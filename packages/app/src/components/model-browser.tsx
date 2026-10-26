@@ -1398,19 +1398,16 @@ function ModelBrowserContent({
     () => groupProfilesByProviderModel(profiles?.rows ?? []),
     [profiles],
   );
-  const selectedViewProvider = useMemo(
-    () =>
-      view.kind === "provider"
-        ? (providers.find(
-            (provider) =>
-              provider.id === view.providerId &&
-              (view.serverId == null || (provider.serverId ?? null) === (view.serverId ?? null),
-          ) ??
-          providers.find((provider) => provider.id === view.providerId) ??
-          null)
-        : null,
-    [providers, view],
-  );
+  const selectedViewProvider = useMemo(() => {
+    if (view.kind !== "provider") return null;
+    const exact = providers.find(
+      (provider) =>
+        provider.id === view.providerId &&
+        (view.serverId == null || (provider.serverId ?? null) === (view.serverId ?? null)),
+    );
+    if (exact) return exact;
+    return providers.find((provider) => provider.id === view.providerId) ?? null;
+  }, [providers, view]);
   const allView = useMemo(
     () =>
       resolveModelBrowserAllView({
