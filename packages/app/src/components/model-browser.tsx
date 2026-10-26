@@ -981,7 +981,7 @@ function GroupProviderButton({
   const { t } = useTranslation();
   const selection = provider.modelSelection;
   const handlePress = useCallback(() => {
-    onDrillDown(provider.id, provider.label, serverId ?? provider.serverId ?? null);
+    onDrillDown(provider.id, provider.label, provider.serverId ?? serverId ?? null);
   }, [onDrillDown, provider.id, provider.label, provider.serverId, serverId]);
 
   const stateNode = useMemo(() => {
