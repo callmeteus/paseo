@@ -1401,11 +1401,11 @@ function ModelBrowserContent({
   const selectedViewProvider = useMemo(
     () =>
       view.kind === "provider"
-        ? (providers.find(
-            (provider) =>
-              provider.id === view.providerId &&
-              (provider.serverId ?? null) === (view.serverId ?? null),
-          ) ?? null)
+        ? (providers.find((provider) => {
+            if (provider.id !== view.providerId) return false;
+            if (view.serverId == null) return true;
+            return (provider.serverId ?? null) === (view.serverId ?? null);
+          }) ?? null)
         : null,
     [providers, view],
   );
