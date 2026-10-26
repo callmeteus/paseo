@@ -201,6 +201,9 @@ export const en = {
       fallback: "Provider",
       select: "Select agent provider",
       portingUnsupported: "This host needs an update before an agent can change providers",
+      pendingOnNextMessage: "Provider change will be applied when you send your next message",
+      crossHostUnsupported: "The target host needs an update to accept ported agents",
+      targetHostDisconnected: "The target host is not connected",
     },
     thinking: {
       title: "Thinking",

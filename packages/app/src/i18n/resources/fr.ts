@@ -208,6 +208,10 @@ export const fr: TranslationResources = {
       fallback: "Fournisseur",
       select: "Choisir le fournisseur d’agent",
       portingUnsupported: "Mettez à jour cet hôte avant de changer le fournisseur d’un agent",
+      pendingOnNextMessage:
+        "Le changement de fournisseur s’appliquera à l’envoi de votre prochain message",
+      crossHostUnsupported: "L’hôte cible doit être mis à jour pour accepter les agents portés",
+      targetHostDisconnected: "L’hôte cible n’est pas connecté",
     },
     thinking: {
       title: "Réflexion",

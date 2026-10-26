@@ -3024,7 +3024,17 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
     }
     if (this.config.thinkingOptionId && this.config.thinkingOptionId !== this.thinkingOptionId) {
-      await this.setThinkingOption(this.config.thinkingOptionId);
+      try {
+        await this.setThinkingOption(this.config.thinkingOptionId);
+      } catch (error) {
+        if (!this.isThinkingSelectionUnavailableError(error)) {
+          throw error;
+        }
+        this.warnInvalidSelection(
+          this.config.thinkingOptionId,
+          `${error instanceof Error ? error.message : "failed to apply thinking option"}; using the provider default`,
+        );
+      }
     }
     const configuredFeatureValues = this.config.featureValues ?? {};
     for (const featureOption of this.configFeatureOptions) {
@@ -3074,6 +3084,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   private isModelSelectionUnavailableError(error: unknown): boolean {
     return error instanceof Error && error.message === this.modelSelectionUnavailableMessage();
+  }
+
+  private thinkingSelectionUnavailableMessage(): string {
+    return `${this.provider} does not expose ACP thought-level selection`;
+  }
+
+  private isThinkingSelectionUnavailableError(error: unknown): boolean {
+    return error instanceof Error && error.message === this.thinkingSelectionUnavailableMessage();
   }
 
   private featureUnavailableMessage(featureId: string): string {

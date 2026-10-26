@@ -38,7 +38,6 @@ import { useSessionStore } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature } from "@/runtime/host-features";
 import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
-import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -67,8 +66,15 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { readMeasuredWidth } from "@/hooks/use-container-width";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
-import { performAgentProviderSwap } from "@/composer/agent-controls/provider-swap";
-import { performCrossHostPort } from "@/composer/agent-controls/cross-host-port";
+import {
+  clearProviderSwitch,
+  planProviderSwitch,
+  resolveDisplayModelId,
+  resolveDisplayProvider,
+  stageProviderSwitch,
+  updateStagedProviderModel,
+  usePendingProviderSwitch,
+} from "@/composer/agent-controls/pending-provider-switch";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import {
   useAgentControlCommandCenterActions,
@@ -1574,6 +1580,64 @@ function optionalNonEmpty<T>(value: T[]): T[] | undefined {
   return value.length > 0 ? value : undefined;
 }
 
+/** Providers exposed by every other connected host, for cross-host porting. */ async function loadCrossHostProviders(input: {
+  hosts: Array<{ serverId?: string | null }>;
+  serverId: string;
+  cwd: string | null | undefined;
+}): Promise<ProviderSelectorProvider[]> {
+  const otherHosts = input.hosts.filter(
+    (host) => host.serverId && host.serverId !== input.serverId,
+  );
+  const results = await Promise.all(
+    otherHosts.map(async (host) => {
+      const hostClient = getHostRuntimeStore().getClient(host.serverId ?? "");
+      if (!hostClient) return [] as ProviderSelectorProvider[];
+      try {
+        const snapshot = await hostClient.getProvidersSnapshot({ cwd: input.cwd ?? undefined });
+        return buildSelectableProviderSelectorProviders(
+          snapshot.entries,
+          true,
+          host.serverId ?? null,
+        );
+      } catch {
+        return [] as ProviderSelectorProvider[];
+      }
+    }),
+  );
+  return results.flat();
+}
+
+function buildModelSelectorProviders(input: {
+  snapshotEntries: ReturnType<typeof useProvidersSnapshot>["entries"];
+  snapshotSelectedEntry: ReturnType<typeof resolveSnapshotSelectedEntry>;
+  serverId: string;
+  providerDefinitions: AgentProviderDefinition[];
+  modelsByProvider: Map<string, AgentModelDefinition[]>;
+  supportsSnapshotTransfer: boolean;
+  crossHostProviders: ProviderSelectorProvider[];
+}): ProviderSelectorProvider[] {
+  let base: ProviderSelectorProvider[];
+  if (input.snapshotEntries) {
+    base = buildSelectableProviderSelectorProviders(input.snapshotEntries, true, input.serverId);
+  } else if (input.snapshotSelectedEntry) {
+    base = buildSelectableProviderSelectorProviders(
+      [input.snapshotSelectedEntry],
+      true,
+      input.serverId,
+    );
+  } else {
+    base = buildProviderSelectorProviders({
+      providerDefinitions: input.providerDefinitions,
+      modelsByProvider: input.modelsByProvider,
+      serverId: input.serverId,
+    });
+  }
+  if (input.supportsSnapshotTransfer && input.crossHostProviders.length > 0) {
+    return [...base, ...input.crossHostProviders];
+  }
+  return base;
+}
+
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
@@ -1585,15 +1649,13 @@ export const AgentControls = memo(function AgentControls({
     useShallow((state) => selectAgentControlsSlice(state, serverId, agentId)),
   );
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
-  const agentWorkspaceId = useSessionStore(
-    (state) => state.sessions[serverId]?.agents.get(agentId)?.workspaceId ?? null,
-  );
   const toast = useToast();
+  const { t } = useTranslation();
+  const pendingProviderSwitch = usePendingProviderSwitch(serverId, agentId);
   const supportsProviderSwap = useHostFeature(serverId, "agentProviderSwap");
   const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
-  const [isSwappingProvider, setIsSwappingProvider] = useState(false);
   const modeControl = useLiveAgentModeControl(serverId, agentId);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
@@ -1624,22 +1686,15 @@ export const AgentControls = memo(function AgentControls({
     [agent?.provider, models],
   );
   const agentModelSelectorProviders = useMemo(() => {
-    let base: ProviderSelectorProvider[];
-    if (snapshotEntries) {
-      base = buildSelectableProviderSelectorProviders(snapshotEntries, true, serverId);
-    } else if (snapshotSelectedEntry) {
-      base = buildSelectableProviderSelectorProviders([snapshotSelectedEntry], true, serverId);
-    } else {
-      base = buildProviderSelectorProviders({
-        providerDefinitions: agentProviderDefinitions,
-        modelsByProvider: agentProviderModels,
-        serverId,
-      });
-    }
-    if (supportsSnapshotTransfer && crossHostProviders.length > 0) {
-      return [...base, ...crossHostProviders];
-    }
-    return base;
+    return buildModelSelectorProviders({
+      snapshotEntries,
+      snapshotSelectedEntry,
+      serverId,
+      providerDefinitions: agentProviderDefinitions,
+      modelsByProvider: agentProviderModels,
+      supportsSnapshotTransfer,
+      crossHostProviders,
+    });
   }, [
     agentProviderDefinitions,
     agentProviderModels,
@@ -1696,104 +1751,56 @@ export const AgentControls = memo(function AgentControls({
 
   const handleSelectProviderAndModel = useCallback(
     async (provider: string, modelId: string, targetServerId?: string | null) => {
-      if (!client) {
+      const plan = planProviderSwitch({
+        currentProvider: agentProvider,
+        currentServerId: serverId,
+        nextProvider: provider,
+        nextServerId: targetServerId,
+        supportsProviderSwap,
+        targetSupportsSnapshotTransfer:
+          useSessionStore.getState().sessions[(targetServerId ?? "").trim() || serverId]?.serverInfo
+            ?.features?.agentSnapshotTransfer === true,
+        targetClientConnected:
+          getHostRuntimeStore().getClient((targetServerId ?? "").trim() || serverId) !== null,
+      });
+      if (plan.kind === "reject") {
+        toast.error(t(plan.messageKey));
         return;
       }
-      if (provider === agentProvider && (targetServerId ?? serverId) === serverId) {
+      if (plan.kind === "model") {
+        clearProviderSwitch(serverId, agentId);
         await handleSelectModel(modelId);
         return;
       }
-      if (!supportsProviderSwap && (targetServerId ?? serverId) === serverId) {
-        toast.error(t("agentControls.provider.portingUnsupported"));
-        return;
-      }
+      // Porting archives this agent and creates a new one, so the pick is staged
+      // and committed by the next message instead of yanking the chat away now.
+      stageProviderSwitch(serverId, agentId, {
+        targetServerId: plan.targetHost,
+        provider,
+        modelId,
+      });
+      toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
+    },
+    [agentId, agentProvider, handleSelectModel, serverId, supportsProviderSwap, t, toast],
+  );
 
-      const targetHost = (targetServerId ?? "").trim() || serverId;
-      const isCrossHost = targetHost !== serverId;
-
-      if (isCrossHost) {
-        const destSupports =
-          useSessionStore.getState().sessions[targetHost]?.serverInfo?.features
-            ?.agentSnapshotTransfer === true;
-        if (!destSupports) {
-          toast.error("Target host does not support porting");
-          return;
-        }
-        const destinationClient = getHostRuntimeStore().getClient(targetHost);
-        if (!destinationClient) {
-          toast.error("Target host is not connected");
-          return;
-        }
-        setIsSwappingProvider(true);
-        try {
-          const result = await performCrossHostPort({
-            sourceClient: client,
-            destinationClient,
-            agentId,
-            provider,
-            modelId,
-            agentWorkspaceId,
-            sourceHost: serverId,
-            targetHost,
-          });
-          navigateToAgent({
-            serverId: targetHost,
-            agentId: result.newAgentId,
-            workspaceId: agentWorkspaceId ?? undefined,
-          });
-        } catch (error) {
-          console.warn("[AgentControls] cross-host port failed", error);
-          toast.error(toErrorMessage(error));
-        } finally {
-          setIsSwappingProvider(false);
-        }
-        return;
-      }
-
-      setIsSwappingProvider(true);
-      try {
-        const result = await performAgentProviderSwap({
-          client,
-          agentId,
-          provider,
-          modelId,
-          persistPreference: (nextProvider, nextModelId) =>
-            updatePreferences((current) =>
-              mergeProviderPreferences({
-                preferences: current,
-                provider: nextProvider as AgentProvider,
-                updates: { model: nextModelId || undefined },
-              }),
-            ),
-          onPreferencePersistError: (error) => {
-            console.warn("[AgentControls] persist ported provider preference failed", error);
-          },
-        });
-
-        navigateToAgent({
-          serverId,
-          agentId: result.newAgentId,
-          workspaceId: agentWorkspaceId,
-        });
-      } catch (error) {
-        console.warn("[AgentControls] swapAgentProvider failed", error);
-        toast.error(toErrorMessage(error));
-      } finally {
-        setIsSwappingProvider(false);
+  /**
+   * While a switch is staged, the provider glyph and model label already show
+   * the destination, so picking another model must edit the staged pick instead
+   * of writing a model the current agent cannot run.
+   */
+  const handleSelectModelFromPicker = useCallback(
+    (modelId: string) => {
+      if (!updateStagedProviderModel(serverId, agentId, modelId)) {
+        void handleSelectModel(modelId);
       }
     },
-    [
-      agentId,
-      agentProvider,
-      agentWorkspaceId,
-      client,
-      handleSelectModel,
-      serverId,
-      supportsProviderSwap,
-      toast,
-      updatePreferences,
-    ],
+    [agentId, handleSelectModel, serverId],
   );
+
+  useEffect(() => {
+    return () => clearProviderSwitch(serverId, agentId);
+  }, [agentId, serverId]);
 
   const handleSelectCommandCenterModel = useCallback(
     (provider: AgentProvider, modelId: string) => {
@@ -1931,25 +1938,7 @@ export const AgentControls = memo(function AgentControls({
   const handleModelSelectorOpen = useCallback(() => {
     refetchSnapshotIfStale(agentProvider);
     if (!supportsSnapshotTransfer) return;
-    const otherHosts = hosts.filter((host) => host.serverId && host.serverId !== serverId);
-    const fetchProviders = async () => {
-      const results = await Promise.all(
-        otherHosts.map(async (host) => {
-          const hostClient = getHostRuntimeStore().getClient(host.serverId);
-          if (!hostClient) return [] as ProviderSelectorProvider[];
-          try {
-            const snapshot = await hostClient.getProvidersSnapshot({
-              cwd: agent?.cwd ?? undefined,
-            });
-            return buildSelectableProviderSelectorProviders(snapshot.entries, true, host.serverId);
-          } catch {
-            return [] as ProviderSelectorProvider[];
-          }
-        }),
-      );
-      setCrossHostProviders(results.flat());
-    };
-    void fetchProviders();
+    void loadCrossHostProviders({ hosts, serverId, cwd: agent?.cwd }).then(setCrossHostProviders);
   }, [
     agent?.cwd,
     agentProvider,
@@ -1975,11 +1964,11 @@ export const AgentControls = memo(function AgentControls({
       {commandCenterRegistration}
       {profileEditor.element}
       <ControlledAgentControls
-        provider={agent.provider}
+        provider={resolveDisplayProvider(pendingProviderSwitch, agent.provider)}
         modelSelectorProviders={agentModelSelectorProviders}
         modelOptions={modelOptions}
-        selectedModelId={optionalValue(modelSelection.activeModelId)}
-        onSelectModel={handleSelectModel}
+        selectedModelId={resolveDisplayModelId(pendingProviderSwitch, modelSelection.activeModelId)}
+        onSelectModel={handleSelectModelFromPicker}
         onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}
         onApplyAgentProfile={agentProfiles?.applyProfile}
@@ -1991,12 +1980,12 @@ export const AgentControls = memo(function AgentControls({
         onSelectThinkingOption={handleSelectThinkingOption}
         features={agent.features}
         onSetFeature={handleSetFeature}
-        isModelLoading={anyTrue(snapshotIsLoading, selectedProviderIsLoading, isSwappingProvider)}
+        isModelLoading={anyTrue(snapshotIsLoading, selectedProviderIsLoading)}
         onModelSelectorOpen={handleModelSelectorOpen}
         onRetryModelProvider={handleRetryModelProvider}
         isRetryingModelProvider={snapshotIsRefreshing}
         onDropdownClose={onDropdownClose}
-        disabled={anyTrue(client === null, isSwappingProvider)}
+        disabled={anyTrue(client === null)}
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}

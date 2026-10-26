@@ -206,6 +206,11 @@ export const ptBR: TranslationResources = {
       fallback: "Provedor",
       select: "Selecionar provedor do agente",
       portingUnsupported: "Atualize este host antes de trocar o provedor de um agente",
+      pendingOnNextMessage:
+        "A troca de provedor será aplicada quando você enviar a próxima mensagem",
+      crossHostUnsupported:
+        "O host de destino precisa de atualização para receber agentes portados",
+      targetHostDisconnected: "O host de destino não está conectado",
     },
     thinking: {
       title: "Raciocínio",

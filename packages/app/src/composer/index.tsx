@@ -126,6 +126,14 @@ import { ComposerRecall } from "@/composer/recall";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useAppSettings } from "@/hooks/use-settings";
+import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
+import { applyProviderSwitch } from "@/composer/agent-controls/apply-provider-switch";
+import {
+  stageProviderSwitch,
+  takeProviderSwitch,
+} from "@/composer/agent-controls/pending-provider-switch";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
@@ -1282,6 +1290,7 @@ function ComposerContentImpl({
   const isConnected = useHostRuntimeIsConnected(serverId);
   const agentDirectoryStatus = useHostRuntimeAgentDirectoryStatus(serverId);
   const toast = useToast();
+  const { updatePreferences } = useFormPreferences();
   const toastErrorRef = useRef(toast.error);
   toastErrorRef.current = toast.error;
   const voice = useVoiceOptional();
@@ -1566,28 +1575,79 @@ function ComposerContentImpl({
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
+
+      // A staged provider switch is committed here, by the first message after
+      // the pick: porting archives this agent, so doing it on pick would replace
+      // the conversation before the user sent anything.
+      let targetClient = client;
+      let targetServerId = serverId;
+      let resolvedAgentId = targetAgentId;
+      const pendingSwitch = takeProviderSwitch(serverId, targetAgentId);
+      if (pendingSwitch) {
+        try {
+          const applied = await applyProviderSwitch({
+            sourceClient: client,
+            sourceServerId: serverId,
+            agentId: targetAgentId,
+            workspaceId: workspaceId ?? null,
+            pending: pendingSwitch,
+            persistPreference: (nextProvider, nextModelId) =>
+              updatePreferences((current) =>
+                mergeProviderPreferences({
+                  preferences: current,
+                  provider: nextProvider as AgentProvider,
+                  updates: { model: nextModelId || undefined },
+                }),
+              ),
+            onPreferencePersistError: (error) => {
+              console.warn("[Composer] persist ported provider preference failed", error);
+            },
+          });
+          targetClient = applied.client;
+          targetServerId = applied.serverId;
+          resolvedAgentId = applied.agentId;
+          navigateToAgent({
+            serverId: targetServerId,
+            agentId: resolvedAgentId,
+            workspaceId: workspaceId ?? undefined,
+          });
+        } catch (error) {
+          stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
+          throw error;
+        }
+      }
+
       await dispatchComposerAgentMessage({
-        client,
-        agentId: targetAgentId,
+        client: targetClient,
+        agentId: resolvedAgentId,
         text,
         attachments: sendAttachments,
         attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
           supportsForgeAttachments: supportsForgeSearch,
         }),
         encodeImages,
-        submission: createMessageSubmissionWriter(serverId),
+        submission: createMessageSubmissionWriter(targetServerId),
         activeTurnBehavior,
         activeTurnId:
           activeTurnBehavior === "steer"
             ? (selectAgentTurnPresentation(
-                useSessionStore.getState().sessions[serverId],
-                targetAgentId,
+                useSessionStore.getState().sessions[targetServerId],
+                resolvedAgentId,
               ).turnId ?? undefined)
             : undefined,
       });
       onAttentionPromptSend?.();
     };
-  }, [appSettings.sendBehavior, client, onAttentionPromptSend, serverId, supportsForgeSearch, t]);
+  }, [
+    appSettings.sendBehavior,
+    client,
+    onAttentionPromptSend,
+    serverId,
+    supportsForgeSearch,
+    t,
+    updatePreferences,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     onSubmitMessageRef.current = onSubmitMessage;

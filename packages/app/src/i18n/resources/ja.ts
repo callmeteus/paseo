@@ -207,6 +207,9 @@ export const ja: TranslationResources = {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",
       portingUnsupported: "エージェントのプロバイダーを変更する前に、このホストを更新してください",
+      pendingOnNextMessage: "次回メッセージを送信するとプロバイダーの変更が適用されます",
+      crossHostUnsupported: "移行したエージェントを受け入れるには、対象ホストの更新が必要です",
+      targetHostDisconnected: "対象ホストに接続されていません",
     },
     thinking: {
       title: "思考",

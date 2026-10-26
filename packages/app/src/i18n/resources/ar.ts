@@ -205,6 +205,9 @@ export const ar: TranslationResources = {
       fallback: "مزود",
       select: "حدد مزود الوكيل",
       portingUnsupported: "حدّث هذا المضيف قبل تغيير مزود الوكيل",
+      pendingOnNextMessage: "سيُطبَّق تغيير المزود عند إرسال رسالتك التالية",
+      crossHostUnsupported: "يحتاج المضيف الهدف إلى تحديث لقبول الوكلاء المنقولين",
+      targetHostDisconnected: "المضيف الهدف غير متصل",
     },
     thinking: {
       title: "التفكير",

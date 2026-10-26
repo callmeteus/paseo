@@ -205,6 +205,9 @@ export const ko: TranslationResources = {
       fallback: "프로바이더",
       select: "에이전트 프로바이더 선택",
       portingUnsupported: "에이전트 프로바이더를 변경하려면 이 호스트를 업데이트하세요",
+      pendingOnNextMessage: "다음 메시지를 보낼 때 프로바이더 변경이 적용됩니다",
+      crossHostUnsupported: "이동된 에이전트를 받으려면 대상 호스트를 업데이트해야 합니다",
+      targetHostDisconnected: "대상 호스트에 연결되어 있지 않습니다",
     },
     thinking: {
       title: "사고",

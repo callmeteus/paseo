@@ -205,6 +205,9 @@ export const zhCN: TranslationResources = {
       fallback: "Provider",
       select: "选择 Agent Provider",
       portingUnsupported: "请先更新此主机，然后再更改 Agent Provider。",
+      pendingOnNextMessage: "发送下一条消息时将应用 Provider 更改",
+      crossHostUnsupported: "目标主机需要更新才能接收迁移的 Agent",
+      targetHostDisconnected: "目标主机未连接",
     },
     thinking: {
       title: "Thinking",

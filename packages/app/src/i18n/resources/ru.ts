@@ -207,6 +207,9 @@ export const ru: TranslationResources = {
       fallback: "Провайдер",
       select: "Выбрать провайдера агента",
       portingUnsupported: "Обновите этот хост, прежде чем менять провайдера агента",
+      pendingOnNextMessage: "Смена провайдера применится при отправке следующего сообщения",
+      crossHostUnsupported: "Целевому хосту нужно обновление, чтобы принимать перенесённых агентов",
+      targetHostDisconnected: "Целевой хост не подключён",
     },
     thinking: {
       title: "Рассуждения",
