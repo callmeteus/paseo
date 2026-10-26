@@ -1,0 +1,138 @@
+import { randomUUID } from "node:crypto";
+
+import type { Logger } from "pino";
+
+import type { AgentTimelineItem } from "./agent-sdk-types.js";
+import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
+
+export interface SwapProviderInput {
+  storage: AgentStorage;
+  agentId: string;
+  targetProvider: string;
+  targetModel: string | null;
+  previousItems?: readonly AgentTimelineItem[];
+  logger?: Logger;
+}
+
+export interface SwapProviderResult {
+  newAgentId: string;
+  previousAgentId: string;
+}
+
+export const MAX_PORTED_TRANSCRIPT_CHARS = 120_000;
+
+/**
+ * Convert a provider timeline into a plain transcript that another provider can
+ * read as context. Tool calls are reduced to a single line so the ported
+ * conversation stays readable and bounded.
+ */
+export function buildPortingTranscript(items: readonly AgentTimelineItem[]): string {
+  const lines: string[] = [];
+
+  for (const item of items) {
+    if (item.type === "user_message") {
+      const text = item.text.trim();
+      if (text) lines.push(`User: ${text}`);
+    } else if (item.type === "assistant_message") {
+      const text = item.text.trim();
+      if (text) lines.push(`Assistant: ${text}`);
+    } else if (item.type === "tool_call") {
+      lines.push(`Assistant used tool ${item.name} (${item.status})`);
+    }
+  }
+
+  const transcript = lines.join("\n\n").trim();
+  if (transcript.length <= MAX_PORTED_TRANSCRIPT_CHARS) {
+    return transcript;
+  }
+  return transcript.slice(transcript.length - MAX_PORTED_TRANSCRIPT_CHARS);
+}
+
+function buildPortedSystemPrompt(
+  existingPrompt: string | null | undefined,
+  provider: string,
+  items: readonly AgentTimelineItem[] | undefined,
+): string | undefined {
+  const transcript = items && items.length > 0 ? buildPortingTranscript(items) : "";
+  const portedContext = transcript
+    ? `The following conversation was ported from ${provider}. Continue it as if you had been the assistant.\n\n${transcript}`
+    : "";
+  const prompt = [existingPrompt?.trim(), portedContext].filter(Boolean).join("\n\n");
+  return prompt.length > 0 ? prompt : undefined;
+}
+
+export class SwapProviderError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "SwapProviderError";
+  }
+}
+
+export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapProviderResult> {
+  const { storage, agentId, targetProvider, targetModel } = input;
+
+  const existing = await storage.get(agentId);
+  if (!existing) {
+    throw new SwapProviderError("agent.notFound", `Agent ${agentId} not found`, 404);
+  }
+
+  if (!targetProvider || targetProvider.trim().length === 0) {
+    throw new SwapProviderError("agent.invalidProvider", "Target provider is required", 400);
+  }
+
+  if (existing.provider === targetProvider && existing.config?.model === targetModel) {
+    throw new SwapProviderError(
+      "agent.sameProvider",
+      "Agent already uses the requested provider and model",
+      400,
+    );
+  }
+
+  const newAgentId = randomUUID();
+  const now = new Date().toISOString();
+  const systemPrompt = buildPortedSystemPrompt(
+    existing.config?.systemPrompt,
+    existing.provider,
+    input.previousItems,
+  );
+
+  const newRecord: StoredAgentRecord = {
+    ...existing,
+    id: newAgentId,
+    provider: targetProvider,
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
+    lastStatus: "closed",
+    archivedAt: null,
+    config: {
+      ...existing.config,
+      model: targetModel,
+      ...(systemPrompt ? { systemPrompt } : {}),
+    },
+    runtimeInfo: existing.runtimeInfo
+      ? { ...existing.runtimeInfo, provider: targetProvider, model: targetModel }
+      : { provider: targetProvider, sessionId: null, model: targetModel },
+    persistence: null,
+    migratedFrom: {
+      provider: existing.provider,
+      agentId: existing.id,
+      portedAt: now,
+    },
+  };
+
+  await storage.upsert(newRecord);
+
+  // Archive the previous agent, preserving migratedTo link.
+  await storage.upsert({
+    ...existing,
+    archivedAt: now,
+    migratedTo: { provider: targetProvider, agentId: newAgentId, portedAt: now },
+  });
+
+  return { newAgentId, previousAgentId: agentId };
+}

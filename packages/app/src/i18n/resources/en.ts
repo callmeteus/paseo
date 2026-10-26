@@ -394,6 +394,10 @@ export const en = {
       withTokens: "Context compacted ({{tokens}}K tokens)",
       completed: "Context compacted",
     },
+    porting: {
+      loading: "Porting context...",
+      completed: "Context ported to {{provider}}",
+    },
   },
   importSession: {
     title: "Import session",

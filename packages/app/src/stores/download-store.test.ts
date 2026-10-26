@@ -33,9 +33,9 @@ const staleTcpConnection: DirectTcpHostConnection = {
 };
 
 const localTcpConnection: DirectTcpHostConnection = {
-  id: "direct:localhost:6767",
+  id: "direct:localhost:17000",
   type: "directTcp",
-  endpoint: "localhost:6767",
+  endpoint: "localhost:17000",
 };
 
 function profileWith(connections: HostProfile["connections"]): HostProfile {

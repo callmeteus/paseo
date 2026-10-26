@@ -25,14 +25,14 @@ Use it to:
 npx @getpaseo/cli
 ```
 
-It listens on `ws://127.0.0.1:6767/ws`.
+It listens on `ws://127.0.0.1:17000/ws`.
 
 ## Run an agent
 
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

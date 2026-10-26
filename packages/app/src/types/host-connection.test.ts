@@ -58,21 +58,21 @@ describe("normalizeStoredHostProfile", () => {
       label: "Old Host",
       connections: [
         {
-          id: "direct:127.0.0.1:6767",
+          id: "direct:127.0.0.1:17000",
           type: "directTcp",
-          endpoint: "127.0.0.1:6767",
+          endpoint: "127.0.0.1:17000",
         },
       ],
-      preferredConnectionId: "direct:127.0.0.1:6767",
+      preferredConnectionId: "direct:127.0.0.1:17000",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
 
     expect(profile).not.toBeNull();
     expect(profile?.connections[0]).toEqual({
-      id: "direct:localhost:6767",
+      id: "direct:localhost:17000",
       type: "directTcp",
-      endpoint: "localhost:6767",
+      endpoint: "localhost:17000",
       useTls: false,
     });
     expect(profile?.connections[0]).not.toHaveProperty("password");
@@ -81,7 +81,7 @@ describe("normalizeStoredHostProfile", () => {
   it("moves a stored direct TCP password to the host profile", () => {
     const profile = normalizeStoredHostProfile({
       serverId: "srv_legacy",
-      connections: [{ type: "directTcp", endpoint: "localhost:6767", password: "old-secret" }],
+      connections: [{ type: "directTcp", endpoint: "localhost:17000", password: "old-secret" }],
     });
     expect(profile?.password).toBe("old-secret");
     expect(profile?.connections[0]).not.toHaveProperty("password");
@@ -212,14 +212,14 @@ describe("upsertHostConnectionInProfiles", () => {
     (savedC) => {
       const route: HostConnection = { id: "via:srv_a", type: "routed", originServerId: "srv_a" };
       const directB: HostConnection = {
-        id: "direct:b:6767",
+        id: "direct:b:17000",
         type: "directTcp",
-        endpoint: "b:6767",
+        endpoint: "b:17000",
       };
       const directC: HostConnection = {
-        id: "direct:c:6767",
+        id: "direct:c:17000",
         type: "directTcp",
-        endpoint: "c:6767",
+        endpoint: "c:17000",
       };
       const b: HostProfile = {
         ...makeHost("srv_b"),
@@ -286,9 +286,9 @@ describe("upsertHostConnectionInProfiles", () => {
 
   it("replaces a direct connection when its settings change", () => {
     const existingConnection: HostConnection = {
-      id: "direct:example.test:6767",
+      id: "direct:example.test:17000",
       type: "directTcp",
-      endpoint: "example.test:6767",
+      endpoint: "example.test:17000",
       useTls: false,
     };
     const existing: HostProfile = {

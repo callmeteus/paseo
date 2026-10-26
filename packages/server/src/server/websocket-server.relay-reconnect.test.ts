@@ -423,8 +423,8 @@ function createHelloMessage(
 function createDirectRequest() {
   return {
     headers: {
-      host: "localhost:6767",
-      origin: "http://localhost:6767",
+      host: "localhost:17000",
+      origin: "http://localhost:17000",
       "user-agent": "vitest",
     },
     socket: {

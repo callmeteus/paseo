@@ -72,7 +72,7 @@ Paseo 的 CLI 控制的是与应用相同的 daemon：
 ```bash
 paseo run --provider codex "implement OAuth"
 paseo run --provider claude --worktree refactor-auth "refactor auth"
-paseo run --host devbox:6767 "run the test suite"
+paseo run --host devbox:17000 "run the test suite"
 paseo ls
 paseo send <agent-id> "add tests"
 paseo schedule create --cron "0 9 * * 1" "audit the codebase"

@@ -134,7 +134,7 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
             projectSlug: "repo",
             branchName: "feature-peer-env",
             scriptName,
-            daemonPort: 6767,
+            daemonPort: 17000,
             serviceProxy: routeStore,
             runtimeStore,
             terminalManager,
@@ -151,10 +151,10 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       const webEnv = readEnvFile(webEnvPath);
 
       expect(apiEnv.PASEO_SERVICE_API_URL).toBe(
-        "http://api--feature-peer-env--repo.localhost:6767",
+        "http://api--feature-peer-env--repo.localhost:17000",
       );
       expect(apiEnv.PASEO_SERVICE_WEB_URL).toBe(
-        "http://web--feature-peer-env--repo.localhost:6767",
+        "http://web--feature-peer-env--repo.localhost:17000",
       );
       expect(apiEnv.PASEO_SERVICE_API_PORT).toEqual(expect.stringMatching(/^\d+$/));
       expect(apiEnv.PASEO_SERVICE_WEB_PORT).toEqual(expect.stringMatching(/^\d+$/));
@@ -163,10 +163,10 @@ describe.skipIf(isPlatform("win32"))("worktree-bootstrap POSIX-only", () => {
       expect(apiEnv).not.toHaveProperty("PORT");
 
       expect(webEnv.PASEO_SERVICE_API_URL).toBe(
-        "http://api--feature-peer-env--repo.localhost:6767",
+        "http://api--feature-peer-env--repo.localhost:17000",
       );
       expect(webEnv.PASEO_SERVICE_WEB_URL).toBe(
-        "http://web--feature-peer-env--repo.localhost:6767",
+        "http://web--feature-peer-env--repo.localhost:17000",
       );
       expect(webEnv.PASEO_SERVICE_API_PORT).toBe(apiEnv.PASEO_SERVICE_API_PORT);
       expect(webEnv.PASEO_SERVICE_WEB_PORT).toBe(apiEnv.PASEO_SERVICE_WEB_PORT);

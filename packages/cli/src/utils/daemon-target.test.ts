@@ -24,7 +24,7 @@ test("explicit selectors win over both environment selectors", () => {
 test("endpoint connections resolve local credentials from PASEO_HOME", () => {
   expect(
     resolveClientPaseoHome(
-      { kind: "endpoint", host: "localhost:6767" },
+      { kind: "endpoint", host: "localhost:17000" },
       { PASEO_HOME: "/tmp/custom-home" },
     ),
   ).toBe("/tmp/custom-home");
@@ -54,16 +54,16 @@ test("a pairing offer without a URL prefix still redacts its key", () => {
     v: 2,
     serverId: "srv_example",
     daemonPublicKeyB64: "example-secret",
-    relay: { endpoint: "localhost:6767", useTls: false },
+    relay: { endpoint: "localhost:17000", useTls: false },
   };
   const host = `#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`;
   expect(describeDaemonTarget({ kind: "endpoint", host })).toBe(
-    "relay://localhost:6767/srv_example",
+    "relay://localhost:17000/srv_example",
   );
 });
 
 test("malformed endpoint diagnostics never expose the supplied credential", () => {
-  const target = { kind: "endpoint" as const, host: "alice:example-secret@localhost:6767" };
+  const target = { kind: "endpoint" as const, host: "alice:example-secret@localhost:17000" };
   expect(describeDaemonTarget(target)).not.toContain("example-secret");
   for (const message of [
     `Invalid connection ${target.host}`,
@@ -80,14 +80,14 @@ test("CLI selects an explicit password before a matching local credential and ne
   delete process.env.PASEO_PASSWORD;
   try {
     const token = "a".repeat(43);
-    await writeFile(join(home, "paseo.pid"), JSON.stringify({ listen: "127.0.0.1:6767" }));
+    await writeFile(join(home, "paseo.pid"), JSON.stringify({ listen: "127.0.0.1:17000" }));
     await writeFile(join(home, "local-credential"), token);
-    expect(resolveDaemonCredential("tcp://localhost:6767", home)).toEqual({
+    expect(resolveDaemonCredential("tcp://localhost:17000", home)).toEqual({
       kind: "localCredential",
       token,
     });
-    expect(resolveDaemonCredential("tcp://remote.example:6767", home)).toBeNull();
-    expect(resolveDaemonCredential("tcp://localhost:6767?password=explicit", home)).toEqual({
+    expect(resolveDaemonCredential("tcp://remote.example:17000", home)).toBeNull();
+    expect(resolveDaemonCredential("tcp://localhost:17000?password=explicit", home)).toEqual({
       kind: "password",
       password: "explicit",
     });
@@ -98,7 +98,7 @@ test("CLI selects an explicit password before a matching local credential and ne
   }
 });
 
-test.each(["/tmp/paseo.sock", "\\\\.\\pipe\\paseo", "localhost:6767", "[::1]:6767", "6767"])(
+test.each(["/tmp/paseo.sock", "\\\\.\\pipe\\paseo", "localhost:17000", "[::1]:17000", "17000"])(
   "validated bare target %s keeps its spelling in command hints",
   (host) => {
     expect(describeDaemonTarget({ kind: "endpoint", host })).toBe(host);
@@ -124,7 +124,7 @@ test("validated URI command hints preserve their transport address without crede
   expect(
     describeDaemonTarget({
       kind: "endpoint",
-      host: "tcp://localhost:6767?daemonPort=example-secret&ssl=example-secret",
+      host: "tcp://localhost:17000?daemonPort=example-secret&ssl=example-secret",
     }),
   ).not.toContain("example-secret");
 });

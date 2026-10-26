@@ -15,14 +15,14 @@ function makeHost(): HostProfile {
     label: "Secret host",
     appearance: defaultHostAppearance(),
     lifecycle: {},
-    preferredConnectionId: "direct:secret.example.test:6767",
+    preferredConnectionId: "direct:secret.example.test:17000",
     createdAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
     connections: [
       {
-        id: "direct:secret.example.test:6767",
+        id: "direct:secret.example.test:17000",
         type: "directTcp",
-        endpoint: "secret.example.test:6767",
+        endpoint: "secret.example.test:17000",
         useTls: true,
       },
       {
@@ -77,7 +77,7 @@ describe("app diagnostics report", () => {
       agentDirectoryError: null,
       hasEverLoadedAgentDirectory: true,
       probeByConnectionId: new Map([
-        ["direct:secret.example.test:6767", { status: "available", latencyMs: 42 }],
+        ["direct:secret.example.test:17000", { status: "available", latencyMs: 42 }],
         ["relay:relay.secret.test:443", { status: "available", latencyMs: 8 }],
       ]),
       clientGeneration: 1,
@@ -102,7 +102,7 @@ describe("app diagnostics report", () => {
     const redacted = redactAppDiagnosticReport(
       [
         "Desktop app log tail",
-        "secret.example.test:6767",
+        "secret.example.test:17000",
         "relay.secret.test:443",
         "daemon-public-key-secret",
         "/tmp/paseo-secret.sock",

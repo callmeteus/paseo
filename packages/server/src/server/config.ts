@@ -35,7 +35,7 @@ export {
   type PersistedConfig,
 } from "./persisted-config.js";
 
-const DEFAULT_PORT = 6767;
+const DEFAULT_PORT = 17000;
 const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
 const DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
@@ -477,7 +477,7 @@ function resolveTrustedProxiesConfig(
 // - host:port (TCP)
 // - /path/to/socket (Unix socket)
 // - unix:///path/to/socket (Unix socket)
-// Default is TCP at 127.0.0.1:6767
+// Default is TCP at 127.0.0.1:17000
 function resolveListenAddress(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,

@@ -205,11 +205,11 @@ http://<script>--<project>.localhost:<daemon-port>
 
 ```
 PASEO_PORT=3000                         # this service's port
-PASEO_URL=http://web--my-app.localhost:6767  # this service's proxy URL
+PASEO_URL=http://web--my-app.localhost:17000  # this service's proxy URL
 PASEO_SERVICE_API_PORT=51732
-PASEO_SERVICE_API_URL=http://api--my-app.localhost:6767
+PASEO_SERVICE_API_URL=http://api--my-app.localhost:17000
 PASEO_SERVICE_WEB_PORT=3000
-PASEO_SERVICE_WEB_URL=http://web--my-app.localhost:6767
+PASEO_SERVICE_WEB_URL=http://web--my-app.localhost:17000
 ```
 
 脚本名会转为大写，非字母数字字符变为 `_`。让你的前端指向 `$PASEO_SERVICE_API_URL`，而不是写死端口。

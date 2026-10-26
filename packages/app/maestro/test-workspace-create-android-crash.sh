@@ -15,8 +15,8 @@
 #
 # Optional environment:
 #   PASEO_MAESTRO_APP_ID=sh.paseo.debug
-#   PASEO_MAESTRO_DIRECT_ENDPOINT=127.0.0.1:6767
-#   PASEO_MAESTRO_DAEMON_WS_URL=ws://127.0.0.1:6767/ws
+#   PASEO_MAESTRO_DIRECT_ENDPOINT=127.0.0.1:17000
+#   PASEO_MAESTRO_DAEMON_WS_URL=ws://127.0.0.1:17000/ws
 #   PASEO_MAESTRO_PROJECT_PATH=/path/to/git/repo
 set -euo pipefail
 
@@ -27,8 +27,8 @@ OUT_DIR="/tmp/paseo-workspace-create-android-$(date +%s)"
 CLIENT_EXPORTS="$REPO_ROOT/packages/client/dist/daemon-client.js"
 
 export PASEO_MAESTRO_APP_ID="${PASEO_MAESTRO_APP_ID:-sh.paseo.debug}"
-export PASEO_MAESTRO_DIRECT_ENDPOINT="${PASEO_MAESTRO_DIRECT_ENDPOINT:-127.0.0.1:6767}"
-export PASEO_MAESTRO_DAEMON_WS_URL="${PASEO_MAESTRO_DAEMON_WS_URL:-ws://127.0.0.1:6767/ws}"
+export PASEO_MAESTRO_DIRECT_ENDPOINT="${PASEO_MAESTRO_DIRECT_ENDPOINT:-127.0.0.1:17000}"
+export PASEO_MAESTRO_DAEMON_WS_URL="${PASEO_MAESTRO_DAEMON_WS_URL:-ws://127.0.0.1:17000/ws}"
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -102,7 +102,7 @@ echo "Rendered flow: $FLOW"
 
 echo ""
 echo "Preparing Android port reverse..."
-adb reverse tcp:6767 tcp:6767 >/dev/null
+adb reverse tcp:17000 tcp:17000 >/dev/null
 
 echo ""
 echo "Opening project in daemon..."

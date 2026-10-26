@@ -7,7 +7,7 @@ import {
 
 export type ModelBrowserView =
   | { kind: "all" }
-  | { kind: "provider"; providerId: string; providerLabel: string };
+  | { kind: "provider"; providerId: string; providerLabel: string; serverId?: string | null };
 
 export function resolveModelBrowserScrolling({
   isNative,

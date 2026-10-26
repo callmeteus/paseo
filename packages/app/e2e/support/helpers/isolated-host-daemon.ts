@@ -44,7 +44,7 @@ async function getAvailablePort(): Promise<number> {
 export async function getAvailableHostDaemonPort(): Promise<number> {
   const primaryPort = Number(process.env.E2E_DAEMON_PORT ?? 0);
   let port = await getAvailablePort();
-  while (port === 6767 || port === 6768 || port === primaryPort) port = await getAvailablePort();
+  while (port === 17000 || port === 6768 || port === primaryPort) port = await getAvailablePort();
   return port;
 }
 

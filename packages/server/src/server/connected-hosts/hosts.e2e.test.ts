@@ -55,9 +55,9 @@ test("SDK saves unreachable hosts, rejects syntax and preserves source identity 
     code: "invalid_connection",
   });
   for (const connection of [
-    "alice:example-secret@localhost:6767",
-    "not-a-scheme://localhost:6767",
-    "localhost/path:6767",
+    "alice:example-secret@localhost:17000",
+    "not-a-scheme://localhost:17000",
+    "localhost/path:17000",
   ]) {
     const failure = await paseo.hosts.add({ connection }).catch((error: unknown) => error);
     expect(failure).toMatchObject({ code: "invalid_connection" });
@@ -582,7 +582,7 @@ test("CLI host commands manage the selected daemon and emit secret-free structur
         )
       ).stdout,
     );
-  const malformed = await cli("add", "alice:example-secret@localhost:6767").catch(
+  const malformed = await cli("add", "alice:example-secret@localhost:17000").catch(
     (error: unknown) => error,
   );
   expect(malformed).toHaveProperty("stderr");

@@ -401,6 +401,10 @@ export const ru: TranslationResources = {
       withTokens: "Контекст сжат ({{tokens}} тыс. токенов)",
       completed: "Контекст сжат",
     },
+    porting: {
+      loading: "Перенос контекста...",
+      completed: "Контекст перенесён в {{provider}}",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,

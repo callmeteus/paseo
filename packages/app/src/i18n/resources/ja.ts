@@ -402,6 +402,10 @@ export const ja: TranslationResources = {
       withTokens: "コンテキストを圧縮しました（{{tokens}}Kトークン）",
       completed: "コンテキストを圧縮しました",
     },
+    porting: {
+      loading: "コンテキストを移植中...",
+      completed: "コンテキストを{{provider}}に移植しました",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,

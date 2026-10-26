@@ -214,11 +214,11 @@ Services launched from the same workspace see each other's ports and proxy URLs.
 
 ```
 PASEO_PORT=3000                         # this service's port
-PASEO_URL=http://web--my-app.localhost:6767  # this service's proxy URL
+PASEO_URL=http://web--my-app.localhost:17000  # this service's proxy URL
 PASEO_SERVICE_API_PORT=51732
-PASEO_SERVICE_API_URL=http://api--my-app.localhost:6767
+PASEO_SERVICE_API_URL=http://api--my-app.localhost:17000
 PASEO_SERVICE_WEB_PORT=3000
-PASEO_SERVICE_WEB_URL=http://web--my-app.localhost:6767
+PASEO_SERVICE_WEB_URL=http://web--my-app.localhost:17000
 ```
 
 Script names are upper-cased and non-alphanumerics become `_`. Point your frontend at `$PASEO_SERVICE_API_URL` instead of hard-coding a port.

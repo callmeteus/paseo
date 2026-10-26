@@ -14,6 +14,7 @@ import { addReloadOptions, runReloadCommand } from "./reload.js";
 import { addImportOptions, runImportCommand } from "./import.js";
 import { runUpdateCommand } from "./update.js";
 import { runDetachCommand } from "./detach.js";
+import { runSwapProviderCommand } from "./swap-provider.js";
 import { addOpenOptions, runOpenCommand } from "./open.js";
 import { withOutput } from "../../output/index.js";
 import {
@@ -108,6 +109,18 @@ export function createAgentCommand(): Command {
         [],
       ),
   ).action(withOutput(runUpdateCommand));
+
+  addJsonAndDaemonHostOptions(
+    agent
+      .command("swap-provider")
+      .description("Port an agent to a different provider/model")
+      .argument("<id>", "Agent ID (or prefix)")
+      .requiredOption("--provider <provider>", "Target provider")
+      .option("--model <model>", "Target model")
+      .option("--to-host <host>", "Port to another daemon endpoint (cross-host)")
+      .option("--to-home <path>", "Port to another local daemon home (cross-host)")
+      .option("--to-workspace <id>", "Target workspace on the destination host"),
+  ).action(withOutput(runSwapProviderCommand));
 
   return agent;
 }

@@ -94,7 +94,7 @@ import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
 import { useSettings } from "@/hooks/use-settings";
 import type { Theme } from "@/styles/theme";
 import type { PendingPermission } from "@/types/shared";
-import type { StreamItem, TodoEntry } from "@/types/stream";
+import type { PortingItem, StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
@@ -1357,6 +1357,16 @@ const AgentStreamSection = memo(function AgentStreamSection({
   const streamItemsRaw = useSessionStore((state) =>
     agentId ? state.sessions[serverId]?.agentStreamTail?.get(agentId) : undefined,
   );
+  const migratedFrom = useSessionStore((state) => {
+    if (!agentId) {
+      return undefined;
+    }
+    const session = state.sessions[serverId];
+    return (
+      session?.agents.get(agentId)?.migratedFrom ??
+      session?.agentDetails?.get(agentId)?.migratedFrom
+    );
+  });
   const pendingMessageSubmissions = useSessionStore(
     useShallow((state) =>
       agentId
@@ -1371,7 +1381,27 @@ const AgentStreamSection = memo(function AgentStreamSection({
         : { isActive: false, isCancelling: false, startedAt: null, turnId: null },
     ),
   );
-  const streamItems = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
+  const streamItems = useMemo(() => {
+    const items = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
+    if (!migratedFrom) {
+      return items;
+    }
+    const portedAt = migratedFrom.portedAt ? new Date(migratedFrom.portedAt).getTime() : null;
+    const boundary =
+      portedAt === null
+        ? items.length
+        : items.findIndex((item) => item.timestamp.getTime() > portedAt);
+    const index = boundary < 0 ? items.length : boundary;
+    const marker: PortingItem = {
+      kind: "porting",
+      id: `porting:${agent.id}`,
+      timestamp: portedAt === null ? new Date() : new Date(portedAt),
+      status: "completed",
+      fromProvider: migratedFrom.provider as PortingItem["fromProvider"],
+      toProvider: agent.provider,
+    };
+    return [...items.slice(0, index), marker, ...items.slice(index)];
+  }, [agent.id, agent.provider, migratedFrom, streamItemsRaw]);
   const pendingPermissionList = useStoreWithEqualityFn(
     useSessionStore,
     (state) => {

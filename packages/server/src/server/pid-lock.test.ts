@@ -42,10 +42,10 @@ describe("pid-lock ownership", () => {
           patch: { listen: string },
           options: { ownerPid: number },
         ) => Promise<void>
-      )(paseoHome, { listen: "127.0.0.1:6767" }, { ownerPid });
+      )(paseoHome, { listen: "127.0.0.1:17000" }, { ownerPid });
 
       const updatedLock = await getPidLockInfo(paseoHome);
-      expect(updatedLock?.listen).toBe("127.0.0.1:6767");
+      expect(updatedLock?.listen).toBe("127.0.0.1:17000");
 
       await (
         releasePidLock as unknown as (home: string, options: { ownerPid: number }) => Promise<void>
@@ -76,7 +76,7 @@ describe("pid-lock ownership", () => {
           startedAt: new Date().toISOString(),
           hostname: "old-host",
           uid: process.getuid?.() ?? 0,
-          listen: "127.0.0.1:6767",
+          listen: "127.0.0.1:17000",
           desktopManaged: true,
           heartbeat: true,
         }),
@@ -109,7 +109,7 @@ describe("pid-lock ownership", () => {
           startedAt: new Date().toISOString(),
           hostname: "old-host",
           uid: process.getuid?.() ?? 0,
-          listen: "127.0.0.1:6767",
+          listen: "127.0.0.1:17000",
           desktopManaged: true,
           heartbeat: true,
         }),
@@ -123,7 +123,7 @@ describe("pid-lock ownership", () => {
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
-      expect(lock?.listen).toBe("127.0.0.1:6767");
+      expect(lock?.listen).toBe("127.0.0.1:17000");
     } finally {
       await rm(paseoHome, { recursive: true, force: true });
     }
@@ -141,7 +141,7 @@ describe("pid-lock ownership", () => {
           startedAt: new Date().toISOString(),
           hostname: "old-host",
           uid: process.getuid?.() ?? 0,
-          listen: "127.0.0.1:6767",
+          listen: "127.0.0.1:17000",
           desktopManaged: true,
         }),
       );
@@ -172,7 +172,7 @@ describe("pid-lock ownership", () => {
           startedAt: new Date().toISOString(),
           hostname: "old-host",
           uid: process.getuid?.() ?? 0,
-          listen: "127.0.0.1:6767",
+          listen: "127.0.0.1:17000",
           desktopManaged: true,
         }),
       );
@@ -239,7 +239,7 @@ describe("pid-lock ownership", () => {
           startedAt: new Date().toISOString(),
           hostname: "current-host",
           uid: process.getuid?.() ?? 0,
-          listen: "127.0.0.1:6767",
+          listen: "127.0.0.1:17000",
           desktopManaged: true,
           heartbeat: true,
         }),
@@ -251,7 +251,7 @@ describe("pid-lock ownership", () => {
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
-      expect(lock?.listen).toBe("127.0.0.1:6767");
+      expect(lock?.listen).toBe("127.0.0.1:17000");
     } finally {
       await rm(paseoHome, { recursive: true, force: true });
     }

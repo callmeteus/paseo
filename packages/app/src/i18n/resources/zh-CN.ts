@@ -397,6 +397,10 @@ export const zhCN: TranslationResources = {
       withTokens: "上下文已压缩（{{tokens}}K tokens）",
       completed: "上下文已压缩",
     },
+    porting: {
+      loading: "正在移植上下文...",
+      completed: "上下文已移植到 {{provider}}",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,

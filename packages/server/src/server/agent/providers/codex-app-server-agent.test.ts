@@ -2233,7 +2233,7 @@ describe("Codex app-server provider", () => {
         createConfig({
           cwd: "/workspace/project",
           mcpServers: {
-            paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1" },
+            paseo: { type: "http", url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1" },
           },
         }),
         null,
@@ -2268,7 +2268,7 @@ describe("Codex app-server provider", () => {
           ...customCodexConfig,
           mcp_servers: {
             paseo: expect.objectContaining({
-              url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+              url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
             }),
           },
         }),

@@ -398,6 +398,10 @@ export const ko: TranslationResources = {
       withTokens: "컨텍스트가 압축되었습니다 ({{tokens}}K 토큰)",
       completed: "컨텍스트가 압축되었습니다",
     },
+    porting: {
+      loading: "컨텍스트 포팅 중...",
+      completed: "컨텍스트가 {{provider}}(으)로 포팅되었습니다",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,
