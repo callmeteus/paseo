@@ -204,6 +204,7 @@ export const ar: TranslationResources = {
     provider: {
       fallback: "مزود",
       select: "حدد مزود الوكيل",
+      portingUnsupported: "حدّث هذا المضيف قبل تغيير مزود الوكيل",
     },
     thinking: {
       title: "التفكير",

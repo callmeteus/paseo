@@ -204,6 +204,7 @@ export const zhCN: TranslationResources = {
     provider: {
       fallback: "Provider",
       select: "选择 Agent Provider",
+      portingUnsupported: "请先更新此主机，然后再更改 Agent Provider。",
     },
     thinking: {
       title: "Thinking",

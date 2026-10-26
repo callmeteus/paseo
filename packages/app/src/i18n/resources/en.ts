@@ -200,6 +200,7 @@ export const en = {
     provider: {
       fallback: "Provider",
       select: "Select agent provider",
+      portingUnsupported: "This host needs an update before an agent can change providers",
     },
     thinking: {
       title: "Thinking",

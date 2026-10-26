@@ -207,6 +207,7 @@ export const fr: TranslationResources = {
     provider: {
       fallback: "Fournisseur",
       select: "Choisir le fournisseur d’agent",
+      portingUnsupported: "Mettez à jour cet hôte avant de changer le fournisseur d’un agent",
     },
     thinking: {
       title: "Réflexion",

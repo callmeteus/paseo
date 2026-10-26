@@ -206,6 +206,7 @@ export const es: TranslationResources = {
     provider: {
       fallback: "Proveedor",
       select: "Seleccionar proveedor de agente",
+      portingUnsupported: "Actualiza este host antes de cambiar el proveedor de un agente",
     },
     thinking: {
       title: "Pensamiento",

@@ -204,6 +204,7 @@ export const ko: TranslationResources = {
     provider: {
       fallback: "프로바이더",
       select: "에이전트 프로바이더 선택",
+      portingUnsupported: "에이전트 프로바이더를 변경하려면 이 호스트를 업데이트하세요",
     },
     thinking: {
       title: "사고",

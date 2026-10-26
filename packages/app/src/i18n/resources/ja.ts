@@ -206,6 +206,7 @@ export const ja: TranslationResources = {
     provider: {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",
+      portingUnsupported: "エージェントのプロバイダーを変更する前に、このホストを更新してください",
     },
     thinking: {
       title: "思考",

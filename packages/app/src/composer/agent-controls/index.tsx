@@ -1704,7 +1704,7 @@ export const AgentControls = memo(function AgentControls({
         return;
       }
       if (!supportsProviderSwap && (targetServerId ?? serverId) === serverId) {
-        toast.error("This host needs an update before an agent can change providers");
+        toast.error(t("agentControls.provider.portingUnsupported"));
         return;
       }
 

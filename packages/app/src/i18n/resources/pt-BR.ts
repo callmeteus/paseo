@@ -205,6 +205,7 @@ export const ptBR: TranslationResources = {
     provider: {
       fallback: "Provedor",
       select: "Selecionar provedor do agente",
+      portingUnsupported: "Atualize este host antes de trocar o provedor de um agente",
     },
     thinking: {
       title: "Raciocínio",

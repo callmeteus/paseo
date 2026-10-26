@@ -206,6 +206,7 @@ export const ru: TranslationResources = {
     provider: {
       fallback: "Провайдер",
       select: "Выбрать провайдера агента",
+      portingUnsupported: "Обновите этот хост, прежде чем менять провайдера агента",
     },
     thinking: {
       title: "Рассуждения",
