@@ -1574,10 +1574,6 @@ function optionalNonEmpty<T>(value: T[]): T[] | undefined {
   return value.length > 0 ? value : undefined;
 }
 
-function enabledHandler<T>(enabled: boolean, handler: T): T | undefined {
-  return enabled ? handler : undefined;
-}
-
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
@@ -1629,7 +1625,7 @@ export const AgentControls = memo(function AgentControls({
   );
   const agentModelSelectorProviders = useMemo(() => {
     let base: ProviderSelectorProvider[];
-    if (supportsProviderSwap && snapshotEntries) {
+    if (snapshotEntries) {
       base = buildSelectableProviderSelectorProviders(snapshotEntries, true, serverId);
     } else if (snapshotSelectedEntry) {
       base = buildSelectableProviderSelectorProviders([snapshotSelectedEntry], true, serverId);
@@ -1651,7 +1647,6 @@ export const AgentControls = memo(function AgentControls({
     serverId,
     snapshotEntries,
     snapshotSelectedEntry,
-    supportsProviderSwap,
     supportsSnapshotTransfer,
   ]);
 
@@ -1709,6 +1704,7 @@ export const AgentControls = memo(function AgentControls({
         return;
       }
       if (!supportsProviderSwap && (targetServerId ?? serverId) === serverId) {
+        toast.error("This host needs an update before an agent can change providers");
         return;
       }
 
@@ -1984,10 +1980,7 @@ export const AgentControls = memo(function AgentControls({
         modelOptions={modelOptions}
         selectedModelId={optionalValue(modelSelection.activeModelId)}
         onSelectModel={handleSelectModel}
-        onSelectProviderAndModel={enabledHandler(
-          supportsProviderSwap,
-          handleSelectProviderAndModel,
-        )}
+        onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}
         onApplyAgentProfile={agentProfiles?.applyProfile}
         onEditAgentProfiles={handleEditAgentProfiles}

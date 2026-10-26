@@ -318,7 +318,6 @@ export function useModelBrowser({
     setSearchQuery(value);
   }, []);
 
-  const singleProviderView = providers.length === 1;
   const header = useMemo<SheetHeader>(() => {
     if (view.kind === "all") {
       return {
@@ -344,7 +343,10 @@ export function useModelBrowser({
           tone="foreground"
         />
       ),
-      back: singleProviderView ? undefined : { onPress: showAll },
+      // A running conversation can initially expose only its current provider
+      // while the broader catalog is refreshed. Keep the root navigation
+      // available so the user can return to the provider list at any time.
+      back: { onPress: showAll },
       actions: (
         <View style={styles.headerActionRow}>
           <ProviderSettingsAction
@@ -366,16 +368,7 @@ export function useModelBrowser({
         testID: "model-search-input",
       },
     };
-  }, [
-    autoFocusSearch,
-    handleSearchQueryChange,
-    searchResetKey,
-    serverId,
-    singleProviderView,
-    showAll,
-    t,
-    view,
-  ]);
+  }, [autoFocusSearch, handleSearchQueryChange, searchResetKey, serverId, showAll, t, view]);
 
   const selectedModelLabel = useMemo(
     () =>
