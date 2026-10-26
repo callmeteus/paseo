@@ -12,7 +12,7 @@ Docker 镜像跟随 Paseo 稳定版的发布节奏。`ghcr.io/getpaseo/paseo:lat
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
@@ -22,7 +22,7 @@ docker run -d --name paseo \
 然后打开：
 
 ```text
-http://localhost:6767
+http://localhost:17000
 ```
 
 如果设置了 `PASEO_PASSWORD`，在网页界面、移动应用或 CLI 中添加直连 daemon 时，请使用相同的密码。
@@ -33,13 +33,13 @@ http://localhost:6767
 
 - 安装 Paseo daemon 和 CLI
 - 提供内置的网页界面
-- 在容器内监听 `0.0.0.0:6767`
+- 在容器内监听 `0.0.0.0:17000`
 - 把 daemon 状态保存在 `/home/paseo/.paseo` 下
 - 以非 root 的 `paseo` 用户运行 daemon 和启动的 Agent
 
 该镜像不包含 Claude Code、Codex、OpenCode、Copilot、Pi 或 Muse Code 等 Agent CLI。请用一个小的子镜像添加你使用的 Agent。
 
-在宿主机上运行 CLI 命令时需要显式指定容器，例如 `paseo project ls --host 127.0.0.1:6767`。如果不指定端点，CLI 会查找本地 home 的 supervisor。容器的环境变量设置属于部署层面的覆盖；重启 worker 会保留它们。完整替换 supervisor 由你的容器管理器负责。
+在宿主机上运行 CLI 命令时需要显式指定容器，例如 `paseo project ls --host 127.0.0.1:17000`。如果不指定端点，CLI 会查找本地 home 的 supervisor。容器的环境变量设置属于部署层面的覆盖；重启 worker 会保留它们。完整替换 supervisor 由你的容器管理器负责。
 
 ## Docker Compose {#docker-compose}
 
@@ -50,7 +50,7 @@ services:
     container_name: paseo
     restart: unless-stopped
     ports:
-      - "6767:6767"
+      - "17000:17000"
     environment:
       PASEO_PASSWORD: "change-me"
       # PASEO_HOSTNAMES: "paseo.example.com,.lan"
@@ -114,7 +114,7 @@ Caddy：
 
 ```caddy
 paseo.example.com {
-  reverse_proxy 127.0.0.1:6767
+  reverse_proxy 127.0.0.1:17000
 }
 ```
 
@@ -126,7 +126,7 @@ server {
     server_name paseo.example.com;
 
     location / {
-        proxy_pass http://127.0.0.1:6767;
+        proxy_pass http://127.0.0.1:17000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

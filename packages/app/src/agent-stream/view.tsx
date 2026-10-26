@@ -37,6 +37,7 @@ import {
   ToolCall,
   TodoListCard,
   CompactionMarker,
+  PortingMarker,
   MessageOuterSpacingProvider,
   type InlinePathTarget,
 } from "@/components/message";
@@ -933,6 +934,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 preTokens={item.preTokens}
               />
             );
+
+          case "porting":
+            return <PortingMarker status={item.status} provider={item.toProvider} />;
 
           case "plugin":
             return (

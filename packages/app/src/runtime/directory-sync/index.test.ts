@@ -463,7 +463,7 @@ describe("DirectorySync session readiness", () => {
             type: "service",
             hostname: "web.paseo.localhost",
             port: 3000,
-            proxyUrl: "http://web.paseo.localhost:6767",
+            proxyUrl: "http://web.paseo.localhost:17000",
             lifecycle: "running",
             health: "healthy",
             exitCode: null,

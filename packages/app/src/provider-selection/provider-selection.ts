@@ -18,6 +18,7 @@ export interface ProviderSelectionModelRow {
    */
   favoriteKey: string;
   provider: string;
+  serverId?: string | null;
   providerLabel: string;
   modelId: string;
   modelLabel: string;
@@ -25,8 +26,11 @@ export interface ProviderSelectionModelRow {
   isDefault?: boolean;
 }
 
-function buildModelRowKey(provider: string, modelId: string): string {
-  return `${provider}:${modelId}`;
+function buildModelRowKey(provider: string, modelId: string, serverId?: string | null): string {
+  const normalizedServerId = serverId?.trim();
+  return normalizedServerId
+    ? `${normalizedServerId}:${provider}:${modelId}`
+    : `${provider}:${modelId}`;
 }
 
 export type ProviderModelSelection =
@@ -37,6 +41,7 @@ export type ProviderModelSelection =
 export interface ProviderSelectorProvider {
   id: string;
   label: string;
+  serverId?: string | null;
   modelSelection: ProviderModelSelection;
 }
 
@@ -58,30 +63,34 @@ function buildModelRows(
   provider: string,
   providerLabel: string,
   models: AgentModelDefinition[],
+  serverId?: string | null,
 ): ProviderSelectionModelRow[] {
   return models.map((model) => ({
-    favoriteKey: buildModelRowKey(provider, model.id),
+    favoriteKey: buildModelRowKey(provider, model.id, serverId),
     provider,
     providerLabel,
     modelId: model.id,
     modelLabel: model.label,
     description: model.description ?? model.id,
     isDefault: model.isDefault,
+    serverId,
   }));
 }
 
 function buildSyntheticDefaultRow(
   provider: string,
   providerLabel: string,
+  serverId?: string | null,
 ): ProviderSelectionModelRow {
   return {
-    favoriteKey: buildModelRowKey(provider, ""),
+    favoriteKey: buildModelRowKey(provider, "", serverId),
     provider,
     providerLabel,
     modelId: "",
     modelLabel: i18n.t("providerSelection.defaultModel"),
     description: undefined,
     isDefault: true,
+    serverId,
   };
 }
 
@@ -89,27 +98,32 @@ function buildModelSelection(
   provider: string,
   providerLabel: string,
   models: AgentModelDefinition[] | null,
+  serverId?: string | null,
 ): ProviderModelSelection {
   if (models === null) {
     return { kind: "loading" };
   }
   const selectableModels = filterSelectableModels(models) ?? [];
   if (selectableModels.length === 0) {
-    return { kind: "models", rows: [buildSyntheticDefaultRow(provider, providerLabel)] };
+    return { kind: "models", rows: [buildSyntheticDefaultRow(provider, providerLabel, serverId)] };
   }
-  return { kind: "models", rows: buildModelRows(provider, providerLabel, selectableModels) };
+  return {
+    kind: "models",
+    rows: buildModelRows(provider, providerLabel, selectableModels, serverId),
+  };
 }
 
 function buildEntryModelSelection(
   entry: ProviderSnapshotEntry,
   label: string,
   isConnected: boolean,
+  serverId?: string | null,
 ): ProviderModelSelection {
   if ((entry.models?.length ?? 0) > 0) {
-    return buildModelSelection(entry.provider, label, entry.models ?? null);
+    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId);
   }
   if (entry.status === "ready") {
-    return buildModelSelection(entry.provider, label, entry.models ?? null);
+    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId);
   }
   if (entry.status === "loading") {
     return isConnected
@@ -129,16 +143,19 @@ function buildEntryModelSelection(
 export function buildProviderSelectorProviders(input: {
   providerDefinitions: AgentProviderDefinition[];
   modelsByProvider: Map<string, AgentModelDefinition[]>;
+  serverId?: string | null;
 }): ProviderSelectorProvider[] {
   return input.providerDefinitions.map((definition) => ({
     id: definition.id,
     label: definition.label,
+    serverId: input.serverId,
     modelSelection: buildModelSelection(
       definition.id,
       definition.label,
       input.modelsByProvider.has(definition.id)
         ? (input.modelsByProvider.get(definition.id) ?? [])
         : null,
+      input.serverId,
     ),
   }));
 }
@@ -146,6 +163,7 @@ export function buildProviderSelectorProviders(input: {
 export function buildSelectableProviderSelectorProviders(
   entries: ProviderSnapshotEntry[] | undefined,
   isConnected = true,
+  serverId?: string | null,
 ): ProviderSelectorProvider[] {
   return (entries ?? [])
     .filter((entry) => entry.enabled)
@@ -154,7 +172,8 @@ export function buildSelectableProviderSelectorProviders(
       return {
         id: entry.provider,
         label,
-        modelSelection: buildEntryModelSelection(entry, label, isConnected),
+        serverId,
+        modelSelection: buildEntryModelSelection(entry, label, isConnected, serverId),
       };
     });
 }

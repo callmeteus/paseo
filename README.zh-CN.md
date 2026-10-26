@@ -113,7 +113,7 @@ paseo attach abc123                # 实时流式查看输出
 paseo send abc123 "also add tests" # 发送后续任务
 
 # 在远程 daemon 上运行
-paseo --host workstation.local:6767 run "run the full test suite"
+paseo --host workstation.local:17000 run "run the full test suite"
 ```
 
 更多内容见[完整 CLI 参考](https://paseo.sh/zh-CN/docs/cli)。

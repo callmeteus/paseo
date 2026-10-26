@@ -28,7 +28,7 @@ interface CompactModelSheetProps {
   selectedProvider: string;
   selectedModel: string;
   thinkingLabel: string | null;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -162,8 +162,8 @@ export function CompactModelSheet({
   }, [modelBrowser, onClose, rootBrowser]);
 
   const handleSearchSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       Keyboard.dismiss();
       rootBrowser.showAll();
     },
@@ -191,16 +191,16 @@ export function CompactModelSheet({
   }, [modelBrowser]);
 
   const handleBrowserSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       closeModelBrowser();
     },
     [closeModelBrowser, onSelect],
   );
 
   const handleDesktopSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       close();
     },
     [close, onSelect],

@@ -444,14 +444,14 @@ describe("WorkspaceScriptsButton", () => {
         hostname: "dev--proj--repo.localhost",
         lifecycle: "running",
         port: 57483,
-        proxyUrl: "http://dev--proj--repo.localhost:6767",
+        proxyUrl: "http://dev--proj--repo.localhost:17000",
         terminalId: "terminal-script-1",
       }),
     ];
     current = renderScripts(scripts);
 
     const row = requireRow("dev");
-    expect(row.textContent).toContain("dev--proj--repo.localhost:6767");
+    expect(row.textContent).toContain("dev--proj--repo.localhost:17000");
 
     const routeButton = row.querySelector('[data-testid="workspace-scripts-route-dev"]');
     expect(routeButton).not.toBeNull();
@@ -479,7 +479,7 @@ describe("WorkspaceScriptsButton", () => {
         type: "service",
         lifecycle: "running",
         port: 57483,
-        localProxyUrl: "http://dev--proj--repo.localhost:6767",
+        localProxyUrl: "http://dev--proj--repo.localhost:17000",
         publicProxyUrl: "https://dev--proj--repo.services.example.com",
         proxyUrl: "https://dev--proj--repo.services.example.com",
         terminalId: "terminal-script-1",
@@ -551,7 +551,7 @@ describe("WorkspaceScriptsButton", () => {
         type: "service",
         lifecycle: "running",
         port: 3000,
-        proxyUrl: "http://dev--project.localhost:6767",
+        proxyUrl: "http://dev--project.localhost:17000",
         terminalId: "terminal-script-1",
       }),
     ]);

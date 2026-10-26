@@ -13,7 +13,7 @@
 将你的 daemon 连接到另一台机器，然后让 Agent 把工作委派过去：
 
 ```sh
-paseo host add 192.168.1.20:6767 --label studio
+paseo host add 192.168.1.20:17000 --label studio
 paseo host add 'ssh://me@build-box' --label build-box
 paseo host add 'relay://...' --label laptop
 ```
@@ -187,7 +187,7 @@ paseo host add 'relay://...' --label laptop
 - 修复了 Cursor Agent 的上下文详情中不显示套餐用量的问题 ([#6353](https://github.com/getpaseo/paseo/pull/6353) by [@gengjiawen](https://github.com/gengjiawen))
 - 修复了代理在响应结束时报告输入用量时，Claude 上下文计量只统计输出 token 的问题 ([#6703](https://github.com/getpaseo/paseo/pull/6703) by [@kywoo26](https://github.com/kywoo26))
 - 修复了切换回 200k 模型后 Claude 上下文计量仍显示 1M 上限的问题 ([#6814](https://github.com/getpaseo/paseo/pull/6814))
-- 修复了自定义 Claude `[1m]` 模型在第一个回合期间上下文计量一直为空的问题 ([#6767](https://github.com/getpaseo/paseo/pull/6767))
+- 修复了自定义 Claude `[1m]` 模型在第一个回合期间上下文计量一直为空的问题 ([#17000](https://github.com/getpaseo/paseo/pull/17000))
 - 修复了定时任务的某次运行无法记录后该定时任务再也不运行的问题 ([#6334](https://github.com/getpaseo/paseo/pull/6334))
 - 修复了共享同一 cron 分钟的定时任务会把一个时段运行两次并跳过下一次的问题 ([#6532](https://github.com/getpaseo/paseo/pull/6532) by [@keithpk](https://github.com/keithpk))
 - 修复了从已有分支创建的 worktree 在 Committed 中不显示更改的问题 ([#6462](https://github.com/getpaseo/paseo/pull/6462) by [@cr-2takumax](https://github.com/cr-2takumax))
@@ -2444,7 +2444,7 @@ _此版本只修复了一个 Android 问题，桌面端用户无需更新。_
 
 ### 新增
 
-- 每个 worktree 的脚本和服务——在 `paseo.json` 中定义命名命令，长时间运行的服务会被托管，拥有自己的端口和像 `http://web.my-app.localhost:6767` 这样友好的代理 URL。参见 [worktree 指南](https://paseo.sh/docs/worktrees)
+- 每个 worktree 的脚本和服务——在 `paseo.json` 中定义命名命令，长时间运行的服务会被托管，拥有自己的端口和像 `http://web.my-app.localhost:17000` 这样友好的代理 URL。参见 [worktree 指南](https://paseo.sh/docs/worktrees)
 - 直接从工作区标题栏为 worktree 启动脚本和服务
 - 每个工作区中新增 Setup 标签页，实时显示 setup、teardown 和脚本进度
 - 资源管理器侧边栏中显示 GitHub 检查和 PR 审查，并提供展示完整明细的悬停卡片

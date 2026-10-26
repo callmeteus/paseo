@@ -23,14 +23,14 @@ nav: 概览
 npx @getpaseo/cli
 ```
 
-它监听 `ws://127.0.0.1:6767/ws`。
+它监听 `ws://127.0.0.1:17000/ws`。
 
 ## 运行 Agent {#run-an-agent}
 
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

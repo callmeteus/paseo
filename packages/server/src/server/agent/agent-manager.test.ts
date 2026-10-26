@@ -2965,7 +2965,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     idFactory: () => "00000000-0000-4000-8000-000000000103",
   });
 
@@ -2993,7 +2993,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
   expect(client.lastConfig?.mcpServers).toEqual({
     paseo: {
       type: "http",
-      url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
+      url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${snapshot.id}`,
     },
     custom: {
       type: "stdio",
@@ -3213,7 +3213,7 @@ test("createAgent passes native Paseo tools through launch context without inter
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     paseoToolCatalogFactory: () => paseoTools,
     idFactory: () => "00000000-0000-4000-8000-000000000106",
   });
@@ -3277,7 +3277,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     mcpAuthToken: "cap-token",
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
@@ -3294,7 +3294,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
   expect(manager.getMcpAuthToken()).toBe("cap-token");
   expect(client.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
-    url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
+    url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${snapshot.id}`,
     headers: { Authorization: "Bearer cap-token" },
   });
 
@@ -3342,7 +3342,7 @@ test("uses each provider's current policy for new sessions and snapshots it by a
     clients: { codex, claude },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     resolvePaseoToolPolicy: (provider) => policies.get(provider),
     paseoToolCatalogFactory: async (context) => {
       policyInputs.push(context);
@@ -3422,7 +3422,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     clients: { codex: enabledClient },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     resolvePaseoToolPolicy: () => ({ disabledTools: ["list_agents"] }),
   });
   const enabledAgent = await enabledManager.createAgent(
@@ -3433,7 +3433,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
 
   expect(enabledClient.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
-    url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${enabledAgent.id}`,
+    url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${enabledAgent.id}`,
   });
 
   const disabledClient = new McpClient();
@@ -3442,7 +3442,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     clients: { codex: disabledClient },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     paseoToolsEnabled: false,
     resolvePaseoToolPolicy: () => ({ enabled: true }),
     paseoToolCatalogFactory: () => {
@@ -3490,7 +3490,7 @@ test("resumeAgentFromPersistence replaces stored internal paseo MCP with current
     mcpServers: {
       paseo: {
         type: "http",
-        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=stale-agent",
+        url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=stale-agent",
       },
       custom: {
         type: "stdio",
@@ -3542,7 +3542,7 @@ test("resumeAgentFromPersistence drops stored internal paseo MCP when runtime in
     mcpServers: {
       paseo: {
         type: "http",
-        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=stale-agent",
+        url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=stale-agent",
       },
     },
   });
@@ -3572,7 +3572,7 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
 

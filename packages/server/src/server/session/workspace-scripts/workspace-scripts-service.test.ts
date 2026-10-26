@@ -107,7 +107,7 @@ function buildService(options: BuildOptions = {}) {
     workspaceRegistry: fakeWorkspaceRegistry(workspace),
     projectRegistry: fakeProjectRegistry(options.project ?? null),
     workspaceRuntimeStore: options.runtimeStore ?? fakeRuntimeStore(),
-    getDaemonTcpPort: () => 6767,
+    getDaemonTcpPort: () => 17000,
     getDaemonTcpHost: () => "127.0.0.1",
     serviceProxyPublicBaseUrl: null,
     resolveScriptHealth: null,
@@ -212,7 +212,7 @@ describe("buildSnapshot", () => {
         projectSlug: deriveProjectServiceSlug(project),
         branchName: workspace.branch,
         scriptName: "app",
-        daemonPort: 6767,
+        daemonPort: 17000,
       }).hostname,
     );
     await service.start({ ...request, workspaceId: workspace.workspaceId });
@@ -349,7 +349,7 @@ describe("start", () => {
       projectSlug: "paseo",
       branchName: "feature/scripts",
       scriptName: "app",
-      daemonPort: 6767,
+      daemonPort: 17000,
       daemonListenHost: "127.0.0.1",
     });
     expect(published).toContainEqual({

@@ -35,14 +35,14 @@ daemon 还可以自己提供浏览器网页应用，这样你无需托管版应�
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
   ghcr.io/getpaseo/paseo:latest
 ```
 
-然后打开 `http://localhost:6767`。
+然后打开 `http://localhost:17000`。
 
 该镜像运行 daemon 并提供内置的网页界面。它不包含 Agent CLI，因此请用你使用的 Agent 扩展它。Compose、反向代理、Agent 安装和安全方面的示例见 [Docker](/docs/docker)。
 

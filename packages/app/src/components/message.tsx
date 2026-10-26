@@ -82,6 +82,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { capAssistantMessageForRender, getUtf8ByteLength } from "./assistant-message-render-limit";
 import { getTurnDurationLabel } from "./assistant-turn-footer-label";
 import { getCompactionMarkerLabel } from "./message-compaction-label";
+import { getPortingMarkerLabel } from "./message-porting-label";
 import { PlanCard } from "./plan-card";
 import { ToolCallDetailsContent } from "./tool-call-details";
 import { useToolCallSheet } from "./tool-call-sheet";
@@ -1404,6 +1405,31 @@ export const CompactionMarker = memo(function CompactionMarker({
   preTokens,
 }: CompactionMarkerProps) {
   const label = getCompactionMarkerLabel({ status, trigger, preTokens });
+
+  return (
+    <View style={compactionStylesheet.container}>
+      <View style={compactionStylesheet.line} />
+      <View style={compactionStylesheet.label}>
+        {status === "loading" ? (
+          <LoadingSpinner size="small" color="#a1a1aa" />
+        ) : (
+          <Scissors size={12} color="#a1a1aa" />
+        )}
+        <Text style={compactionStylesheet.text}>{label}</Text>
+      </View>
+      <View style={compactionStylesheet.line} />
+    </View>
+  );
+});
+
+export const PortingMarker = memo(function PortingMarker({
+  status,
+  provider,
+}: {
+  status: "loading" | "completed";
+  provider?: string;
+}) {
+  const label = getPortingMarkerLabel({ status, provider });
 
   return (
     <View style={compactionStylesheet.container}>

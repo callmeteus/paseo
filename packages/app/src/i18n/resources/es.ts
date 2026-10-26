@@ -404,6 +404,10 @@ export const es: TranslationResources = {
       withTokens: "Contexto compactado (tokens{{tokens}}K)",
       completed: "Contexto compactado",
     },
+    porting: {
+      loading: "Portando contexto...",
+      completed: "Contexto portado a {{provider}}",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,

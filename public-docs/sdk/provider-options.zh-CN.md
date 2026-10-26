@@ -44,7 +44,7 @@ Provider 选项不是主机边界。它们约束的是 Agent CLI，而 Agent CLI
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -88,7 +88,7 @@ await client.close();
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -140,7 +140,7 @@ await client.close();
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

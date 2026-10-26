@@ -399,6 +399,10 @@ export const ar: TranslationResources = {
       withTokens: "تم ضغط السياق (رموز{{tokens}}K)",
       completed: "تم ضغط السياق",
     },
+    porting: {
+      loading: "جارٍ نقل السياق...",
+      completed: "تم نقل السياق إلى {{provider}}",
+    },
   },
   importSession: {
     chooseHostTitle: en.importSession.chooseHostTitle,

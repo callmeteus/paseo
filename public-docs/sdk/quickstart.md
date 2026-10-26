@@ -19,7 +19,7 @@ Requires Node.js 22 or newer.
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 ```
 

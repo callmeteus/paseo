@@ -74,7 +74,7 @@ describe("direct connection failure copy", () => {
     const message = "Invalid daemon password";
     expect(
       buildConnectionFailureCopy({
-        endpoint: "example.test:6767",
+        endpoint: "example.test:17000",
         error: new DaemonConnectionTestError(message, {
           reason: message,
           lastError: message,

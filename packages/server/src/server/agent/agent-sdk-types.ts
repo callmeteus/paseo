@@ -381,6 +381,14 @@ export interface CompactionTimelineItem {
   preTokens?: number;
 }
 
+export interface PortingTimelineItem {
+  [key: string]: unknown;
+  type: "porting";
+  status: "loading" | "completed";
+  fromProvider?: AgentProvider;
+  toProvider?: AgentProvider;
+}
+
 export interface PluginTimelineItem {
   type: "plugin";
   id: string;
@@ -403,6 +411,7 @@ export type AgentTimelineItem =
       message: string;
     }
   | CompactionTimelineItem
+  | PortingTimelineItem
   | PluginTimelineItem;
 
 export type AgentStreamEvent =

@@ -46,14 +46,14 @@ PASEO_WEB_UI_ENABLED=true paseo daemon run
 然后在浏览器中打开 daemon 的地址：
 
 ```
-http://localhost:6767/
+http://localhost:17000/
 ```
 
 如果你的 daemon 不认识 `--web-ui`，请更新它；这个参数是随内置 Web UI 一起加入的。
 
 ## 连接的工作方式 {#how-the-connection-works}
 
-页面与 daemon 的 API 和 WebSocket 来自同一个源。打开页面时，应用会自动连接回同一个源，因此你通常可以完全跳过“添加主机”步骤：打开 `http://localhost:6767/`，就能看到你的 Agent。
+页面与 daemon 的 API 和 WebSocket 来自同一个源。打开页面时，应用会自动连接回同一个源，因此你通常可以完全跳过“添加主机”步骤：打开 `http://localhost:17000/`，就能看到你的 Agent。
 
 同一个 HTTP 服务器继续提供 API（`/api/*`）、MCP（`/mcp/*`）、服务代理路由和 WebSocket 升级。新增的只有静态文件。要让提供的 UI 指向*另一个* daemon，请照常在 UI 中把那个 daemon 添加为主机。
 
@@ -61,7 +61,7 @@ http://localhost:6767/
 
 三种常见的运行方式，按暴露程度从低到高排列：
 
-- **同一台机器。** daemon 和浏览器在同一台机器上。打开 `http://localhost:6767/`，无需其他配置。
+- **同一台机器。** daemon 和浏览器在同一台机器上。打开 `http://localhost:17000/`，无需其他配置。
 - **私有网络（局域网或 VPN）。** 从你信任的网络中的其他设备访问 daemon，例如家庭局域网或 [Tailscale](https://tailscale.com) tailnet。完整的直接连接设置见[连接方式指南](/docs/connectivity#tailscale)。
 - **公开的反向代理或隧道。** 通过 HTTPS 在一个域名上暴露 UI，在反向代理或隧道处终止 TLS。这是完整的自托管设置。
 
@@ -69,10 +69,10 @@ http://localhost:6767/
 
 ## 在 localhost 之外暴露 {#exposing-beyond-localhost}
 
-daemon 默认监听 `127.0.0.1:6767`，只能从同一台机器访问。要从其他设备访问，请把它绑定到某个网络接口：
+daemon 默认监听 `127.0.0.1:17000`，只能从同一台机器访问。要从其他设备访问，请把它绑定到某个网络接口：
 
 ```bash
-paseo daemon config set daemon.listen 0.0.0.0:6767
+paseo daemon config set daemon.listen 0.0.0.0:17000
 paseo daemon start
 ```
 
@@ -128,7 +128,7 @@ server {
   client_max_body_size 100m;
 
   location / {
-    proxy_pass http://127.0.0.1:6767;
+    proxy_pass http://127.0.0.1:17000;
     proxy_http_version 1.1;
 
     # WebSocket upgrade
@@ -154,7 +154,7 @@ Caddy 会为你处理 TLS、WebSocket 升级、请求头转发和流式传输：
 
 ```caddy
 paseo.example.com {
-  reverse_proxy 127.0.0.1:6767
+  reverse_proxy 127.0.0.1:17000
 }
 ```
 
@@ -164,7 +164,7 @@ paseo.example.com {
 
 在代理（或隧道）处终止 TLS，并通过 localhost 上的普通 HTTP 转发给 daemon，上面的配置就是这样做的。当页面通过 HTTPS 提供且代理传递 `X-Forwarded-Proto: https` 时，应用会自动通过 `wss://` 连接回来。你不需要在任何地方配置协议；它跟随边缘节点。
 
-daemon 默认信任来自回环地址代理的转发请求头，上面所有的设置都是如此：代理或隧道转发到 `127.0.0.1:6767`。
+daemon 默认信任来自回环地址代理的转发请求头，上面所有的设置都是如此：代理或隧道转发到 `127.0.0.1:17000`。
 
 如果你的代理从其他地址访问 daemon，例如在某些 Docker、局域网或负载均衡器设置中，请配置受信任的代理范围：
 
@@ -195,7 +195,7 @@ PASEO_TRUSTED_PROXIES=loopback,172.16.0.0/12 PASEO_WEB_UI_ENABLED=true paseo dae
 - **Tailscale Serve** 把它保留在你的 tailnet 内，不公开暴露，并为你处理 TLS：
 
   ```bash
-  tailscale serve --bg http://127.0.0.1:6767
+  tailscale serve --bg http://127.0.0.1:17000
   ```
 
   通过 `https://<your-machine>.<tailnet>.ts.net/` 访问。只有你的 tailnet 中的设备可以连接。
@@ -203,7 +203,7 @@ PASEO_TRUSTED_PROXIES=loopback,172.16.0.0/12 PASEO_WEB_UI_ENABLED=true paseo dae
 - **Cloudflare Tunnel** 通过一个支持 TLS 和 WebSocket 的公开主机名暴露它：
 
   ```bash
-  cloudflared tunnel --url http://localhost:6767
+  cloudflared tunnel --url http://localhost:17000
   ```
 
   Cloudflare 会终止 TLS 并设置 `X-Forwarded-Proto: https`，因此自动连接可以正常工作。由于 URL 是公开的，**请设置 daemon 密码**。

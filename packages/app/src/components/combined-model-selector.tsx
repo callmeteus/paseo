@@ -27,7 +27,7 @@ interface CombinedModelSelectorProps {
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
   selectedModel: string;
-  onSelect: (provider: AgentProvider, modelId: string) => void;
+  onSelect: (provider: AgentProvider, modelId: string, serverId?: string | null) => void;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -119,8 +119,8 @@ export function CombinedModelSelector({
   );
 
   const handleSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       handleOpenChange(false);
     },
     [handleOpenChange, onSelect],

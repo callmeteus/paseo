@@ -59,6 +59,7 @@ import {
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import { swapAgentProvider } from "./agent-provider-swap.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -314,6 +315,9 @@ export interface CreateAgentOptions {
   env?: Record<string, string>;
   persistSession?: boolean;
   initialTitle?: string | null;
+  timeline?: AgentTimelineItem[];
+  timelineRows?: AgentTimelineRow[];
+  timelineNextSeq?: number;
   // undefined is an explicit decision: the agent never appears in the sidebar.
   workspaceId: string | undefined;
   owner?: AgentOwner;
@@ -1321,6 +1325,9 @@ export class AgentManager {
     const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       labels: options.labels,
       initialTitle: options.initialTitle,
+      timeline: options.timeline,
+      timelineRows: options.timelineRows,
+      timelineNextSeq: options.timelineNextSeq,
       workspaceId: options.workspaceId,
       owner: options.owner,
       historyPrimed: true,
@@ -4124,6 +4131,32 @@ export class AgentManager {
       throw new Error("Agent storage unavailable");
     }
     return this.registry;
+  }
+
+  async swapProvider(
+    agentId: string,
+    targetProvider: string,
+    targetModel: string | null,
+  ): Promise<{ newAgentId: string; previousAgentId: string }> {
+    const registry = this.requireRegistry();
+    const previousItems = this.timelineStore.has(agentId)
+      ? this.timelineStore.getItems(agentId)
+      : [];
+    const result = await swapAgentProvider({
+      storage: registry,
+      agentId,
+      targetProvider,
+      targetModel,
+      previousItems,
+      logger: this.logger,
+    });
+    if (previousItems.length > 0 && !this.timelineStore.has(result.newAgentId)) {
+      this.timelineStore.initialize(result.newAgentId, {
+        items: previousItems,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return result;
   }
 
   /**

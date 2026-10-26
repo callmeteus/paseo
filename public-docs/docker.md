@@ -14,7 +14,7 @@ Docker images follow the stable Paseo release cadence. `ghcr.io/getpaseo/paseo:l
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
@@ -24,7 +24,7 @@ docker run -d --name paseo \
 Then open:
 
 ```text
-http://localhost:6767
+http://localhost:17000
 ```
 
 If you set `PASEO_PASSWORD`, use that same password when adding the direct daemon connection in the web UI, mobile app, or CLI.
@@ -35,13 +35,13 @@ The image:
 
 - installs the Paseo daemon and CLI
 - serves the bundled web UI
-- listens on `0.0.0.0:6767` inside the container
+- listens on `0.0.0.0:17000` inside the container
 - stores daemon state under `/home/paseo/.paseo`
 - runs the daemon and launched agents as the non-root `paseo` user
 
 The image does not bundle agent CLIs such as Claude Code, Codex, OpenCode, Copilot, Pi, or Muse Code. Add the agents you use with a small child image.
 
-Host-side CLI commands select the container explicitly, for example `paseo project ls --host 127.0.0.1:6767`. Without an endpoint selector the CLI looks for a local home’s supervisor. Container environment settings are deployment overrides; worker restart preserves them. Your container manager owns full supervisor replacement.
+Host-side CLI commands select the container explicitly, for example `paseo project ls --host 127.0.0.1:17000`. Without an endpoint selector the CLI looks for a local home’s supervisor. Container environment settings are deployment overrides; worker restart preserves them. Your container manager owns full supervisor replacement.
 
 ## Docker Compose
 
@@ -52,7 +52,7 @@ services:
     container_name: paseo
     restart: unless-stopped
     ports:
-      - "6767:6767"
+      - "17000:17000"
     environment:
       PASEO_PASSWORD: "change-me"
       # PASEO_HOSTNAMES: "paseo.example.com,.lan"
@@ -116,7 +116,7 @@ Caddy:
 
 ```caddy
 paseo.example.com {
-  reverse_proxy 127.0.0.1:6767
+  reverse_proxy 127.0.0.1:17000
 }
 ```
 
@@ -128,7 +128,7 @@ server {
     server_name paseo.example.com;
 
     location / {
-        proxy_pass http://127.0.0.1:6767;
+        proxy_pass http://127.0.0.1:17000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

@@ -53,7 +53,7 @@ Paseo has a CLI that mirrors the app:
 
 ```bash
 paseo run --provider codex "implement OAuth"
-paseo run --host devbox:6767 "run the test suite"
+paseo run --host devbox:17000 "run the test suite"
 paseo ls
 paseo send <agent-id> "add tests"
 paseo schedule create --cron "0 9 * * 1" "audit the codebase"

@@ -1,4 +1,5 @@
 import { AgentMessageSchema } from "./agent-message.js";
+import { AgentSnapshotSchema } from "./agent-snapshot.js";
 import {
   HostsListRequestSchema,
   HostsAddRequestSchema,
@@ -749,6 +750,12 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     preTokens: z.number().optional(),
   }),
   z.object({
+    type: z.literal("porting"),
+    status: z.enum(["loading", "completed"]),
+    fromProvider: AgentProviderSchema.optional(),
+    toProvider: AgentProviderSchema.optional(),
+  }),
+  z.object({
     type: z.literal("plugin"),
     id: z.string(),
     pluginId: PluginIdSchema,
@@ -879,6 +886,22 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  migratedFrom: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
   // Private helper marker, retained for exact-ID snapshots and older wire messages.
   internal: z.boolean().optional(),
 });
@@ -966,6 +989,15 @@ export const DeleteAgentRequestMessageSchema = z.object({
 export const ArchiveAgentRequestMessageSchema = z.object({
   type: z.literal("archive_agent_request"),
   agentId: z.string(),
+  // Set when the archived agent was ported elsewhere, so its record keeps the pointer.
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
   requestId: z.string(),
 });
 
@@ -1783,6 +1815,30 @@ export const AgentCreateRequestSchema = CreateAgentRequestMessageSchema.extend({
   agentId: z.uuid().optional(),
   attachments: z.array(AgentAttachmentSchema).optional(),
   subscribe: z.boolean().optional(),
+});
+
+export const AgentSwapProviderRequestSchema = z.object({
+  type: z.literal("agent.swap_provider.request"),
+  agentId: z.string(),
+  targetProvider: z.string(),
+  targetModel: z.string().nullable().optional(),
+  requestId: z.string(),
+});
+
+export const AgentExportSnapshotRequestSchema = z.object({
+  type: z.literal("agent.export_snapshot.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentImportSnapshotRequestSchema = z.object({
+  type: z.literal("agent.import_snapshot.request"),
+  snapshot: AgentSnapshotSchema,
+  targetProvider: z.string(),
+  targetModel: z.string().nullable().optional(),
+  workspaceId: z.string().optional(),
+  sourceHost: z.string().optional(),
+  requestId: z.string(),
 });
 
 export const WorkspaceInitialAgentSchema = AgentCreateRequestSchema.omit({
@@ -3410,6 +3466,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ArchiveWorkspaceRequestSchema,
   WorkspaceCreateRequestSchema,
   AgentCreateRequestSchema,
+  AgentSwapProviderRequestSchema,
+  AgentExportSnapshotRequestSchema,
+  AgentImportSnapshotRequestSchema,
   CreationSubscribeRequestSchema,
   WorkspaceClearAttentionRequestSchema,
   WorkspaceMarkUnreadRequestSchema,
@@ -3759,6 +3818,10 @@ export const ServerInfoStatusPayloadSchema = z
         daemonSelfUpdate: z.boolean().optional(),
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: z.boolean().optional(),
+        // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
+        agentProviderSwap: z.boolean().optional(),
+        // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.
+        agentSnapshotTransfer: z.boolean().optional(),
         // COMPAT(agentForkContextCursor): added in v0.1.108, remove gate after 2027-01-14.
         agentForkContextCursor: z.boolean().optional(),
         // COMPAT(providerSubagents): added in v0.1.107, remove gate after 2027-01-12.
@@ -5011,6 +5074,34 @@ export const AgentCreateResponseSchema = z.object({
     agent: AgentSnapshotPayloadSchema.nullable(),
     error: z.string().nullable(),
     creation: CreationSnapshotSchema.optional(),
+  }),
+});
+
+export const AgentSwapProviderResponseSchema = z.object({
+  type: z.literal("agent.swap_provider.response"),
+  payload: z.object({
+    requestId: z.string(),
+    newAgentId: z.string().nullable(),
+    previousAgentId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentExportSnapshotResponseSchema = z.object({
+  type: z.literal("agent.export_snapshot.response"),
+  payload: z.object({
+    requestId: z.string(),
+    snapshot: AgentSnapshotSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentImportSnapshotResponseSchema = z.object({
+  type: z.literal("agent.import_snapshot.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string().nullable(),
+    error: z.string().nullable(),
   }),
 });
 
@@ -7053,6 +7144,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ClearAgentAttentionResponseMessageSchema,
   WorkspaceCreateResponseSchema,
   AgentCreateResponseSchema,
+  AgentSwapProviderResponseSchema,
+  AgentExportSnapshotResponseSchema,
+  AgentImportSnapshotResponseSchema,
   WorkspaceCreationUpdateSchema,
   AgentCreationUpdateSchema,
   CreationSubscribeResponseSchema,

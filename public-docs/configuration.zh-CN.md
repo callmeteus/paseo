@@ -33,7 +33,7 @@ Paseo 默认使用 `~/.paseo` 作为主目录。配置文件是：
   "$schema": "https://paseo.sh/schemas/paseo.config.v1.json",
   "version": 1,
   "daemon": {
-    "listen": "127.0.0.1:6767",
+    "listen": "127.0.0.1:17000",
     "hostnames": ["localhost", ".localhost"],
     "mcp": { "enabled": true }
   }
@@ -141,7 +141,7 @@ PASEO_WEB_UI_ENABLED=true paseo daemon run
 }
 ```
 
-启用后，打开 daemon 的 HTTP 地址（例如 `http://localhost:6767/`）即可加载 Web 应用。静态 UI 文件无需 daemon 身份验证即可加载；API 和 WebSocket 请求仍然需要配置的密码。
+启用后，打开 daemon 的 HTTP 地址（例如 `http://localhost:17000/`）即可加载 Web 应用。静态 UI 文件无需 daemon 身份验证即可加载；API 和 WebSocket 请求仍然需要配置的密码。
 
 ## 日志 {#logging}
 
@@ -211,14 +211,14 @@ CLI 按以下顺序获取密码：
 1. `tcp://` 主机 URI 上的 `password` 查询参数：
 
    ```bash
-   paseo --host "tcp://192.168.1.10:6767?password=my-secret" ls
+   paseo --host "tcp://192.168.1.10:17000?password=my-secret" ls
    ```
 
-2. `PASEO_PASSWORD` 环境变量，在主机未携带内嵌密码时作为后备使用（适用于 `localhost:6767`、裸的 `host:port`，或不带 `password=` 查询参数的 `tcp://` 主机）：
+2. `PASEO_PASSWORD` 环境变量，在主机未携带内嵌密码时作为后备使用（适用于 `localhost:17000`、裸的 `host:port`，或不带 `password=` 查询参数的 `tcp://` 主机）：
 
    ```bash
    PASEO_PASSWORD=my-secret paseo ls
-   PASEO_PASSWORD=my-secret paseo --host 192.168.1.10:6767 ls
+   PASEO_PASSWORD=my-secret paseo --host 192.168.1.10:17000 ls
    ```
 
 URI 中的 `password=` 总是优先于环境变量，因此你可以全局设置 `PASEO_PASSWORD`，同时通过在 URI 中写明密码来连接另一个 daemon。

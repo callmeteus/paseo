@@ -51,7 +51,7 @@ daemon 在处理任何命令之前都要求一次有效的密码学握手。被�
 
 ## 直接连接 {#direct-connections}
 
-daemon 默认监听 `127.0.0.1:6767`（仅限 localhost）。这对本地 CLI 使用是安全的，但你的手机或其他设备无法访问。
+daemon 默认监听 `127.0.0.1:17000`（仅限 localhost）。这对本地 CLI 使用是安全的，但你的手机或其他设备无法访问。
 
 中继和 Tailscale 的设置说明见[连接方式](/docs/connectivity)。
 
@@ -104,7 +104,7 @@ Paseo 使用主机白名单校验传入请求的 `Host` 请求头。主机无法
 
 ## 用 Docker 自托管 {#docker-self-hosting}
 
-官方 Docker 镜像在一个容器中运行 daemon 和内置的 Web UI。它在容器内绑定 `0.0.0.0:6767`，以便 Docker 端口发布和反向代理可以正常工作。
+官方 Docker 镜像在一个容器中运行 daemon 和内置的 Web UI。它在容器内绑定 `0.0.0.0:17000`，以便 Docker 端口发布和反向代理可以正常工作。
 
 对于 Docker 部署：
 

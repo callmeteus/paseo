@@ -70,14 +70,14 @@ A completed query exits with status `0`, including when individual reports are u
 `registrationId`, not their label.
 
 ```sh
-paseo --host localhost:6767 host add 'ssh://deploy@build-box' --label build-box --meta team=infra
-paseo --host localhost:6767 host ls --json
-paseo --host localhost:6767 host inspect hst_123
-paseo --host localhost:6767 host update hst_123 --meta team=tools --remove-meta obsolete
-paseo --host localhost:6767 host update hst_123 --connection 'ssh://deploy@new-address'
-paseo --host localhost:6767 host disable hst_123
-paseo --host localhost:6767 host enable hst_123
-paseo --host localhost:6767 host rm hst_123
+paseo --host localhost:17000 host add 'ssh://deploy@build-box' --label build-box --meta team=infra
+paseo --host localhost:17000 host ls --json
+paseo --host localhost:17000 host inspect hst_123
+paseo --host localhost:17000 host update hst_123 --meta team=tools --remove-meta obsolete
+paseo --host localhost:17000 host update hst_123 --connection 'ssh://deploy@new-address'
+paseo --host localhost:17000 host disable hst_123
+paseo --host localhost:17000 host enable hst_123
+paseo --host localhost:17000 host rm hst_123
 ```
 
 Add accepts TCP/host-and-port, `ws://`/`wss://`, local socket/pipe, SSH, and relay/pairing URLs.
@@ -96,7 +96,7 @@ Ask the daemon to inspect the provider environment it actually uses:
 ```bash
 paseo provider diagnostic claude
 paseo provider diagnostic codex --json
-paseo --host devbox:6767 provider diagnostic opencode
+paseo --host devbox:17000 provider diagnostic opencode
 ```
 
 The diagnostic includes the configured command, daemon `PATH` and shell, matching binaries, resolved path, version, model count, and provider status. Use the global `--host` option for a remote daemon. This is the same diagnostic shown under **Settings → your host → Providers → provider → Diagnostic**.
@@ -154,7 +154,7 @@ paseo project delete <project-id>
 For a local daemon, `paseo project create [path]` defaults to the current directory and resolves relative paths on the CLI machine. When you use the global `--host` option or `PASEO_HOST`, provide a path that the target daemon can access:
 
 ```bash
-paseo --host devbox:6767 project create /srv/repos/api
+paseo --host devbox:17000 project create /srv/repos/api
 ```
 
 The remote daemon interprets that path on its own machine. See [Workspaces](/docs/workspaces) for how projects group working directories and sessions.

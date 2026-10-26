@@ -1471,7 +1471,7 @@ describe("OpenCode adapter startTurn error handling", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=test-agent",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=test-agent",
           },
         },
       });
@@ -1484,7 +1484,7 @@ describe("OpenCode adapter startTurn error handling", () => {
           name: "paseo",
           config: {
             type: "remote",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=test-agent",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=test-agent",
             enabled: true,
           },
         },
@@ -1522,7 +1522,7 @@ describe("OpenCode adapter startTurn error handling", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=test-agent",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=test-agent",
           },
         },
       });

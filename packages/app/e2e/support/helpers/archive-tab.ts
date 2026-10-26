@@ -133,9 +133,9 @@ export async function primeAdditionalPage(page: Page): Promise<void> {
   const seedNonce = randomUUID();
   const { daemon, preferences } = buildSeededStoragePayload();
 
-  await page.route(/:(6767)\b/, (route) => route.abort());
-  await page.routeWebSocket(/:(6767)\b/, async (ws) => {
-    await ws.close({ code: 1008, reason: "Blocked connection to localhost:6767 during e2e." });
+  await page.route(/:(17000)\b/, (route) => route.abort());
+  await page.routeWebSocket(/:(17000)\b/, async (ws) => {
+    await ws.close({ code: 1008, reason: "Blocked connection to localhost:17000 during e2e." });
   });
   await page.addInitScript(
     ({ daemon: seededDaemon, preferences: seededPreferences, seedNonce: nonce }) => {

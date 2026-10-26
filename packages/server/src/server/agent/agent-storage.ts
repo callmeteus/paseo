@@ -75,6 +75,22 @@ const STORED_AGENT_SCHEMA = z.object({
   internal: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
+  migratedFrom: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type SerializableAgentConfig = Pick<
@@ -258,6 +274,12 @@ export class AgentStorage {
       // stale pre-archive record after the archive mutation.
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
+      }
+      if (existing?.migratedFrom !== undefined) {
+        record.migratedFrom = existing.migratedFrom;
+      }
+      if (existing?.migratedTo !== undefined) {
+        record.migratedTo = existing.migratedTo;
       }
       return record;
     });

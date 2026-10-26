@@ -34,7 +34,7 @@ jobs:
 
           export PASEO_HOME
           PASEO_HOME="$(mktemp -d)"
-          export PASEO_LISTEN=127.0.0.1:6767
+          export PASEO_LISTEN=127.0.0.1:17000
 
           WRAPPER_LOG="$PASEO_HOME/paseo-cli.log"
 
@@ -55,7 +55,7 @@ jobs:
             if STATUS_JSON="$(./result/bin/paseo daemon status --json)" \
               && jq -e '.connectedDaemon == "reachable"' <<<"$STATUS_JSON" >/dev/null; then
               echo "$STATUS_JSON"
-              curl --fail --silent --show-error http://127.0.0.1:6767/ >"$PASEO_HOME/web-ui.html"
+              curl --fail --silent --show-error http://127.0.0.1:17000/ >"$PASEO_HOME/web-ui.html"
               [[ -s "$PASEO_HOME/web-ui.html" ]]
               if ! TERMINAL_JSON="$(./result/bin/paseo terminal create --cwd "$PASEO_HOME" --name nix-smoke --json)"; then
                 break

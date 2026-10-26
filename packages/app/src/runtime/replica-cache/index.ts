@@ -155,6 +155,13 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     ...TimelineItemBaseShape,
+    kind: z.literal("porting"),
+    status: z.enum(["loading", "completed"]),
+    fromProvider: AgentProviderSchema.optional(),
+    toProvider: AgentProviderSchema.optional(),
+  }),
+  z.strictObject({
+    ...TimelineItemBaseShape,
     kind: z.literal("tool_call"),
     provider: AgentProviderSchema,
     item: AgentTimelineItemPayloadSchema.refine((item) => item.type === "tool_call"),
@@ -482,6 +489,14 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         ...(item.trigger ? { trigger: item.trigger } : {}),
         ...(item.preTokens !== undefined ? { preTokens: item.preTokens } : {}),
       };
+    case "porting":
+      return {
+        ...base,
+        kind: item.kind,
+        status: item.status,
+        ...(item.fromProvider ? { fromProvider: item.fromProvider } : {}),
+        ...(item.toProvider ? { toProvider: item.toProvider } : {}),
+      };
     case "tool_call":
       if (item.payload.source !== "agent") return null;
       return {
@@ -503,13 +518,19 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
   }
 }
 
+function deserializeTimelineBase(item: StoredTimelineItem) {
+  return {
+    id: item.id,
+    ...(item.timelineCursor ? { timelineCursor: item.timelineCursor } : {}),
+    ...(item.turnId ? { turnId: item.turnId } : {}),
+    timestamp: new Date(item.timestamp),
+  };
+}
+
 function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
   if (item.kind === "plugin") {
     return {
-      id: item.id,
-      ...(item.timelineCursor ? { timelineCursor: item.timelineCursor } : {}),
-      ...(item.turnId ? { turnId: item.turnId } : {}),
-      timestamp: new Date(item.timestamp),
+      ...deserializeTimelineBase(item),
       kind: item.kind,
       pluginId: item.pluginId,
       pluginItemId: item.pluginItemId,
@@ -524,12 +545,7 @@ function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
 function deserializeBuiltinTimelineItem(
   item: Exclude<StoredTimelineItem, { kind: "plugin" }>,
 ): StreamItem {
-  const base = {
-    id: item.id,
-    ...(item.timelineCursor ? { timelineCursor: item.timelineCursor } : {}),
-    ...(item.turnId ? { turnId: item.turnId } : {}),
-    timestamp: new Date(item.timestamp),
-  };
+  const base = deserializeTimelineBase(item);
   switch (item.kind) {
     case "user_message":
       return {
@@ -571,6 +587,14 @@ function deserializeBuiltinTimelineItem(
         status: item.status,
         ...(item.trigger ? { trigger: item.trigger } : {}),
         ...(item.preTokens !== undefined ? { preTokens: item.preTokens } : {}),
+      };
+    case "porting":
+      return {
+        ...base,
+        kind: item.kind,
+        status: item.status,
+        ...(item.fromProvider ? { fromProvider: item.fromProvider } : {}),
+        ...(item.toProvider ? { toProvider: item.toProvider } : {}),
       };
     case "tool_call": {
       const tool = item.item;
