@@ -12298,3 +12298,251 @@ test("an out-of-band command racing idle cleanup waits for the resumed runtime",
   expect(h.commands).toEqual(["/maintenance"]);
   expect(h.prompts).toEqual([]);
 });
+
+function waitForAgentStream(
+  manager: AgentManager,
+  agentId: string,
+  predicate: (event: AgentStreamEvent) => boolean,
+): Promise<AgentStreamEvent> {
+  return new Promise<AgentStreamEvent>((resolve) => {
+    const unsubscribe = manager.subscribe(
+      (event) => {
+        if (event.type !== "agent_stream" || event.agentId !== agentId) return;
+        if (!predicate(event.event)) return;
+        unsubscribe();
+        resolve(event.event);
+      },
+      { agentId, replayState: false },
+    );
+  });
+}
+
+class GoalPromptSession extends TestAgentSession {
+  readonly prompts: AgentPromptInput[] = [];
+
+  override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+    this.prompts.push(prompt);
+    return super.startTurn();
+  }
+}
+
+test("daemon-level /goal starts a turn and the timeline shows the typed text", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-start-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let session: GoalPromptSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalPromptSession(config);
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const completed = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+
+    const result = await startAgentRun(manager, agent.id, "/goal make the build pass", logger);
+    await completed;
+
+    expect(result).toEqual({ disposition: "turn_started" });
+    expect(session!.prompts).toHaveLength(1);
+    const providerPrompt = session!.prompts[0];
+    expect(String(providerPrompt)).toContain("<paseo-goal>");
+    expect(String(providerPrompt)).toContain("Goal: make the build pass");
+    expect(String(providerPrompt)).not.toContain("/goal make the build pass");
+
+    expect(manager.getAgent(agent.id)?.goal).toMatchObject({
+      objective: "make the build pass",
+      status: "active",
+    });
+
+    // The preamble is injected into the provider prompt; the user still reads
+    // exactly what they typed.
+    const items = manager
+      .fetchTimeline(agent.id, { direction: "tail", limit: 20 })
+      .rows.map((row) => row.item);
+    expect(items).toEqual([
+      {
+        type: "user_message",
+        text: "/goal make the build pass",
+        clientMessageId: expect.any(String),
+        messageId: expect.any(String),
+      },
+    ]);
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level /goal pause, resume, and clear answer without a provider turn", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-control-"));
+  let session: GoalPromptSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalPromptSession(config);
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const started = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/goal make the build pass", logger);
+    await started;
+    expect(session!.prompts).toHaveLength(1);
+
+    const statusAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    expect(await statusAnswer).toEqual({
+      type: "timeline",
+      provider: "codex",
+      item: { type: "assistant_message", text: "Goal (active): make the build pass" },
+    });
+    // A control subcommand must not reach the provider as a turn.
+    expect(session!.prompts).toHaveLength(1);
+
+    const pausedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal pause", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await pausedAnswer;
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("paused");
+
+    // While paused, a normal message reaches the provider untouched.
+    const pausedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "first task", logger);
+    await pausedTurn;
+    expect(session!.prompts.at(-1)).toBe("first task");
+
+    const resumedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal resume", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await resumedAnswer;
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("active");
+
+    // An active goal is prepended to the next real message.
+    const resumedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "second task", logger);
+    await resumedTurn;
+    const resumedPrompt = String(session!.prompts.at(-1));
+    expect(resumedPrompt).toContain("Goal: make the build pass");
+    expect(resumedPrompt.endsWith("second task")).toBe(true);
+
+    // Provider slash commands stay verbatim so provider features keep working.
+    const slashTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/compact", logger);
+    await slashTurn;
+    expect(session!.prompts.at(-1)).toBe("/compact");
+
+    const clearedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal clear", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await clearedAnswer;
+    expect(manager.getAgent(agent.id)?.goal).toBeUndefined();
+
+    // After clearing, nothing is injected any more.
+    const unmanagedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "third task", logger);
+    await unmanagedTurn;
+    expect(session!.prompts.at(-1)).toBe("third task");
+  } finally {
+    await manager.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level /goal persists on the agent record and in the wire snapshot", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-persist-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new GoalPromptSession(config);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const completed = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/goal ship the release", logger);
+    await completed;
+    await manager.flush();
+
+    const stored = await storage.get(agent.id);
+    expect(stored?.goal).toMatchObject({
+      objective: "ship the release",
+      status: "active",
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
+
+    const snapshot = manager.getAgent(agent.id);
+    expect(snapshot).not.toBeNull();
+    expect(toAgentPayload(snapshot!).goal).toMatchObject({
+      objective: "ship the release",
+      status: "active",
+    });
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

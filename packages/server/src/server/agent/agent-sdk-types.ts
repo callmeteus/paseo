@@ -201,6 +201,11 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /**
+   * Daemon-internal: text to record in the timeline when the dispatched prompt
+   * carries injected context (the `/goal` preamble). Providers ignore it.
+   */
+  submittedPromptText?: string;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {

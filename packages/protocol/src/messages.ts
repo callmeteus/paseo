@@ -904,6 +904,15 @@ export const AgentSnapshotPayloadSchema = z.object({
     .optional(),
   // Private helper marker, retained for exact-ID snapshots and older wire messages.
   internal: z.boolean().optional(),
+  /** Daemon-level `/goal` state, shared by every provider. */
+  goal: z
+    .object({
+      objective: z.string(),
+      status: z.enum(["active", "paused"]),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;

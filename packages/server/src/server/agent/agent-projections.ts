@@ -108,6 +108,7 @@ export function toStoredAgentRecord(
     owner: agent.owner,
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
+    ...(agent.goal ? { goal: agent.goal } : {}),
     ...(agent.portedTimeline
       ? { portedTimeline: agent.portedTimeline as StoredAgentRecord["portedTimeline"] }
       : {}),
@@ -156,6 +157,7 @@ export function toAgentPayload(
     ...(agent.internal ? { internal: true } : {}),
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
+    ...(agent.goal ? { goal: agent.goal } : {}),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);

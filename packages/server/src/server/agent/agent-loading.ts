@@ -124,6 +124,7 @@ export async function ensureAgentLoaded(
           migratedFrom: record.migratedFrom,
           migratedTo: record.migratedTo,
           portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
+          goal: record.goal,
         },
         record.archivedAt ? { purpose: "history" } : undefined,
       );
@@ -145,6 +146,7 @@ export async function ensureAgentLoaded(
         migratedFrom: record.migratedFrom,
         migratedTo: record.migratedTo,
         portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
+        goal: record.goal,
         preserveTimeline: true,
       });
       deps.logger.info({ agentId, provider: record.provider }, "Agent created from stored config");

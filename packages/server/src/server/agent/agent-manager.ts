@@ -57,6 +57,17 @@ import {
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import {
+  buildGoalStartPrompt,
+  formatGoalCleared,
+  formatGoalPaused,
+  formatGoalResumed,
+  formatGoalStatus,
+  parseGoalCommand,
+  planGoalPrompt,
+  withDaemonSlashCommands,
+  type AgentGoal,
+} from "./agent-goal.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import { buildPortedTimelineRows, swapAgentProvider } from "./agent-provider-swap.js";
@@ -331,6 +342,14 @@ export interface CreateAgentOptions {
   preserveTimeline?: boolean;
   /** Rows written when the agent was ported; seeds the timeline after a reload. */
   portedTimeline?: AgentTimelineRow[];
+  /** Daemon-level goal restored with a recreated agent. */
+  goal?: AgentGoal;
+}
+
+export interface GoalTurnPlan {
+  prompt: AgentPromptInput;
+  /** Shown in the timeline in place of the provider-facing prompt. */
+  submittedPromptText: string;
 }
 
 export interface AgentManagerOptions {
@@ -465,6 +484,8 @@ interface ManagedAgentBase {
   migratedTo?: StoredAgentRecord["migratedTo"];
   /** Ported timeline rows, kept so snapshot persists don't drop them. */
   portedTimeline?: AgentTimelineRow[];
+  /** Daemon-level goal shared by every provider (`/goal`). */
+  goal?: AgentGoal;
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -680,11 +701,13 @@ function buildPortedAgentState(options?: {
   migratedFrom?: StoredAgentRecord["migratedFrom"];
   migratedTo?: StoredAgentRecord["migratedTo"];
   portedTimeline?: AgentTimelineRow[];
-}): Pick<ManagedAgentBase, "migratedFrom" | "migratedTo" | "portedTimeline"> {
+  goal?: AgentGoal;
+}): Pick<ManagedAgentBase, "migratedFrom" | "migratedTo" | "portedTimeline" | "goal"> {
   return {
     ...(options?.migratedFrom ? { migratedFrom: options.migratedFrom } : {}),
     ...(options?.migratedTo ? { migratedTo: options.migratedTo } : {}),
     ...(options?.portedTimeline ? { portedTimeline: options.portedTimeline } : {}),
+    ...(options?.goal ? { goal: options.goal } : {}),
   };
 }
 
@@ -1198,6 +1221,12 @@ export class AgentManager {
   }
 
   async listDraftCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
+    return withDaemonSlashCommands(await this.listProviderDraftCommands(config));
+  }
+
+  private async listProviderDraftCommands(
+    config: AgentSessionConfig,
+  ): Promise<AgentSlashCommand[]> {
     const normalizedConfig = await this.normalizeConfig(config, { resolveDefaultModel: false });
     const client = this.requireClient(normalizedConfig.provider);
     if (!normalizedConfig.model) {
@@ -1426,6 +1455,7 @@ export class AgentManager {
       owner: options.owner,
       migratedFrom: options.migratedFrom,
       migratedTo: options.migratedTo,
+      goal: options.goal,
       historyPrimed: true,
     });
     if (!agent.internal) {
@@ -1461,6 +1491,7 @@ export class AgentManager {
       migratedFrom?: StoredAgentRecord["migratedFrom"];
       migratedTo?: StoredAgentRecord["migratedTo"];
       portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1496,6 +1527,7 @@ export class AgentManager {
       migratedFrom?: StoredAgentRecord["migratedFrom"];
       migratedTo?: StoredAgentRecord["migratedTo"];
       portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1748,6 +1780,7 @@ export class AgentManager {
         attention: preservedAttention,
         migratedFrom: existing.migratedFrom,
         migratedTo: existing.migratedTo,
+        goal: existing.goal,
         restoring: true,
       });
     } catch (error) {
@@ -2628,6 +2661,100 @@ export class AgentManager {
   }
 
   /**
+   * Daemon-level `/goal`, provider-agnostic by design: the objective lives on
+   * the agent record and is re-sent as a context preamble with each turn.
+   *
+   * `/goal <objective>` returns a rewritten prompt so the turn starts
+   * immediately; control subcommands return null and are claimed by
+   * `tryRunOutOfBand` without interrupting a running turn.
+   */
+  async planGoalTurn(agentId: string, prompt: AgentPromptInput): Promise<GoalTurnPlan | null> {
+    if (typeof prompt !== "string") return null;
+    const command = parseGoalCommand(prompt);
+    if (command?.kind === "set") {
+      const agent = this.requireSessionAgent(agentId);
+      const goal = this.writeAgentGoal(agent, { objective: command.objective, status: "active" });
+      return { prompt: buildGoalStartPrompt(goal), submittedPromptText: prompt };
+    }
+    if (command) return null;
+    const agent = this.agents.get(agentId);
+    if (!agent?.goal) return null;
+    // Agent-to-agent envelopes must reach the provider untouched.
+    if (parseAgentMessage(prompt)) return null;
+    return planGoalPrompt({ prompt, goal: agent.goal, startedGoal: null });
+  }
+
+  private writeAgentGoal(
+    agent: ActiveManagedAgent,
+    input: { objective: string; status: AgentGoal["status"] },
+  ): AgentGoal {
+    const now = new Date().toISOString();
+    const goal: AgentGoal = {
+      objective: input.objective,
+      status: input.status,
+      createdAt: agent.goal?.createdAt ?? now,
+      updatedAt: now,
+    };
+    agent.goal = goal;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    return goal;
+  }
+
+  private clearAgentGoal(agent: ActiveManagedAgent): void {
+    if (!agent.goal) return;
+    agent.goal = undefined;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+  }
+
+  private buildGoalOutOfBandHandler(
+    agent: ActiveManagedAgent,
+    prompt: AgentPromptInput,
+  ): { run(context: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+    if (typeof prompt !== "string") return null;
+    const command = parseGoalCommand(prompt);
+    if (!command || command.kind === "set") return null;
+    return {
+      run: async ({ emit }) => {
+        let text: string;
+        switch (command.kind) {
+          case "status":
+            text = formatGoalStatus(agent.goal);
+            break;
+          case "pause": {
+            const goal = agent.goal;
+            text = goal
+              ? formatGoalPaused(
+                  this.writeAgentGoal(agent, { objective: goal.objective, status: "paused" }),
+                )
+              : formatGoalStatus(undefined);
+            break;
+          }
+          case "resume": {
+            const goal = agent.goal;
+            text = goal
+              ? formatGoalResumed(
+                  this.writeAgentGoal(agent, { objective: goal.objective, status: "active" }),
+                )
+              : formatGoalStatus(undefined);
+            break;
+          }
+          case "clear":
+            text = agent.goal ? formatGoalCleared() : formatGoalStatus(undefined);
+            this.clearAgentGoal(agent);
+            break;
+        }
+        emit({
+          type: "timeline",
+          provider: agent.provider,
+          item: { type: "assistant_message", text },
+        });
+      },
+    };
+  }
+
+  /**
    * Try to run a prompt out-of-band — i.e. without allocating a foreground turn
    * and without canceling any active turn. Returns true when the session
    * accepted the prompt as a side-effect command (e.g. /goal pause). Events
@@ -2651,9 +2778,11 @@ export class AgentManager {
     // Providers parse slash commands from the raw text, so a command another agent sent
     // must reach them without its sender envelope.
     const agentMessage = typeof prompt === "string" ? parseAgentMessage(prompt) : null;
-    const handler = agent.session.tryHandleOutOfBand?.(
-      agentMessage?.source ? agentMessage.text : prompt,
-    );
+    const commandText = agentMessage?.source ? agentMessage.text : prompt;
+    // `/goal` is daemon-level so it behaves identically on every harness.
+    const handler =
+      this.buildGoalOutOfBandHandler(agent, commandText) ??
+      agent.session.tryHandleOutOfBand?.(commandText);
     if (!handler) {
       return false;
     }
@@ -2759,6 +2888,7 @@ export class AgentManager {
       if (options?.clientMessageId) {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "rejected", {
           messageId: options.clientMessageId,
+          text: options.submittedPromptText,
         });
       }
       await this.handleStreamEvent(agent, {
@@ -2868,6 +2998,7 @@ export class AgentManager {
       if (options?.clientMessageId) {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted", {
           messageId: options.clientMessageId,
+          text: options.submittedPromptText,
           turnId,
           providerMessageId:
             stagedSubmittedPromptEcho?.item.type === "user_message"
@@ -3782,6 +3913,7 @@ export class AgentManager {
       migratedFrom?: StoredAgentRecord["migratedFrom"];
       migratedTo?: StoredAgentRecord["migratedTo"];
       portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3974,6 +4106,7 @@ export class AgentManager {
           migratedFrom?: StoredAgentRecord["migratedFrom"];
           migratedTo?: StoredAgentRecord["migratedTo"];
           portedTimeline?: AgentTimelineRow[];
+          goal?: AgentGoal;
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -5073,11 +5206,16 @@ export class AgentManager {
     prompt: AgentPromptInput,
     clientMessageId: string,
     outcome: "accepted" | "rejected",
-    options?: { messageId?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      messageId?: string;
+      providerMessageId?: string;
+      turnId?: string;
+      text?: string;
+    },
   ): void {
     const items = projectAgentMessages({
       type: "user_message",
-      text: submittedPromptText(prompt),
+      text: options?.text ?? submittedPromptText(prompt),
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
     });

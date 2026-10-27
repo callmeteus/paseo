@@ -106,6 +106,7 @@ import {
 } from "./workspace-labels/index.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { withDaemonSlashCommands } from "./agent/agent-goal.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -5238,7 +5239,7 @@ export class Session {
           : null;
 
       if (agent?.session?.listCommands) {
-        const commands = await agent.session.listCommands();
+        const commands = withDaemonSlashCommands(await agent.session.listCommands());
         this.emit({
           type: "list_commands_response",
           payload: {

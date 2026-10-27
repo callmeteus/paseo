@@ -91,6 +91,15 @@ const STORED_AGENT_SCHEMA = z.object({
       portedAt: z.string().optional(),
     })
     .optional(),
+  /** Daemon-level `/goal` state. Kept here so goals survive restarts and reloads. */
+  goal: z
+    .object({
+      objective: z.string(),
+      status: z.enum(["active", "paused"]),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .optional(),
   /**
    * Timeline rows of the source conversation, written when an agent is ported.
    * A ported provider session starts empty, so this is the only way to restore

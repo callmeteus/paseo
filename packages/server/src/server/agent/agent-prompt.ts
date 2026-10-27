@@ -1,4 +1,5 @@
 import { prepareAgentMessage, type AgentPromptSource } from "./agent-messages/index.js";
+import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type { AgentPromptInput, AgentRunOptions } from "./agent-sdk-types.js";
@@ -13,6 +14,7 @@ export type AgentUnarchiveController = Pick<AgentManager, "notifyAgentState" | "
 export type AgentRunController = Pick<
   AgentManager,
   | "getAgent"
+  | "planGoalTurn"
   | "tryRunOutOfBand"
   | "hasInFlightRun"
   | "replaceAgentRun"
@@ -87,6 +89,32 @@ async function drainAgentRunIterator(
   }
 }
 
+/**
+ * Rewrite the dispatch so `/goal <objective>` starts a real turn with the goal
+ * preamble while the timeline records what the user typed. Providers never see
+ * `submittedPromptText`; only the daemon does.
+ */
+async function planGoalDispatch(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+): Promise<{ prompt: AgentPromptInput; options: StartAgentRunOptions | undefined }> {
+  const plan = await agentManager.planGoalTurn(agentId, prompt);
+  if (!plan) return { prompt, options };
+  return {
+    prompt: plan.prompt,
+    options: {
+      ...options,
+      runOptions: {
+        ...options?.runOptions,
+        clientMessageId: options?.runOptions?.clientMessageId ?? randomUUID(),
+        submittedPromptText: plan.submittedPromptText,
+      },
+    },
+  };
+}
+
 export async function startAgentRun(
   agentManager: AgentRunController,
   agentId: string,
@@ -107,6 +135,10 @@ export async function startAgentRun(
     },
     "agent.session.start_stream.request",
   );
+  // Daemon-level `/goal` runs before the out-of-band intercept: setting a goal
+  // rewrites the prompt into a real turn, while pause/resume/clear stay
+  // out-of-band. Both paths work for every provider.
+  ({ prompt, options } = await planGoalDispatch(agentManager, agentId, prompt, options));
   // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
   // in-flight turn — replaceAgentRun would interrupt the running turn. The
   // intercept lives at this layer so it covers every prompt entrypoint.
