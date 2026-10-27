@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 
 interface WindowsFindExecutableOptions {
@@ -56,8 +56,17 @@ async function find(input: string, options: WindowsFindExecutableOptions): Promi
     input,
     options.localAppData ?? process.env.LOCALAPPDATA,
   ).filter(options.exists);
+  const claudeDesktopCandidates =
+    input === "claude"
+      ? enumerateClaudeDesktopCandidates(options.localAppData ?? process.env.LOCALAPPDATA).filter(
+          options.exists,
+        )
+      : [];
 
-  return findFirstProbeable([...pathCandidates, ...wingetCandidates], options);
+  return findFirstProbeable(
+    [...pathCandidates, ...wingetCandidates, ...claudeDesktopCandidates],
+    options,
+  );
 }
 
 async function findFirstProbeable(
@@ -89,7 +98,62 @@ function exists(executablePath: string, options: WindowsExecutableExistsOptions)
   return null;
 }
 
+function enumerateClaudeDesktopCandidates(localAppData: string | undefined): string[] {
+  if (!localAppData) {
+    return [];
+  }
+
+  const packagesDir = join(localAppData, "Packages");
+  let packageDirs: string[];
+  try {
+    packageDirs = readdirSync(packagesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^Claude_/i.test(entry.name))
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+
+  const result: string[] = [];
+  for (const packageDir of packageDirs) {
+    const claudeCodeRoot = join(
+      packagesDir,
+      packageDir,
+      "LocalCache",
+      "Roaming",
+      "Claude",
+      "claude-code",
+    );
+    let versionDirs: string[];
+    try {
+      versionDirs = readdirSync(claudeCodeRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+    } catch {
+      continue;
+    }
+    for (const versionDir of versionDirs) {
+      const versionPath = join(claudeCodeRoot, versionDir);
+      let hashDirs: string[];
+      try {
+        hashDirs = readdirSync(versionPath, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => entry.name);
+      } catch {
+        continue;
+      }
+      for (const hashDir of hashDirs) {
+        const executablePath = join(versionPath, hashDir, "claude.exe");
+        if (existsSync(executablePath)) {
+          result.push(executablePath);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 export const windowsExecutableResolution = {
   exists,
   find,
+  enumerateClaudeDesktopCandidates,
 };

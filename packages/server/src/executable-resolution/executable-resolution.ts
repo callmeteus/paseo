@@ -4,7 +4,6 @@ import { delimiter, resolve } from "node:path";
 import type { ProcessEnvRecord } from "../server/paseo-env.js";
 import { execCommand } from "../utils/spawn.js";
 import { windowsExecutableResolution } from "./windows.js";
-
 type Which = (
   command: string,
   options: { all: true; path?: string; pathExt?: string },
@@ -59,7 +58,15 @@ async function enumerateCandidatesViaLibrary(
   }
 
   const seen = new Set<string>();
-  return candidates.filter((candidate) => {
+  let allCandidates = candidates;
+  if (process.platform === "win32" && name === "claude") {
+    const localAppData = env?.LOCALAPPDATA ?? process.env.LOCALAPPDATA;
+    const msixCandidates = windowsExecutableResolution
+      .enumerateClaudeDesktopCandidates(localAppData)
+      .filter((candidate) => existsSync(candidate));
+    allCandidates = [...allCandidates, ...msixCandidates];
+  }
+  return allCandidates.filter((candidate) => {
     if (seen.has(candidate)) {
       return false;
     }
