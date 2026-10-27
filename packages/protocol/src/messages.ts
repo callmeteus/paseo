@@ -38,6 +38,23 @@ export {
 } from "./plugin-config.js";
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
+import { ModelRouterSettingsSchema } from "./model-router.js";
+export {
+  MODEL_ROUTER_MODES,
+  ModelRouterModeSchema,
+  ModelRouterSchema,
+  ModelRouterSettingsSchema,
+  ModelRouterTargetSchema,
+  DEFAULT_MODEL_ROUTER_SETTINGS,
+  isRetryableRouterFailure,
+  normalizeRouterTargets,
+  selectDistributionTarget,
+  selectFallbackTarget,
+  type ModelRouter,
+  type ModelRouterMode,
+  type ModelRouterSettings,
+  type ModelRouterTarget,
+} from "./model-router.js";
 import { z } from "zod";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
@@ -233,6 +250,7 @@ export const MutableDaemonConfigSchema = z
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
+    modelRouters: ModelRouterSettingsSchema.optional(),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, keep optional while old daemons are supported.
@@ -260,6 +278,7 @@ export const MutableDaemonConfigPatchSchema = z
       .optional(),
     removeProviders: z.array(z.string().min(1)).optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
+    modelRouters: ModelRouterSettingsSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     idleRuntimeCleanup: z.boolean().optional(),

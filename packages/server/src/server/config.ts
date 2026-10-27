@@ -663,6 +663,7 @@ export function resolveConfigFromPersisted(
     idleRuntimeCleanup: persisted.agents?.idleRuntimeCleanup ?? true,
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
+    modelRouters: persisted.agents?.modelRouters,
     providerOverrides,
     log: resolveLogConfigFromEnv(env, persisted),
     configReload: {

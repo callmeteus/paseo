@@ -13,6 +13,7 @@ import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.j
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protocol/agent-profile";
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
+import { ModelRouterSettingsSchema } from "@getpaseo/protocol/model-router";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -344,6 +345,7 @@ export const PersistedConfigSchema = z
         idleRuntimeCleanup: z.boolean().optional(),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
+        modelRouters: ModelRouterSettingsSchema.optional(),
         skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
       })
       .strict()

@@ -467,6 +467,7 @@ export interface PaseoDaemonConfig {
     }>;
   };
   providerOverrides?: Record<string, ProviderOverride>;
+  modelRouters?: MutableDaemonConfig["modelRouters"];
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
@@ -584,6 +585,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
     },
+    modelRouters: config.modelRouters ?? { routers: [] },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,

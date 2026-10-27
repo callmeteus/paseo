@@ -25,6 +25,7 @@ import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { useAgentControlCommandCenterActions } from "@/command-center/agent-control-registration";
 import { encodeImages } from "@/utils/encode-images";
+import { selectDistributionTarget } from "@getpaseo/protocol/model-router";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { shouldAutoFocusWorkspaceDraftComposer } from "@/screens/workspace/workspace-draft-pane-focus";
 import {
@@ -115,6 +116,41 @@ function resolveDraftModeId(input: {
   return null;
 }
 
+async function resolveDraftRouterTarget(
+  client: DaemonClient | null,
+): Promise<{ provider: string; model: string | null } | null> {
+  if (!client) return null;
+  try {
+    const { config } = await client.getDaemonConfig();
+    const settings = config.modelRouters;
+    const router = settings?.defaultRouterId
+      ? settings.routers.find((entry) => entry.id === settings.defaultRouterId)
+      : undefined;
+    if (!router || router.mode !== "distribution") return null;
+    const selection = selectDistributionTarget({
+      router,
+      cursor: draftRouterCursor,
+      installedProviders: new Set(router.targets.map((target) => target.provider)),
+    });
+    if (!selection) return null;
+    draftRouterCursor = selection.cursor;
+    return { provider: selection.target.provider, model: selection.target.model ?? null };
+  } catch {
+    return null;
+  }
+}
+
+let draftRouterCursor = 0;
+
+function resolveDraftRoute(input: {
+  provider: string;
+  model: string | undefined;
+  routerTarget: { provider: string; model: string | null } | null;
+}): { provider: string; model: string | undefined } {
+  if (!input.routerTarget) return { provider: input.provider, model: input.model };
+  return { provider: input.routerTarget.provider, model: input.routerTarget.model ?? undefined };
+}
+
 async function submitDraftCreateRequest(input: {
   draftId: string;
   attempt: { clientMessageId: string };
@@ -163,11 +199,19 @@ async function submitDraftCreateRequest(input: {
     autoSubmitConfig,
     effectiveModeId: composerState.effectiveModeId,
   });
-  const config = buildWorkspaceDraftAgentConfig({
+  // A default distribution router overrides the draft's provider/model so new
+  // chats rotate across the configured targets.
+  const routerTarget = autoSubmitConfig ? null : await resolveDraftRouterTarget(client);
+  const route = resolveDraftRoute({
     provider,
+    model: composerState.effectiveModelId || undefined,
+    routerTarget,
+  });
+  const config = buildWorkspaceDraftAgentConfig({
+    provider: route.provider,
     cwd,
     ...modeIdOverride,
-    model: autoSubmitConfig?.model ?? (composerState.effectiveModelId || undefined),
+    model: autoSubmitConfig?.model ?? route.model,
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
     featureValues: autoSubmitConfig?.featureValues ?? composerState.featureValues,

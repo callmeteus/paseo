@@ -25,6 +25,7 @@ interface SupportedMutableConfigPatch {
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
   metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
+  modelRouters?: MutableDaemonConfigPatch["modelRouters"];
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   idleRuntimeCleanup?: boolean;
@@ -195,6 +196,7 @@ const RELOADABLE_PATHS = [
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
   "agents.metadataGeneration",
+  "agents.modelRouters",
   "agents.skills.selection",
   "pluginsEnabled",
 ] as const;
@@ -220,6 +222,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["agents.providers", "providers"],
   ["agents.catalogRefreshTimeoutMs", "catalogRefreshTimeoutMs"],
   ["agents.metadataGeneration", "metadataGeneration"],
+  ["agents.modelRouters", "modelRouters"],
   ["agents.skills.selection", "skills.selection"],
   ["pluginsEnabled", "pluginsEnabled"],
 ]);
@@ -285,6 +288,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.metadataGeneration?.providers !== undefined
       ? { metadataGeneration: { providers: patch.metadataGeneration.providers } }
       : {}),
+    ...(patch.modelRouters !== undefined ? { modelRouters: patch.modelRouters } : {}),
     ...(patch.autoArchiveAfterMerge !== undefined
       ? { autoArchiveAfterMerge: patch.autoArchiveAfterMerge }
       : {}),
@@ -669,6 +673,7 @@ function mergeMutableAgentPatch(
   if (
     patch.providers === undefined &&
     patch.metadataGeneration === undefined &&
+    patch.modelRouters === undefined &&
     patch.skills === undefined &&
     patch.idleRuntimeCleanup === undefined &&
     removeProviders.length === 0
@@ -701,6 +706,10 @@ function mergeMutableAgentPatch(
 
   if (patch.skills?.selection !== undefined) {
     next["skills"] = { selection: patch.skills.selection };
+  }
+
+  if (patch.modelRouters !== undefined) {
+    next["modelRouters"] = patch.modelRouters;
   }
 
   if (patch.idleRuntimeCleanup !== undefined) {

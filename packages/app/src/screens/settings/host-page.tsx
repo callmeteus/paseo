@@ -66,6 +66,7 @@ import type { Theme } from "@/styles/theme";
 import { useProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
 import { IdleRuntimeCleanupCard } from "./idle-runtime-cleanup-card";
+import { ModelRoutersCard } from "./model-routers-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
 
 const ThemedRestart = withUnistyles(RotateCw);
@@ -299,6 +300,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
         </View>
       )}
+      <ModelRoutersCard serverId={serverId} />
       <AgentSkillsSection serverId={serverId} />
       <AgentProfilesSection serverId={serverId} />
     </View>
