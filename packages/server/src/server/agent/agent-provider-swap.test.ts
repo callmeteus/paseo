@@ -236,6 +236,7 @@ describe("swapAgentProvider archive deferral", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
         labels: {},
         lastStatus: "closed",
+        lastModeId: "act",
         config: { model: "act-model", modeId: "act" },
       } as unknown as Parameters<typeof storage.upsert>[0]);
 
@@ -252,6 +253,7 @@ describe("swapAgentProvider archive deferral", () => {
       expect(original?.migratedTo?.agentId).toBe(result.newAgentId);
       const ported = await storage.get(result.newAgentId);
       expect(ported?.config?.modeId).toBeUndefined();
+      expect(ported?.lastModeId).toBeNull();
       expect(ported?.runtimeInfo?.modeId).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });

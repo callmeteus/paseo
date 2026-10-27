@@ -22,6 +22,7 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
+import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { ComposerDock } from "@/composer/dock";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -406,6 +407,32 @@ const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 const EMPTY_MESSAGE_SUBMISSIONS = [] as const;
 const EMPTY_PENDING_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_PENDING_PERMISSION_LIST: PendingPermission[] = [];
+
+function insertCompletedPortingMarker(
+  items: StreamItem[],
+  migratedFrom: { provider: string; portedAt?: string } | undefined,
+  agentId: string,
+  agentProvider: string,
+): StreamItem[] {
+  if (!migratedFrom || items.some((item) => item.kind === "porting")) {
+    return items;
+  }
+  const portedAt = migratedFrom.portedAt ? new Date(migratedFrom.portedAt).getTime() : null;
+  const boundary =
+    portedAt === null
+      ? items.length
+      : items.findIndex((item) => item.timestamp.getTime() > portedAt);
+  const index = boundary < 0 ? items.length : boundary;
+  const marker: PortingItem = {
+    kind: "porting",
+    id: `porting:${agentId}`,
+    timestamp: portedAt === null ? new Date() : new Date(portedAt),
+    status: "completed",
+    fromProvider: migratedFrom.provider as PortingItem["fromProvider"],
+    toProvider: agentProvider,
+  };
+  return [...items.slice(0, index), marker, ...items.slice(index)];
+}
 
 type RouteBottomAnchorRequest = ReturnType<typeof deriveRouteBottomAnchorRequest>;
 
@@ -1391,27 +1418,28 @@ const AgentStreamSection = memo(function AgentStreamSection({
         : { isActive: false, isCancelling: false, startedAt: null, turnId: null },
     ),
   );
+  const portingActivity = usePortingActivity(serverId, agentId ?? "");
   const streamItems = useMemo(() => {
     const items = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
-    if (!migratedFrom || items.some((item) => item.kind === "porting")) {
-      return items;
+    const withMigrationMarker = insertCompletedPortingMarker(
+      items,
+      migratedFrom,
+      agent.id ?? "",
+      agent.provider ?? "",
+    );
+    if (!portingActivity) {
+      return withMigrationMarker;
     }
-    const portedAt = migratedFrom.portedAt ? new Date(migratedFrom.portedAt).getTime() : null;
-    const boundary =
-      portedAt === null
-        ? items.length
-        : items.findIndex((item) => item.timestamp.getTime() > portedAt);
-    const index = boundary < 0 ? items.length : boundary;
-    const marker: PortingItem = {
+    const activeMarker: PortingItem = {
       kind: "porting",
-      id: `porting:${agent.id}`,
-      timestamp: portedAt === null ? new Date() : new Date(portedAt),
-      status: "completed",
-      fromProvider: migratedFrom.provider as PortingItem["fromProvider"],
-      toProvider: agent.provider,
+      id: `porting-active:${agent.id}`,
+      timestamp: new Date(),
+      status: "loading",
+      fromProvider: agent.provider,
+      toProvider: portingActivity.toProvider as PortingItem["toProvider"],
     };
-    return [...items.slice(0, index), marker, ...items.slice(index)];
-  }, [agent.id, agent.provider, migratedFrom, streamItemsRaw]);
+    return [...withMigrationMarker, activeMarker];
+  }, [agent.id, agent.provider, migratedFrom, portingActivity, streamItemsRaw]);
   const pendingPermissionList = useStoreWithEqualityFn(
     useSessionStore,
     (state) => {

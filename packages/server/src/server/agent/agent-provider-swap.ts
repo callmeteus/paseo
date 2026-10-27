@@ -156,6 +156,7 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     updatedAt: now,
     lastActivityAt: now,
     lastStatus: "closed",
+    lastModeId: null,
     archivedAt: null,
     config: {
       ...portedConfig,

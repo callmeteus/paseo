@@ -132,6 +132,10 @@ import {
   stageProviderSwitch,
   takeProviderSwitch,
 } from "@/composer/agent-controls/pending-provider-switch";
+import {
+  finishPortingActivity,
+  startPortingActivity,
+} from "@/composer/agent-controls/porting-activity";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { RenderProfile } from "@/utils/render-profiler";
@@ -1586,69 +1590,78 @@ function ComposerContentImpl({
       let finishSwitch: (() => Promise<void>) | null = null;
       const pendingSwitch = takeProviderSwitch(serverId, targetAgentId);
       if (pendingSwitch) {
-        try {
-          const applied = await applyProviderSwitch({
-            sourceClient: client,
-            sourceServerId: serverId,
-            agentId: targetAgentId,
-            workspaceId: workspaceId ?? null,
-            pending: pendingSwitch,
-            persistPreference: (nextProvider, nextModelId) =>
-              updatePreferences((current) =>
-                mergeProviderPreferences({
-                  preferences: current,
-                  provider: nextProvider as AgentProvider,
-                  updates: { model: nextModelId || undefined },
-                }),
-              ),
-            onPreferencePersistError: (error) => {
-              console.warn("[Composer] persist ported provider preference failed", error);
-            },
-          });
-          targetClient = applied.client;
-          targetServerId = applied.serverId;
-          resolvedAgentId = applied.agentId;
-          finishSwitch = applied.finalize;
-          switched = true;
-        } catch (error) {
-          stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
-          throw error;
-        }
+        startPortingActivity(serverId, targetAgentId, { toProvider: pendingSwitch.provider });
       }
+      try {
+        if (pendingSwitch) {
+          try {
+            const applied = await applyProviderSwitch({
+              sourceClient: client,
+              sourceServerId: serverId,
+              agentId: targetAgentId,
+              workspaceId: workspaceId ?? null,
+              pending: pendingSwitch,
+              persistPreference: (nextProvider, nextModelId) =>
+                updatePreferences((current) =>
+                  mergeProviderPreferences({
+                    preferences: current,
+                    provider: nextProvider as AgentProvider,
+                    updates: { model: nextModelId || undefined },
+                  }),
+                ),
+              onPreferencePersistError: (error) => {
+                console.warn("[Composer] persist ported provider preference failed", error);
+              },
+            });
+            targetClient = applied.client;
+            targetServerId = applied.serverId;
+            resolvedAgentId = applied.agentId;
+            finishSwitch = applied.finalize;
+            switched = true;
+          } catch (error) {
+            stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
+            throw error;
+          }
+        }
 
-      await dispatchComposerAgentMessage({
-        client: targetClient,
-        agentId: resolvedAgentId,
-        text,
-        attachments: sendAttachments,
-        attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
-          supportsForgeAttachments: supportsForgeSearch,
-        }),
-        encodeImages,
-        submission: createMessageSubmissionWriter(targetServerId),
-        activeTurnBehavior,
-        activeTurnId:
-          activeTurnBehavior === "steer"
-            ? (selectAgentTurnPresentation(
-                useSessionStore.getState().sessions[targetServerId],
-                resolvedAgentId,
-              ).turnId ?? undefined)
-            : undefined,
-      });
-      onAttentionPromptSend?.();
-      // Navigate only after the triggering message landed: the destination agent
-      // is loaded and its timeline seeded by then, so the new chat does not open
-      // empty while the port is still running. Until this point the previous chat
-      // stays on screen.
-      if (switched) {
-        navigateToAgent({
-          serverId: targetServerId,
+        await dispatchComposerAgentMessage({
+          client: targetClient,
           agentId: resolvedAgentId,
-          workspaceId: workspaceId ?? undefined,
+          text,
+          attachments: sendAttachments,
+          attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+            supportsForgeAttachments: supportsForgeSearch,
+          }),
+          encodeImages,
+          submission: createMessageSubmissionWriter(targetServerId),
+          activeTurnBehavior,
+          activeTurnId:
+            activeTurnBehavior === "steer"
+              ? (selectAgentTurnPresentation(
+                  useSessionStore.getState().sessions[targetServerId],
+                  resolvedAgentId,
+                ).turnId ?? undefined)
+              : undefined,
         });
-        void finishSwitch?.().catch((error: unknown) => {
-          console.warn("[Composer] failed to archive the ported source agent", error);
-        });
+        onAttentionPromptSend?.();
+        // Navigate only after the triggering message landed: the destination agent
+        // is loaded and its timeline seeded by then, so the new chat does not open
+        // empty while the port is still running. Until this point the previous chat
+        // stays on screen with a loading porting marker.
+        if (switched) {
+          navigateToAgent({
+            serverId: targetServerId,
+            agentId: resolvedAgentId,
+            workspaceId: workspaceId ?? undefined,
+          });
+          void finishSwitch?.().catch((error: unknown) => {
+            console.warn("[Composer] failed to archive the ported source agent", error);
+          });
+        }
+      } finally {
+        if (pendingSwitch) {
+          finishPortingActivity(serverId, targetAgentId);
+        }
       }
     };
   }, [
