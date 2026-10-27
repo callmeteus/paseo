@@ -1,5 +1,6 @@
 import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
+import { startAgentRun } from "./agent-prompt.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -59,10 +60,14 @@ import {
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import {
   buildGoalStartPrompt,
+  buildGoalAutoContinuationPrompt,
   formatGoalCleared,
+  formatGoalComplete,
+  formatGoalContinuationLimit,
   formatGoalPaused,
   formatGoalResumed,
   formatGoalStatus,
+  isGoalCompleteText,
   parseGoalCommand,
   planGoalPrompt,
   withDaemonSlashCommands,
@@ -205,7 +210,7 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
     provider: record.provider,
     cwd: record.cwd,
   };
-  // lastModeId is the last live mode — it also covers provider-side switches
+  // lastModeId is the last live mode â€” it also covers provider-side switches
   // that never reach record.config.modeId.
   const modeId = record.lastModeId ?? record.config?.modeId;
   if (modeId != null) config.modeId = modeId;
@@ -842,6 +847,10 @@ export class AgentManager {
   private readonly registry?: AgentStorage;
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
+  /** Daemon-off `/goal` auto-continuation state, keyed by agent id. */
+  private readonly goalContinuationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly goalAutoContinueCounts = new Map<string, number>();
+  private readonly goalContinuationInFlight = new Set<string>();
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
@@ -981,7 +990,7 @@ export class AgentManager {
   /**
    * Capability token the daemon's own MCP clients must present to the Agent MCP
    * endpoint when a daemon password is configured. Read by the per-client
-   * session to authenticate its own MCP connection. Stays in the daemon — never
+   * session to authenticate its own MCP connection. Stays in the daemon â€” never
    * sent to remote clients.
    */
   getMcpAuthToken(): string | null {
@@ -1676,7 +1685,7 @@ export class AgentManager {
   // Hot-reload an active agent session with config overrides. By default the
   // in-memory timeline is preserved (used for voice-mode toggles and similar
   // config swaps). When `rehydrateFromDisk` is set, the timeline is wiped so a
-  // new epoch is minted and provider history is re-streamed — this is what the
+  // new epoch is minted and provider history is re-streamed â€” this is what the
   // user-facing "Reload agent" action wants when the on-disk session was
   // mutated outside Paseo.
   reloadAgentSession(
@@ -2674,6 +2683,8 @@ export class AgentManager {
     if (command?.kind === "set") {
       const agent = this.requireSessionAgent(agentId);
       const goal = this.writeAgentGoal(agent, { objective: command.objective, status: "active" });
+      this.goalAutoContinueCounts.set(agentId, 0);
+      this.cancelGoalContinuationTimer(agentId);
       return { prompt: buildGoalStartPrompt(goal), submittedPromptText: prompt };
     }
     if (command) return null;
@@ -2681,7 +2692,10 @@ export class AgentManager {
     if (!agent?.goal) return null;
     // Agent-to-agent envelopes must reach the provider untouched.
     if (parseAgentMessage(prompt)) return null;
-    return planGoalPrompt({ prompt, goal: agent.goal, startedGoal: null });
+    const plan = planGoalPrompt({ prompt, goal: agent.goal, startedGoal: null });
+    // A real user message arrived: the auto-continuation count starts over.
+    if (plan) this.goalAutoContinueCounts.delete(agentId);
+    return plan;
   }
 
   private writeAgentGoal(
@@ -2704,8 +2718,91 @@ export class AgentManager {
   private clearAgentGoal(agent: ActiveManagedAgent): void {
     if (!agent.goal) return;
     agent.goal = undefined;
+    this.goalAutoContinueCounts.delete(agent.id);
+    this.cancelGoalContinuationTimer(agent.id);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
+  }
+
+  /**
+   * Goal auto-continuation: when a foreground turn completes while the goal is
+   * still active, start another continuation turn so the agent keeps working
+   * toward the objective (the provider would otherwise stop at "next turn").
+   * The model is asked to end its final message with the goal-complete
+   * marker, which clears the goal and stops the loop. Interrupted, failed, and
+   * replaced turns never auto-continue, and the count is capped to bound a
+   * goal that never terminates.
+   */
+  private static readonly MAX_GOAL_AUTO_CONTINUATIONS = 50;
+  private static readonly GOAL_CONTINUATION_DELAY_MS = 1_500;
+
+  private scheduleGoalContinuation(agent: ActiveManagedAgent): void {
+    const goal = agent.goal;
+    if (!goal || goal.status !== "active") return;
+    const agentId = agent.id;
+    if (this.goalContinuationTimers.has(agentId) || this.goalContinuationInFlight.has(agentId)) {
+      return;
+    }
+    if (this.hasInFlightRun(agentId) || agent.pendingReplacement) return;
+    const previousCount = this.goalAutoContinueCounts.get(agentId) ?? 0;
+    if (previousCount >= AgentManager.MAX_GOAL_AUTO_CONTINUATIONS) {
+      this.goalAutoContinueCounts.delete(agentId);
+      void this.appendTimelineItem(agentId, {
+        type: "assistant_message",
+        text: formatGoalContinuationLimit(AgentManager.MAX_GOAL_AUTO_CONTINUATIONS),
+      });
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.goalContinuationTimers.delete(agentId);
+      void this.fireGoalContinuation(agentId, goal);
+    }, AgentManager.GOAL_CONTINUATION_DELAY_MS);
+    timer.unref?.();
+    this.goalContinuationTimers.set(agentId, timer);
+  }
+
+  private cancelGoalContinuationTimer(agentId: string): void {
+    const timer = this.goalContinuationTimers.get(agentId);
+    if (timer) {
+      clearTimeout(timer);
+      this.goalContinuationTimers.delete(agentId);
+    }
+  }
+
+  private async fireGoalContinuation(agentId: string, scheduledGoal: AgentGoal): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+    // The goal may have been set, paused, or cleared between scheduling and firing.
+    const goal = agent.goal ?? scheduledGoal;
+    if (goal.status !== "active") return;
+    if (agent.lifecycle !== "idle") return;
+    if (this.goalContinuationInFlight.has(agentId)) return;
+    if (this.hasInFlightRun(agentId) || agent.pendingReplacement) return;
+    const lastAssistantText = await this.getLastAssistantMessage(agentId);
+    if (lastAssistantText && isGoalCompleteText(lastAssistantText)) {
+      this.clearAgentGoal(agent);
+      this.goalAutoContinueCounts.delete(agentId);
+      await this.appendTimelineItem(agentId, {
+        type: "assistant_message",
+        text: formatGoalComplete(goal),
+      });
+      return;
+    }
+    this.goalContinuationInFlight.add(agentId);
+    this.goalAutoContinueCounts.set(agentId, (this.goalAutoContinueCounts.get(agentId) ?? 0) + 1);
+    try {
+      await startAgentRun(this, agentId, buildGoalAutoContinuationPrompt(goal), this.logger);
+    } catch (error) {
+      this.logger.warn(
+        {
+          agentId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "agent.manager.goal.continuation_failed",
+      );
+    } finally {
+      this.goalContinuationInFlight.delete(agentId);
+    }
   }
 
   private buildGoalOutOfBandHandler(
@@ -2755,7 +2852,7 @@ export class AgentManager {
   }
 
   /**
-   * Try to run a prompt out-of-band — i.e. without allocating a foreground turn
+   * Try to run a prompt out-of-band â€” i.e. without allocating a foreground turn
    * and without canceling any active turn. Returns true when the session
    * accepted the prompt as a side-effect command (e.g. /goal pause). Events
    * emitted by the handler flow through dispatchStream so they persist and
@@ -3468,6 +3565,8 @@ export class AgentManager {
 
   private async cancelAgentRunNow(agentId: string): Promise<AgentRunCancellationResult> {
     const agent = this.requireSessionAgent(agentId);
+    // A user interrupt wins over any scheduled goal auto-continuation.
+    this.cancelGoalContinuationTimer(agentId);
     const run =
       this.runs.getRun(agentId) ??
       (agent.lifecycle === "running" ? this.runs.trackAutonomousRun(agentId, null) : null);
@@ -4437,7 +4536,7 @@ export class AgentManager {
 
   /**
    * Provider-side mode switches (ACP current_mode_update, in-session
-   * commands, permission-driven transitions) must land in config.modeId too —
+   * commands, permission-driven transitions) must land in config.modeId too â€”
    * reloadAgentSession and the persisted record derive the resumed session's
    * mode from it, so leaving it stale silently downgrades the mode on resume.
    */
@@ -4745,6 +4844,9 @@ export class AgentManager {
         this.runs.settleTerminalRun(agent.id, eventTurnId);
         if (isForegroundEvent) {
           this.finalizeForegroundTurn(agent, eventTurnId);
+          if (event.type === "turn_completed") {
+            this.scheduleGoalContinuation(agent);
+          }
         }
       }
 
@@ -5686,7 +5788,7 @@ export class AgentManager {
       });
       return (catalog.models.find((model) => model.isDefault) ?? catalog.models[0])?.id;
     } catch {
-      // Provider may not support model listing — leave model undefined.
+      // Provider may not support model listing â€” leave model undefined.
       return undefined;
     }
   }
@@ -5903,7 +6005,7 @@ export function commandMayHaveChangedExternalState(command: string): boolean {
   return (
     // GitHub PR operations (merge, close, create, edit, comment, review)
     /\bgh\s+pr\s+(merge|close|create|edit|comment|review)\b/.test(normalized) ||
-    // Pushes to remote — local refs unchanged, but remote state (PR checks,
+    // Pushes to remote â€” local refs unchanged, but remote state (PR checks,
     // mergeable status) may shift immediately after.
     /\bgit\s+push\b/.test(normalized) ||
     // Fetches update refs/remotes/ which our watchers do not watch, so

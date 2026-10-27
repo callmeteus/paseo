@@ -35,6 +35,12 @@ const GOAL_PROMPT_PREFIX = "<paseo-goal>";
 const GOAL_PROMPT_SUFFIX = "</paseo-goal>";
 
 /**
+ * Marker the model is asked to append to its final message when the goal is
+ * fully achieved. The daemon uses it to stop auto-continuation.
+ */
+export const GOAL_COMPLETE_MARKER = "<paseo-goal-complete>";
+
+/**
  * Parse `/goal ...`. Returns null when the text is not a goal command, so the
  * caller can forward it to the provider untouched.
  */
@@ -93,6 +99,7 @@ function buildGoalPreamble(goal: AgentGoal, instruction: string): string {
     "",
     instruction,
     "Report what remains when you stop, and say so explicitly when the goal is complete.",
+    `When the goal is fully achieved, end your final message with ${GOAL_COMPLETE_MARKER}.`,
     GOAL_PROMPT_SUFFIX,
   ].join("\n");
 }
@@ -109,6 +116,30 @@ export function buildGoalContinuationPrompt(goal: AgentGoal, userText: string): 
     "Keep working toward this goal. The user's message follows.",
   );
   return `${preamble}\n\n${userText}`;
+}
+
+/**
+ * Daemon-initiated turn fired when the agent stops while the goal is still
+ * active. No user message is pending; the model either keeps working or
+ * declares completion with the marker.
+ */
+export function buildGoalAutoContinuationPrompt(goal: AgentGoal): string {
+  return buildGoalPreamble(
+    goal,
+    "No new user message is pending. Continue working toward this goal now.",
+  );
+}
+
+export function isGoalCompleteText(text: string): boolean {
+  return text.toLowerCase().includes(GOAL_COMPLETE_MARKER);
+}
+
+export function formatGoalComplete(goal: AgentGoal): string {
+  return `Goal complete: ${goal.objective}`;
+}
+
+export function formatGoalContinuationLimit(max: number): string {
+  return `Goal did not complete after ${max} continuation attempts. The goal watcher stopped; send another message, or /goal resume to restart it.`;
 }
 
 /**

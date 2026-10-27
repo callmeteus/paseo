@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  GOAL_COMPLETE_MARKER,
   GOAL_SLASH_COMMAND,
+  buildGoalAutoContinuationPrompt,
   buildGoalStartPrompt,
   formatGoalStatus,
+  isGoalCompleteText,
   parseGoalCommand,
   planGoalPrompt,
   withDaemonSlashCommands,
@@ -101,6 +104,32 @@ describe("formatGoalStatus", () => {
 describe("buildGoalStartPrompt", () => {
   test("names the goal in the preamble", () => {
     expect(buildGoalStartPrompt(ACTIVE_GOAL)).toContain("Goal: make the test suite pass");
+  });
+});
+
+describe("buildGoalAutoContinuationPrompt", () => {
+  test("continues the goal without a user message and declares the marker", () => {
+    const prompt = buildGoalAutoContinuationPrompt(ACTIVE_GOAL);
+    expect(prompt).toContain("Goal: make the test suite pass");
+    expect(prompt).toContain("No new user message is pending");
+    expect(prompt).toContain(GOAL_COMPLETE_MARKER);
+  });
+
+  test("is recognized as its own preamble so planGoalPrompt forwards it untouched", () => {
+    expect(
+      planGoalPrompt({
+        prompt: buildGoalAutoContinuationPrompt(ACTIVE_GOAL),
+        goal: ACTIVE_GOAL,
+        startedGoal: null,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("isGoalCompleteText", () => {
+  test("matches the marker in any casing", () => {
+    expect(isGoalCompleteText("done. <PASEO-GOAL-COMPLETE>")).toBe(true);
+    expect(isGoalCompleteText("still working")).toBe(false);
   });
 });
 

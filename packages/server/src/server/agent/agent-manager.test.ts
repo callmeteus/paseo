@@ -26,6 +26,7 @@ import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
+import { GOAL_COMPLETE_MARKER } from "./agent-goal.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type {
@@ -12326,6 +12327,35 @@ class GoalPromptSession extends TestAgentSession {
   }
 }
 
+/**
+ * Fake session for goal auto-continuation: the first turn reports partial
+ * work, later turns append the goal-complete marker so the daemon watcher
+ * stops on the second turn.
+ */
+class GoalWatchSession extends TestAgentSession {
+  readonly prompts: AgentPromptInput[] = [];
+
+  override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+    this.prompts.push(prompt);
+    const turnNumber = this.prompts.length;
+    const turnId = `watch-turn-${turnNumber}`;
+    setTimeout(() => {
+      const text =
+        turnNumber >= 2
+          ? `All checks passed. ${GOAL_COMPLETE_MARKER}`
+          : "Partial work. I'll continue on the next turn.";
+      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      this.pushEvent({
+        type: "timeline",
+        provider: this.provider,
+        item: { type: "assistant_message", text },
+      });
+      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+    }, 0);
+    return { turnId };
+  }
+}
+
 test("daemon-level /goal starts a turn and the timeline shows the typed text", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-start-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
@@ -12379,6 +12409,61 @@ test("daemon-level /goal starts a turn and the timeline shows the typed text", a
   } finally {
     await manager.flush().catch(() => undefined);
     await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level goal auto-continues after a completed turn and stops on the completion marker", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-autocontinue-"));
+  let session: GoalWatchSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalWatchSession(config);
+      return session;
+    }
+  })();
+  const workdirStorage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: workdirStorage,
+    logger,
+  });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    await startAgentRun(manager, agent.id, "/goal probe the network", logger);
+
+    // First turn completed without the marker: the daemon continues on its own.
+    await vi.waitFor(
+      () => {
+        expect(session!.prompts).toHaveLength(2);
+        expect(String(session!.prompts[1])).toContain("No new user message is pending");
+        expect(String(session!.prompts[1])).toContain("Goal: probe the network");
+        expect(String(session!.prompts[1])).toContain(GOAL_COMPLETE_MARKER);
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+
+    // Second turn reports completion; the goal is cleared and the watch stops.
+    await vi.waitFor(
+      () => {
+        expect(manager.getAgent(agent.id)?.goal).toBeUndefined();
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+    const items = manager.fetchTimeline(agent.id, { direction: "tail", limit: 10 }).rows;
+    const lastAssistant = items
+      .map((row) => row.item)
+      .findLast((item) => item.type === "assistant_message");
+    expect(lastAssistant && "text" in lastAssistant ? lastAssistant.text : "").toContain(
+      "Goal complete: probe the network",
+    );
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await workdirStorage.flush().catch(() => undefined);
     rmSync(workdir, { recursive: true, force: true });
   }
 });
