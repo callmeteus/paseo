@@ -190,6 +190,11 @@ export const en = {
     goal: {
       active: "Goal",
       paused: "Goal paused",
+      edit: "Edit goal",
+      info: "Toggle goal details",
+      clear: "Clear goal",
+      collapse: "Hide goal",
+      show: "Show goal",
     },
     github: {
       searching: "Searching...",

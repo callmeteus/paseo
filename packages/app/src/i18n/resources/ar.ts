@@ -194,6 +194,11 @@ export const ar: TranslationResources = {
     goal: {
       active: "الهدف",
       paused: "الهدف متوقف مؤقتاً",
+      edit: "تعديل الهدف",
+      info: "تفاصيل الهدف",
+      clear: "إزالة الهدف",
+      collapse: "إخفاء الهدف",
+      show: "إظهار الهدف",
     },
     github: {
       searching: "جارٍ البحث...",

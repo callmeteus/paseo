@@ -197,6 +197,11 @@ export const fr: TranslationResources = {
     goal: {
       active: "Objectif",
       paused: "Objectif en pause",
+      edit: "Modifier l'objectif",
+      info: "Détails de l'objectif",
+      clear: "Supprimer l'objectif",
+      collapse: "Masquer l'objectif",
+      show: "Afficher l'objectif",
     },
     github: {
       searching: "Recherche…",

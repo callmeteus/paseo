@@ -196,6 +196,11 @@ export const ru: TranslationResources = {
     goal: {
       active: "Цель",
       paused: "Цель приостановлена",
+      edit: "Изменить цель",
+      info: "О цели",
+      clear: "Убрать цель",
+      collapse: "Скрыть цель",
+      show: "Показать цель",
     },
     github: {
       searching: "Идет поиск...",

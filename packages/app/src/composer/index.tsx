@@ -46,6 +46,9 @@ import {
   ClipboardPaste,
   Paperclip,
   Target,
+  Info,
+  Trash2,
+  Minus,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { FOOTER_HEIGHT } from "@/constants/layout";
@@ -727,24 +730,114 @@ function QueuedMessageRow({
 
 interface GoalBannerRowProps {
   goal: AgentGoalState;
+  onEdit: () => void;
+  onClear: () => void;
+}
+
+function formatGoalElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m ${totalSeconds % 60}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  return `${hours}h ${totalMinutes % 60}m`;
 }
 
 /**
- * Recommends a goal banner above the composer according to the specified requirement.
+ * Goal strip above the composer (Cursor-style): a card with the objective,
+ * status badge, elapsed time, and per-goal actions (edit is delegated to the
+ * composer input, clear re-sends `/goal clear`). Collapsible to a small pill.
  */
-function GoalBannerRow({ goal }: GoalBannerRowProps) {
+function GoalBannerRow({ goal, onEdit, onClear }: GoalBannerRowProps) {
   const { t } = useTranslation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const isPaused = goal.status === "paused";
+
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
+  const handleExpand = useCallback(() => {
+    setIsCollapsed(false);
+    setNow(Date.now());
+  }, []);
+  const handleToggleDetails = useCallback(() => {
+    setIsDetailsExpanded((prev) => !prev);
+  }, []);
+  const handleCollapse = useCallback(() => setIsCollapsed(true), []);
+
+  if (isCollapsed) {
+    return (
+      <View style={styles.goalCollapsedRow}>
+        <Pressable
+          style={styles.goalCollapsedPill}
+          onPress={handleExpand}
+          accessibilityRole="button"
+          accessibilityLabel={t("composer.goal.show")}
+          testID="composer-goal-restore"
+        >
+          <Text style={styles.goalBadge}>{t("composer.goal.active")}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const reference = isPaused ? goal.updatedAt : goal.createdAt;
+  const elapsed = formatGoalElapsed(Math.max(0, now - new Date(reference).getTime()));
   return (
     <View style={styles.goalRow} testID="composer-goal-banner">
-      <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
-      <Text style={styles.goalText} numberOfLines={2} ellipsizeMode="tail">
-        {goal.objective}
-      </Text>
+      <View style={styles.goalHeaderRow}>
+        <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+        <Text style={isPaused ? styles.goalBadgePaused : styles.goalBadge} accessibilityRole="text">
+          {isPaused ? t("composer.goal.paused") : t("composer.goal.active")}
+        </Text>
+        <Text style={styles.goalElapsed}>{elapsed}</Text>
+        <View style={styles.goalActions}>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={onEdit}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.edit")}
+          >
+            <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={handleToggleDetails}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.info")}
+          >
+            <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={onClear}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.clear")}
+            testID="composer-goal-clear"
+          >
+            <ThemedTrash2 size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={handleCollapse}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.collapse")}
+          >
+            <ThemedMinus size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+        </View>
+      </View>
       <Text
-        style={goal.status === "paused" ? styles.goalBadgePaused : styles.goalBadge}
-        accessibilityRole="text"
+        style={styles.goalText}
+        numberOfLines={isDetailsExpanded ? undefined : 2}
+        ellipsizeMode="tail"
       >
-        {goal.status === "paused" ? t("composer.goal.paused") : t("composer.goal.active")}
+        {goal.objective}
       </Text>
     </View>
   );
@@ -2472,9 +2565,21 @@ function ComposerContentImpl({
     [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
+  const handleGoalEdit = useCallback(() => {
+    replaceUserInput("/goal ");
+    messageInputRef.current?.focus();
+  }, [replaceUserInput]);
+
+  const handleGoalClear = useCallback(() => {
+    void sendMessageWithContent("/goal clear", [], true);
+  }, [sendMessageWithContent]);
+
   const goalStrip = useMemo(
-    () => (agentState.goal ? <GoalBannerRow goal={agentState.goal} /> : null),
-    [agentState.goal],
+    () =>
+      agentState.goal ? (
+        <GoalBannerRow goal={agentState.goal} onEdit={handleGoalEdit} onClear={handleGoalClear} />
+      ) : null,
+    [agentState.goal, handleGoalEdit, handleGoalClear],
   );
 
   const autocompleteConfiguration = useMemo(
@@ -2774,15 +2879,47 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[2],
   },
   goalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
+    flexDirection: "column",
+    gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[2],
     backgroundColor: theme.colors.surface1,
     borderRadius: theme.borderRadius.lg,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
+  },
+  goalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  goalElapsed: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  goalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    marginLeft: "auto",
+  },
+  goalActionButton: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalCollapsedRow: {
+    flexDirection: "row",
+  },
+  goalCollapsedPill: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
   },
   goalText: {
     flex: 1,
@@ -2850,6 +2987,9 @@ const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foregroun
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
 const ThemedTarget = withUnistyles(Target);
+const ThemedInfo = withUnistyles(Info);
+const ThemedTrash2 = withUnistyles(Trash2);
+const ThemedMinus = withUnistyles(Minus);
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

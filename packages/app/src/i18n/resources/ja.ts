@@ -196,6 +196,11 @@ export const ja: TranslationResources = {
     goal: {
       active: "目標",
       paused: "目標を一時停止中",
+      edit: "目標を編集",
+      info: "目標の詳細",
+      clear: "目標をクリア",
+      collapse: "目標を隠す",
+      show: "目標を表示",
     },
     github: {
       searching: "検索中...",

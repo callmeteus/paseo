@@ -194,6 +194,11 @@ export const ko: TranslationResources = {
     goal: {
       active: "목표",
       paused: "목표 일시 중지",
+      edit: "목표 편집",
+      info: "목표 세부정보",
+      clear: "목표 지우기",
+      collapse: "목표 숨기기",
+      show: "목표 표시",
     },
     github: {
       searching: "검색 중...",

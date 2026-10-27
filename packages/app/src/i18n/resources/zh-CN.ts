@@ -194,6 +194,11 @@ export const zhCN: TranslationResources = {
     goal: {
       active: "目标",
       paused: "目标已暂停",
+      edit: "编辑目标",
+      info: "目标详情",
+      clear: "清除目标",
+      collapse: "收起目标",
+      show: "展开目标",
     },
     github: {
       searching: "正在搜索...",
