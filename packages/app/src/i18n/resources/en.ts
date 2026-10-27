@@ -195,6 +195,9 @@ export const en = {
       clear: "Clear goal",
       collapse: "Hide goal",
       show: "Show goal",
+      pause: "Pause goal",
+      resume: "Resume goal",
+      stop: "Stop goal",
     },
     github: {
       searching: "Searching...",

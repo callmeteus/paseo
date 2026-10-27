@@ -199,6 +199,9 @@ export const zhCN: TranslationResources = {
       clear: "清除目标",
       collapse: "收起目标",
       show: "展开目标",
+      pause: "暂停目标",
+      resume: "恢复目标",
+      stop: "停止目标",
     },
     github: {
       searching: "正在搜索...",

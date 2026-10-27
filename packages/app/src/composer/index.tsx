@@ -47,8 +47,9 @@ import {
   Paperclip,
   Target,
   Info,
-  Trash2,
   Minus,
+  Pause,
+  Play,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { FOOTER_HEIGHT } from "@/constants/layout";
@@ -730,8 +731,10 @@ function QueuedMessageRow({
 
 interface GoalBannerRowProps {
   goal: AgentGoalState;
-  onEdit: () => void;
-  onClear: () => void;
+  onEdit: (objective: string) => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
 }
 
 function formatGoalElapsed(ms: number): string {
@@ -748,7 +751,7 @@ function formatGoalElapsed(ms: number): string {
  * status badge, elapsed time, and per-goal actions (edit is delegated to the
  * composer input, clear re-sends `/goal clear`). Collapsible to a small pill.
  */
-function GoalBannerRow({ goal, onEdit, onClear }: GoalBannerRowProps) {
+function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRowProps) {
   const { t } = useTranslation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
@@ -769,6 +772,7 @@ function GoalBannerRow({ goal, onEdit, onClear }: GoalBannerRowProps) {
     setIsDetailsExpanded((prev) => !prev);
   }, []);
   const handleCollapse = useCallback(() => setIsCollapsed(true), []);
+  const handleEditGoal = useCallback(() => onEdit(goal.objective), [onEdit, goal.objective]);
 
   if (isCollapsed) {
     return (
@@ -799,7 +803,7 @@ function GoalBannerRow({ goal, onEdit, onClear }: GoalBannerRowProps) {
         <View style={styles.goalActions}>
           <Pressable
             style={styles.goalActionButton}
-            onPress={onEdit}
+            onPress={handleEditGoal}
             accessibilityRole="button"
             accessibilityLabel={t("composer.goal.edit")}
           >
@@ -813,14 +817,35 @@ function GoalBannerRow({ goal, onEdit, onClear }: GoalBannerRowProps) {
           >
             <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
           </Pressable>
+          {goal.status === "paused" ? (
+            <Pressable
+              style={styles.goalActionButton}
+              onPress={onResume}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.goal.resume")}
+              testID="composer-goal-resume"
+            >
+              <ThemedPlay size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.goalActionButton}
+              onPress={onPause}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.goal.pause")}
+              testID="composer-goal-pause"
+            >
+              <ThemedPause size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          )}
           <Pressable
             style={styles.goalActionButton}
-            onPress={onClear}
+            onPress={onStop}
             accessibilityRole="button"
-            accessibilityLabel={t("composer.goal.clear")}
-            testID="composer-goal-clear"
+            accessibilityLabel={t("composer.goal.stop")}
+            testID="composer-goal-stop"
           >
-            <ThemedTrash2 size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            <ThemedSquare size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
           </Pressable>
           <Pressable
             style={styles.goalActionButton}
@@ -2565,21 +2590,38 @@ function ComposerContentImpl({
     [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
-  const handleGoalEdit = useCallback(() => {
-    replaceUserInput("/goal ");
-    messageInputRef.current?.focus();
-  }, [replaceUserInput]);
+  const handleGoalEdit = useCallback(
+    (objective: string) => {
+      replaceUserInput(`/goal ${objective}`);
+      messageInputRef.current?.focus();
+    },
+    [replaceUserInput],
+  );
 
-  const handleGoalClear = useCallback(() => {
+  const handleGoalPause = useCallback(() => {
+    void sendMessageWithContent("/goal pause", [], true);
+  }, [sendMessageWithContent]);
+
+  const handleGoalResume = useCallback(() => {
+    void sendMessageWithContent("/goal resume", [], true);
+  }, [sendMessageWithContent]);
+
+  const handleGoalStop = useCallback(() => {
     void sendMessageWithContent("/goal clear", [], true);
   }, [sendMessageWithContent]);
 
   const goalStrip = useMemo(
     () =>
       agentState.goal ? (
-        <GoalBannerRow goal={agentState.goal} onEdit={handleGoalEdit} onClear={handleGoalClear} />
+        <GoalBannerRow
+          goal={agentState.goal}
+          onEdit={handleGoalEdit}
+          onPause={handleGoalPause}
+          onResume={handleGoalResume}
+          onStop={handleGoalStop}
+        />
       ) : null,
-    [agentState.goal, handleGoalEdit, handleGoalClear],
+    [agentState.goal, handleGoalEdit, handleGoalPause, handleGoalResume, handleGoalStop],
   );
 
   const autocompleteConfiguration = useMemo(
@@ -2988,8 +3030,10 @@ const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.fore
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
 const ThemedTarget = withUnistyles(Target);
 const ThemedInfo = withUnistyles(Info);
-const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedMinus = withUnistyles(Minus);
+const ThemedPause = withUnistyles(Pause);
+const ThemedPlay = withUnistyles(Play);
+const ThemedSquare = withUnistyles(Square);
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

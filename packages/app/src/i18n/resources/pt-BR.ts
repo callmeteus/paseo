@@ -200,6 +200,9 @@ export const ptBR: TranslationResources = {
       clear: "Limpar meta",
       collapse: "Ocultar meta",
       show: "Mostrar meta",
+      pause: "Pausar meta",
+      resume: "Retomar meta",
+      stop: "Parar meta",
     },
     github: {
       searching: "Buscando...",

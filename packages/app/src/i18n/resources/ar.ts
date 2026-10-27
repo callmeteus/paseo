@@ -199,6 +199,9 @@ export const ar: TranslationResources = {
       clear: "إزالة الهدف",
       collapse: "إخفاء الهدف",
       show: "إظهار الهدف",
+      pause: "إيقاف الهدف مؤقتاً",
+      resume: "استئناف الهدف",
+      stop: "إيقاف الهدف",
     },
     github: {
       searching: "جارٍ البحث...",

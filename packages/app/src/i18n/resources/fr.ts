@@ -202,6 +202,9 @@ export const fr: TranslationResources = {
       clear: "Supprimer l'objectif",
       collapse: "Masquer l'objectif",
       show: "Afficher l'objectif",
+      pause: "Mettre en pause",
+      resume: "Reprendre",
+      stop: "Arrêter l'objectif",
     },
     github: {
       searching: "Recherche…",

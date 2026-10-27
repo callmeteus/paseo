@@ -199,6 +199,9 @@ export const ko: TranslationResources = {
       clear: "목표 지우기",
       collapse: "목표 숨기기",
       show: "목표 표시",
+      pause: "목표 일시 중지",
+      resume: "목표 재개",
+      stop: "목표 중지",
     },
     github: {
       searching: "검색 중...",

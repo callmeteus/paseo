@@ -201,6 +201,9 @@ export const ru: TranslationResources = {
       clear: "Убрать цель",
       collapse: "Скрыть цель",
       show: "Показать цель",
+      pause: "Приостановить цель",
+      resume: "Возобновить цель",
+      stop: "Остановить цель",
     },
     github: {
       searching: "Идет поиск...",

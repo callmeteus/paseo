@@ -201,6 +201,9 @@ export const es: TranslationResources = {
       clear: "Eliminar objetivo",
       collapse: "Ocultar objetivo",
       show: "Mostrar objetivo",
+      pause: "Pausar objetivo",
+      resume: "Reanudar objetivo",
+      stop: "Detener objetivo",
     },
     github: {
       searching: "Búsqueda...",

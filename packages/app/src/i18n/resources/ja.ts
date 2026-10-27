@@ -201,6 +201,9 @@ export const ja: TranslationResources = {
       clear: "目標をクリア",
       collapse: "目標を隠す",
       show: "目標を表示",
+      pause: "目標を一時停止",
+      resume: "目標を再開",
+      stop: "目標を停止",
     },
     github: {
       searching: "検索中...",
