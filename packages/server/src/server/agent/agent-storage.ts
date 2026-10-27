@@ -91,6 +91,20 @@ const STORED_AGENT_SCHEMA = z.object({
       portedAt: z.string().optional(),
     })
     .optional(),
+  /**
+   * Timeline rows of the source conversation, written when an agent is ported.
+   * A ported provider session starts empty, so this is the only way to restore
+   * the pre-port chat after the in-memory timeline is discarded.
+   */
+  portedTimeline: z
+    .array(
+      z.object({
+        seq: z.number(),
+        timestamp: z.string(),
+        item: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .optional(),
 });
 
 export type SerializableAgentConfig = Pick<

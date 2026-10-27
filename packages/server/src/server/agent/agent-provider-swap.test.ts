@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentStorage } from "./agent-storage.js";
 import {
+  buildPortedTimelineRows,
   buildPortingTranscript,
   swapAgentProvider,
   SwapProviderError,
@@ -158,5 +159,66 @@ describe("buildPortingTranscript", () => {
     ]);
 
     expect(transcript).toBe("Assistant used tool search (completed)");
+  });
+});
+
+describe("buildPortedTimelineRows", () => {
+  it("keeps the previous conversation and appends a completed porting marker", () => {
+    const rows = buildPortedTimelineRows({
+      previousRows: [
+        {
+          seq: 4,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          item: { type: "user_message", text: "hi" },
+        },
+        {
+          seq: 5,
+          timestamp: "2026-01-01T00:00:01.000Z",
+          item: { type: "assistant_message", text: "hello" },
+        },
+      ],
+      fromProvider: "cline",
+      toProvider: "opencode",
+      portedAt: "2026-01-01T00:00:02.000Z",
+    });
+
+    expect(rows).toEqual([
+      {
+        seq: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        item: { type: "user_message", text: "hi" },
+      },
+      {
+        seq: 2,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        item: { type: "assistant_message", text: "hello" },
+      },
+      {
+        seq: 3,
+        timestamp: "2026-01-01T00:00:02.000Z",
+        item: {
+          type: "porting",
+          status: "completed",
+          fromProvider: "cline",
+          toProvider: "opencode",
+        },
+      },
+    ]);
+  });
+
+  it("records the marker even when the source conversation is empty", () => {
+    const rows = buildPortedTimelineRows({
+      previousRows: [],
+      toProvider: "opencode",
+      portedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(rows).toEqual([
+      {
+        seq: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        item: { type: "porting", status: "completed", toProvider: "opencode" },
+      },
+    ]);
   });
 });

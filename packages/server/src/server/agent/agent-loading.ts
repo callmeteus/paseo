@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import type { AgentProvider } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
+import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import {
   buildConfigOverrides,
   buildSessionConfig,
@@ -117,7 +118,13 @@ export async function ensureAgentLoaded(
         handle,
         buildConfigOverrides(record),
         agentId,
-        { ...extractTimestamps(record), attention: extractAttention(record) },
+        {
+          ...extractTimestamps(record),
+          attention: extractAttention(record),
+          migratedFrom: record.migratedFrom,
+          migratedTo: record.migratedTo,
+          portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
+        },
         record.archivedAt ? { purpose: "history" } : undefined,
       );
       deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
@@ -135,6 +142,10 @@ export async function ensureAgentLoaded(
         labels: record.labels,
         workspaceId: record.workspaceId,
         owner: record.owner,
+        migratedFrom: record.migratedFrom,
+        migratedTo: record.migratedTo,
+        portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
+        preserveTimeline: true,
       });
       deps.logger.info({ agentId, provider: record.provider }, "Agent created from stored config");
     }

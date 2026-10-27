@@ -9,7 +9,7 @@ import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import type { AgentManager } from "./agent-manager.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import { MAX_PORTED_TRANSCRIPT_CHARS } from "./agent-provider-swap.js";
-import type { AgentStorage } from "./agent-storage.js";
+import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
 type SnapshotAgentManager = Pick<AgentManager, "createAgent" | "getTimeline">;
 
@@ -185,7 +185,10 @@ function turnItems(turn: AgentSnapshotTurn): AgentTimelineItem[] {
   return items;
 }
 
-export function buildImportedTimelineRows(snapshot: AgentSnapshot): AgentTimelineRow[] {
+export function buildImportedTimelineRows(
+  snapshot: AgentSnapshot,
+  targetProvider?: string,
+): AgentTimelineRow[] {
   const rows: AgentTimelineRow[] = [];
   const fallbackTimestamp = new Date().toISOString();
   for (const turn of snapshot.turns) {
@@ -193,6 +196,18 @@ export function buildImportedTimelineRows(snapshot: AgentSnapshot): AgentTimelin
     for (const item of turnItems(turn)) {
       rows.push({ seq: rows.length + 1, timestamp, item });
     }
+  }
+  if (targetProvider) {
+    rows.push({
+      seq: rows.length + 1,
+      timestamp: fallbackTimestamp,
+      item: {
+        type: "porting",
+        status: "completed",
+        fromProvider: snapshot.provider,
+        toProvider: targetProvider,
+      },
+    });
   }
   return rows;
 }
@@ -211,8 +226,20 @@ export async function importAgentSnapshot(
     );
   }
 
-  const timelineRows = buildImportedTimelineRows(snapshot);
+  const timelineRows = buildImportedTimelineRows(snapshot, targetProvider);
   const systemPrompt = buildImportedSystemPrompt(snapshot);
+  const portedAt = new Date().toISOString();
+  const migratedFrom = {
+    provider: snapshot.provider,
+    agentId: snapshot.agentId,
+    ...(input.sourceHost ? { host: input.sourceHost } : {}),
+    portedAt,
+  };
+  const portedTimeline = timelineRows.map((row) => ({
+    seq: row.seq,
+    timestamp: row.timestamp,
+    item: row.item,
+  })) as StoredAgentRecord["portedTimeline"];
   const config: AgentSessionConfig = {
     provider: targetProvider,
     cwd: snapshot.cwd,
@@ -229,6 +256,8 @@ export async function importAgentSnapshot(
       timelineNextSeq: timelineRows.length + 1,
       initialTitle: snapshot.title ?? null,
       workspaceId: input.workspaceId,
+      migratedFrom,
+      portedTimeline: portedTimeline as AgentTimelineRow[],
     });
   } catch (error) {
     throw new AgentSnapshotTransferError(
@@ -241,12 +270,8 @@ export async function importAgentSnapshot(
   if (record) {
     await input.storage.upsert({
       ...record,
-      migratedFrom: {
-        provider: snapshot.provider,
-        agentId: snapshot.agentId,
-        ...(input.sourceHost ? { host: input.sourceHost } : {}),
-        portedAt: new Date().toISOString(),
-      },
+      migratedFrom,
+      portedTimeline,
     });
   }
 

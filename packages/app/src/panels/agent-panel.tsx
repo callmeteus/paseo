@@ -1393,7 +1393,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   );
   const streamItems = useMemo(() => {
     const items = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
-    if (!migratedFrom) {
+    if (!migratedFrom || items.some((item) => item.kind === "porting")) {
       return items;
     }
     const portedAt = migratedFrom.portedAt ? new Date(migratedFrom.portedAt).getTime() : null;

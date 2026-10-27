@@ -59,7 +59,7 @@ import {
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
-import { swapAgentProvider } from "./agent-provider-swap.js";
+import { buildPortedTimelineRows, swapAgentProvider } from "./agent-provider-swap.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -321,6 +321,16 @@ export interface CreateAgentOptions {
   // undefined is an explicit decision: the agent never appears in the sidebar.
   workspaceId: string | undefined;
   owner?: AgentOwner;
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  /**
+   * Recreating an existing agent from its stored config must keep the timeline
+   * already primed for it (ported conversations have no provider history to
+   * re-stream). Brand-new agents leave this unset so stale state is discarded.
+   */
+  preserveTimeline?: boolean;
+  /** Rows written when the agent was ported; seeds the timeline after a reload. */
+  portedTimeline?: AgentTimelineRow[];
 }
 
 export interface AgentManagerOptions {
@@ -450,6 +460,11 @@ interface ManagedAgentBase {
    * User-defined labels for categorizing agents (e.g., { surface: "workspace" }).
    */
   labels: Record<string, string>;
+  /** Porting links carried from the stored record so live payloads keep them. */
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  /** Ported timeline rows, kept so snapshot persists don't drop them. */
+  portedTimeline?: AgentTimelineRow[];
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -661,6 +676,50 @@ function buildExplicitTimelineSeedForRegister(
   };
 }
 
+function buildPortedAgentState(options?: {
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  portedTimeline?: AgentTimelineRow[];
+}): Pick<ManagedAgentBase, "migratedFrom" | "migratedTo" | "portedTimeline"> {
+  return {
+    ...(options?.migratedFrom ? { migratedFrom: options.migratedFrom } : {}),
+    ...(options?.migratedTo ? { migratedTo: options.migratedTo } : {}),
+    ...(options?.portedTimeline ? { portedTimeline: options.portedTimeline } : {}),
+  };
+}
+
+function resolveRegistrationTimelineSeed(input: {
+  now: Date;
+  explicit: SeedAgentTimelineOptions | null;
+  durable: SeedAgentTimelineOptions | null;
+  portedTimeline: readonly AgentTimelineRow[] | undefined;
+  timelineAlreadyPrimed: boolean;
+}): {
+  seed: SeedAgentTimelineOptions | null;
+  hasRows: boolean;
+  portedRows: readonly AgentTimelineRow[] | null;
+} {
+  const portedRows =
+    !input.explicit && !input.timelineAlreadyPrimed && input.portedTimeline?.length
+      ? input.portedTimeline
+      : null;
+  const portedSeed = portedRows
+    ? {
+        rows: portedRows,
+        nextSeq: (portedRows.at(-1)?.seq ?? 0) + 1,
+        timestamp: input.now.toISOString(),
+      }
+    : null;
+  return {
+    seed: input.explicit ?? input.durable ?? portedSeed,
+    hasRows:
+      input.timelineAlreadyPrimed ||
+      portedSeed !== null ||
+      (input.durable != null && (input.durable.nextSeq ?? 1) > 1),
+    portedRows,
+  };
+}
+
 function buildImportedTimelineRows(entries: readonly ImportedTimelineEntry[]): AgentTimelineRow[] {
   const rows: AgentTimelineRow[] = [];
   for (const entry of entries) {
@@ -763,6 +822,7 @@ export class AgentManager {
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
+  private readonly portedTimelineRepairs = new Set<string>();
   private readonly reloadedSessionCloses = new WeakMap<AgentSession, Promise<void>>();
   private readonly runtimeCleanupIdentities = new WeakMap<AgentSession, object>();
   private readonly collectingRuntimes = new Set<string>();
@@ -1230,12 +1290,44 @@ export class AgentManager {
   async getTimelineRows(id: string): Promise<AgentTimelineRow[]> {
     this.requireAgent(id);
     if (this.durableTimelineStore) {
+      const committed = await this.durableTimelineStore.getCommittedRows(id);
+      const repaired = committed.length === 0 ? await this.repairPortedTimelineIfEmpty(id) : null;
       return projectTimelineRows({
-        rows: await this.durableTimelineStore.getCommittedRows(id),
+        rows: repaired ?? committed,
         mode: "projected",
       }).map((entry) => Object.assign({ seq: entry.seqEnd }, entry));
     }
     return this.timelineStore.getRows(id);
+  }
+
+  /**
+   * Ports created before the durable seed fix have migration metadata but no
+   * committed rows, so the app shows an empty chat. Copy the source agent's
+   * committed rows (it is archived, not deleted) and append the porting marker
+   * once, then serve them from there on.
+   */
+  private async repairPortedTimelineIfEmpty(id: string): Promise<AgentTimelineRow[] | null> {
+    if (!this.durableTimelineStore || !this.registry) return null;
+    if (this.portedTimelineRepairs.has(id)) return null;
+    this.portedTimelineRepairs.add(id);
+    try {
+      const record = await this.registry.get(id);
+      const migratedFrom = record?.migratedFrom;
+      if (!record || !migratedFrom) return null;
+      const sourceRows = await this.durableTimelineStore.getCommittedRows(migratedFrom.agentId);
+      if (sourceRows.length === 0) return null;
+      const rows = buildPortedTimelineRows({
+        previousRows: sourceRows,
+        fromProvider: migratedFrom.provider,
+        toProvider: record.provider,
+        portedAt: migratedFrom.portedAt ?? new Date().toISOString(),
+      });
+      await this.durableTimelineStore.bulkInsert(id, rows);
+      return rows;
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: id }, "Failed to repair ported agent timeline");
+      return null;
+    }
   }
 
   fetchTimeline(id: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
@@ -1299,7 +1391,9 @@ export class AgentManager {
       config = { ...request.config, internal: config.internal };
       options = { ...options, env: request.env };
     }
-    await this.deleteAgentState(resolvedAgentId);
+    if (!options.preserveTimeline) {
+      await this.deleteAgentState(resolvedAgentId);
+    }
     const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
       config,
       resolvedAgentId,
@@ -1330,6 +1424,8 @@ export class AgentManager {
       timelineNextSeq: options.timelineNextSeq,
       workspaceId: options.workspaceId,
       owner: options.owner,
+      migratedFrom: options.migratedFrom,
+      migratedTo: options.migratedTo,
       historyPrimed: true,
     });
     if (!agent.internal) {
@@ -1362,6 +1458,9 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       attention?: AttentionState;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1394,6 +1493,9 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       attention?: AttentionState;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1644,6 +1746,8 @@ export class AgentManager {
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
         attention: preservedAttention,
+        migratedFrom: existing.migratedFrom,
+        migratedTo: existing.migratedTo,
         restoring: true,
       });
     } catch (error) {
@@ -3675,6 +3779,9 @@ export class AgentManager {
       publishWhenReady?: boolean;
       workspaceId?: string;
       owner?: AgentOwner;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3810,6 +3917,7 @@ export class AgentManager {
           persistence?: AgentPersistenceHandle;
           createdAt?: Date;
           updatedAt?: Date;
+          portedTimeline?: AgentTimelineRow[];
         }
       | undefined;
   }): Promise<{ durableTimelineHasRows: boolean }> {
@@ -3821,12 +3929,22 @@ export class AgentManager {
     const durableTimelineSeed = shouldSeedFromDurable
       ? await this.loadCommittedTimelineSeed(agentId, now)
       : null;
-    const durableTimelineHasRows =
-      timelineAlreadyPrimed ||
-      (durableTimelineSeed != null && (durableTimelineSeed.nextSeq ?? 1) > 1);
-    const timelineSeed = explicitTimelineSeed ?? durableTimelineSeed;
+    const {
+      seed: timelineSeed,
+      hasRows: durableTimelineHasRows,
+      portedRows,
+    } = resolveRegistrationTimelineSeed({
+      now,
+      explicit: explicitTimelineSeed,
+      durable: durableTimelineSeed,
+      portedTimeline: options?.portedTimeline,
+      timelineAlreadyPrimed,
+    });
     if (timelineSeed || !this.timelineStore.has(agentId)) {
       this.timelineStore.initialize(agentId, timelineSeed ?? { timestamp: now.toISOString() });
+    }
+    if (portedRows) {
+      this.enqueueDurableTimelineBulkInsert(agentId, portedRows);
     }
     if (options?.timelineRows?.length) {
       this.enqueueDurableTimelineBulkInsert(agentId, options.timelineRows);
@@ -3853,6 +3971,9 @@ export class AgentManager {
           persistence?: AgentPersistenceHandle;
           workspaceId?: string;
           owner?: AgentOwner;
+          migratedFrom?: StoredAgentRecord["migratedFrom"];
+          migratedTo?: StoredAgentRecord["migratedTo"];
+          portedTimeline?: AgentTimelineRow[];
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -3893,6 +4014,7 @@ export class AgentManager {
       attention: resolveInitialAttention(options?.attention),
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
+      ...buildPortedAgentState(options),
     } as ActiveManagedAgent;
   }
 
@@ -4139,22 +4261,41 @@ export class AgentManager {
     targetModel: string | null,
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
-    const previousItems = this.timelineStore.has(agentId)
-      ? this.timelineStore.getItems(agentId)
-      : [];
+    const previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    const previousItems = previousRows.map((row) => row.item);
+    const existing = await registry.get(agentId);
+    const portedAt = new Date().toISOString();
+    const portedRows = buildPortedTimelineRows({
+      previousRows,
+      fromProvider: existing?.provider,
+      toProvider: targetProvider,
+      portedAt,
+    });
     const result = await swapAgentProvider({
       storage: registry,
       agentId,
       targetProvider,
       targetModel,
       previousItems,
+      portedTimeline: portedRows,
       logger: this.logger,
     });
-    if (previousItems.length > 0 && !this.timelineStore.has(result.newAgentId)) {
-      this.timelineStore.initialize(result.newAgentId, {
-        items: previousItems,
-        timestamp: new Date().toISOString(),
-      });
+    this.timelineStore.initialize(result.newAgentId, {
+      rows: portedRows,
+      nextSeq: portedRows.length + 1,
+      timestamp: portedAt,
+    });
+    // The durable store is what the client reads for history, so seeding only
+    // the in-memory store leaves the ported agent looking empty in the UI.
+    if (this.durableTimelineStore && portedRows.length > 0) {
+      try {
+        await this.durableTimelineStore.bulkInsert(result.newAgentId, portedRows);
+      } catch (error) {
+        this.logger.error(
+          { err: error, agentId: result.newAgentId, rowCount: portedRows.length },
+          "Failed to seed durable timeline for ported agent",
+        );
+      }
     }
     return result;
   }

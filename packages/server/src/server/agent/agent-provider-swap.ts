@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type { Logger } from "pino";
 
-import type { AgentTimelineItem } from "./agent-sdk-types.js";
+import type { AgentTimelineItem, AgentProvider } from "./agent-sdk-types.js";
+import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
 export interface SwapProviderInput {
@@ -11,6 +12,8 @@ export interface SwapProviderInput {
   targetProvider: string;
   targetModel: string | null;
   previousItems?: readonly AgentTimelineItem[];
+  /** Rows to persist on the new record so a ported chat survives reloads. */
+  portedTimeline?: readonly AgentTimelineRow[];
   logger?: Logger;
 }
 
@@ -20,6 +23,36 @@ export interface SwapProviderResult {
 }
 
 export const MAX_PORTED_TRANSCRIPT_CHARS = 120_000;
+
+/**
+ * Timeline rows for the ported agent: the previous conversation followed by a
+ * porting marker. The marker is a real timeline item (like compaction) so it is
+ * recorded, persisted, and rendered from the timeline instead of being inferred
+ * from migration metadata.
+ */
+export function buildPortedTimelineRows(input: {
+  previousRows: readonly AgentTimelineRow[];
+  fromProvider?: AgentProvider | null;
+  toProvider: AgentProvider;
+  portedAt: string;
+}): AgentTimelineRow[] {
+  const rows: AgentTimelineRow[] = input.previousRows.map((row, index) => ({
+    seq: index + 1,
+    timestamp: row.timestamp,
+    item: row.item,
+  }));
+  rows.push({
+    seq: rows.length + 1,
+    timestamp: input.portedAt,
+    item: {
+      type: "porting",
+      status: "completed",
+      ...(input.fromProvider ? { fromProvider: input.fromProvider } : {}),
+      toProvider: input.toProvider,
+    },
+  });
+  return rows;
+}
 
 /**
  * Convert a provider timeline into a plain transcript that another provider can
@@ -123,6 +156,15 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
       agentId: existing.id,
       portedAt: now,
     },
+    ...(input.portedTimeline?.length
+      ? {
+          portedTimeline: input.portedTimeline.map((row) => ({
+            seq: row.seq,
+            timestamp: row.timestamp,
+            item: row.item,
+          })) as StoredAgentRecord["portedTimeline"],
+        }
+      : {}),
   };
 
   await storage.upsert(newRecord);
