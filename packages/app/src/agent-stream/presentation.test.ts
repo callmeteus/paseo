@@ -588,3 +588,34 @@ describe("timeline presentation", () => {
     expect(projectTimelineItems([source], () => [])).toEqual([]);
   });
 });
+
+describe("daemon goal context", () => {
+  it("hides the injected goal preamble from the transcript", () => {
+    const harness = streamHarness();
+    harness.send({
+      type: "timeline",
+      provider: "claude",
+      item: {
+        type: "user_message",
+        messageId: "message-goal",
+        text: "<paseo-goal>\nThe user set a persistent goal for this session.\n</paseo-goal>",
+      },
+    });
+    harness.send(assistant("Working on it."));
+
+    const texts = rows(harness.render()).flatMap((item) =>
+      item.kind === "user_message" || item.kind === "assistant_message" ? [item.text] : [],
+    );
+    expect(texts).toEqual(["Working on it."]);
+  });
+
+  it("strips the completion marker from the assistant message", () => {
+    const harness = streamHarness();
+    harness.send(assistant("All checks passed. <paseo-goal-complete>"));
+
+    const texts = rows(harness.render()).flatMap((item) =>
+      item.kind === "assistant_message" ? [item.text] : [],
+    );
+    expect(texts).toEqual(["All checks passed."]);
+  });
+});

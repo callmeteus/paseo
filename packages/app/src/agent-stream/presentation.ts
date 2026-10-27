@@ -33,6 +33,12 @@ const NO_COLLAPSED_TURNS: StreamPresentation["turns"] = collapseTurns({
 });
 
 /** Source messages reach plugins before display projection. */
+// The daemon injects a `/goal` preamble into the provider prompt because most
+// harnesses have no system-prompt slot. That text is context, not a chat
+// message: hide it (and the completion marker) from the transcript.
+const GOAL_PROMPT_PREFIX = "<paseo-goal>";
+const GOAL_COMPLETE_MARKER_PATTERN = /<paseo-goal-complete>/gi;
+
 export function createStreamPresentation() {
   const userMessageCache = new WeakMap<UserMessageItem, UserMessageItem>();
 
@@ -63,7 +69,16 @@ export function createStreamPresentation() {
   let collapsed: TurnCollapse | undefined;
 
   function presentRows(item: StreamItem): StreamItem[] {
-    return [item.kind === "user_message" ? presentUserMessage(item) : item];
+    if (item.kind === "user_message") {
+      // Goal preambles are injected context; they never belong in the transcript.
+      if (item.text.trimStart().startsWith(GOAL_PROMPT_PREFIX)) return [];
+      return [presentUserMessage(item)];
+    }
+    if (item.kind === "assistant_message" && item.text.includes("<paseo-goal-complete")) {
+      const text = item.text.replace(GOAL_COMPLETE_MARKER_PATTERN, "").trim();
+      return text ? [{ ...item, text }] : [];
+    }
+    return [item];
   }
 
   function collapse(
