@@ -2299,6 +2299,8 @@ export const ko: TranslationResources = {
       invalidTitle: "라우터가 불완전합니다",
       invalidBody: "이름과 대상이 하나 이상 필요합니다.",
       saveError: "라우터를 저장할 수 없습니다",
+      fallbackMoved: "이전 공급자의 한도가 소진되어 채팅을 {{provider}}(으)로 이동했습니다",
+      noMoreTargets: "이 채팅에 남은 폴백 대상이 없습니다",
     },
     voice: {
       offline: "음성을 설정하려면 이 호스트에 연결하세요.",

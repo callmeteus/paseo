@@ -2310,6 +2310,9 @@ export const ja: TranslationResources = {
       invalidTitle: "ルーターが不完全です",
       invalidBody: "名前と1つ以上の対象を指定してください。",
       saveError: "ルーターを保存できませんでした",
+      fallbackMoved:
+        "前のプロバイダーが上限に達したため、このチャットを {{provider}} に移動しました",
+      noMoreTargets: "このチャットに残りのフォールバック先はありません",
     },
     voice: {
       offline: "音声を設定するには、このホストに接続してください。",

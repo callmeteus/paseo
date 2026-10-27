@@ -2414,6 +2414,8 @@ export const en = {
       invalidTitle: "Incomplete router",
       invalidBody: "Give the router a name and at least one target.",
       saveError: "Unable to save routers",
+      fallbackMoved: "Moved this chat to {{provider}} after the previous provider ran out",
+      noMoreTargets: "No fallback target left for this chat",
     },
     voice: {
       offline: "Connect to this host to configure voice.",

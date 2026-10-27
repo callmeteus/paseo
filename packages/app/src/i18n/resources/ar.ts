@@ -2325,6 +2325,8 @@ export const ar: TranslationResources = {
       invalidTitle: "موجه غير مكتمل",
       invalidBody: "أعط الموجه اسماً وهدفاً واحداً على الأقل.",
       saveError: "تعذر حفظ الموجهات",
+      fallbackMoved: "تم نقل المحادثة إلى {{provider}} بعد نفاد المزود السابق",
+      noMoreTargets: "لا يوجد هدف احتياطي متبقٍ لهذه المحادثة",
     },
     voice: {
       offline: "اتصل بهذا المضيف لضبط الصوت.",

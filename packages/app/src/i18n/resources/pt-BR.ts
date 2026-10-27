@@ -2324,6 +2324,8 @@ export const ptBR: TranslationResources = {
       invalidTitle: "Roteador incompleto",
       invalidBody: "Dê um nome ao roteador e pelo menos um destino.",
       saveError: "Não foi possível salvar os roteadores",
+      fallbackMoved: "Chat movido para {{provider}} porque o provedor anterior esgotou",
+      noMoreTargets: "Não há mais destino de fallback para este chat",
     },
     voice: {
       offline: "Conecte-se a este host para configurar a voz.",

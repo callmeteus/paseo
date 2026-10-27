@@ -2338,6 +2338,8 @@ export const fr: TranslationResources = {
       invalidTitle: "Routeur incomplet",
       invalidBody: "Donnez un nom et au moins une cible.",
       saveError: "Impossible d'enregistrer les routeurs",
+      fallbackMoved: "Chat déplacé vers {{provider}} car le fournisseur précédent est épuisé",
+      noMoreTargets: "Plus aucune cible de fallback pour ce chat",
     },
     voice: {
       offline: "Connectez-vous à cet hôte pour configurer la voix.",

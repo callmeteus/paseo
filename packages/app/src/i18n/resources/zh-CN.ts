@@ -2266,6 +2266,8 @@ export const zhCN: TranslationResources = {
       invalidTitle: "路由器不完整",
       invalidBody: "请填写名称并至少添加一个目标。",
       saveError: "无法保存路由器",
+      fallbackMoved: "上一个提供商用尽后，已将聊天移至 {{provider}}",
+      noMoreTargets: "此聊天没有剩余的备用目标",
     },
     voice: {
       offline: "连接到此主机以配置语音。",

@@ -105,6 +105,7 @@ import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agen
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildDraftAgentSetup, type ClientSlashCommand } from "@/client-slash-commands";
+import { useRouterFallback } from "@/model-routers/use-router-fallback";
 
 interface ChatAgentStateShape {
   serverId: string | null;
@@ -724,6 +725,7 @@ function ChatAgentContent({
   const agentState = useSessionStore(
     useShallow((state) => selectChatAgentState(state, serverId, agentId)),
   );
+  useRouterFallback({ serverId, agentId, client, isConnected });
   const projectPlacement = useStoreWithEqualityFn(
     useSessionStore,
     (state) => {

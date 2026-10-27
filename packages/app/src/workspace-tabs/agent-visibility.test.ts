@@ -17,6 +17,8 @@ function makeAgent(input: {
   archivedAt?: Date | null;
   createdAt?: Date;
   lastActivityAt?: Date;
+  lastUserMessageAt?: Date | null;
+  migratedFrom?: Agent["migratedFrom"];
 }): Agent {
   const createdAt = input.createdAt ?? new Date("2026-03-04T00:00:00.000Z");
   const lastActivityAt = input.lastActivityAt ?? createdAt;
@@ -28,7 +30,7 @@ function makeAgent(input: {
     turn: { phase: "idle", cancellationRequestId: null },
     createdAt,
     updatedAt: createdAt,
-    lastUserMessageAt: null,
+    lastUserMessageAt: input.lastUserMessageAt ?? null,
     lastActivityAt,
     capabilities: {
       supportsStreaming: true,
@@ -57,6 +59,7 @@ function makeAgent(input: {
     attentionReason: null,
     attentionTimestamp: null,
     archivedAt: input.archivedAt ?? null,
+    ...(input.migratedFrom ? { migratedFrom: input.migratedFrom } : {}),
   };
 }
 
@@ -519,5 +522,47 @@ describe("workspace agent visibility", () => {
       };
       expect(workspaceAgentVisibilityEqual(a, b)).toBe(true);
     });
+  });
+});
+
+describe("ported agent tabs", () => {
+  it("keeps a freshly ported chat out of the tab bar until its first message", () => {
+    const ported = makeAgent({
+      id: "ported-agent",
+      cwd: "/repo/worktree",
+      workspaceId: WORKSPACE_ID,
+      migratedFrom: {
+        provider: "codex",
+        agentId: "source-agent",
+        portedAt: "2026-03-04T00:00:00.000Z",
+      },
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map([[ported.id, ported]]),
+      workspaceId: WORKSPACE_ID,
+    });
+
+    expect(result.activeAgentIds.has("ported-agent")).toBe(true);
+    expect(result.autoOpenAgentIds.has("ported-agent")).toBe(false);
+  });
+
+  it("auto-opens the ported chat once it has a message", () => {
+    const ported = makeAgent({
+      id: "ported-agent",
+      cwd: "/repo/worktree",
+      workspaceId: WORKSPACE_ID,
+      migratedFrom: {
+        provider: "codex",
+        agentId: "source-agent",
+        portedAt: "2026-03-04T00:00:00.000Z",
+      },
+      lastUserMessageAt: new Date("2026-03-04T00:00:01.000Z"),
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map([[ported.id, ported]]),
+      workspaceId: WORKSPACE_ID,
+    });
+
+    expect(result.autoOpenAgentIds.has("ported-agent")).toBe(true);
   });
 });

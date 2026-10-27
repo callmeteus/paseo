@@ -2338,6 +2338,8 @@ export const es: TranslationResources = {
       invalidTitle: "Enrutador incompleto",
       invalidBody: "Ponle un nombre y al menos un destino.",
       saveError: "No se pudieron guardar los enrutadores",
+      fallbackMoved: "Chat movido a {{provider}} porque el proveedor anterior se agotó",
+      noMoreTargets: "No queda ningún destino de fallback para este chat",
     },
     voice: {
       offline: "Conéctate a este host para configurar la voz.",
