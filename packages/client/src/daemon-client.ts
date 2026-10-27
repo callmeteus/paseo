@@ -3113,6 +3113,7 @@ export class DaemonClient {
     agentId: string;
     targetProvider: string;
     targetModel: string | null;
+    archivePrevious?: boolean;
     requestId?: string;
     timeout?: number;
   }): Promise<{ newAgentId: string | null; previousAgentId: string; error: string | null }> {
@@ -3122,6 +3123,7 @@ export class DaemonClient {
       agentId: options.agentId,
       targetProvider: options.targetProvider,
       targetModel: options.targetModel,
+      ...(options.archivePrevious === false ? { archivePrevious: false } : {}),
       requestId: resolvedRequestId,
     });
     const payload = await this.sendRequest({

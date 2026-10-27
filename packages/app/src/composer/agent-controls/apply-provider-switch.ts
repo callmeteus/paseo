@@ -18,6 +18,11 @@ export interface ApplyProviderSwitchResult {
   client: DaemonClient;
   serverId: string;
   agentId: string;
+  /**
+   * Archives the source agent. Called after the client has navigated to the new
+   * chat, so the old conversation stays on screen while the port runs.
+   */
+  finalize: () => Promise<void>;
 }
 
 /**
@@ -37,6 +42,7 @@ export async function applyProviderSwitch(
       agentId: input.agentId,
       provider: input.pending.provider,
       modelId: input.pending.modelId,
+      archivePrevious: false,
       persistPreference: input.persistPreference,
       onPreferencePersistError: input.onPreferencePersistError,
     });
@@ -44,6 +50,17 @@ export async function applyProviderSwitch(
       client: input.sourceClient,
       serverId: input.sourceServerId,
       agentId: result.newAgentId,
+      finalize: async () => {
+        if (!result.previousAgentId) return;
+        await input.sourceClient.archiveAgent(result.previousAgentId, {
+          migratedTo: {
+            provider: input.pending.provider,
+            agentId: result.newAgentId,
+            host: input.sourceServerId,
+            portedAt: new Date().toISOString(),
+          },
+        });
+      },
     };
   }
 
@@ -60,6 +77,7 @@ export async function applyProviderSwitch(
     agentWorkspaceId: input.workspaceId,
     sourceHost: input.sourceServerId,
     targetHost,
+    archiveSource: false,
   });
   try {
     await input.persistPreference(input.pending.provider, input.pending.modelId);
@@ -70,5 +88,15 @@ export async function applyProviderSwitch(
     client: destinationClient,
     serverId: targetHost,
     agentId: result.newAgentId,
+    finalize: async () => {
+      await input.sourceClient.archiveAgent(input.agentId, {
+        migratedTo: {
+          provider: input.pending.provider,
+          agentId: result.newAgentId,
+          host: targetHost,
+          portedAt: new Date().toISOString(),
+        },
+      });
+    },
   };
 }

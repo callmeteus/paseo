@@ -1,5 +1,6 @@
 export interface AgentProviderSwapResult {
   newAgentId?: string | null;
+  previousAgentId?: string | null;
   error?: string | null;
 }
 
@@ -8,6 +9,7 @@ export interface AgentProviderSwapClient {
     agentId: string;
     targetProvider: string;
     targetModel: string | null;
+    archivePrevious?: boolean;
   }): Promise<AgentProviderSwapResult>;
 }
 
@@ -23,12 +25,15 @@ export interface PerformAgentProviderSwapInput {
   agentId: string;
   provider: string;
   modelId: string;
+  /** False keeps the source agent open until the caller archives it. */
+  archivePrevious?: boolean;
   persistPreference: (provider: string, modelId: string) => Promise<unknown>;
   onPreferencePersistError?: (error: unknown) => void;
 }
 
 export interface PerformAgentProviderSwapResult {
   newAgentId: string;
+  previousAgentId: string | null;
 }
 
 /**
@@ -42,6 +47,7 @@ export async function performAgentProviderSwap(
     agentId: input.agentId,
     targetProvider: input.provider,
     targetModel: input.modelId || null,
+    ...(input.archivePrevious === false ? { archivePrevious: false } : {}),
   });
 
   if (result.error) {
@@ -57,5 +63,8 @@ export async function performAgentProviderSwap(
     input.onPreferencePersistError?.(error);
   }
 
-  return { newAgentId: result.newAgentId };
+  return {
+    newAgentId: result.newAgentId,
+    previousAgentId: result.previousAgentId ?? null,
+  };
 }

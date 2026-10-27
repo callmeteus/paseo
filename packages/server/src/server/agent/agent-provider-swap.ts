@@ -14,6 +14,8 @@ export interface SwapProviderInput {
   previousItems?: readonly AgentTimelineItem[];
   /** Rows to persist on the new record so a ported chat survives reloads. */
   portedTimeline?: readonly AgentTimelineRow[];
+  /** Defaults to true. False leaves the source agent for the client to archive. */
+  archivePrevious?: boolean;
   logger?: Logger;
 }
 
@@ -132,6 +134,19 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     existing.provider,
     input.previousItems,
   );
+  // Mode, thinking, features and provider options name things inside the source
+  // provider. Carrying them over makes the target reject the agent (for example
+  // OpenCode treating Cline's "act" mode as an unknown agent). Let the target
+  // provider pick its own defaults; only the transcript and Paseo-level settings
+  // cross the boundary.
+  const {
+    modeId: _sourceModeId,
+    thinkingOptionId: _sourceThinkingOptionId,
+    featureValues: _sourceFeatureValues,
+    providerOptions: _sourceProviderOptions,
+    model: _sourceModel,
+    ...portedConfig
+  } = existing.config ?? {};
 
   const newRecord: StoredAgentRecord = {
     ...existing,
@@ -143,13 +158,11 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     lastStatus: "closed",
     archivedAt: null,
     config: {
-      ...existing.config,
+      ...portedConfig,
       model: targetModel,
       ...(systemPrompt ? { systemPrompt } : {}),
     },
-    runtimeInfo: existing.runtimeInfo
-      ? { ...existing.runtimeInfo, provider: targetProvider, model: targetModel }
-      : { provider: targetProvider, sessionId: null, model: targetModel },
+    runtimeInfo: { provider: targetProvider, sessionId: null, model: targetModel },
     persistence: null,
     migratedFrom: {
       provider: existing.provider,
@@ -169,10 +182,12 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
 
   await storage.upsert(newRecord);
 
-  // Archive the previous agent, preserving migratedTo link.
+  // Archive the previous agent, preserving the migratedTo link. When the caller
+  // keeps it open during the port, stop at the link and let the client archive
+  // after it has switched chats.
   await storage.upsert({
     ...existing,
-    archivedAt: now,
+    ...(input.archivePrevious === false ? {} : { archivedAt: now }),
     migratedTo: { provider: targetProvider, agentId: newAgentId, portedAt: now },
   });
 

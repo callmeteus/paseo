@@ -222,3 +222,39 @@ describe("buildPortedTimelineRows", () => {
     ]);
   });
 });
+
+describe("swapAgentProvider archive deferral", () => {
+  it("keeps the source unarchived when the caller archives it after switching", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "paseo-swap-defer-"));
+    const storage = new AgentStorage(dir, createTestLogger());
+    try {
+      await storage.upsert({
+        id: "agent-1",
+        provider: "cline",
+        cwd: "/tmp/project",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        labels: {},
+        lastStatus: "closed",
+        config: { model: "act-model", modeId: "act" },
+      } as unknown as Parameters<typeof storage.upsert>[0]);
+
+      const result = await swapAgentProvider({
+        storage,
+        agentId: "agent-1",
+        targetProvider: "opencode",
+        targetModel: "opencode-model",
+        archivePrevious: false,
+      });
+
+      const original = await storage.get("agent-1");
+      expect(original?.archivedAt).toBeFalsy();
+      expect(original?.migratedTo?.agentId).toBe(result.newAgentId);
+      const ported = await storage.get(result.newAgentId);
+      expect(ported?.config?.modeId).toBeUndefined();
+      expect(ported?.runtimeInfo?.modeId).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

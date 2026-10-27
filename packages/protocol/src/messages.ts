@@ -1822,6 +1822,11 @@ export const AgentSwapProviderRequestSchema = z.object({
   agentId: z.string(),
   targetProvider: z.string(),
   targetModel: z.string().nullable().optional(),
+  /**
+   * When false the source agent stays unarchived; the client archives it after
+   * it has switched to the new agent, so the old chat does not vanish mid-port.
+   */
+  archivePrevious: z.boolean().optional(),
   requestId: z.string(),
 });
 

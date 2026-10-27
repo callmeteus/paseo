@@ -1582,6 +1582,8 @@ function ComposerContentImpl({
       let targetClient = client;
       let targetServerId = serverId;
       let resolvedAgentId = targetAgentId;
+      let switched = false;
+      let finishSwitch: (() => Promise<void>) | null = null;
       const pendingSwitch = takeProviderSwitch(serverId, targetAgentId);
       if (pendingSwitch) {
         try {
@@ -1606,11 +1608,8 @@ function ComposerContentImpl({
           targetClient = applied.client;
           targetServerId = applied.serverId;
           resolvedAgentId = applied.agentId;
-          navigateToAgent({
-            serverId: targetServerId,
-            agentId: resolvedAgentId,
-            workspaceId: workspaceId ?? undefined,
-          });
+          finishSwitch = applied.finalize;
+          switched = true;
         } catch (error) {
           stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
           throw error;
@@ -1637,6 +1636,20 @@ function ComposerContentImpl({
             : undefined,
       });
       onAttentionPromptSend?.();
+      // Navigate only after the triggering message landed: the destination agent
+      // is loaded and its timeline seeded by then, so the new chat does not open
+      // empty while the port is still running. Until this point the previous chat
+      // stays on screen.
+      if (switched) {
+        navigateToAgent({
+          serverId: targetServerId,
+          agentId: resolvedAgentId,
+          workspaceId: workspaceId ?? undefined,
+        });
+        void finishSwitch?.().catch((error: unknown) => {
+          console.warn("[Composer] failed to archive the ported source agent", error);
+        });
+      }
     };
   }, [
     appSettings.sendBehavior,

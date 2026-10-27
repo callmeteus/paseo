@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { performAgentProviderSwap, ProviderSwapError } from "./provider-swap";
 
-function createClient(result: { newAgentId?: string | null; error?: string | null }) {
+function createClient(result: {
+  newAgentId?: string | null;
+  previousAgentId?: string | null;
+  error?: string | null;
+}) {
   return {
     swapAgentProvider: vi.fn(async () => result),
   };
@@ -26,7 +30,7 @@ describe("performAgentProviderSwap", () => {
       targetModel: "gpt-5",
     });
     expect(persistPreference).toHaveBeenCalledWith("codex", "gpt-5");
-    expect(result).toEqual({ newAgentId: "agent-new" });
+    expect(result).toEqual({ newAgentId: "agent-new", previousAgentId: null });
   });
 
   it("passes a null target model when no model is selected", async () => {
@@ -77,6 +81,27 @@ describe("performAgentProviderSwap", () => {
     ).rejects.toThrow("Provider swap did not return a new agent");
   });
 
+  it("leaves the source agent for the caller when archivePrevious is false", async () => {
+    const client = createClient({ newAgentId: "agent-new", previousAgentId: "agent-old" });
+
+    const result = await performAgentProviderSwap({
+      client,
+      agentId: "agent-old",
+      provider: "codex",
+      modelId: "gpt-5",
+      archivePrevious: false,
+      persistPreference: async () => undefined,
+    });
+
+    expect(client.swapAgentProvider).toHaveBeenCalledWith({
+      agentId: "agent-old",
+      targetProvider: "codex",
+      targetModel: "gpt-5",
+      archivePrevious: false,
+    });
+    expect(result.previousAgentId).toBe("agent-old");
+  });
+
   it("keeps the swap when persisting the preference fails", async () => {
     const client = createClient({ newAgentId: "agent-new" });
     const onPreferencePersistError = vi.fn();
@@ -92,7 +117,7 @@ describe("performAgentProviderSwap", () => {
       onPreferencePersistError,
     });
 
-    expect(result).toEqual({ newAgentId: "agent-new" });
+    expect(result).toEqual({ newAgentId: "agent-new", previousAgentId: null });
     expect(onPreferencePersistError).toHaveBeenCalledWith(expect.any(Error));
   });
 });

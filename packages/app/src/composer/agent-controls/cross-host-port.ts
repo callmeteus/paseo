@@ -14,6 +14,8 @@ export interface PerformCrossHostPortInput {
   agentWorkspaceId: string | null;
   sourceHost: string;
   targetHost: string;
+  /** False leaves the source agent for the caller to archive after switching. */
+  archiveSource?: boolean;
 }
 
 export interface PerformCrossHostPortResult {
@@ -38,13 +40,15 @@ export async function performCrossHostPort(
     ...(input.agentWorkspaceId ? { workspaceId: input.agentWorkspaceId } : {}),
     sourceHost: input.sourceHost,
   });
-  await input.sourceClient.archiveAgent(input.agentId, {
-    migratedTo: {
-      provider: input.provider,
-      agentId: newAgentId,
-      host: input.targetHost,
-      portedAt: new Date().toISOString(),
-    },
-  });
+  if (input.archiveSource !== false) {
+    await input.sourceClient.archiveAgent(input.agentId, {
+      migratedTo: {
+        provider: input.provider,
+        agentId: newAgentId,
+        host: input.targetHost,
+        portedAt: new Date().toISOString(),
+      },
+    });
+  }
   return { newAgentId };
 }

@@ -4259,6 +4259,7 @@ export class AgentManager {
     agentId: string,
     targetProvider: string,
     targetModel: string | null,
+    options?: { archivePrevious?: boolean },
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
     const previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
@@ -4278,6 +4279,7 @@ export class AgentManager {
       targetModel,
       previousItems,
       portedTimeline: portedRows,
+      archivePrevious: options?.archivePrevious,
       logger: this.logger,
     });
     this.timelineStore.initialize(result.newAgentId, {
