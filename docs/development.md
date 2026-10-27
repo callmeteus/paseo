@@ -29,6 +29,23 @@ the titlebar row. Production builds leave the variable unset and show no label.
 
 `npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
 
+### Reaching the dev daemon over Tailscale
+
+`PASEO_LISTEN` overrides `daemon.listen` for a foreground/dev daemon. Bind all interfaces so loopback stays usable and the tailnet can reach it:
+
+```bash
+PASEO_LISTEN=0.0.0.0:6767 npm run dev:server
+```
+
+Connect clients to the machine's tailnet address (`tailscale ip -4`) on port `6767`. For the web UI served by Metro, add that origin to `daemon.cors.allowedOrigins`; otherwise the WebSocket upgrade is rejected with `Origin not allowed`:
+
+```bash
+paseo daemon config set daemon.cors.allowedOrigins '["http://100.101.102.103:8081"]'
+paseo daemon reload
+```
+
+Binding `0.0.0.0` exposes the daemon to every interface, not just Tailscale. With no daemon password, any reachable device can control agents. Set `PASEO_PASSWORD` (or bind the tailnet IP alone) when the machine shares a LAN you do not trust. `daemon.listen` is not reloadable, so changing it requires a worker restart.
+
 ## Nix desktop package
 
 The flake exposes `packages.<system>.desktop` on Linux and macOS:
