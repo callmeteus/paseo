@@ -193,6 +193,10 @@ export const ru: TranslationResources = {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",
     },
+    goal: {
+      active: "Цель",
+      paused: "Цель приостановлена",
+    },
     github: {
       searching: "Идет поиск...",
       noResults: "Результаты не найдены.",

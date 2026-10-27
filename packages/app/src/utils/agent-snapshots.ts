@@ -57,6 +57,8 @@ export function derivePendingPermissionKey(
   return `${agentId}:${fallbackId}`;
 }
 
+export type AgentGoalState = NonNullable<AgentSnapshotPayload["goal"]>;
+
 export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
   return {
     id: agent.id,
@@ -87,6 +89,7 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     archivedAt: agent.archivedAt?.toISOString() ?? null,
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
+    ...(agent.goal ? { goal: agent.goal } : {}),
   };
 }
 
@@ -139,5 +142,6 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     ...(snapshot.migratedTo ? { migratedTo: snapshot.migratedTo } : {}),
     parentAgentId,
     labels: snapshot.labels,
+    goal: snapshot.goal ?? null,
   };
 }

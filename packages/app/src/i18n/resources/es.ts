@@ -193,6 +193,10 @@ export const es: TranslationResources = {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",
     },
+    goal: {
+      active: "Objetivo",
+      paused: "Objetivo en pausa",
+    },
     github: {
       searching: "Búsqueda...",
       noResults: "No se encontraron resultados.",

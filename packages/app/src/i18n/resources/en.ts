@@ -187,6 +187,10 @@ export const en = {
       archiveAgent: "Archive the current agent",
       freshDraft: "Archive this agent and start a fresh draft",
     },
+    goal: {
+      active: "Goal",
+      paused: "Goal paused",
+    },
     github: {
       searching: "Searching...",
       noResults: "No results found.",

@@ -191,6 +191,10 @@ export const ko: TranslationResources = {
       archiveAgent: "현재 에이전트 보관",
       freshDraft: "이 에이전트를 보관하고 새 초안을 시작합니다",
     },
+    goal: {
+      active: "목표",
+      paused: "목표 일시 중지",
+    },
     github: {
       searching: "검색 중...",
       noResults: "결과가 없습니다.",

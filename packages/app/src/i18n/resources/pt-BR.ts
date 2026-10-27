@@ -192,6 +192,10 @@ export const ptBR: TranslationResources = {
       archiveAgent: "Arquivar o agente atual",
       freshDraft: "Arquivar este agente e iniciar um novo rascunho",
     },
+    goal: {
+      active: "Meta",
+      paused: "Meta pausada",
+    },
     github: {
       searching: "Buscando...",
       noResults: "Nenhum resultado encontrado.",

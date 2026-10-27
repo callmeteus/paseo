@@ -193,6 +193,10 @@ export const ja: TranslationResources = {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",
     },
+    goal: {
+      active: "目標",
+      paused: "目標を一時停止中",
+    },
     github: {
       searching: "検索中...",
       noResults: "結果が見つかりません。",

@@ -194,6 +194,10 @@ export const fr: TranslationResources = {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",
     },
+    goal: {
+      active: "Objectif",
+      paused: "Objectif en pause",
+    },
     github: {
       searching: "Recherche…",
       noResults: "Aucun résultat.",

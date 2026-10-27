@@ -45,6 +45,7 @@ import {
   Image as ImageIcon,
   ClipboardPaste,
   Paperclip,
+  Target,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { FOOTER_HEIGHT } from "@/constants/layout";
@@ -71,6 +72,7 @@ import {
 } from "./input/input";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import type { AgentGoalState } from "@/utils/agent-snapshots";
 import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
 import { focusWithRetries } from "@/utils/web-focus";
@@ -297,6 +299,7 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
       totalCostUsd: agent?.lastUsage?.totalCostUsd ?? null,
       model: agent?.model ?? null,
+      goal: agent?.goal ?? null,
     };
   };
 }
@@ -718,6 +721,31 @@ function QueuedMessageRow({
           <ThemedArrowUp size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+interface GoalBannerRowProps {
+  goal: AgentGoalState;
+}
+
+/**
+ * Recommends a goal banner above the composer according to the specified requirement.
+ */
+function GoalBannerRow({ goal }: GoalBannerRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.goalRow} testID="composer-goal-banner">
+      <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+      <Text style={styles.goalText} numberOfLines={2} ellipsizeMode="tail">
+        {goal.objective}
+      </Text>
+      <Text
+        style={goal.status === "paused" ? styles.goalBadgePaused : styles.goalBadge}
+        accessibilityRole="text"
+      >
+        {goal.status === "paused" ? t("composer.goal.paused") : t("composer.goal.active")}
+      </Text>
     </View>
   );
 }
@@ -2444,6 +2472,11 @@ function ComposerContentImpl({
     [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
+  const goalStrip = useMemo(
+    () => (agentState.goal ? <GoalBannerRow goal={agentState.goal} /> : null),
+    [agentState.goal],
+  );
+
   const autocompleteConfiguration = useMemo(
     () => ({
       setUserInput: replaceUserInput,
@@ -2522,6 +2555,7 @@ function ComposerContentImpl({
         <View style={inputAreaContainerStyle}>
           <View style={inputAreaContentStyle}>
             {isFullscreen ? null : queueList}
+            {!isFullscreen && goalStrip}
             {!isFullscreen && sendErrorNode}
 
             <View ref={messageInputContainerRef} style={messageInputContainerStyle}>
@@ -2739,6 +2773,30 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexDirection: "column",
     gap: theme.spacing[2],
   },
+  goalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    backgroundColor: theme.colors.surface1,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  goalText: {
+    flex: 1,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+  },
+  goalBadge: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSize.sm,
+  },
+  goalBadgePaused: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   queueItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -2791,6 +2849,7 @@ const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
+const ThemedTarget = withUnistyles(Target);
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

@@ -191,6 +191,10 @@ export const zhCN: TranslationResources = {
       archiveAgent: "归档当前 Agent",
       freshDraft: "归档此 Agent 并开始新的草稿",
     },
+    goal: {
+      active: "目标",
+      paused: "目标已暂停",
+    },
     github: {
       searching: "正在搜索...",
       noResults: "没有结果。",

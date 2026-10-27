@@ -40,6 +40,7 @@ import type {
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
+import type { AgentGoalState } from "@/utils/agent-snapshots";
 import {
   normalizeWorkspaceOpaqueId,
   normalizeWorkspacePath,
@@ -100,6 +101,8 @@ export interface Agent {
   model: string | null;
   features?: AgentFeature[];
   thinkingOptionId?: string | null;
+  /** Daemon-level /goal state; only present while a goal is set. */
+  goal?: AgentGoalState | null;
   requiresAttention?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;
   attentionTimestamp?: Date | null;

@@ -191,6 +191,10 @@ export const ar: TranslationResources = {
       archiveAgent: "أرشفة الوكيل الحالي",
       freshDraft: "أرشفة هذا الوكيل وابدأ مسودة جديدة",
     },
+    goal: {
+      active: "الهدف",
+      paused: "الهدف متوقف مؤقتاً",
+    },
     github: {
       searching: "جارٍ البحث...",
       noResults: "لم يتم العثور على نتائج.",
