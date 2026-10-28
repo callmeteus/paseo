@@ -105,6 +105,55 @@ describe("swapAgentProvider", () => {
     expect(ported?.config?.systemPrompt).toContain("Hello");
   });
 
+  it("replaces the previous ported transcript instead of stacking another one", async () => {
+    await storage.upsert({
+      id: "agent-1",
+      provider: "opencode",
+      cwd: "/tmp/project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      labels: {},
+      lastStatus: "closed",
+      config: {
+        model: "gpt-5.1",
+        systemPrompt:
+          "You are a careful reviewer.\n\nThe following conversation was ported from cline. Continue it as if you had been the assistant.\n\nUser: old turn\n\nAssistant: old reply",
+      },
+    } as unknown as Parameters<typeof storage.upsert>[0]);
+
+    const result = await swapAgentProvider({
+      storage,
+      agentId: "agent-1",
+      targetProvider: "claude",
+      targetModel: null,
+      previousItems: [{ type: "user_message", text: "new turn" }],
+    });
+
+    const prompt = (await storage.get(result.newAgentId))?.config?.systemPrompt ?? "";
+    expect(prompt).toContain("You are a careful reviewer.");
+    expect(prompt).toContain("new turn");
+    expect(prompt).not.toContain("old turn");
+    expect(prompt.match(/was ported from/g)).toHaveLength(1);
+  });
+
+  it("caps the ported system prompt so providers accept it", async () => {
+    await seed();
+    const longHistory = Array.from({ length: 400 }, (_, index) => ({
+      type: "user_message" as const,
+      text: `message ${index} `.repeat(30),
+    }));
+    const result = await swapAgentProvider({
+      storage,
+      agentId: "agent-1",
+      targetProvider: "claude",
+      targetModel: null,
+      previousItems: longHistory,
+    });
+    const prompt = (await storage.get(result.newAgentId))?.config?.systemPrompt ?? "";
+    expect(prompt.length).toBeLessThanOrEqual(48_000);
+    expect(prompt).toContain("ported from opencode");
+  });
+
   it("throws when agent does not exist (sad path)", async () => {
     await expect(
       swapAgentProvider({

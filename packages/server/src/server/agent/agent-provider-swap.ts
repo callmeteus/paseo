@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 
 import type { AgentTimelineItem, AgentProvider } from "./agent-sdk-types.js";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
+import { clampSystemPrompt } from "./system-prompt.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
 export interface SwapProviderInput {
@@ -24,7 +25,9 @@ export interface SwapProviderResult {
   previousAgentId: string;
 }
 
-export const MAX_PORTED_TRANSCRIPT_CHARS = 120_000;
+export const MAX_PORTED_TRANSCRIPT_CHARS = 24_000;
+
+const PORTED_CONTEXT_MARKER = "The following conversation was ported from";
 
 /**
  * Timeline rows for the ported agent: the previous conversation followed by a
@@ -83,6 +86,18 @@ export function buildPortingTranscript(items: readonly AgentTimelineItem[]): str
   return transcript.slice(transcript.length - MAX_PORTED_TRANSCRIPT_CHARS);
 }
 
+/**
+ * A port chains through providers: every hop used to append another transcript
+ * to the previous ported one, so prompts grew until OpenCode rejected them with
+ * HTTP 413. Drop the previous ported section before writing the new one.
+ */
+function stripPreviousPortedContext(prompt: string | null | undefined): string {
+  const trimmed = prompt?.trim() ?? "";
+  if (!trimmed) return "";
+  const index = trimmed.lastIndexOf(PORTED_CONTEXT_MARKER);
+  return index >= 0 ? trimmed.slice(0, index).trim() : trimmed;
+}
+
 function buildPortedSystemPrompt(
   existingPrompt: string | null | undefined,
   provider: string,
@@ -90,10 +105,12 @@ function buildPortedSystemPrompt(
 ): string | undefined {
   const transcript = items && items.length > 0 ? buildPortingTranscript(items) : "";
   const portedContext = transcript
-    ? `The following conversation was ported from ${provider}. Continue it as if you had been the assistant.\n\n${transcript}`
+    ? `${PORTED_CONTEXT_MARKER} ${provider}. Continue it as if you had been the assistant.\n\n${transcript}`
     : "";
-  const prompt = [existingPrompt?.trim(), portedContext].filter(Boolean).join("\n\n");
-  return prompt.length > 0 ? prompt : undefined;
+  const prompt = [stripPreviousPortedContext(existingPrompt), portedContext]
+    .filter(Boolean)
+    .join("\n\n");
+  return prompt.length > 0 ? clampSystemPrompt(prompt) : undefined;
 }
 
 export class SwapProviderError extends Error {
