@@ -70,3 +70,13 @@ describe("router presets", () => {
     expect(describeRouterTarget({ provider: "codex", model: null })).toBe("codex · padrão");
   });
 });
+
+it("caps preset targets at the schema limit", () => {
+  const models = Array.from({ length: 40 }, (_, index) => ({
+    id: `openrouter/vendor/model-${index}:free`,
+    label: `Model ${index} (free)`,
+    metadata: zeroCost,
+  }));
+  const preset = buildPremiumFreePreset([entry("opencode", models)]);
+  expect(preset?.targets).toHaveLength(32);
+});

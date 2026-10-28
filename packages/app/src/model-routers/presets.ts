@@ -10,6 +10,9 @@ export interface RouterModelCandidate {
   score: number;
 }
 
+/** Matches `ModelRouterSchema`'s target cap. */
+const MAX_PRESET_TARGETS = 32;
+
 const OPEN_WEIGHT_PATTERN =
   /(llama|qwen|deepseek|mistral|mixtral|gpt-oss|kimi|glm|gemma|phi-?\d|nemotron|minimax|hermes|falcon|yi-|olmo|granite|smollm)/i;
 
@@ -85,6 +88,9 @@ function toTargets(candidates: readonly RouterModelCandidate[]): ModelRouterTarg
     if (seen.has(key)) continue;
     seen.add(key);
     targets.push({ provider: candidate.provider, model: candidate.model });
+    // The wire schema caps a router at 32 targets; presets must respect it or
+    // the whole daemon-config patch is rejected.
+    if (targets.length >= MAX_PRESET_TARGETS) break;
   }
   return targets;
 }
