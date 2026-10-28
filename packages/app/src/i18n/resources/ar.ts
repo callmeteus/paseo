@@ -2153,6 +2153,26 @@ export const ar: TranslationResources = {
       codeReview: "مراجعة التعليمات البرمجية",
       credits: "الأرصدة",
       monthlyCredits: "أرصدة شهرية",
+      rolling: "متجدد",
+      spent: "المُنفق",
+      tokens: "الرموز",
+    },
+    details: {
+      sessions: "الجلسات",
+      input: "الإدخال",
+      output: "الإخراج",
+      prompts: "المطالبات",
+      steps: "الخطوات",
+      cacheRead: "القراءة المخزنة",
+      since: "منذ",
+    },
+    plan: {
+      local: "محلي",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (محلي)",
+      kiloLocal: "Kilo (محلي)",
+      clineLocal: "Cline (محلي)",
     },
     duration: {
       days: "{{value}} يوم",

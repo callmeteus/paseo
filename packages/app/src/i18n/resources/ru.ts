@@ -2186,6 +2186,26 @@ export const ru: TranslationResources = {
       codeReview: "Проверка кода",
       credits: "Кредиты",
       monthlyCredits: "Ежемесячные кредиты",
+      rolling: "Скользящее",
+      spent: "Потрачено",
+      tokens: "Токены",
+    },
+    details: {
+      sessions: "Сеансы",
+      input: "Ввод",
+      output: "Вывод",
+      prompts: "Запросы",
+      steps: "Шаги",
+      cacheRead: "Чтение кэша",
+      since: "С",
+    },
+    plan: {
+      local: "Локально",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (локально)",
+      kiloLocal: "Kilo (локально)",
+      clineLocal: "Cline (локально)",
     },
     duration: {
       days: "{{value}} дн.",

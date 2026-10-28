@@ -2131,6 +2131,26 @@ export const zhCN: TranslationResources = {
       codeReview: "代码审查",
       credits: "积分",
       monthlyCredits: "每月积分",
+      rolling: "滚动",
+      spent: "已花费",
+      tokens: "令牌",
+    },
+    details: {
+      sessions: "会话",
+      input: "输入",
+      output: "输出",
+      prompts: "提示",
+      steps: "步骤",
+      cacheRead: "缓存读取",
+      since: "起始",
+    },
+    plan: {
+      local: "本地",
+    },
+    sources: {
+      opencodeLocal: "OpenCode（本地）",
+      kiloLocal: "Kilo（本地）",
+      clineLocal: "Cline（本地）",
     },
     duration: {
       days: "{{value}}天",

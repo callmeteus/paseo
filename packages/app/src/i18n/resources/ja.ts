@@ -2174,6 +2174,26 @@ export const ja: TranslationResources = {
       codeReview: "コードレビュー",
       credits: "クレジット",
       monthlyCredits: "月間クレジット",
+      rolling: "ローリング",
+      spent: "使用額",
+      tokens: "トークン",
+    },
+    details: {
+      sessions: "セッション",
+      input: "入力",
+      output: "出力",
+      prompts: "プロンプト",
+      steps: "ステップ",
+      cacheRead: "キャッシュ読み取り",
+      since: "開始",
+    },
+    plan: {
+      local: "ローカル",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (ローカル)",
+      kiloLocal: "Kilo (ローカル)",
+      clineLocal: "Cline (ローカル)",
     },
     duration: {
       days: "{{value}}日",

@@ -2202,6 +2202,26 @@ export const es: TranslationResources = {
       codeReview: "Revisión de código",
       credits: "Créditos",
       monthlyCredits: "Créditos mensuales",
+      rolling: "Rotativo",
+      spent: "Gastado",
+      tokens: "Tokens",
+    },
+    details: {
+      sessions: "Sesiones",
+      input: "Entrada",
+      output: "Salida",
+      prompts: "Prompts",
+      steps: "Pasos",
+      cacheRead: "Caché leída",
+      since: "Desde",
+    },
+    plan: {
+      local: "Local",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (local)",
+      kiloLocal: "Kilo (local)",
+      clineLocal: "Cline (local)",
     },
     duration: {
       days: "{{value}} d",

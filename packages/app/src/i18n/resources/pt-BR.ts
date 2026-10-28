@@ -2188,6 +2188,26 @@ export const ptBR: TranslationResources = {
       codeReview: "Revisão de código",
       credits: "Créditos",
       monthlyCredits: "Créditos mensais",
+      rolling: "Rotativo",
+      spent: "Gasto",
+      tokens: "Tokens",
+    },
+    details: {
+      sessions: "Sessões",
+      input: "Entrada",
+      output: "Saída",
+      prompts: "Prompts",
+      steps: "Passos",
+      cacheRead: "Cache lido",
+      since: "Desde",
+    },
+    plan: {
+      local: "Local",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (local)",
+      kiloLocal: "Kilo (local)",
+      clineLocal: "Cline (local)",
     },
     duration: {
       days: "{{value}} d",

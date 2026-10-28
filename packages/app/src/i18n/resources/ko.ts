@@ -2163,6 +2163,26 @@ export const ko: TranslationResources = {
       codeReview: "코드 검토",
       credits: "크레딧",
       monthlyCredits: "월간 크레딧",
+      rolling: "롤링",
+      spent: "사용액",
+      tokens: "토큰",
+    },
+    details: {
+      sessions: "세션",
+      input: "입력",
+      output: "출력",
+      prompts: "프롬프트",
+      steps: "단계",
+      cacheRead: "캐시 읽기",
+      since: "시작",
+    },
+    plan: {
+      local: "로컬",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (로컬)",
+      kiloLocal: "Kilo (로컬)",
+      clineLocal: "Cline (로컬)",
     },
     duration: {
       days: "{{value}}일",
