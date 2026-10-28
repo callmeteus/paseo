@@ -43,6 +43,14 @@ export interface V2RuntimeAcquireOptions {
   signal?: AbortSignal;
 }
 
+const OPENCODE_HELPER_TAIL_LINES = 20;
+const OPENCODE_HELPER_TAIL_LINE_CHARS = 400;
+
+/** Drops provider credentials before a helper line reaches the daemon log. */
+function redactHelperLine(line: string): string {
+  return line.replace(/[A-Za-z0-9_-]{24,}/g, "***").slice(0, OPENCODE_HELPER_TAIL_LINE_CHARS);
+}
+
 // The runtime owns a credential for each subprocess; sessions only receive its authenticated client.
 export class V2Runtime {
   private current: Promise<Generation> | null = null;
@@ -174,14 +182,49 @@ export class V2Runtime {
       }),
     });
     const processAbort = new AbortController();
+    const startedAt = Date.now();
+    // The helper writes its own diagnostics to stderr; keep a small tail so a
+    // crash report says why instead of only an exit code.
+    const outputTail: string[] = [];
+    const rememberOutput = (chunk: Buffer) => {
+      for (const line of chunk.toString().split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        outputTail.push(redactHelperLine(line));
+        if (outputTail.length > OPENCODE_HELPER_TAIL_LINES) outputTail.shift();
+      }
+    };
+    process.stdout?.on("data", rememberOutput);
+    process.stderr?.on("data", rememberOutput);
+    let intentionalStop = false;
     const exited = new Promise<Error>((resolve) =>
-      process.once("exit", (code) => {
+      process.once("exit", (code, signal) => {
+        if (!intentionalStop) {
+          logger.error(
+            {
+              code,
+              signal,
+              provider: "opencode",
+              uptimeMs: Date.now() - startedAt,
+              outputTail: [...outputTail],
+            },
+            "OpenCode helper server exited unexpectedly",
+          );
+        }
         const error = new Error(`OpenCode helper server exited (${code})`);
         processAbort.abort(error);
         resolve(error);
       }),
     );
     let stopped: Promise<void> | undefined;
+    const stop = () => {
+      stopped ??= (async () => {
+        intentionalStop = true;
+        await terminateWithTreeKill(process, { gracefulTimeoutMs: 5_000, forceTimeoutMs: 1_000 });
+        const entry = await record;
+        if (entry) await managedProcesses?.remove(entry.id);
+      })();
+      return stopped;
+    };
     const record =
       process.pid && managedProcesses
         ? managedProcesses
@@ -196,14 +239,6 @@ export class V2Runtime {
               return null;
             })
         : Promise.resolve(null);
-    const stop = () => {
-      stopped ??= (async () => {
-        await terminateWithTreeKill(process, { gracefulTimeoutMs: 5_000, forceTimeoutMs: 1_000 });
-        const entry = await record;
-        if (entry) await managedProcesses?.remove(entry.id);
-      })();
-      return stopped;
-    };
     const deadline = Date.now() + 30_000;
     try {
       const url = await new Promise<string>((resolve, reject) => {
