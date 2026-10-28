@@ -2320,12 +2320,30 @@ export const ptBR: TranslationResources = {
       cancel: "Cancelar",
       save: "Salvar",
       namePlaceholder: "Nome do roteador",
-      preset: "Usar preset: {{name}}",
       invalidTitle: "Roteador incompleto",
       invalidBody: "Dê um nome ao roteador e pelo menos um destino.",
       saveError: "Não foi possível salvar os roteadores",
       fallbackMoved: "Chat movido para {{provider}} porque o provedor anterior esgotou",
       noMoreTargets: "Não há mais destino de fallback para este chat",
+      targetCount: "{{count}} destinos",
+      usePreset: "Usar preset",
+      wizard: {
+        title: "Novo roteador",
+        choose: "Comece por um preset ou monte sua própria lista.",
+        manual: "Montar manualmente",
+        manualHint: "Escolha provedor e modelo de cada destino, em ordem.",
+        startManual: "Montar",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "Modelos gratuitos de laboratórios premium, dos mais fortes aos mais baratos.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "Modelos open weight gratuitos, famílias de ponta primeiro, menores por último.",
+        },
+      },
     },
     voice: {
       offline: "Conecte-se a este host para configurar a voz.",

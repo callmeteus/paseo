@@ -2321,12 +2321,30 @@ export const ar: TranslationResources = {
       cancel: "إلغاء",
       save: "حفظ",
       namePlaceholder: "اسم الموجه",
-      preset: "استخدم الإعداد: {{name}}",
       invalidTitle: "موجه غير مكتمل",
       invalidBody: "أعط الموجه اسماً وهدفاً واحداً على الأقل.",
       saveError: "تعذر حفظ الموجهات",
       fallbackMoved: "تم نقل المحادثة إلى {{provider}} بعد نفاد المزود السابق",
       noMoreTargets: "لا يوجد هدف احتياطي متبقٍ لهذه المحادثة",
+      targetCount: "{{count}} أهداف",
+      usePreset: "استخدام الإعداد",
+      wizard: {
+        title: "موجه جديد",
+        choose: "ابدأ من إعداد مسبق أو أنشئ قائمتك.",
+        manual: "إنشاء يدوي",
+        manualHint: "اختر المزود والنموذج لكل هدف بالترتيب.",
+        startManual: "إنشاء",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "نماذج مجانية من مختبرات متميزة، الأقوى أولاً ثم الأرخص.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "نماذج open weight مجانية، العائلات الرائدة أولاً والنماذج الأصغر أخيراً.",
+        },
+      },
     },
     voice: {
       offline: "اتصل بهذا المضيف لضبط الصوت.",

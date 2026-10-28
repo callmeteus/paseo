@@ -2306,13 +2306,31 @@ export const ja: TranslationResources = {
       cancel: "キャンセル",
       save: "保存",
       namePlaceholder: "ルーター名",
-      preset: "プリセットを使用: {{name}}",
       invalidTitle: "ルーターが不完全です",
       invalidBody: "名前と1つ以上の対象を指定してください。",
       saveError: "ルーターを保存できませんでした",
       fallbackMoved:
         "前のプロバイダーが上限に達したため、このチャットを {{provider}} に移動しました",
       noMoreTargets: "このチャットに残りのフォールバック先はありません",
+      targetCount: "{{count}} 個の対象",
+      usePreset: "プリセットを使用",
+      wizard: {
+        title: "新しいルーター",
+        choose: "プリセットから始めるか、独自のリストを作成します。",
+        manual: "手動で作成",
+        manualHint: "各対象のプロバイダーとモデルを順番に選びます。",
+        startManual: "作成",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "プレミアムラボの無料モデル。強いものから安価なものへ。",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "無料の open weight モデル。先端ファミリーから小型モデルへ。",
+        },
+      },
     },
     voice: {
       offline: "音声を設定するには、このホストに接続してください。",

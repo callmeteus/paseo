@@ -2262,12 +2262,30 @@ export const zhCN: TranslationResources = {
       cancel: "取消",
       save: "保存",
       namePlaceholder: "路由器名称",
-      preset: "使用预设：{{name}}",
       invalidTitle: "路由器不完整",
       invalidBody: "请填写名称并至少添加一个目标。",
       saveError: "无法保存路由器",
       fallbackMoved: "上一个提供商用尽后，已将聊天移至 {{provider}}",
       noMoreTargets: "此聊天没有剩余的备用目标",
+      targetCount: "{{count}} 个目标",
+      usePreset: "使用预设",
+      wizard: {
+        title: "新建路由器",
+        choose: "从预设开始，或创建自己的列表。",
+        manual: "手动创建",
+        manualHint: "按顺序为每个目标选择提供商和模型。",
+        startManual: "创建",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "来自顶级实验室的免费模型，从最强到更便宜。",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "免费 open weight 模型，前沿系列优先，小型模型最后。",
+        },
+      },
     },
     voice: {
       offline: "连接到此主机以配置语音。",

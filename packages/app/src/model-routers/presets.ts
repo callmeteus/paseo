@@ -109,15 +109,25 @@ function sortForTiers(
   });
 }
 
+export type RouterPresetId = "premium-free" | "open-weight-free";
+
 export interface RouterPreset {
-  id: string;
-  name: string;
+  id: RouterPresetId;
   mode: ModelRouter["mode"];
   targets: ModelRouterTarget[];
 }
 
+/** Provider chain summary used when a router has no stored summary. */
+export function buildRouterSummary(targets: readonly ModelRouterTarget[]): string {
+  const providers: string[] = [];
+  for (const target of targets) {
+    if (!providers.includes(target.provider)) providers.push(target.provider);
+  }
+  return providers.join(" → ");
+}
+
 /**
- * "Premium Free": every free-ish installed model, best tiers first.
+ * "Premium Free": free closed-weight models from premium labs, best tiers first.
  */
 export function buildPremiumFreePreset(
   entries: readonly ProviderSnapshotEntry[],
@@ -127,15 +137,14 @@ export function buildPremiumFreePreset(
   );
   if (candidates.length === 0) return null;
   return {
-    id: `preset-premium-free-${Date.now()}`,
-    name: "Premium Free",
+    id: "premium-free",
     mode: "fallback",
     targets: toTargets(sortForTiers(candidates, PREMIUM_TIERS)),
   };
 }
 
 /**
- * "Open Weight Free": free-ish installed open-weight models only.
+ * "Open Weight Free": free open-weight models only.
  */
 export function buildOpenWeightFreePreset(
   entries: readonly ProviderSnapshotEntry[],
@@ -145,8 +154,7 @@ export function buildOpenWeightFreePreset(
   );
   if (candidates.length === 0) return null;
   return {
-    id: `preset-open-weight-${Date.now()}`,
-    name: "Open Weight Free",
+    id: "open-weight-free",
     mode: "fallback",
     targets: toTargets(sortForTiers(candidates, OPEN_WEIGHT_TIERS)),
   };

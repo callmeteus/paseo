@@ -2295,12 +2295,30 @@ export const ko: TranslationResources = {
       cancel: "취소",
       save: "저장",
       namePlaceholder: "라우터 이름",
-      preset: "프리셋 사용: {{name}}",
       invalidTitle: "라우터가 불완전합니다",
       invalidBody: "이름과 대상이 하나 이상 필요합니다.",
       saveError: "라우터를 저장할 수 없습니다",
       fallbackMoved: "이전 공급자의 한도가 소진되어 채팅을 {{provider}}(으)로 이동했습니다",
       noMoreTargets: "이 채팅에 남은 폴백 대상이 없습니다",
+      targetCount: "대상 {{count}}개",
+      usePreset: "프리셋 사용",
+      wizard: {
+        title: "새 라우터",
+        choose: "프리셋으로 시작하거나 직접 목록을 만드세요.",
+        manual: "직접 만들기",
+        manualHint: "각 대상의 공급자와 모델을 순서대로 선택하세요.",
+        startManual: "만들기",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "프리미엄 연구소의 무료 모델, 강한 것부터 저렴한 것까지.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "무료 open weight 모델, 최전선 제품군부터 소형 모델까지.",
+        },
+      },
     },
     voice: {
       offline: "음성을 설정하려면 이 호스트에 연결하세요.",

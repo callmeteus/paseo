@@ -2319,12 +2319,30 @@ export const ru: TranslationResources = {
       cancel: "Отмена",
       save: "Сохранить",
       namePlaceholder: "Название маршрутизатора",
-      preset: "Использовать пресет: {{name}}",
       invalidTitle: "Неполный маршрутизатор",
       invalidBody: "Укажите название и хотя бы одну цель.",
       saveError: "Не удалось сохранить маршрутизаторы",
       fallbackMoved: "Чат перенесён в {{provider}}: у предыдущего провайдера закончился лимит",
       noMoreTargets: "Для этого чата больше нет запасных целей",
+      targetCount: "целей: {{count}}",
+      usePreset: "Использовать пресет",
+      wizard: {
+        title: "Новый маршрутизатор",
+        choose: "Начните с пресета или создайте свой список.",
+        manual: "Создать вручную",
+        manualHint: "Выберите провайдера и модель для каждой цели по порядку.",
+        startManual: "Создать",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "Бесплатные модели премиальных лабораторий: от сильных к дешёвым.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "Бесплатные open weight модели: передовые семейства, затем небольшие.",
+        },
+      },
     },
     voice: {
       offline: "Подключитесь к этому хосту, чтобы настроить голос.",

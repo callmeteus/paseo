@@ -2410,7 +2410,25 @@ export const en = {
       cancel: "Cancel",
       save: "Save",
       namePlaceholder: "Router name",
-      preset: "Use preset: {{name}}",
+      targetCount: "{{count}} targets",
+      usePreset: "Use preset",
+      wizard: {
+        title: "New router",
+        choose: "Start from a preset or build your own list.",
+        manual: "Build manually",
+        manualHint: "Pick the provider and model for each target, in order.",
+        startManual: "Build",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "Free models from premium labs, strongest first, ending on cheaper models.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "Free open-weight models, frontier families first, smaller models last.",
+        },
+      },
       invalidTitle: "Incomplete router",
       invalidBody: "Give the router a name and at least one target.",
       saveError: "Unable to save routers",

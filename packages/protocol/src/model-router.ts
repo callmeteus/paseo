@@ -28,6 +28,8 @@ export const ModelRouterSchema = z
   .object({
     id: z.string().min(1).max(128),
     name: z.string().min(1).max(80),
+    /** One-line description shown in settings instead of the full target list. */
+    summary: z.string().min(1).max(200).optional(),
     mode: ModelRouterModeSchema,
     targets: z.array(ModelRouterTargetSchema).min(1).max(32),
   })

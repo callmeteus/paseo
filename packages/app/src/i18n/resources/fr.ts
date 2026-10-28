@@ -2334,12 +2334,31 @@ export const fr: TranslationResources = {
       cancel: "Annuler",
       save: "Enregistrer",
       namePlaceholder: "Nom du routeur",
-      preset: "Utiliser le preset : {{name}}",
       invalidTitle: "Routeur incomplet",
       invalidBody: "Donnez un nom et au moins une cible.",
       saveError: "Impossible d'enregistrer les routeurs",
       fallbackMoved: "Chat déplacé vers {{provider}} car le fournisseur précédent est épuisé",
       noMoreTargets: "Plus aucune cible de fallback pour ce chat",
+      targetCount: "{{count}} cibles",
+      usePreset: "Utiliser le preset",
+      wizard: {
+        title: "Nouveau routeur",
+        choose: "Partez d'un preset ou créez votre propre liste.",
+        manual: "Créer manuellement",
+        manualHint: "Choisissez le fournisseur et le modèle de chaque cible, dans l'ordre.",
+        startManual: "Créer",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "Modèles gratuits de laboratoires premium, du plus fort au moins cher.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary:
+            "Modèles open weight gratuits, familles de pointe d'abord, petits modèles en dernier.",
+        },
+      },
     },
     voice: {
       offline: "Connectez-vous à cet hôte pour configurer la voix.",

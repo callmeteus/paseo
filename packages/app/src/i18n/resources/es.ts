@@ -2334,12 +2334,32 @@ export const es: TranslationResources = {
       cancel: "Cancelar",
       save: "Guardar",
       namePlaceholder: "Nombre del enrutador",
-      preset: "Usar preset: {{name}}",
       invalidTitle: "Enrutador incompleto",
       invalidBody: "Ponle un nombre y al menos un destino.",
       saveError: "No se pudieron guardar los enrutadores",
       fallbackMoved: "Chat movido a {{provider}} porque el proveedor anterior se agotó",
       noMoreTargets: "No queda ningún destino de fallback para este chat",
+      targetCount: "{{count}} destinos",
+      usePreset: "Usar preset",
+      wizard: {
+        title: "Nuevo enrutador",
+        choose: "Empieza con un preset o crea tu propia lista.",
+        manual: "Crear manualmente",
+        manualHint: "Elige proveedor y modelo de cada destino, en orden.",
+        startManual: "Crear",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary:
+            "Modelos gratuitos de laboratorios premium, de los más fuertes a los más baratos.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary:
+            "Modelos open weight gratuitos, familias punteras primero, modelos pequeños al final.",
+        },
+      },
     },
     voice: {
       offline: "Conéctate a este host para configurar la voz.",

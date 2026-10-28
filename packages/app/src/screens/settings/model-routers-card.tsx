@@ -8,8 +8,8 @@ import type {
   ModelRouterTarget,
 } from "@getpaseo/protocol/model-router";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
-import { FormTextInput } from "@/components/ui/form-field";
 import { Button } from "@/components/ui/button";
+import { FormTextInput } from "@/components/ui/form-field";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -19,11 +19,7 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
-import {
-  buildRouterPresets,
-  describeRouterTarget,
-  type RouterPreset,
-} from "@/model-routers/presets";
+import { buildRouterPresets, buildRouterSummary, type RouterPreset } from "@/model-routers/presets";
 import { settingsStyles } from "@/styles/settings";
 
 interface DraftTarget {
@@ -38,6 +34,8 @@ interface RouterDraft {
   mode: ModelRouterMode;
   targets: DraftTarget[];
 }
+
+type WizardStep = "choose" | "manual" | null;
 
 function newKey(): string {
   return `target-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -84,7 +82,7 @@ function RouterRow({
             ? t("settings.modelRouters.modeFallback")
             : t("settings.modelRouters.modeDistribution")}
           {" · "}
-          {router.targets.map(describeRouterTarget).join(" → ")}
+          {router.summary ?? buildRouterSummary(router.targets)}
         </Text>
       </View>
       <View style={styles.actions}>
@@ -100,6 +98,39 @@ function RouterRow({
           {t("settings.modelRouters.delete")}
         </Button>
       </View>
+    </View>
+  );
+}
+
+function presetNameKey(preset: RouterPreset): string {
+  return `settings.modelRouters.presets.${preset.id}.name`;
+}
+
+function presetSummaryKey(preset: RouterPreset): string {
+  return `settings.modelRouters.presets.${preset.id}.summary`;
+}
+
+interface PresetRowProps {
+  preset: RouterPreset;
+  disabled: boolean;
+  onApply: (preset: RouterPreset) => void;
+}
+
+function PresetRow({ preset, disabled, onApply }: PresetRowProps) {
+  const { t } = useTranslation();
+  const handleApply = useCallback(() => onApply(preset), [onApply, preset]);
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t(presetNameKey(preset))}</Text>
+        <Text style={settingsStyles.rowHint}>{t(presetSummaryKey(preset))}</Text>
+        <Text style={styles.meta}>
+          {t("settings.modelRouters.targetCount", { count: preset.targets.length })}
+        </Text>
+      </View>
+      <Button size="sm" onPress={handleApply} disabled={disabled}>
+        {t("settings.modelRouters.usePreset")}
+      </Button>
     </View>
   );
 }
@@ -153,24 +184,6 @@ function DraftTargetRow({
   );
 }
 
-function PresetButton({
-  preset,
-  disabled,
-  onApply,
-}: {
-  preset: RouterPreset;
-  disabled: boolean;
-  onApply: (preset: RouterPreset) => void;
-}) {
-  const { t } = useTranslation();
-  const handleApply = useCallback(() => onApply(preset), [onApply, preset]);
-  return (
-    <Button variant="outline" size="sm" onPress={handleApply} disabled={disabled}>
-      {t("settings.modelRouters.preset", { name: preset.name })} ({preset.targets.length})
-    </Button>
-  );
-}
-
 export function ModelRoutersCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { config, isLoading, patchConfig } = useDaemonConfig(serverId);
@@ -185,6 +198,7 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
     [config?.modelRouters?.routers],
   );
   const defaultRouterId = config?.modelRouters?.defaultRouterId ?? null;
+  const [wizard, setWizard] = useState<WizardStep>(null);
   const [draft, setDraft] = useState<RouterDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -198,11 +212,13 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
             ...(nextDefaultRouterId !== undefined ? { defaultRouterId: nextDefaultRouterId } : {}),
           },
         });
+        return true;
       } catch (error) {
         Alert.alert(
           t("settings.modelRouters.saveError"),
           error instanceof Error ? error.message : String(error),
         );
+        return false;
       } finally {
         setIsSaving(false);
       }
@@ -210,7 +226,14 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
     [patchConfig, t],
   );
 
-  const handleStartCreate = useCallback(() => setDraft(emptyDraft()), []);
+  const handleStartCreate = useCallback(() => {
+    setDraft(null);
+    setWizard("choose");
+  }, []);
+  const handleStartManual = useCallback(() => {
+    setDraft(emptyDraft());
+    setWizard("manual");
+  }, []);
   const handleStartEdit = useCallback((router: ModelRouter) => {
     setDraft({
       id: router.id,
@@ -222,8 +245,12 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
         model: target.model ?? null,
       })),
     });
+    setWizard("manual");
   }, []);
-  const handleCancel = useCallback(() => setDraft(null), []);
+  const handleCancel = useCallback(() => {
+    setDraft(null);
+    setWizard(null);
+  }, []);
   const handleAddTarget = useCallback(() => {
     setDraft((current) =>
       current
@@ -267,8 +294,14 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
     const next = draft.id
       ? routers.map((entry) => (entry.id === draft.id ? router : entry))
       : [...routers, router];
-    await saveRouters(next, defaultRouterId === draft.id ? draft.id : defaultRouterId);
-    setDraft(null);
+    const saved = await saveRouters(
+      next,
+      defaultRouterId === draft.id ? draft.id : defaultRouterId,
+    );
+    if (saved) {
+      setDraft(null);
+      setWizard(null);
+    }
   }, [defaultRouterId, draft, routers, saveRouters, t]);
   const handleDelete = useCallback(
     async (routerId: string) => {
@@ -287,13 +320,15 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
     async (preset: RouterPreset) => {
       const router: ModelRouter = {
         id: newRouterId(),
-        name: preset.name,
+        name: t(presetNameKey(preset)),
+        summary: t(presetSummaryKey(preset)),
         mode: preset.mode,
         targets: preset.targets,
       };
-      await saveRouters([...routers, router], defaultRouterId);
+      const saved = await saveRouters([...routers, router], defaultRouterId);
+      if (saved) setWizard(null);
     },
-    [defaultRouterId, routers, saveRouters],
+    [defaultRouterId, routers, saveRouters, t],
   );
 
   const modeOptions = useMemo(
@@ -325,25 +360,57 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
       testID="model-routers-settings"
     >
       <View style={settingsStyles.card}>
-        {routers.length === 0 ? (
+        {routers.length === 0 && wizard === null ? (
           <View style={settingsStyles.row}>
             <Text style={settingsStyles.rowHint}>{t("settings.modelRouters.empty")}</Text>
           </View>
-        ) : (
-          routers.map((router) => (
-            <RouterRow
-              key={router.id}
-              router={router}
-              isDefault={router.id === defaultRouterId}
-              disabled={isSaving}
-              onSetDefault={handleSetDefault}
-              onEdit={handleStartEdit}
-              onDelete={handleDelete}
-            />
-          ))
-        )}
+        ) : null}
+        {routers.map((router) => (
+          <RouterRow
+            key={router.id}
+            router={router}
+            isDefault={router.id === defaultRouterId}
+            disabled={isSaving}
+            onSetDefault={handleSetDefault}
+            onEdit={handleStartEdit}
+            onDelete={handleDelete}
+          />
+        ))}
 
-        {draft ? (
+        {wizard === "choose" ? (
+          <View style={[settingsStyles.row, settingsStyles.rowBorder, styles.wizard]}>
+            <Text style={settingsStyles.rowTitle}>{t("settings.modelRouters.wizard.title")}</Text>
+            <Text style={settingsStyles.rowHint}>{t("settings.modelRouters.wizard.choose")}</Text>
+            {presets.map((preset) => (
+              <PresetRow
+                key={preset.id}
+                preset={preset}
+                disabled={isSaving}
+                onApply={handleApplyPreset}
+              />
+            ))}
+            <View style={styles.manualRow}>
+              <View style={settingsStyles.rowContent}>
+                <Text style={settingsStyles.rowTitle}>
+                  {t("settings.modelRouters.wizard.manual")}
+                </Text>
+                <Text style={settingsStyles.rowHint}>
+                  {t("settings.modelRouters.wizard.manualHint")}
+                </Text>
+              </View>
+              <Button variant="outline" size="sm" onPress={handleStartManual}>
+                {t("settings.modelRouters.wizard.startManual")}
+              </Button>
+            </View>
+            <View style={styles.actions}>
+              <Button variant="outline" size="sm" onPress={handleCancel}>
+                {t("settings.modelRouters.cancel")}
+              </Button>
+            </View>
+          </View>
+        ) : null}
+
+        {wizard === "manual" && draft ? (
           <View style={[settingsStyles.row, settingsStyles.rowBorder, styles.draft]}>
             <FormTextInput
               key={draft.id ?? "new-router"}
@@ -385,21 +452,15 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
               </Button>
             </View>
           </View>
-        ) : (
+        ) : null}
+
+        {wizard === null ? (
           <View style={[settingsStyles.row, settingsStyles.rowBorder, styles.footer]}>
             <Button size="sm" onPress={handleStartCreate} disabled={isSaving}>
               {t("settings.modelRouters.create")}
             </Button>
-            {presets.map((preset) => (
-              <PresetButton
-                key={preset.id}
-                preset={preset}
-                disabled={isSaving}
-                onApply={handleApplyPreset}
-              />
-            ))}
           </View>
-        )}
+        ) : null}
       </View>
     </SettingsSection>
   );
@@ -424,28 +485,20 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     gap: theme.spacing[2],
   },
-  actionButton: {
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  wizard: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: theme.spacing[3],
   },
-  primaryButton: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
+  manualRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
   },
-  actionText: {
-    color: theme.colors.foreground,
+  meta: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-  },
-  primaryText: {
-    color: theme.colors.accentForeground ?? theme.colors.surface0,
-    fontSize: theme.fontSize.sm,
-  },
-  dangerText: {
-    color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[1],
   },
   draft: {
     flexDirection: "column",
@@ -462,8 +515,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   targetSelector: {
     flex: 1,
-  },
-  nameInput: {
-    fontSize: theme.fontSize.base,
   },
 }));
