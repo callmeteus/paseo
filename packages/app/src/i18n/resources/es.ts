@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "No hay meta definida. Uso: /goal <objetivo> | /goal pause | /goal resume | /goal clear",
+    status: "Meta ({{status}}): {{objective}}",
+    activeLabel: "activa",
+    pausedLabel: "en pausa",
+    set: "Meta definida: {{objective}}",
+    paused: "Meta en pausa: {{objective}}",
+    resumed: "Meta reanudada: {{objective}}",
+    cleared: "Meta eliminada.",
+    complete: "Meta completada: {{objective}}",
+    continuousLimit:
+      "La meta no se completó tras {{max}} intentos. El vigilante se detuvo; envía otro mensaje o /goal resume para reiniciarlo.",
+  },
   paneFind: {
     connectionFailure:
       "No se pudo buscar en este chat. Comprueba la conexión con el host y vuelve a intentarlo.",

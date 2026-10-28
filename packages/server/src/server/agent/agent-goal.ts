@@ -98,8 +98,9 @@ function buildGoalPreamble(goal: AgentGoal, instruction: string): string {
     `Goal: ${goal.objective}`,
     "",
     instruction,
-    "Report what remains when you stop, and say so explicitly when the goal is complete.",
-    `When the goal is fully achieved, end your final message with ${GOAL_COMPLETE_MARKER}.`,
+    "Report what remains when you stop.",
+    "Saying the work is done or finished does NOT end the goal — only the marker below does.",
+    `When every requirement of the goal is actually met, end your final message with this marker on its own line: ${GOAL_COMPLETE_MARKER}`,
     GOAL_PROMPT_SUFFIX,
   ].join("\n");
 }

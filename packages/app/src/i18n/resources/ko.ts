@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "설정된 목표가 없습니다. 사용법: /goal <목표> | /goal pause | /goal resume | /goal clear",
+    status: "목표 ({{status}}): {{objective}}",
+    activeLabel: "진행 중",
+    pausedLabel: "일시중지",
+    set: "목표 설정됨: {{objective}}",
+    paused: "목표 일시중지됨: {{objective}}",
+    resumed: "목표 재개됨: {{objective}}",
+    cleared: "목표가 해제되었습니다.",
+    complete: "목표 완료: {{objective}}",
+    continuousLimit:
+      "{{max}}번 계속 시도했지만 목표를 완료하지 못했습니다. 감시가 중지되었습니다. 메시지를 다시 보내거나 /goal resume으로 재시작하세요.",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",

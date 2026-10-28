@@ -2,6 +2,19 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  goalNotice: {
+    noGoal: "未设置目标。用法：/goal <目标> | /goal pause | /goal resume | /goal clear",
+    status: "目标（{{status}}）：{{objective}}",
+    activeLabel: "进行中",
+    pausedLabel: "已暂停",
+    set: "已设置目标：{{objective}}",
+    paused: "目标已暂停：{{objective}}",
+    resumed: "目标已恢复：{{objective}}",
+    cleared: "目标已清除。",
+    complete: "目标已完成：{{objective}}",
+    continuousLimit:
+      "在 {{max}} 次继续尝试后目标仍未完成。监视器已停止；请发送新消息或使用 /goal resume 重新开始。",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

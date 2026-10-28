@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ptBR: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "Nenhuma meta definida. Uso: /goal <objetivo> | /goal pause | /goal resume | /goal clear",
+    status: "Meta ({{status}}): {{objective}}",
+    activeLabel: "ativa",
+    pausedLabel: "pausada",
+    set: "Meta definida: {{objective}}",
+    paused: "Meta pausada: {{objective}}",
+    resumed: "Meta retomada: {{objective}}",
+    cleared: "Meta removida.",
+    complete: "Meta concluída: {{objective}}",
+    continuousLimit:
+      "A meta não foi concluída após {{max}} tentativas. O monitor parou; envie outra mensagem ou use /goal resume para retomar.",
+  },
   paneFind: {
     connectionFailure:
       "Não foi possível pesquisar nesta conversa. Verifique a conexão com o host e tente novamente.",

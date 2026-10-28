@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "ゴールが設定されていません。使い方: /goal <目標> | /goal pause | /goal resume | /goal clear",
+    status: "ゴール ({{status}}): {{objective}}",
+    activeLabel: "進行中",
+    pausedLabel: "一時停止",
+    set: "ゴールを設定しました: {{objective}}",
+    paused: "ゴールを一時停止しました: {{objective}}",
+    resumed: "ゴールを再開しました: {{objective}}",
+    cleared: "ゴールを解除しました。",
+    complete: "ゴール達成: {{objective}}",
+    continuousLimit:
+      "{{max}} 回の継続後もゴールは達成されませんでした。監視を停止しました。もう一度メッセージを送るか、/goal resume で再開してください。",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",

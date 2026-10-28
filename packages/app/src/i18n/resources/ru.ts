@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "Цель не задана. Использование: /goal <цель> | /goal pause | /goal resume | /goal clear",
+    status: "Цель ({{status}}): {{objective}}",
+    activeLabel: "активна",
+    pausedLabel: "на паузе",
+    set: "Цель задана: {{objective}}",
+    paused: "Цель приостановлена: {{objective}}",
+    resumed: "Цель возобновлена: {{objective}}",
+    cleared: "Цель снята.",
+    complete: "Цель достигнута: {{objective}}",
+    continuousLimit:
+      "Цель не достигнута после {{max}} попыток. Наблюдатель остановлен; отправьте сообщение или /goal resume, чтобы продолжить.",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",

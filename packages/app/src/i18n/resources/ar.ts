@@ -2,6 +2,19 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  goalNotice: {
+    noGoal: "لا يوجد هدف محدد. الاستخدام: /goal <الهدف> | /goal pause | /goal resume | /goal clear",
+    status: "الهدف ({{status}}): {{objective}}",
+    activeLabel: "نشط",
+    pausedLabel: "متوقف مؤقتًا",
+    set: "تم تحديد الهدف: {{objective}}",
+    paused: "تم إيقاف الهدف مؤقتًا: {{objective}}",
+    resumed: "تم استئناف الهدف: {{objective}}",
+    cleared: "تمت إزالة الهدف.",
+    complete: "اكتمل الهدف: {{objective}}",
+    continuousLimit:
+      "لم يكتمل الهدف بعد {{max}} محاولة. توقف المراقب؛ أرسل رسالة أخرى أو استخدم /goal resume لإعادة التشغيل.",
+  },
   paneFind: {
     connectionFailure: "تعذر البحث في هذه المحادثة. تحقق من الاتصال بالمضيف وأعد المحاولة.",
     historyChangedFailure: "تغيّرت المحادثة أثناء البحث. أعد البحث.",

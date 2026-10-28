@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "Aucun objectif défini. Utilisation : /goal <objectif> | /goal pause | /goal resume | /goal clear",
+    status: "Objectif ({{status}}) : {{objective}}",
+    activeLabel: "actif",
+    pausedLabel: "en pause",
+    set: "Objectif défini : {{objective}}",
+    paused: "Objectif en pause : {{objective}}",
+    resumed: "Objectif repris : {{objective}}",
+    cleared: "Objectif supprimé.",
+    complete: "Objectif atteint : {{objective}}",
+    continuousLimit:
+      "L'objectif n'a pas été atteint après {{max}} tentatives. Le surveillant s'est arrêté ; envoyez un autre message ou /goal resume pour reprendre.",
+  },
   paneFind: {
     connectionFailure:
       "Impossible de rechercher dans cette conversation. Vérifiez la connexion à l’hôte et réessayez.",

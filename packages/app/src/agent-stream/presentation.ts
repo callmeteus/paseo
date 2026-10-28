@@ -1,4 +1,5 @@
 import type { ChatDisplay } from "@/hooks/use-settings";
+import { localizeGoalNotice } from "@/agent-stream/goal-copy";
 import type { TimelineItemTransform } from "@/plugins/timeline/model";
 import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
 import {
@@ -77,6 +78,10 @@ export function createStreamPresentation() {
     if (item.kind === "assistant_message" && item.text.includes("<paseo-goal-complete")) {
       const text = item.text.replace(GOAL_COMPLETE_MARKER_PATTERN, "").trim();
       return text ? [{ ...item, text }] : [];
+    }
+    if (item.kind === "assistant_message") {
+      const text = localizeGoalNotice(item.text);
+      return text === item.text ? [item] : [{ ...item, text }];
     }
     return [item];
   }

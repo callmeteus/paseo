@@ -1,4 +1,17 @@
 export const en = {
+  goalNotice: {
+    noGoal: "No goal set. Usage: /goal <objective> | /goal pause | /goal resume | /goal clear",
+    status: "Goal ({{status}}): {{objective}}",
+    activeLabel: "active",
+    pausedLabel: "paused",
+    set: "Goal set: {{objective}}",
+    paused: "Goal paused: {{objective}}",
+    resumed: "Goal resumed: {{objective}}",
+    cleared: "Goal cleared.",
+    complete: "Goal complete: {{objective}}",
+    continuousLimit:
+      "Goal did not complete after {{max}} continuation attempts. The goal watcher stopped; send another message, or /goal resume to restart it.",
+  },
   paneFind: {
     connectionFailure: "Could not search this chat. Check the host connection and retry.",
     historyChangedFailure: "The chat changed while searching. Search again.",
