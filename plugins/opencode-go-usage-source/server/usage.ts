@@ -57,7 +57,8 @@ interface SqliteDatabase {
   close(): void;
 }
 
-const nodeRequire = createRequire(import.meta.url);
+// Plugin bundles are evaluated with `eval`, so `import.meta.url` is undefined here.
+const nodeRequire = createRequire(join(process.execPath, "..", "paseo-plugin.cjs"));
 
 function openDatabase(path: string): SqliteDatabase | null {
   try {
