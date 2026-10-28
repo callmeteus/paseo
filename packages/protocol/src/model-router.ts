@@ -98,30 +98,48 @@ export function selectDistributionTarget(input: {
 /**
  * Next target after `current` in a fallback router. Returns null when the
  * current target is last (or unknown), so the caller stops instead of looping.
+ *
+ * `skipProviders` marks providers whose failure is account-wide (a quota that
+ * hits every model of the provider). Those targets are skipped while a later
+ * target from another provider is still available.
  */
 export function selectFallbackTarget(input: {
   router: ModelRouter;
   current: { provider: string; model: string | null } | null;
   installedProviders: ReadonlySet<string>;
+  skipProviders?: ReadonlySet<string>;
 }): ModelRouterTarget | null {
   const targets = normalizeRouterTargets(
     input.router.targets.filter((target) => isValidTarget(target, input.installedProviders)),
   );
   if (targets.length === 0) return null;
-  if (!input.current) return targets[0] ?? null;
+  if (!input.current) {
+    return firstAllowedTarget(targets, input.skipProviders);
+  }
   const currentKey = `${input.current.provider}::${input.current.model ?? ""}`;
   const index = targets.findIndex(
     (target) => `${target.provider}::${target.model ?? ""}` === currentKey,
   );
   if (index < 0) {
     // The chat is on a provider outside the router: start from the top.
-    return targets[0] ?? null;
+    return firstAllowedTarget(targets, input.skipProviders);
   }
-  return targets[index + 1] ?? null;
+  const remaining = targets.slice(index + 1);
+  if (remaining.length === 0) return null;
+  return firstAllowedTarget(remaining, input.skipProviders);
+}
+
+/** Keeps the stored order; only skips a provider when another one remains. */
+function firstAllowedTarget(
+  targets: readonly ModelRouterTarget[],
+  skipProviders: ReadonlySet<string> | undefined,
+): ModelRouterTarget | null {
+  if (!skipProviders || skipProviders.size === 0) return targets[0] ?? null;
+  return targets.find((target) => !skipProviders.has(target.provider)) ?? targets[0] ?? null;
 }
 
 const RETRYABLE_FAILURE_PATTERN =
-  /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|out of (?:tokens|credits)|limit reached|402|429)/i;
+  /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|limit (?:reached|exceeded)|daily limit|hourly limit|free tier|out of (?:tokens|credits)|402|429)/i;
 
 /**
  * Classifies a provider failure as retryable on another target.

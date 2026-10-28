@@ -92,6 +92,41 @@ describe("selectFallbackTarget", () => {
       }),
     ).toEqual({ provider: "opencode", model: "qwen3" });
   });
+
+  it("skips a failing provider when another one is still available", () => {
+    const mixed = router({
+      targets: [
+        { provider: "opencode", model: "qwen3" },
+        { provider: "opencode", model: "glm" },
+        { provider: "cline", model: null },
+      ],
+    });
+    expect(
+      selectFallbackTarget({
+        router: mixed,
+        current: { provider: "opencode", model: "qwen3" },
+        installedProviders: installed,
+        skipProviders: new Set(["opencode"]),
+      }),
+    ).toEqual({ provider: "cline", model: null });
+  });
+
+  it("keeps the stored order when every remaining target is skipped", () => {
+    const sameProvider = router({
+      targets: [
+        { provider: "opencode", model: "qwen3" },
+        { provider: "opencode", model: "glm" },
+      ],
+    });
+    expect(
+      selectFallbackTarget({
+        router: sameProvider,
+        current: { provider: "opencode", model: "qwen3" },
+        installedProviders: installed,
+        skipProviders: new Set(["opencode"]),
+      }),
+    ).toEqual({ provider: "opencode", model: "glm" });
+  });
 });
 
 describe("normalizeRouterTargets", () => {
@@ -116,6 +151,8 @@ describe("isRetryableRouterFailure", () => {
     "429 Too Many Requests",
     "insufficient_quota",
     "usage limit reached",
+    "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+    "daily limit reached for this model",
   ])("treats %s as retryable", (error) => {
     expect(isRetryableRouterFailure({ error })).toBe(true);
   });

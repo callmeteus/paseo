@@ -19,6 +19,36 @@ interface UseRouterFallbackInput {
   isConnected: boolean;
 }
 
+const RESEND_RETRY_DELAY_MS = 1200;
+
+/**
+ * The ported runtime can still be starting when the fallback lands, so the
+ * carry-over prompt is retried once before giving up.
+ */
+async function resendFailedPrompt(
+  client: DaemonClient,
+  agentId: string,
+  text: string,
+): Promise<void> {
+  const send = () =>
+    client.sendAgentMessage(agentId, text, {
+      messageId: generateMessageId(),
+      activeTurnBehavior: "interrupt",
+    });
+  try {
+    await send();
+    return;
+  } catch (error) {
+    console.warn("[RouterFallback] failed to resend the failed prompt", error);
+  }
+  await new Promise((resolve) => setTimeout(resolve, RESEND_RETRY_DELAY_MS));
+  try {
+    await send();
+  } catch (error) {
+    console.warn("[RouterFallback] failed to resend the failed prompt after a retry", error);
+  }
+}
+
 /**
  * Option A fallback: when a chat fails with a retryable provider error and the
  * default router is a fallback chain, port the chat to the next target, resend
@@ -49,8 +79,9 @@ export function useRouterFallback({
     const agent = session?.agents?.get(agentId);
     if (!agent || agent.archivedAt) return;
     const lastUserText = selectAgentSentMessages(session, agentId)[0] ?? null;
-    if (!lastUserText) return;
-    const attemptKey = `${serverId}:${agentId}:${agent.lastError}:${lastUserText}`;
+    // A ported agent can fail before the resend lands: keep walking the chain
+    // even when there is no prompt left to carry over.
+    const attemptKey = `${serverId}:${agentId}:${agent.lastError}:${lastUserText ?? ""}`;
     if (attemptedKeyRef.current === attemptKey || inFlightRef.current) return;
     attemptedKeyRef.current = attemptKey;
     inFlightRef.current = true;
@@ -69,6 +100,8 @@ export function useRouterFallback({
           current: { provider: agent.provider, model: agent.model ?? null },
           // The daemon resolves availability; offer every configured target.
           installedProviders: new Set(router.targets.map((target) => target.provider)),
+          // Quota limits usually hit the whole account, so prefer another lab.
+          skipProviders: new Set([agent.provider]),
         });
         if (!next) {
           toast.error(t("settings.modelRouters.noMoreTargets"));
@@ -86,10 +119,7 @@ export function useRouterFallback({
           },
           persistPreference: async () => {},
         });
-        await applied.client.sendAgentMessage(applied.agentId, lastUserText, {
-          messageId: generateMessageId(),
-          activeTurnBehavior: "interrupt",
-        });
+        if (lastUserText) await resendFailedPrompt(applied.client, applied.agentId, lastUserText);
         navigateToAgent({
           serverId: applied.serverId,
           agentId: applied.agentId,
