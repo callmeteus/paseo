@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isProviderCrashFailure,
   isRetryableRouterFailure,
+  isSessionCorruptionFailure,
   normalizeRouterTargets,
   selectDistributionTarget,
   selectFallbackTarget,
@@ -190,6 +191,24 @@ describe("isProviderCrashFailure", () => {
     "does not treat %s as a crash",
     (error) => {
       expect(isProviderCrashFailure({ error })).toBe(false);
+    },
+  );
+});
+
+describe("isSessionCorruptionFailure", () => {
+  it("detects an invalid tool call in the stored session", () => {
+    expect(
+      isSessionCorruptionFailure({
+        error:
+          "Upstream request failed: [invalid_value] Validation: `messages[451].tool_calls[0].function.arguments` must be a valid JSON object string",
+      }),
+    ).toBe(true);
+  });
+
+  it.each(["Free usage limit reached", "OpenCode helper server exited (4294967295)"])(
+    "ignores %s",
+    (error) => {
+      expect(isSessionCorruptionFailure({ error })).toBe(false);
     },
   );
 });

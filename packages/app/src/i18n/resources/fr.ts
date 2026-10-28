@@ -2361,6 +2361,9 @@ export const fr: TranslationResources = {
       fallbackMoved: "Chat déplacé vers {{provider}} car le fournisseur précédent est épuisé",
       noMoreTargets: "Plus aucune cible de fallback pour ce chat",
       retryingProvider: "{{provider}} a planté. Nouvelle tentative sur le même fournisseur…",
+      crashPersists: "{{provider}} plante encore. Vérifiez le CLI du fournisseur et réessayez.",
+      sessionRepaired:
+        "La session était corrompue en amont. Nouvelle session {{provider}} propre avec l'historique.",
       targetCount: "{{count}} cibles",
       usePreset: "Utiliser le preset",
       wizard: {

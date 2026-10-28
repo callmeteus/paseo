@@ -2334,6 +2334,10 @@ export const ja: TranslationResources = {
         "前のプロバイダーが上限に達したため、このチャットを {{provider}} に移動しました",
       noMoreTargets: "このチャットに残りのフォールバック先はありません",
       retryingProvider: "{{provider}} がクラッシュしました。同じプロバイダーで再試行しています…",
+      crashPersists:
+        "{{provider}} が繰り返しクラッシュします。プロバイダーの CLI を確認して再試行してください。",
+      sessionRepaired:
+        "上流でセッションが破損していました。履歴を含む新しい {{provider}} セッションを開始しました。",
       targetCount: "{{count}} 個の対象",
       usePreset: "プリセットを使用",
       wizard: {

@@ -2456,6 +2456,9 @@ export const en = {
       fallbackMoved: "Moved this chat to {{provider}} after the previous provider ran out",
       noMoreTargets: "No fallback target left for this chat",
       retryingProvider: "{{provider}} crashed. Retrying on the same provider…",
+      crashPersists: "{{provider}} keeps crashing. Check the provider CLI and try again.",
+      sessionRepaired:
+        "The session was corrupted upstream. Started a clean {{provider}} session with the transcript.",
     },
     voice: {
       offline: "Connect to this host to configure voice.",

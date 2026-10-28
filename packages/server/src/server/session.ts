@@ -3167,6 +3167,7 @@ export class Session {
           msg.targetModel ?? null,
           msg.requestId,
           msg.archivePrevious ?? true,
+          msg.force ?? false,
         );
       case "agent.export_snapshot.request":
         return this.handleExportSnapshotRequest(msg.agentId, msg.requestId);
@@ -3373,12 +3374,14 @@ export class Session {
     targetModel: string | null,
     requestId: string,
     archivePrevious = true,
+    force = false,
   ): Promise<void> {
     this.sessionLogger.info({ agentId, targetProvider }, "Swapping agent provider");
 
     try {
       const result = await this.agentManager.swapProvider(agentId, targetProvider, targetModel, {
         archivePrevious,
+        force,
       });
 
       if (archivePrevious && this.agentManager.getAgent(agentId)) {

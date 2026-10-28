@@ -2347,6 +2347,9 @@ export const ptBR: TranslationResources = {
       fallbackMoved: "Chat movido para {{provider}} porque o provedor anterior esgotou",
       noMoreTargets: "Não há mais destino de fallback para este chat",
       retryingProvider: "{{provider}} travou. Tentando novamente no mesmo provider…",
+      crashPersists: "{{provider}} continua travando. Verifique o CLI do provider e tente de novo.",
+      sessionRepaired:
+        "A sessão estava corrompida no upstream. Iniciei uma sessão limpa de {{provider}} com o histórico.",
       targetCount: "{{count}} destinos",
       usePreset: "Usar preset",
       wizard: {

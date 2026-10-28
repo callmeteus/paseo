@@ -158,6 +158,23 @@ export function isProviderCrashFailure(input: {
 }
 
 /**
+ * The provider's stored session holds a malformed tool call, so every request
+ * from it fails validation upstream. A fresh session (same provider and model)
+ * seeded with the transcript is the only way out.
+ */
+const SESSION_CORRUPTION_PATTERN =
+  /(tool_calls.*function\.arguments|must be a valid JSON object string|invalid_value)/i;
+
+export function isSessionCorruptionFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  return text.length > 0 && SESSION_CORRUPTION_PATTERN.test(text);
+}
+
+/**
  * Classifies a provider failure as retryable on another target.
  *
  * Provider adapters surface free-form errors plus an optional numeric code, so

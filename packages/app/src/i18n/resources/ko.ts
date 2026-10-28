@@ -2322,6 +2322,9 @@ export const ko: TranslationResources = {
       fallbackMoved: "이전 공급자의 한도가 소진되어 채팅을 {{provider}}(으)로 이동했습니다",
       noMoreTargets: "이 채팅에 남은 폴백 대상이 없습니다",
       retryingProvider: "{{provider}}이(가) 충돌했습니다. 같은 공급자에서 다시 시도하는 중…",
+      crashPersists: "{{provider}}이(가) 계속 충돌합니다. 공급자 CLI를 확인하고 다시 시도하세요.",
+      sessionRepaired:
+        "업스트림 세션이 손상되었습니다. 기록을 포함한 새 {{provider}} 세션을 시작했습니다.",
       targetCount: "대상 {{count}}개",
       usePreset: "프리셋 사용",
       wizard: {

@@ -1855,6 +1855,11 @@ export const AgentSwapProviderRequestSchema = z.object({
    * it has switched to the new agent, so the old chat does not vanish mid-port.
    */
   archivePrevious: z.boolean().optional(),
+  /**
+   * Port even when the target provider and model match the source. Used to
+   * repair a provider session whose stored history the upstream rejects.
+   */
+  force: z.boolean().optional(),
   requestId: z.string(),
 });
 

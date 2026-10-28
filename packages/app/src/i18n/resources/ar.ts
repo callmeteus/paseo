@@ -2348,6 +2348,8 @@ export const ar: TranslationResources = {
       fallbackMoved: "تم نقل المحادثة إلى {{provider}} بعد نفاد المزود السابق",
       noMoreTargets: "لا يوجد هدف احتياطي متبقٍ لهذه المحادثة",
       retryingProvider: "تعطل {{provider}}. تتم إعادة المحاولة على نفس المزود…",
+      crashPersists: "يتعطل {{provider}} باستمرار. تحقق من واجهة سطر الأوامر للمزود وحاول مجددًا.",
+      sessionRepaired: "كانت الجلسة معطوبة في المصدر. بدأت جلسة {{provider}} نظيفة مع السجل.",
       targetCount: "{{count}} أهداف",
       usePreset: "استخدام الإعداد",
       wizard: {

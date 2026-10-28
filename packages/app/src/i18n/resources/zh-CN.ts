@@ -2289,6 +2289,8 @@ export const zhCN: TranslationResources = {
       fallbackMoved: "上一个提供商用尽后，已将聊天移至 {{provider}}",
       noMoreTargets: "此聊天没有剩余的备用目标",
       retryingProvider: "{{provider}} 崩溃了。正在同一提供商上重试…",
+      crashPersists: "{{provider}} 反复崩溃。请检查提供商的 CLI 后重试。",
+      sessionRepaired: "上游会话已损坏。已使用对话记录启动新的 {{provider}} 会话。",
       targetCount: "{{count}} 个目标",
       usePreset: "使用预设",
       wizard: {

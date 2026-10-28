@@ -17,6 +17,8 @@ export interface SwapProviderInput {
   portedTimeline?: readonly AgentTimelineRow[];
   /** Defaults to true. False leaves the source agent for the client to archive. */
   archivePrevious?: boolean;
+  /** True allows a same provider+model port (repairs a corrupt session). */
+  force?: boolean;
   logger?: Logger;
 }
 
@@ -153,7 +155,11 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     throw new SwapProviderError("agent.invalidProvider", "Target provider is required", 400);
   }
 
-  if (existing.provider === targetProvider && existing.config?.model === targetModel) {
+  if (
+    !input.force &&
+    existing.provider === targetProvider &&
+    existing.config?.model === targetModel
+  ) {
     throw new SwapProviderError(
       "agent.sameProvider",
       "Agent already uses the requested provider and model",
