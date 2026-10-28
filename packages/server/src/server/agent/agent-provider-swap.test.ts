@@ -154,6 +154,56 @@ describe("swapAgentProvider", () => {
     expect(prompt).toContain("ported from opencode");
   });
 
+  it("does not inherit the source's outgoing port link", async () => {
+    await storage.upsert({
+      id: "agent-1",
+      provider: "opencode",
+      cwd: "/tmp/project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      labels: {},
+      lastStatus: "closed",
+      config: { model: "gpt-5.1" },
+      migratedTo: { provider: "kilo", agentId: "older-port" },
+    } as unknown as Parameters<typeof storage.upsert>[0]);
+
+    const result = await swapAgentProvider({
+      storage,
+      agentId: "agent-1",
+      targetProvider: "claude",
+      targetModel: null,
+    });
+
+    const ported = await storage.get(result.newAgentId);
+    expect(ported?.migratedTo).toBeUndefined();
+    expect(ported?.migratedFrom?.agentId).toBe("agent-1");
+  });
+
+  it("keeps the ported chat visible by carrying its last user message time", async () => {
+    await seed();
+    const result = await swapAgentProvider({
+      storage,
+      agentId: "agent-1",
+      targetProvider: "claude",
+      targetModel: null,
+      portedTimeline: [
+        {
+          seq: 1,
+          timestamp: "2026-01-01T10:00:00.000Z",
+          item: { type: "user_message", text: "old prompt", messageId: "m1" },
+        },
+        {
+          seq: 2,
+          timestamp: "2026-01-01T10:05:00.000Z",
+          item: { type: "assistant_message", text: "reply", messageId: "m2" },
+        },
+      ],
+    });
+
+    const ported = await storage.get(result.newAgentId);
+    expect(ported?.lastUserMessageAt).toBe("2026-01-01T10:00:00.000Z");
+  });
+
   it("throws when agent does not exist (sad path)", async () => {
     await expect(
       swapAgentProvider({

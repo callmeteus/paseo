@@ -2345,6 +2345,8 @@ export const ru: TranslationResources = {
       saveError: "Не удалось сохранить маршрутизаторы",
       fallbackMoved: "Чат перенесён в {{provider}}: у предыдущего провайдера закончился лимит",
       noMoreTargets: "Для этого чата больше нет запасных целей",
+      retryingProvider:
+        "{{provider}} завершился с ошибкой. Повторная попытка у того же провайдера…",
       targetCount: "целей: {{count}}",
       usePreset: "Использовать пресет",
       wizard: {

@@ -2321,6 +2321,7 @@ export const ko: TranslationResources = {
       saveError: "라우터를 저장할 수 없습니다",
       fallbackMoved: "이전 공급자의 한도가 소진되어 채팅을 {{provider}}(으)로 이동했습니다",
       noMoreTargets: "이 채팅에 남은 폴백 대상이 없습니다",
+      retryingProvider: "{{provider}}이(가) 충돌했습니다. 같은 공급자에서 다시 시도하는 중…",
       targetCount: "대상 {{count}}개",
       usePreset: "프리셋 사용",
       wizard: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isProviderCrashFailure,
   isRetryableRouterFailure,
   normalizeRouterTargets,
   selectDistributionTarget,
@@ -157,12 +158,15 @@ describe("isRetryableRouterFailure", () => {
     expect(isRetryableRouterFailure({ error })).toBe(true);
   });
 
-  it.each(["model not found", "invalid api key", "process exited with code 1", ""])(
-    "does not fall back on %s",
-    (error) => {
-      expect(isRetryableRouterFailure({ error })).toBe(false);
-    },
-  );
+  it.each([
+    "model not found",
+    "invalid api key",
+    "process exited with code 1",
+    "OpenCode helper server exited (4294967295)",
+    "",
+  ])("does not fall back on %s", (error) => {
+    expect(isRetryableRouterFailure({ error })).toBe(false);
+  });
 
   it("reads the provider code and diagnostic", () => {
     expect(isRetryableRouterFailure({ error: "failed", code: "402" })).toBe(true);
@@ -170,4 +174,22 @@ describe("isRetryableRouterFailure", () => {
       isRetryableRouterFailure({ error: "failed", diagnostic: "credit balance is too low" }),
     ).toBe(true);
   });
+});
+
+describe("isProviderCrashFailure", () => {
+  it.each([
+    "OpenCode helper server exited (4294967295)",
+    "process exited with code 1",
+    "socket hang up",
+    "Transport: connection reset",
+  ])("treats %s as a crash to retry on the same provider", (error) => {
+    expect(isProviderCrashFailure({ error })).toBe(true);
+  });
+
+  it.each(["Free usage limit reached", "model not found", ""])(
+    "does not treat %s as a crash",
+    (error) => {
+      expect(isProviderCrashFailure({ error })).toBe(false);
+    },
+  );
 });

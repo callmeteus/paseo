@@ -2360,6 +2360,7 @@ export const es: TranslationResources = {
       saveError: "No se pudieron guardar los enrutadores",
       fallbackMoved: "Chat movido a {{provider}} porque el proveedor anterior se agotó",
       noMoreTargets: "No queda ningún destino de fallback para este chat",
+      retryingProvider: "{{provider}} se cerró. Reintentando en el mismo proveedor…",
       targetCount: "{{count}} destinos",
       usePreset: "Usar preset",
       wizard: {

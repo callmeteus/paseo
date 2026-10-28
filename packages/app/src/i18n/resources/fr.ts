@@ -2360,6 +2360,7 @@ export const fr: TranslationResources = {
       saveError: "Impossible d'enregistrer les routeurs",
       fallbackMoved: "Chat déplacé vers {{provider}} car le fournisseur précédent est épuisé",
       noMoreTargets: "Plus aucune cible de fallback pour ce chat",
+      retryingProvider: "{{provider}} a planté. Nouvelle tentative sur le même fournisseur…",
       targetCount: "{{count}} cibles",
       usePreset: "Utiliser le preset",
       wizard: {

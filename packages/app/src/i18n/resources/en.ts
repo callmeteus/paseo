@@ -2455,6 +2455,7 @@ export const en = {
       saveError: "Unable to save routers",
       fallbackMoved: "Moved this chat to {{provider}} after the previous provider ran out",
       noMoreTargets: "No fallback target left for this chat",
+      retryingProvider: "{{provider}} crashed. Retrying on the same provider…",
     },
     voice: {
       offline: "Connect to this host to configure voice.",

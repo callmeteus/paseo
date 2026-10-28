@@ -4494,7 +4494,21 @@ export class AgentManager {
     options?: { archivePrevious?: boolean },
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
-    const previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    if (previousRows.length === 0) {
+      // A chat that was never opened in this daemon has no live rows. Without
+      // the provider history the port would silently drop the transcript.
+      try {
+        await this.hydrateTimelineFromProvider(agentId, {
+          force: true,
+          broadcast: false,
+          broadcastTimeline: false,
+        });
+      } catch (error) {
+        this.logger.warn({ err: error, agentId }, "Failed to hydrate timeline before porting");
+      }
+      previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    }
     const previousItems = previousRows.map((row) => row.item);
     const existing = await registry.get(agentId);
     const portedAt = new Date().toISOString();

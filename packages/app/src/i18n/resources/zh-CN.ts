@@ -2288,6 +2288,7 @@ export const zhCN: TranslationResources = {
       saveError: "无法保存路由器",
       fallbackMoved: "上一个提供商用尽后，已将聊天移至 {{provider}}",
       noMoreTargets: "此聊天没有剩余的备用目标",
+      retryingProvider: "{{provider}} 崩溃了。正在同一提供商上重试…",
       targetCount: "{{count}} 个目标",
       usePreset: "使用预设",
       wizard: {

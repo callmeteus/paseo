@@ -2347,6 +2347,7 @@ export const ar: TranslationResources = {
       saveError: "تعذر حفظ الموجهات",
       fallbackMoved: "تم نقل المحادثة إلى {{provider}} بعد نفاد المزود السابق",
       noMoreTargets: "لا يوجد هدف احتياطي متبقٍ لهذه المحادثة",
+      retryingProvider: "تعطل {{provider}}. تتم إعادة المحاولة على نفس المزود…",
       targetCount: "{{count}} أهداف",
       usePreset: "استخدام الإعداد",
       wizard: {

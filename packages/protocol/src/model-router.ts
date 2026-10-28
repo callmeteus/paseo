@@ -139,7 +139,23 @@ function firstAllowedTarget(
 }
 
 const RETRYABLE_FAILURE_PATTERN =
-  /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|limit (?:reached|exceeded)|daily limit|hourly limit|free tier|out of (?:tokens|credits)|402|429)/i;
+  /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|limit (?:reached|exceeded)|daily limit|hourly limit|free tier|out of (?:tokens|credits)|(?:^|[^\d])(?:402|429)(?:[^\d]|$))/i;
+
+/**
+ * A provider process that died mid-turn (helper crashed, transport dropped) is
+ * a transient local failure: retry the same provider instead of porting away.
+ */
+const PROVIDER_CRASH_PATTERN =
+  /(helper server exited|process exited|exited \(\d+\)|transport|econnreset|epipe|socket hang up|connection reset|terminated unexpectedly)/i;
+
+export function isProviderCrashFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  return text.length > 0 && PROVIDER_CRASH_PATTERN.test(text);
+}
 
 /**
  * Classifies a provider failure as retryable on another target.

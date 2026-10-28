@@ -165,6 +165,16 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     ...portedConfig
   } = existing.config ?? {};
 
+  const portedRows = input.portedTimeline ?? [];
+  const lastPortedUserMessageAt =
+    [...portedRows].reverse().find((row) => row.item.type === "user_message")?.timestamp ?? null;
+  const lastUserMessageAt =
+    lastPortedUserMessageAt && existing.lastUserMessageAt
+      ? lastPortedUserMessageAt > existing.lastUserMessageAt
+        ? lastPortedUserMessageAt
+        : existing.lastUserMessageAt
+      : (lastPortedUserMessageAt ?? existing.lastUserMessageAt ?? null);
+
   const newRecord: StoredAgentRecord = {
     ...existing,
     id: newAgentId,
@@ -175,6 +185,14 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     lastStatus: "closed",
     lastModeId: null,
     archivedAt: null,
+    // A port starts a new branch: it must not inherit the source's outgoing
+    // link (that stale pointer hides the ported tab from the tab bar).
+    migratedTo: undefined,
+    lastUserMessageAt,
+    lastError: null,
+    requiresAttention: false,
+    attentionReason: null,
+    attentionTimestamp: null,
     config: {
       ...portedConfig,
       model: targetModel,
@@ -187,9 +205,9 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
       agentId: existing.id,
       portedAt: now,
     },
-    ...(input.portedTimeline?.length
+    ...(portedRows.length
       ? {
-          portedTimeline: input.portedTimeline.map((row) => ({
+          portedTimeline: portedRows.map((row) => ({
             seq: row.seq,
             timestamp: row.timestamp,
             item: row.item,

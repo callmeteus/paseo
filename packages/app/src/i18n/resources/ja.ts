@@ -2333,6 +2333,7 @@ export const ja: TranslationResources = {
       fallbackMoved:
         "前のプロバイダーが上限に達したため、このチャットを {{provider}} に移動しました",
       noMoreTargets: "このチャットに残りのフォールバック先はありません",
+      retryingProvider: "{{provider}} がクラッシュしました。同じプロバイダーで再試行しています…",
       targetCount: "{{count}} 個の対象",
       usePreset: "プリセットを使用",
       wizard: {

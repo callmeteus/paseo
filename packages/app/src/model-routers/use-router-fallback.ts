@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  isProviderCrashFailure,
   isRetryableRouterFailure,
   selectFallbackTarget,
   type ModelRouterTarget,
@@ -20,6 +21,8 @@ interface UseRouterFallbackInput {
 }
 
 const RESEND_RETRY_DELAY_MS = 1200;
+/** Crashes are local: retry twice on the same provider before porting away. */
+const MAX_CRASH_RETRIES = 2;
 
 /**
  * The ported runtime can still be starting when the fallback lands, so the
@@ -64,6 +67,7 @@ export function useRouterFallback({
   const toast = useToast();
   const attemptedKeyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
+  const crashRetriesRef = useRef(new Map<string, number>());
   const errorKey = useSessionStore((state) => {
     if (!agentId) return null;
     const agent = state.sessions[serverId]?.agents?.get(agentId);
@@ -73,12 +77,30 @@ export function useRouterFallback({
 
   useEffect(() => {
     if (!client || !isConnected || !agentId || !errorKey) return;
-    if (!isRetryableRouterFailure({ error: errorKey })) return;
+    const crash = isProviderCrashFailure({ error: errorKey });
+    if (!crash && !isRetryableRouterFailure({ error: errorKey })) return;
     const state = useSessionStore.getState();
     const session = state.sessions[serverId];
     const agent = session?.agents?.get(agentId);
     if (!agent || agent.archivedAt) return;
     const lastUserText = selectAgentSentMessages(session, agentId)[0] ?? null;
+
+    // A crashed provider helper is not a quota problem: retry the same agent
+    // instead of porting the chat to another provider.
+    if (crash && lastUserText) {
+      const crashKey = `${serverId}:${agentId}:${errorKey}`;
+      const attempts = crashRetriesRef.current.get(crashKey) ?? 0;
+      if (attempts < MAX_CRASH_RETRIES) {
+        crashRetriesRef.current.set(crashKey, attempts + 1);
+        toast.show(t("settings.modelRouters.retryingProvider", { provider: agent.provider }), {
+          variant: "info",
+          durationMs: 3000,
+        });
+        void resendFailedPrompt(client, agentId, lastUserText);
+        return;
+      }
+    }
+
     // A ported agent can fail before the resend lands: keep walking the chain
     // even when there is no prompt left to carry over.
     const attemptKey = `${serverId}:${agentId}:${agent.lastError}:${lastUserText ?? ""}`;

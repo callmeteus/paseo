@@ -2346,6 +2346,7 @@ export const ptBR: TranslationResources = {
       saveError: "Não foi possível salvar os roteadores",
       fallbackMoved: "Chat movido para {{provider}} porque o provedor anterior esgotou",
       noMoreTargets: "Não há mais destino de fallback para este chat",
+      retryingProvider: "{{provider}} travou. Tentando novamente no mesmo provider…",
       targetCount: "{{count}} destinos",
       usePreset: "Usar preset",
       wizard: {
