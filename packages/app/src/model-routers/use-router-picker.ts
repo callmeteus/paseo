@@ -76,3 +76,10 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
     select,
   };
 }
+
+/** Name of the router new chats default to, or null when none is active. */
+export function useActiveRouterName(serverId: string | null): string | null {
+  const { rows, selectedRouterId } = useRouterPicker(serverId);
+  if (!selectedRouterId) return null;
+  return rows.find((row) => row.id === selectedRouterId)?.name ?? null;
+}
