@@ -1720,6 +1720,7 @@ export const fr: TranslationResources = {
     error: "Erreur",
     defaultModel: "Par défaut",
     profiles: "Profils",
+    routers: "Routeurs",
     providers: "Fournisseurs",
     model: "Modèle",
     editProfiles: "Modifier",

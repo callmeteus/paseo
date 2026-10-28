@@ -55,6 +55,7 @@ import {
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { useCurrentOverlayLayer } from "@/lib/overlay-root";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { useRouterPicker, type RouterPickerRow } from "@/model-routers/use-router-picker";
 import {
   groupProfilesByProviderModel,
   resolveInitialModelBrowserView,
@@ -193,6 +194,11 @@ interface ModelBrowserProps {
   rootBrowseContent?: React.ReactNode;
   /** Hide the pinned Profiles section while still using rows for model matching. */
   showProfilesSection?: boolean;
+  /**
+   * Called after the user picks (or clears) a router from the section below.
+   * Receives the picked router id, or null when the pick was cleared.
+   */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "scrolling"> {
@@ -962,6 +968,60 @@ function AgentProfilesPickerContent({
   );
 }
 
+function RouterPickerRowView({
+  row,
+  selected,
+  onSelect,
+}: {
+  row: RouterPickerRow;
+  selected: boolean;
+  onSelect: (routerId: string | null) => void;
+}) {
+  const handlePress = useCallback(
+    () => onSelect(selected ? null : row.id),
+    [onSelect, row.id, selected],
+  );
+  return (
+    <ModelBrowserRow
+      label={row.name}
+      description={row.description}
+      tone="elevated"
+      selected={selected}
+      selectionIndicator
+      leadingSlot={null}
+      onPress={handlePress}
+      testID={`model-router-row-${row.id}`}
+    />
+  );
+}
+
+function RoutersPickerSection({
+  rows,
+  selectedRouterId,
+  onSelect,
+}: {
+  rows: RouterPickerRow[];
+  selectedRouterId: string | null;
+  onSelect: (routerId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.routersContainer}>
+      <View style={styles.sectionHeading}>
+        <Text style={styles.sectionHeadingText}>{t("modelSelector.routers")}</Text>
+      </View>
+      {rows.map((row) => (
+        <RouterPickerRowView
+          key={row.id}
+          row={row}
+          selected={row.id === selectedRouterId}
+          onSelect={onSelect}
+        />
+      ))}
+    </View>
+  );
+}
+
 function GroupProviderButton({
   provider,
   serverId,
@@ -1384,8 +1444,17 @@ function ModelBrowserContent({
   searchAllOnFocus,
   rootBrowseContent,
   showProfilesSection = true,
+  onRouterPicked,
 }: ModelBrowserContentProps) {
   const { t } = useTranslation();
+  const routerPicker = useRouterPicker(serverId);
+  const handleRouterSelect = useCallback(
+    (routerId: string | null) => {
+      void routerPicker.select(routerId);
+      onRouterPicked?.(routerId);
+    },
+    [onRouterPicked, routerPicker],
+  );
   const normalizedQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery]);
   const profiledLookup = useMemo(
     () => groupProfilesByProviderModel(profiles?.rows ?? []),
@@ -1474,6 +1543,13 @@ function ModelBrowserContent({
           onEditProfiles={onEditProfiles}
         />
       ) : null}
+      {routerPicker.rows.length > 0 ? (
+        <RoutersPickerSection
+          rows={routerPicker.rows}
+          selectedRouterId={routerPicker.selectedRouterId}
+          onSelect={handleRouterSelect}
+        />
+      ) : null}
       {rootBrowseContent ??
         (providers.length > 0 ? (
           <View>
@@ -1525,6 +1601,7 @@ export function ModelBrowser({
   searchAllOnFocus = false,
   rootBrowseContent,
   showProfilesSection,
+  onRouterPicked,
 }: ModelBrowserProps) {
   return (
     <ModelBrowserContent
@@ -1548,6 +1625,7 @@ export function ModelBrowser({
       searchAllOnFocus={searchAllOnFocus}
       rootBrowseContent={rootBrowseContent}
       showProfilesSection={showProfilesSection}
+      onRouterPicked={onRouterPicked}
     />
   );
 }
@@ -1562,6 +1640,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  routersContainer: {
+    backgroundColor: theme.colors.surface1,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: theme.spacing[1],
   },
   separator: {
     height: 1,

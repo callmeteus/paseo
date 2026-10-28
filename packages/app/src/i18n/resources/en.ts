@@ -1700,6 +1700,7 @@ export const en = {
     error: "Error",
     defaultModel: "Default",
     profiles: "Profiles",
+    routers: "Routers",
     providers: "Providers",
     model: "Model",
     editProfiles: "Edit",

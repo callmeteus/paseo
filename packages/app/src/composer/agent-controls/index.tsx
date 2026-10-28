@@ -93,6 +93,7 @@ import { ComposerControlLayoutProvider } from "@/composer/agent-controls/layout-
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
+import { portAgentToFallbackRouter } from "@/model-routers/port-to-fallback-target";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
@@ -142,6 +143,8 @@ interface ControlledAgentControlsProps {
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** Called after the user picks (or clears) a router in the model selector. */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 export interface DraftAgentControlsProps {
@@ -174,6 +177,7 @@ export interface DraftAgentControlsProps {
   disabled?: boolean;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 interface AgentControlsProps {
@@ -517,6 +521,7 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  onRouterPicked,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -805,6 +810,7 @@ function ControlledAgentControls({
             handleOpenSheet={handleOpenSheet}
             handleCloseSheet={handleCloseSheet}
             modelSelectorServerId={modelSelectorServerId}
+            onRouterPicked={onRouterPicked}
           />
         ) : (
           <SheetAgentControlsContent
@@ -842,6 +848,7 @@ function ControlledAgentControls({
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
+            onRouterPicked={onRouterPicked}
           />
         )}
       </View>
@@ -905,6 +912,7 @@ interface DesktopAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
@@ -962,6 +970,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleOpenSheet,
     handleCloseSheet,
     modelSelectorServerId,
+    onRouterPicked,
   } = props;
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
@@ -1025,6 +1034,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 desktopPlacement="top-start"
                 desktopMinWidth={360}
                 toolbar={modelToolbar}
+                onRouterPicked={onRouterPicked}
               />
             </View>
           </TooltipTrigger>
@@ -1165,6 +1175,7 @@ interface SheetAgentControlsContentProps {
   glyphSize: number;
   modelSelectorServerId: string | null;
   canSwitchProvider: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
@@ -1204,6 +1215,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     glyphSize,
     modelSelectorServerId,
     canSwitchProvider,
+    onRouterPicked,
   } = props;
 
   const thinkingAnchorRef = useRef<View | null>(null);
@@ -1291,6 +1303,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       serverId={modelSelectorServerId}
       glyphSize={glyphSize}
       canSwitchProvider={canSwitchProvider}
+      onRouterPicked={onRouterPicked}
     >
       {sheetControls}
     </CompactModelSheet>
@@ -1955,6 +1968,27 @@ export const AgentControls = memo(function AgentControls({
     [refreshSnapshot],
   );
 
+  const handleRouterPicked = useCallback(
+    (routerId: string | null) => {
+      // Picking a fallback router on an existing chat ports it to the router's
+      // first target through the regular provider-switch port flow.
+      if (!routerId || !client || !agent) return;
+      void portAgentToFallbackRouter({ client, serverId, agentId, routerId }).then((result) => {
+        if (result.outcome === "ported") {
+          toast.show(t("settings.modelRouters.fallbackMoved", { provider: result.provider }), {
+            variant: "info",
+            durationMs: 4000,
+          });
+          return;
+        }
+        if (result.outcome === "no-target") toast.error(t("settings.modelRouters.noMoreTargets"));
+        if (result.outcome === "failed") toast.error(result.reason);
+        return undefined;
+      });
+    },
+    [agent, agentId, client, serverId, t, toast],
+  );
+
   if (!agent) {
     return null;
   }
@@ -1989,6 +2023,7 @@ export const AgentControls = memo(function AgentControls({
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
+        onRouterPicked={handleRouterPicked}
       />
     </>
   );

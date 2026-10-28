@@ -1708,6 +1708,7 @@ export const ptBR: TranslationResources = {
     error: "Erro",
     defaultModel: "Padrão",
     profiles: "Perfis",
+    routers: "Roteadores",
     providers: "Provedores",
     model: "Modelo",
     editProfiles: "Editar",

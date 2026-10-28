@@ -1704,6 +1704,7 @@ export const ru: TranslationResources = {
     error: "Ошибка",
     defaultModel: "По умолчанию",
     profiles: "Профили",
+    routers: "Роутеры",
     providers: "Провайдеры",
     model: "Модель",
     editProfiles: "Изменить",

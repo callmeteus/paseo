@@ -126,7 +126,14 @@ async function resolveDraftRouterTarget(
     const router = settings?.defaultRouterId
       ? settings.routers.find((entry) => entry.id === settings.defaultRouterId)
       : undefined;
-    if (!router || router.mode !== "distribution") return null;
+    if (!router) return null;
+    // A fallback router starts each new chat on its first configured target.
+    if (router.mode === "fallback") {
+      return {
+        provider: router.targets[0]?.provider ?? "",
+        model: router.targets[0]?.model ?? null,
+      };
+    }
     const selection = selectDistributionTarget({
       router,
       cursor: draftRouterCursor,
@@ -199,8 +206,8 @@ async function submitDraftCreateRequest(input: {
     autoSubmitConfig,
     effectiveModeId: composerState.effectiveModeId,
   });
-  // A default distribution router overrides the draft's provider/model so new
-  // chats rotate across the configured targets.
+  // A default router overrides the draft's provider/model so new chats rotate
+  // (distribution) or start at the top of the chain (fallback).
   const routerTarget = autoSubmitConfig ? null : await resolveDraftRouterTarget(client);
   const route = resolveDraftRoute({
     provider,

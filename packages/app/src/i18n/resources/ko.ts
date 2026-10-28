@@ -1685,6 +1685,7 @@ export const ko: TranslationResources = {
     error: "오류",
     defaultModel: "기본값",
     profiles: "프로필",
+    routers: "라우터",
     providers: "제공자",
     model: "모델",
     editProfiles: "편집",

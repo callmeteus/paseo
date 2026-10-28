@@ -63,6 +63,8 @@ interface CombinedModelSelectorProps {
     glyphSize: number;
     showCaret: boolean;
   };
+  /** Called after the user picks (or clears) a router in the browser. */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 export function CombinedModelSelector({
@@ -87,6 +89,7 @@ export function CombinedModelSelector({
   desktopMinWidth,
   triggerFill = false,
   toolbar,
+  onRouterPicked,
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -203,6 +206,7 @@ export function CombinedModelSelector({
       onRetryProvider={onRetryProvider}
       isRetryingProvider={isRetryingProvider}
       scrolling={modelBrowserScrolling}
+      onRouterPicked={onRouterPicked}
     />
   ) : (
     <View style={styles.sheetLoadingState}>

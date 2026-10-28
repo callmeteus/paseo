@@ -1675,6 +1675,7 @@ export const ar: TranslationResources = {
     error: "خطأ",
     defaultModel: "تقصير",
     profiles: "الملفات الشخصية",
+    routers: "الموجّهات",
     providers: "المزودون",
     model: "النموذج",
     editProfiles: "تحرير",

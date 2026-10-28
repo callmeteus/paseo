@@ -43,6 +43,7 @@ interface CompactModelSheetProps {
   serverId?: string | null;
   glyphSize: number;
   canSwitchProvider: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
   children: ReactNode;
 }
 
@@ -95,6 +96,7 @@ export function CompactModelSheet({
   serverId = null,
   glyphSize,
   canSwitchProvider,
+  onRouterPicked,
   children,
 }: CompactModelSheetProps) {
   const { t } = useTranslation();
@@ -320,6 +322,7 @@ export function CompactModelSheet({
             scrolling={modelBrowserScrolling}
             searchAllOnFocus={usesBottomSheet}
             rootBrowseContent={usesBottomSheet ? mobileRootContent : undefined}
+            onRouterPicked={onRouterPicked}
           />
         </View>
         {!usesBottomSheet ? (

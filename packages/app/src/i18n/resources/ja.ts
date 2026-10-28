@@ -1692,6 +1692,7 @@ export const ja: TranslationResources = {
     error: "エラー",
     defaultModel: "デフォルト",
     profiles: "プロファイル",
+    routers: "ルーター",
     providers: "プロバイダー",
     model: "モデル",
     editProfiles: "編集",
