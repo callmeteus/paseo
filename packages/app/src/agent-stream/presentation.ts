@@ -83,6 +83,10 @@ export function createStreamPresentation() {
       const text = localizeGoalNotice(item.text);
       return text === item.text ? [item] : [{ ...item, text }];
     }
+    if (item.kind === "notification") {
+      const message = localizeGoalNotice(item.message);
+      return message === item.message ? [item] : [{ ...item, message }];
+    }
     return [item];
   }
 

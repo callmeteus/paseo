@@ -2748,8 +2748,9 @@ export class AgentManager {
     if (previousCount >= AgentManager.MAX_GOAL_AUTO_CONTINUATIONS) {
       this.goalAutoContinueCounts.delete(agentId);
       void this.appendTimelineItem(agentId, {
-        type: "assistant_message",
-        text: formatGoalContinuationLimit(AgentManager.MAX_GOAL_AUTO_CONTINUATIONS),
+        type: "notification",
+        level: "warning",
+        message: formatGoalContinuationLimit(AgentManager.MAX_GOAL_AUTO_CONTINUATIONS),
       });
       return;
     }
@@ -2783,8 +2784,9 @@ export class AgentManager {
       this.clearAgentGoal(agent);
       this.goalAutoContinueCounts.delete(agentId);
       await this.appendTimelineItem(agentId, {
-        type: "assistant_message",
-        text: formatGoalComplete(goal),
+        type: "notification",
+        level: "info",
+        message: formatGoalComplete(goal),
       });
       return;
     }
@@ -2845,7 +2847,7 @@ export class AgentManager {
         emit({
           type: "timeline",
           provider: agent.provider,
-          item: { type: "assistant_message", text },
+          item: { type: "notification", level: "info", message: text },
         });
       },
     };

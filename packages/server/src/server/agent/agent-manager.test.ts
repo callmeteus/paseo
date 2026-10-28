@@ -12455,10 +12455,10 @@ test("daemon-level goal auto-continues after a completed turn and stops on the c
       { timeout: 10_000, interval: 100 },
     );
     const items = manager.fetchTimeline(agent.id, { direction: "tail", limit: 10 }).rows;
-    const lastAssistant = items
+    const lastNotice = items
       .map((row) => row.item)
-      .findLast((item) => item.type === "assistant_message");
-    expect(lastAssistant && "text" in lastAssistant ? lastAssistant.text : "").toContain(
+      .findLast((item) => item.type === "notification");
+    expect(lastNotice && "message" in lastNotice ? lastNotice.message : "").toContain(
       "Goal complete: probe the network",
     );
   } finally {
@@ -12495,7 +12495,7 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
     const statusAnswer = waitForAgentStream(
       manager,
       agent.id,
-      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+      (event) => event.type === "timeline" && event.item.type === "notification",
     );
     expect(await startAgentRun(manager, agent.id, "/goal", logger)).toEqual({
       disposition: "out_of_band",
@@ -12503,7 +12503,7 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
     expect(await statusAnswer).toEqual({
       type: "timeline",
       provider: "codex",
-      item: { type: "assistant_message", text: "Goal (active): make the build pass" },
+      item: { type: "notification", level: "info", message: "Goal (active): make the build pass" },
     });
     // A control subcommand must not reach the provider as a turn.
     expect(session!.prompts).toHaveLength(1);
@@ -12511,7 +12511,7 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
     const pausedAnswer = waitForAgentStream(
       manager,
       agent.id,
-      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+      (event) => event.type === "timeline" && event.item.type === "notification",
     );
     expect(await startAgentRun(manager, agent.id, "/goal pause", logger)).toEqual({
       disposition: "out_of_band",
@@ -12532,7 +12532,7 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
     const resumedAnswer = waitForAgentStream(
       manager,
       agent.id,
-      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+      (event) => event.type === "timeline" && event.item.type === "notification",
     );
     expect(await startAgentRun(manager, agent.id, "/goal resume", logger)).toEqual({
       disposition: "out_of_band",
@@ -12565,7 +12565,7 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
     const clearedAnswer = waitForAgentStream(
       manager,
       agent.id,
-      (event) => event.type === "timeline" && event.item.type === "assistant_message",
+      (event) => event.type === "timeline" && event.item.type === "notification",
     );
     expect(await startAgentRun(manager, agent.id, "/goal clear", logger)).toEqual({
       disposition: "out_of_band",
