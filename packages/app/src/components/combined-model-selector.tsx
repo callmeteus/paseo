@@ -350,7 +350,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     flexShrink: 1,
     color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize["2xs"],
     fontWeight: theme.fontWeight.normal,
   },
   customTriggerWrapper: {

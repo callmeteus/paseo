@@ -575,6 +575,7 @@ export const SPACING = {
 } as const;
 
 export const FONT_SIZE = {
+  "2xs": 10,
   code: 12,
   content: 15,
   sm: 12,
