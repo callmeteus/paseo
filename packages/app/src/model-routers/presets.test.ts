@@ -27,15 +27,16 @@ function entry(
 const zeroCost = { cost: { input: 0, output: 0 } };
 
 describe("router presets", () => {
-  it("orders premium free targets by tier and keeps only free candidates", () => {
+  it("orders premium free targets by tier and keeps only closed-weight labs", () => {
     const preset = buildPremiumFreePreset([
       entry("opencode", [
         { id: "openrouter/qwen/qwen3-coder:free", label: "Qwen3 Coder (free)", metadata: zeroCost },
         {
-          id: "openrouter/openai/gpt-oss-120b:free",
-          label: "GPT-OSS 120B (free)",
+          id: "openrouter/anthropic/claude-haiku:free",
+          label: "Claude Haiku (free)",
           metadata: zeroCost,
         },
+        { id: "openrouter/openai/gpt-5:free", label: "GPT-5 (free)", metadata: zeroCost },
         { id: "openrouter/anthropic/claude-opus-9", label: "Claude Opus 9" },
       ]),
     ]);
@@ -43,8 +44,8 @@ describe("router presets", () => {
     expect(preset).not.toBeNull();
     expect(preset!.mode).toBe("fallback");
     expect(preset!.targets).toEqual([
-      { provider: "opencode", model: "openrouter/qwen/qwen3-coder:free" },
-      { provider: "opencode", model: "openrouter/openai/gpt-oss-120b:free" },
+      { provider: "opencode", model: "openrouter/openai/gpt-5:free" },
+      { provider: "opencode", model: "openrouter/anthropic/claude-haiku:free" },
     ]);
   });
 
@@ -52,12 +53,20 @@ describe("router presets", () => {
     const preset = buildOpenWeightFreePreset([
       entry("opencode", [
         { id: "openrouter/meta/llama-4:free", label: "Llama 4 (free)", metadata: zeroCost },
+        { id: "openrouter/xiaomi/mimo-7b:free", label: "MiMo 7B (free)", metadata: zeroCost },
+        {
+          id: "openrouter/deepseek/deepseek-v4:free",
+          label: "DeepSeek V4 (free)",
+          metadata: zeroCost,
+        },
         { id: "openrouter/openai/gpt-5:free", label: "GPT-5 (free)", metadata: zeroCost },
       ]),
     ]);
 
     expect(preset?.targets).toEqual([
+      { provider: "opencode", model: "openrouter/deepseek/deepseek-v4:free" },
       { provider: "opencode", model: "openrouter/meta/llama-4:free" },
+      { provider: "opencode", model: "openrouter/xiaomi/mimo-7b:free" },
     ]);
   });
 

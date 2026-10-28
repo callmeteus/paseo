@@ -14,7 +14,7 @@ export interface RouterModelCandidate {
 const MAX_PRESET_TARGETS = 32;
 
 const OPEN_WEIGHT_PATTERN =
-  /(llama|qwen|deepseek|mistral|mixtral|gpt-oss|kimi|glm|gemma|phi-?\d|nemotron|minimax|hermes|falcon|yi-|olmo|granite|smollm)/i;
+  /(llama|qwen|deepseek|mistral|mixtral|gpt-oss|kimi|glm|gemma|phi-?\d|nemotron|minimax|mimo|hermes|falcon|yi-|olmo|granite|smollm|seed-oss|hunyuan|exaone|ernie|dots|step-?\d)/i;
 
 const FREE_HINT_PATTERN = /(?:^|[^a-z])(free|gratis|gratuito)(?:[^a-z]|$)|:free\b/i;
 
@@ -22,20 +22,23 @@ const FREE_HINT_PATTERN = /(?:^|[^a-z])(free|gratis|gratuito)(?:[^a-z]|$)|:free\
 const FREE_TIER_PROVIDERS = new Set<string>();
 
 /**
- * Priority tiers used to order "Premium Free" targets. Earlier tiers win; a
- * model that matches no tier still participates after all tiers.
+ * Priority tiers for "Premium Free": free models from premium, closed-weight
+ * labs only. Open-weight models are excluded from this preset entirely and
+ * belong to "Open Weight Free".
  */
 const PREMIUM_TIERS: RegExp[] = [
-  /(gpt-5|claude-(?:opus|sonnet)|gemini-2\.5-pro|gemini-3)/i,
-  /(claude-haiku|gpt-4\.1|gpt-5-mini|gemini-2\.5-flash|deepseek-v3)/i,
-  /(qwen|kimi|glm|minimax|nemotron)/i,
-  /(gpt-oss|llama|mistral|gemma)/i,
+  /(gpt-5(?!-(?:mini|nano))|claude-(?:opus|sonnet)|gemini-(?:3|2\.5-pro)|grok-(?:4|5)|composer)/i,
+  /(claude-haiku|gpt-4\.1|gpt-5-(?:mini|nano)|gemini-2\.5-flash|o[34]-(?:mini|pro))/i,
 ];
 
+/**
+ * Priority tiers for "Open Weight Free". Frontier open-weight families first,
+ * then large general models, then small/edge models.
+ */
 const OPEN_WEIGHT_TIERS: RegExp[] = [
   /(deepseek|qwen|kimi|glm|minimax)/i,
-  /(gpt-oss|llama-?4|nemotron)/i,
-  /(llama|mistral|gemma|phi)/i,
+  /(mimo|nemotron-ultra|gpt-oss|llama-?4|gemma-4|mistral-large)/i,
+  /(nemotron|llama|mistral|gemma|phi|smollm|hermes|granite|olmo)/i,
 ];
 
 function readCostIsZero(metadata: unknown): boolean {
@@ -119,7 +122,9 @@ export interface RouterPreset {
 export function buildPremiumFreePreset(
   entries: readonly ProviderSnapshotEntry[],
 ): RouterPreset | null {
-  const candidates = collectRouterCandidates(entries).filter((candidate) => candidate.isFree);
+  const candidates = collectRouterCandidates(entries).filter(
+    (candidate) => candidate.isFree && !candidate.isOpenWeight,
+  );
   if (candidates.length === 0) return null;
   return {
     id: `preset-premium-free-${Date.now()}`,
