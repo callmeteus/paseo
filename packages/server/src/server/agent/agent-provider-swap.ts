@@ -113,6 +113,23 @@ function buildPortedSystemPrompt(
   return prompt.length > 0 ? clampSystemPrompt(prompt) : undefined;
 }
 
+function latestTimestamp(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+
+function lastUserMessageTimestamp(rows: readonly AgentTimelineRow[]): string | null {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.item.type === "user_message") return row.timestamp;
+  }
+  return null;
+}
+
 export class SwapProviderError extends Error {
   constructor(
     public readonly code: string,
@@ -166,14 +183,10 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
   } = existing.config ?? {};
 
   const portedRows = input.portedTimeline ?? [];
-  const lastPortedUserMessageAt =
-    [...portedRows].reverse().find((row) => row.item.type === "user_message")?.timestamp ?? null;
-  const lastUserMessageAt =
-    lastPortedUserMessageAt && existing.lastUserMessageAt
-      ? lastPortedUserMessageAt > existing.lastUserMessageAt
-        ? lastPortedUserMessageAt
-        : existing.lastUserMessageAt
-      : (lastPortedUserMessageAt ?? existing.lastUserMessageAt ?? null);
+  const lastUserMessageAt = latestTimestamp(
+    existing.lastUserMessageAt ?? null,
+    lastUserMessageTimestamp(portedRows),
+  );
 
   const newRecord: StoredAgentRecord = {
     ...existing,
