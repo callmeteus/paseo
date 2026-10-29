@@ -1347,6 +1347,47 @@ test("ensureConnected reconnects immediately without leaving the scheduled retry
   }
 });
 
+test("forceReconnect bypasses the scheduled reconnect delay", async () => {
+  useHeartbeatClock();
+  try {
+    const first = createMockTransport();
+    const second = createMockTransport();
+    const transports = [first, second];
+    let transportIndex = 0;
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_forced_reconnect",
+      reconnect: { enabled: true, baseDelayMs: 60_000, maxDelayMs: 60_000 },
+      transportFactory: () => {
+        const transport = transports[transportIndex];
+        if (!transport) throw new Error("unexpected extra reconnect");
+        transportIndex += 1;
+        return transport.transport;
+      },
+    });
+    clients.push(client);
+
+    const initialConnect = client.connect();
+    first.triggerOpen();
+    await initialConnect;
+    first.triggerClose({ code: 1001, reason: "tab hidden" });
+    expect(client.getConnectionState().status).toBe("disconnected");
+
+    client.forceReconnect();
+    expect(client.getConnectionState().status).toBe("connecting");
+    expect(transportIndex).toBe(2);
+
+    second.triggerOpen();
+    expect(client.getConnectionState().status).toBe("connected");
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(client.getConnectionState().status).toBe("connected");
+    expect(transportIndex).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("connect during a scheduled retry reconnects immediately without leaving the retry armed", async () => {
   useHeartbeatClock();
   try {
@@ -7015,10 +7056,12 @@ test.each([
           id: "claude",
           sourceId: "claude",
           sourceLabel: "Claude",
+          // Git checks this file out with CRLF on Windows while the embedded
+          // fallback uses LF. Line endings are not part of the icon identity.
           icon: readFileSync(
             new URL("../../../plugins/claude-usage-source/icon.svg", import.meta.url),
             "utf8",
-          ),
+          ).replace(/\r\n?/g, "\n"),
           account: {},
           fetchedAt: "2026-09-30T00:00:00.000Z",
           report,

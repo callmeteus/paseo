@@ -1437,7 +1437,11 @@ export class DaemonClient {
     return this.connectPromise;
   }
 
-  private async attemptConnect(): Promise<void> {
+  private canStartConnect(force: boolean): boolean {
+    return force || this.connectionState.status !== "connecting";
+  }
+
+  private async attemptConnect(force = false): Promise<void> {
     if (this.connectionState.status === "disposed") {
       this.rejectConnect(new Error("Daemon client is disposed"));
       return;
@@ -1447,7 +1451,7 @@ export class DaemonClient {
       return;
     }
 
-    if (this.connectionState.status === "connecting") {
+    if (!this.canStartConnect(force)) {
       return;
     }
     // This attempt supersedes any retry the last disconnect scheduled. Left
@@ -1689,13 +1693,43 @@ export class DaemonClient {
       if (options?.verify) this.verifyConnection();
       return;
     }
-    if (this.connectionState.status === "connecting") return;
+    if (this.connectionState.status === "connecting") {
+      if (!this.connectPromise && !this.reconnectTimeout) this.forceReconnect();
+      return;
+    }
     if (this.connectPromise) {
       this.attemptConnect();
       return;
     }
     void this.connect().catch((error: unknown) =>
       this.logger.debug({ err: error }, "Connection attempt ended"),
+    );
+  }
+
+  /**
+   * Restarts the connection immediately, bypassing reconnect backoff.
+   *
+   * Browser tabs suspend timers while hidden, so the scheduled reconnect can
+   * arrive minutes late after the tab regains focus. Foreground recovery calls
+   * this to reopen the socket without waiting for that timer.
+   */
+  forceReconnect(): void {
+    if (this.connectionState.status === "disposed") return;
+    this.shouldReconnect = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    if (this.connectionState.status === "connected") {
+      this.verifyConnection();
+      return;
+    }
+    // A real attempt is already in flight; let its connect timeout own it.
+    if (this.connectPromise) return;
+    this.reconnectAttempt = 0;
+    this.disposeTransport(1001, "Forced reconnect");
+    void this.attemptConnect(true).catch((error: unknown) =>
+      this.logger.debug({ err: error }, "Forced reconnect attempt ended"),
     );
   }
 
