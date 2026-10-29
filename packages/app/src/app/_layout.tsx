@@ -69,6 +69,7 @@ import {
   shouldRunStartupGiveUpTimer,
   startHostRuntimeBootstrap,
   bindHostRuntimeAppState,
+  bindHostRuntimeWebVisibility,
   type StartupBlocker,
 } from "@/navigation/host-runtime-bootstrap";
 import { registerWorkspaceRouteNavigationRef } from "@/navigation/workspace-route-navigation";
@@ -256,7 +257,12 @@ async function shouldStartBuiltInDaemon(): Promise<boolean> {
 function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const store = getHostRuntimeStore();
-    return bindHostRuntimeAppState(store, AppState);
+    const disposeAppState = bindHostRuntimeAppState(store, AppState);
+    const disposeWebVisibility = bindHostRuntimeWebVisibility(store);
+    return () => {
+      disposeAppState();
+      disposeWebVisibility();
+    };
   }, []);
 
   useEffect(() => {

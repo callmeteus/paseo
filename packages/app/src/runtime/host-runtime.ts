@@ -238,6 +238,10 @@ export interface HostRuntimeStartOptions {
 }
 
 const PROBE_TICK_MS = 2_000;
+// The client owns a 15s connect deadline. If the machine is still connecting
+// after that, the attempt is wedged (typically a throttled browser tab), so the
+// controller restarts the connection instead of waiting forever.
+const CONNECTING_WATCHDOG_MS = 20_000;
 const PROBE_STEADY_MS = 10_000;
 const PROBE_MAX_BACKOFF_MS = 30_000;
 const PROBE_INACTIVE_WHILE_ONLINE_MS = 120_000;
@@ -729,6 +733,7 @@ export class HostRuntimeController {
   private clientIdHash: string | null = null;
   private switchRequestVersion = 0;
   private probeRequestVersion = 0;
+  private connectingSince: number | null = null;
   private probeCycleInFlight: Promise<void> | null = null;
   private readonly authRejectedConnectionIds = new Set<string>();
 
@@ -935,6 +940,28 @@ export class HostRuntimeController {
         ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
         probeByConnectionId: new Map(),
       });
+      return;
+    }
+
+    if (
+      this.connectionMachineState.tag === "connecting" &&
+      this.connectingSince !== null &&
+      Date.now() - this.connectingSince >= CONNECTING_WATCHDOG_MS
+    ) {
+      const stuckConnectionId = this.snapshot.activeConnectionId;
+      this.connectingSince = null;
+      watchdog?.record("host.connecting_watchdog", {
+        host: this.host.serverId,
+        connection: stuckConnectionId ?? "none",
+      });
+      if (stuckConnectionId && findConnectionById(this.host, stuckConnectionId)) {
+        void this.switchToConnection({ connectionId: stuckConnectionId }).catch((error) => {
+          watchdog?.record("host.connecting_watchdog_failed", {
+            host: this.host.serverId,
+            error: toErrorMessage(error),
+          });
+        });
+      }
       return;
     }
 
@@ -1247,6 +1274,14 @@ export class HostRuntimeController {
     if (previousState.tag !== "online" && nextState.tag === "online") {
       this.connectionEpoch += 1;
     }
+    if (
+      nextState.tag === "connecting" &&
+      (previousState.tag !== "connecting" || event.type === "select_connection")
+    ) {
+      this.connectingSince = Date.now();
+    } else if (nextState.tag !== "connecting") {
+      this.connectingSince = null;
+    }
     this.connectionMachineState = nextState;
     this.logConnectionTransition({
       from: previousState.tag,
@@ -1466,6 +1501,24 @@ export class HostRuntimeController {
     try {
       if (!existingClient) await client.connect();
       if (!this.isCurrentSwitchRequest(requestVersion) || this.activeClient !== client) return;
+      // connect() resolves only after the daemon hello, so the client is already
+      // connected. Apply that state before subscribing: the initial "connected"
+      // emission can otherwise land before the listener exists and leave the
+      // runtime stuck in "connecting".
+      if (client.getConnectionState().status === "connected") {
+        this.learnRelaySecurity(client, connection.id);
+        this.applyConnectionEvent({
+          type: "client_state",
+          state: { status: "connected" },
+          lastError: client.lastError,
+        });
+        this.updateSnapshot({
+          ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
+          ...this.buildAgentDirectoryStatusPatch(),
+          client,
+          authFailureReason: null,
+        });
+      }
       this.unsubscribeClientHandlers =
         this.deps.mountClientHandlers?.({ client, host: this.host, connection }) ?? null;
       this.unsubscribeClientStatus = client.subscribeConnectionStatus((state) => {
@@ -2730,6 +2783,7 @@ export class HostRuntimeStore {
     }
 
     this.ensureConnectedAll({ verify: true });
+    void this.runProbeCycleNow().catch(() => undefined);
   }
 
   runProbeCycleNow(serverId?: string): Promise<void> {

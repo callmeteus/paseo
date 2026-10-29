@@ -7,6 +7,7 @@ import {
   shouldRunStartupGiveUpTimer,
   startHostRuntimeBootstrap,
   bindHostRuntimeAppState,
+  bindHostRuntimeWebVisibility,
 } from "./host-runtime-bootstrap";
 import type { DaemonStartResult, StartDaemonIfEnabledInput } from "@/runtime/daemon-start-service";
 
@@ -427,4 +428,58 @@ describe("host runtime app lifecycle", () => {
       expect(subscribed).toBe(false);
     },
   );
+});
+
+describe("host runtime web visibility", () => {
+  function createTargets(visibilityState: "visible" | "hidden") {
+    const listeners = new Map<string, () => void>();
+    const target = {
+      addEventListener: (event: string, handler: () => void) => {
+        listeners.set(event, handler);
+      },
+      removeEventListener: (event: string) => {
+        listeners.delete(event);
+      },
+    };
+    return {
+      listeners,
+      targets: {
+        document: { ...target, visibilityState },
+        window: target,
+      },
+    };
+  }
+
+  it("reconnects when the tab becomes visible or the window regains focus", () => {
+    const visibility: boolean[] = [];
+    const { listeners, targets } = createTargets("visible");
+    const dispose = bindHostRuntimeWebVisibility(
+      { setAppVisible: (visible) => visibility.push(visible) },
+      targets,
+    );
+
+    expect(visibility).toEqual([true]);
+    listeners.get("visibilitychange")?.();
+    listeners.get("focus")?.();
+    listeners.get("pageshow")?.();
+    listeners.get("online")?.();
+    expect(visibility).toEqual([true, true, true, true, true]);
+
+    dispose();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("ignores visibility changes while the document is hidden", () => {
+    const visibility: boolean[] = [];
+    const { listeners, targets } = createTargets("hidden");
+    const dispose = bindHostRuntimeWebVisibility(
+      { setAppVisible: (visible) => visibility.push(visible) },
+      targets,
+    );
+
+    expect(visibility).toEqual([]);
+    listeners.get("visibilitychange")?.();
+    expect(visibility).toEqual([]);
+    dispose();
+  });
 });

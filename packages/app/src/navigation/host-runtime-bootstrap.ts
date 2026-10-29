@@ -262,3 +262,58 @@ export function bindHostRuntimeAppState(
   store.setAppVisible(appState.currentState === "active");
   return () => subscription.remove();
 }
+
+export interface HostRuntimeVisibilityTarget {
+  addEventListener(event: string, handler: () => void): void;
+  removeEventListener(event: string, handler: () => void): void;
+}
+
+export interface HostRuntimeWebVisibilityTargets {
+  document: HostRuntimeVisibilityTarget & { visibilityState?: string };
+  window: HostRuntimeVisibilityTarget;
+}
+
+function resolveDefaultWebVisibilityTargets(): HostRuntimeWebVisibilityTargets | null {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    return null;
+  }
+  return {
+    document: document as unknown as HostRuntimeWebVisibilityTargets["document"],
+    window: window as unknown as HostRuntimeWebVisibilityTargets["window"],
+  };
+}
+
+/**
+ * Browsers throttle or suspend background-tab timers, so a reconnect scheduled
+ * while the tab was hidden can fire minutes late. React Native's AppState does
+ * not reliably reflect `visibilitychange` on web, so bind the DOM events that
+ * mean "the user is back" and reconnect immediately.
+ */
+export function bindHostRuntimeWebVisibility(
+  store: { setAppVisible: (visible: boolean) => void },
+  targets: HostRuntimeWebVisibilityTargets | null = resolveDefaultWebVisibilityTargets(),
+): () => void {
+  if (!targets) {
+    return () => {};
+  }
+
+  const { document: doc, window: win } = targets;
+  const notifyVisible = () => store.setAppVisible(true);
+  const handleVisibilityChange = () => {
+    if (doc.visibilityState === "hidden") return;
+    notifyVisible();
+  };
+
+  doc.addEventListener("visibilitychange", handleVisibilityChange);
+  win.addEventListener("focus", notifyVisible);
+  win.addEventListener("pageshow", notifyVisible);
+  win.addEventListener("online", notifyVisible);
+  if (doc.visibilityState !== "hidden") notifyVisible();
+
+  return () => {
+    doc.removeEventListener("visibilitychange", handleVisibilityChange);
+    win.removeEventListener("focus", notifyVisible);
+    win.removeEventListener("pageshow", notifyVisible);
+    win.removeEventListener("online", notifyVisible);
+  };
+}

@@ -59,6 +59,7 @@ class FakeDaemonClient {
   relaySecurityFloor: "legacy" | "protected" | undefined = undefined;
   private state: ConnectionState = { status: "idle" };
   private listeners = new Set<(status: ConnectionState) => void>();
+  public suppressInitialStatusEmit = false;
   private error: string | null = null;
   authFailureReason: "password_required" | "incorrect_password" | null = null;
   private heartbeatRttMs: number | null = null;
@@ -206,7 +207,7 @@ class FakeDaemonClient {
 
   subscribeConnectionStatus(listener: (status: ConnectionState) => void): () => void {
     this.listeners.add(listener);
-    listener(this.state);
+    if (!this.suppressInitialStatusEmit) listener(this.state);
     return () => {
       this.listeners.delete(listener);
     };
@@ -908,6 +909,35 @@ describe("HostRuntimeController", () => {
     expect(controller.getSnapshot().activeConnectionId).toBe("direct:lan:17000");
     expect(controller.getSnapshot().connectionStatus).toBe("connecting");
     expect(controller.getSnapshot().agentDirectoryStatus).toBe("initial_loading");
+  });
+
+  it("marks a connected client online even when the initial status event was missed", async () => {
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    const client = new FakeDaemonClient();
+    client.suppressInitialStatusEmit = true;
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => client as unknown as DaemonClient,
+        connectToDaemon: async () => {
+          throw new Error("probe unavailable");
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+
+    await controller.activateConnection({ connectionId: "direct:lan:17000" });
+
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+    expect(controller.getSnapshot().client).toBe(client);
   });
 
   it("passes resolved client id into created active clients", async () => {
