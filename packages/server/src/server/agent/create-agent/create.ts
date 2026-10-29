@@ -49,6 +49,8 @@ export interface CreateAgentFromSessionInput {
   agentId?: string;
   config: AgentSessionConfig;
   workspaceId: string;
+  /** Model router bound to the new chat; null/undefined means no fallback. */
+  modelRouterId?: string | null;
   initialPrompt?: string;
   source?: AgentPromptSource;
   clientMessageId?: string;
@@ -255,6 +257,7 @@ async function resolveSessionCreateAgent(
       // provider session either. Same as the daemon's own ephemeral helpers.
       ...(sessionConfig.internal ? { persistSession: false } : {}),
       workspaceId: requireResolvedWorkspaceId(workspaceId),
+      modelRouterId: input.modelRouterId ?? null,
     },
     prompt: hasPromptContent ? prompt : undefined,
     source: input.source,

@@ -8,6 +8,7 @@ import {
   type ModelRouterTarget,
 } from "@getpaseo/protocol/model-router";
 import { applyProviderSwitch } from "@/composer/agent-controls/apply-provider-switch";
+import { getProviderSwitch } from "@/composer/agent-controls/pending-provider-switch";
 import { useToast } from "@/contexts/toast-context";
 import { selectAgentSentMessages, useSessionStore } from "@/stores/session-store";
 import { generateMessageId } from "@/types/stream";
@@ -26,6 +27,8 @@ interface RoutedAgent {
   provider: string;
   model?: string | null;
   workspaceId?: string | null;
+  /** Router bound to the chat; unbound chats never fall back. */
+  modelRouterId?: string | null;
 }
 
 interface PortContext {
@@ -108,11 +111,14 @@ async function repairCorruptedSession(
 /** Moves the chat to the next router target and carries the prompt over. */
 async function portToNextTarget(context: PortContext): Promise<void> {
   const { client, serverId, agent, lastUserText } = context;
+  const boundRouterId = agent.modelRouterId?.trim();
+  if (!boundRouterId) return;
+  // A staged target pick wins over the watchdog: porting now would replace the
+  // conversation the user is about to switch themselves.
+  if (getProviderSwitch(serverId, agent.id)) return;
   const { config } = await client.getDaemonConfig();
   const settings = config.modelRouters;
-  const router = settings?.defaultRouterId
-    ? settings.routers.find((entry) => entry.id === settings.defaultRouterId)
-    : undefined;
+  const router = settings?.routers.find((entry) => entry.id === boundRouterId);
   if (!router || router.mode !== "fallback") return;
   const next: ModelRouterTarget | null = selectFallbackTarget({
     router,
@@ -132,9 +138,11 @@ async function portToNextTarget(context: PortContext): Promise<void> {
     agentId: agent.id,
     workspaceId: agent.workspaceId ?? null,
     pending: {
+      kind: "model",
       targetServerId: serverId,
       provider: next.provider,
       modelId: next.model ?? "",
+      clearRouter: true,
     },
     persistPreference: async () => {},
   });
@@ -198,6 +206,7 @@ function handleRouterFailure(input: RouterFailureHandlerInput): void {
     provider,
     model: liveAgent.model ?? null,
     workspaceId: liveAgent.workspaceId ?? null,
+    modelRouterId: liveAgent.modelRouterId ?? null,
   };
 
   if (crash) {

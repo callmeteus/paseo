@@ -72,7 +72,7 @@ export function createMarkdownStyles(
       },
       code: {
         fontFamily: theme.fontFamily.mono === "ui-monospace" && !isWeb ? "" : theme.fontFamily.mono,
-        fontScale: theme.fontSize.code / fontSize,
+        fontSize: theme.fontSize.code,
         color: theme.colors.foreground,
         backgroundColor: theme.colors.surface2,
         borderColor: "transparent",

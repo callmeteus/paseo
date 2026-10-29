@@ -34,7 +34,10 @@ import {
 } from "@/composer/draft/workspace-tab-core";
 import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type {
+  DaemonClient,
+  CreateAgentRequestOptions,
+} from "@getpaseo/client/internal/daemon-client";
 import type { WorkspaceComposerAttachment } from "@/attachments/types";
 import {
   useDraftWorkspaceAttachmentScopeKey,
@@ -118,7 +121,7 @@ function resolveDraftModeId(input: {
 
 async function resolveDraftRouterTarget(
   client: DaemonClient | null,
-): Promise<{ provider: string; model: string | null } | null> {
+): Promise<{ routerId: string; provider: string; model: string | null } | null> {
   if (!client) return null;
   try {
     const { config } = await client.getDaemonConfig();
@@ -130,6 +133,7 @@ async function resolveDraftRouterTarget(
     // A fallback router starts each new chat on its first configured target.
     if (router.mode === "fallback") {
       return {
+        routerId: router.id,
         provider: router.targets[0]?.provider ?? "",
         model: router.targets[0]?.model ?? null,
       };
@@ -141,7 +145,11 @@ async function resolveDraftRouterTarget(
     });
     if (!selection) return null;
     draftRouterCursor = selection.cursor;
-    return { provider: selection.target.provider, model: selection.target.model ?? null };
+    return {
+      routerId: router.id,
+      provider: selection.target.provider,
+      model: selection.target.model ?? null,
+    };
   } catch {
     return null;
   }
@@ -156,6 +164,28 @@ function resolveDraftRoute(input: {
 }): { provider: string; model: string | undefined } {
   if (!input.routerTarget) return { provider: input.provider, model: input.model };
   return { provider: input.routerTarget.provider, model: input.routerTarget.model ?? undefined };
+}
+function buildDraftCreateOptions(input: {
+  draftId: string;
+  config: ReturnType<typeof buildWorkspaceDraftAgentConfig>;
+  workspaceId: string;
+  routerTarget: { routerId: string } | null;
+  text: string;
+  clientMessageId: string;
+  images?: Awaited<ReturnType<typeof encodeImages>>;
+  attachments?: unknown;
+}): CreateAgentRequestOptions {
+  const attachments = Array.isArray(input.attachments) ? input.attachments : undefined;
+  return {
+    idempotencyKey: input.draftId,
+    config: input.config,
+    workspaceId: input.workspaceId,
+    modelRouterId: input.routerTarget?.routerId ?? null,
+    initialPrompt: input.text,
+    clientMessageId: input.clientMessageId,
+    ...(input.images && input.images.length > 0 ? { images: input.images } : {}),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
+  };
 }
 
 async function submitDraftCreateRequest(input: {
@@ -224,17 +254,17 @@ async function submitDraftCreateRequest(input: {
     featureValues: autoSubmitConfig?.featureValues ?? composerState.featureValues,
   });
 
-  const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
   const imagesData = await encodeImages(images);
-  const options = {
-    idempotencyKey: input.draftId,
+  const options = buildDraftCreateOptions({
+    draftId: input.draftId,
     config,
     workspaceId,
-    initialPrompt: text,
+    routerTarget,
+    text,
     clientMessageId: attempt.clientMessageId,
-    ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
-    ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
-  };
+    images: imagesData,
+    attachments,
+  });
   const creation = useWorkspaceDraftSubmissionStore.getState().creationByDraftId[input.draftId];
   const result = creation ? await creation.retry(options) : await client.createAgent(options);
 

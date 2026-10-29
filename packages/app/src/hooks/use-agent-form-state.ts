@@ -37,6 +37,7 @@ import {
   type ProviderModelsByProvider,
 } from "@/provider-selection/resolve-agent-form";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import type { MaterializedAgentProfile } from "@/agent-profiles";
 
 export type { FormInitialValues } from "@/provider-selection/resolve-agent-form";
@@ -149,6 +150,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   const { serverId, initialValues, workingDir, isVisible = true, isCreateFlow = true } = options;
 
   const { preferences, isLoading: isPreferencesLoading, updatePreferences } = useFormPreferences();
+  const { config, patchConfig } = useDaemonConfig(serverId);
   const preferenceOverlayRef = useRef(new OptimisticFormPreferences(preferences));
 
   useEffect(() => {
@@ -298,6 +300,18 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         providerModels,
         providerPrefs,
       });
+      // A new chat runs on a model or on a router, never both: picking a model
+      // stops the default router from overriding it on creation.
+      if (isCreateFlow && config?.modelRouters?.defaultRouterId) {
+        void patchConfig({
+          modelRouters: {
+            routers: config.modelRouters.routers ?? [],
+            defaultRouterId: null,
+          },
+        }).catch((error: unknown) => {
+          console.warn("[AgentForm] failed to clear the default router", error);
+        });
+      }
       void updateCurrentPreferences((current) =>
         mergeSelectedComposerPreferences({
           preferences: current,
@@ -308,7 +322,15 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         }),
       );
     },
-    [allProviderModels, selectableProviderDefinitionMap, updateCurrentPreferences],
+    [
+      allProviderModels,
+      config?.modelRouters?.defaultRouterId,
+      config?.modelRouters?.routers,
+      isCreateFlow,
+      patchConfig,
+      selectableProviderDefinitionMap,
+      updateCurrentPreferences,
+    ],
   );
 
   const clearProviderSelectionFromUser = useCallback(() => {

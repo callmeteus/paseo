@@ -98,13 +98,22 @@ export interface Agent {
   title: string | null;
   cwd: string;
   workspaceId?: string;
+  /** Model router bound to this chat; absent means it runs on its model only. */
+  modelRouterId?: string | null;
   model: string | null;
   features?: AgentFeature[];
   thinkingOptionId?: string | null;
   /** Daemon-level /goal state; only present while a goal is set. */
   goal?: AgentGoalState | null;
   requiresAttention?: boolean;
-  attentionReason?: "finished" | "error" | "permission" | null;
+  attentionReason?:
+    | "finished"
+    | "error"
+    | "permission"
+    | "question"
+    | "goal-paused"
+    | "goal-complete"
+    | null;
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
   migratedFrom?: AgentMigrationLink;

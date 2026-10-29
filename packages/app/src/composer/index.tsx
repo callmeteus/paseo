@@ -137,6 +137,7 @@ import { applyProviderSwitch } from "@/composer/agent-controls/apply-provider-sw
 import {
   stageProviderSwitch,
   takeProviderSwitch,
+  type PendingProviderSwitch,
 } from "@/composer/agent-controls/pending-provider-switch";
 import {
   finishPortingActivity,
@@ -144,6 +145,7 @@ import {
 } from "@/composer/agent-controls/porting-activity";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
@@ -268,6 +270,101 @@ function resolveGithubSearchEnabled(
   cwd: string,
 ): boolean {
   return isGithubPickerOpen && isConnected && cwd.trim().length > 0;
+}
+
+interface AppliedStagedTarget {
+  client: DaemonClient;
+  serverId: string;
+  agentId: string;
+  switched: boolean;
+  finish?: () => Promise<void>;
+}
+
+/**
+ * Commits the target the user picked before this message. Same-provider picks
+ * apply in place; provider changes port the conversation; a router pick either
+ * starts the port at its first target or just binds the chat.
+ */
+async function applyStagedTarget(input: {
+  client: DaemonClient;
+  serverId: string;
+  agentId: string;
+  workspaceId: string | null;
+  pending: PendingProviderSwitch;
+  currentProvider: string;
+  persistPreference: (provider: string, modelId: string) => Promise<unknown>;
+}): Promise<AppliedStagedTarget> {
+  const { client, serverId, agentId, pending } = input;
+  const onPersistError = (error: unknown) => {
+    console.warn("[Composer] persist ported provider preference failed", error);
+  };
+
+  if (pending.kind === "router") {
+    const { config } = await client.getDaemonConfig();
+    const router = config.modelRouters?.routers.find((entry) => entry.id === pending.routerId);
+    if (!router) {
+      throw new Error(`Router ${pending.routerId} not found`);
+    }
+    if (router.mode !== "fallback") {
+      await client.setAgentModelRouter(agentId, pending.routerId);
+      return { client, serverId, agentId, switched: false };
+    }
+    const first = router.targets[0];
+    if (!first) {
+      throw new Error("This router has no target");
+    }
+    const applied = await applyProviderSwitch({
+      sourceClient: client,
+      sourceServerId: serverId,
+      agentId,
+      workspaceId: input.workspaceId,
+      pending: {
+        kind: "model",
+        targetServerId: pending.targetServerId,
+        provider: first.provider,
+        modelId: first.model ?? "",
+        clearRouter: true,
+        routerId: pending.routerId,
+      },
+      persistPreference: input.persistPreference,
+      onPreferencePersistError: onPersistError,
+    });
+    return {
+      client: applied.client,
+      serverId: applied.serverId,
+      agentId: applied.agentId,
+      switched: true,
+      finish: applied.finalize,
+    };
+  }
+
+  if (pending.targetServerId === serverId && pending.provider === input.currentProvider) {
+    if (pending.modelId) {
+      await client.setAgentModel(agentId, pending.modelId);
+    }
+    if (pending.clearRouter) {
+      await client.setAgentModelRouter(agentId, null);
+    }
+    await input.persistPreference(pending.provider, pending.modelId);
+    return { client, serverId, agentId, switched: false };
+  }
+
+  const applied = await applyProviderSwitch({
+    sourceClient: client,
+    sourceServerId: serverId,
+    agentId,
+    workspaceId: input.workspaceId,
+    pending,
+    persistPreference: input.persistPreference,
+    onPreferencePersistError: onPersistError,
+  });
+  return {
+    client: applied.client,
+    serverId: applied.serverId,
+    agentId: applied.agentId,
+    switched: true,
+    finish: applied.finalize,
+  };
 }
 
 function resolveCheckoutRemoteUrl(
@@ -1726,27 +1823,33 @@ function ComposerContentImpl({
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
 
-      // A staged provider switch is committed here, by the first message after
-      // the pick: porting archives this agent, so doing it on pick would replace
-      // the conversation before the user sent anything.
-      let targetClient = client;
-      let targetServerId = serverId;
-      let resolvedAgentId = targetAgentId;
-      let switched = false;
-      let finishSwitch: (() => Promise<void>) | null = null;
+      // A staged target is committed here, by the first message after the pick:
+      // porting archives this agent, so doing it on pick would replace the
+      // conversation before the user sent anything.
       const pendingSwitch = takeProviderSwitch(serverId, targetAgentId);
+      const currentProvider =
+        useSessionStore.getState().sessions[serverId]?.agents.get(targetAgentId)?.provider ?? "";
       if (pendingSwitch) {
-        startPortingActivity(serverId, targetAgentId, { toProvider: pendingSwitch.provider });
+        startPortingActivity(serverId, targetAgentId, {
+          toProvider: pendingSwitch.kind === "router" ? "router" : pendingSwitch.provider,
+        });
       }
+      let applied: AppliedStagedTarget = {
+        client,
+        serverId,
+        agentId: targetAgentId,
+        switched: false,
+      };
       try {
         if (pendingSwitch) {
           try {
-            const applied = await applyProviderSwitch({
-              sourceClient: client,
-              sourceServerId: serverId,
+            applied = await applyStagedTarget({
+              client,
+              serverId,
               agentId: targetAgentId,
               workspaceId: workspaceId ?? null,
               pending: pendingSwitch,
+              currentProvider,
               persistPreference: (nextProvider, nextModelId) =>
                 updatePreferences((current) =>
                   mergeProviderPreferences({
@@ -1755,15 +1858,7 @@ function ComposerContentImpl({
                     updates: { model: nextModelId || undefined },
                   }),
                 ),
-              onPreferencePersistError: (error) => {
-                console.warn("[Composer] persist ported provider preference failed", error);
-              },
             });
-            targetClient = applied.client;
-            targetServerId = applied.serverId;
-            resolvedAgentId = applied.agentId;
-            finishSwitch = applied.finalize;
-            switched = true;
           } catch (error) {
             stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
             throw error;
@@ -1771,21 +1866,21 @@ function ComposerContentImpl({
         }
 
         await dispatchComposerAgentMessage({
-          client: targetClient,
-          agentId: resolvedAgentId,
+          client: applied.client,
+          agentId: applied.agentId,
           text,
           attachments: sendAttachments,
           attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
             supportsForgeAttachments: supportsForgeSearch,
           }),
           encodeImages,
-          submission: createMessageSubmissionWriter(targetServerId),
+          submission: createMessageSubmissionWriter(applied.serverId),
           activeTurnBehavior,
           activeTurnId:
             activeTurnBehavior === "steer"
               ? (selectAgentTurnPresentation(
-                  useSessionStore.getState().sessions[targetServerId],
-                  resolvedAgentId,
+                  useSessionStore.getState().sessions[applied.serverId],
+                  applied.agentId,
                 ).turnId ?? undefined)
               : undefined,
         });
@@ -1794,13 +1889,13 @@ function ComposerContentImpl({
         // is loaded and its timeline seeded by then, so the new chat does not open
         // empty while the port is still running. Until this point the previous chat
         // stays on screen with a loading porting marker.
-        if (switched) {
+        if (applied.switched) {
           navigateToAgent({
-            serverId: targetServerId,
-            agentId: resolvedAgentId,
+            serverId: applied.serverId,
+            agentId: applied.agentId,
             workspaceId: workspaceId ?? undefined,
           });
-          void finishSwitch?.().catch((error: unknown) => {
+          void applied.finish?.().catch((error: unknown) => {
             console.warn("[Composer] failed to archive the ported source agent", error);
           });
         }

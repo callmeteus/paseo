@@ -1270,6 +1270,19 @@ function appendNotification(state: StreamItem[], entry: NotificationItem): Strea
   return [...state, entry];
 }
 
+function isProviderRetryNotification(item: StreamItem): boolean {
+  return (
+    item.kind === "notification" &&
+    item.sourceType === "error" &&
+    item.message.startsWith("Provider retry")
+  );
+}
+
+function withoutProviderRetryNotifications(state: StreamItem[]): StreamItem[] {
+  const filtered = state.filter((item) => !isProviderRetryNotification(item));
+  return filtered.length === state.length ? state : filtered;
+}
+
 function appendPluginTimelineItem(
   state: StreamItem[],
   item: Extract<AgentTimelineItem, { type: "plugin" }>,
@@ -1604,16 +1617,26 @@ function reduceTimelineEvent(
       );
     }
     case "error": {
+      const message = item.message ?? "Unknown error";
+      // Retry notices are live status, not history. Drop rows written by older
+      // daemons and replace the previous attempt so the transcript shows only
+      // the current retry instead of a growing list.
+      if (message.startsWith("Provider retry") && source !== "live") {
+        return finalizeActiveThoughts(state);
+      }
+      const base = message.startsWith("Provider retry")
+        ? withoutProviderRetryNotifications(state)
+        : state;
       const notification: NotificationItem = {
         kind: "notification",
         sourceType: "error",
-        id: createUniqueTimelineId(state, "error", item.message ?? "", timestamp),
+        id: createUniqueTimelineId(base, "error", message, timestamp),
         ...(timelineCursor ? { timelineCursor } : {}),
         timestamp,
         level: "error",
-        message: item.message ?? "Unknown error",
+        message,
       };
-      return finalizeActiveThoughts(appendNotification(state, notification));
+      return finalizeActiveThoughts(appendNotification(base, notification));
     }
     case "notification": {
       const notification: NotificationItem = {
@@ -1670,6 +1693,7 @@ export function reduceStreamUpdate(
     case "turn_completed":
     case "turn_failed":
     case "turn_canceled":
+      return finalizeActiveThoughts(withoutProviderRetryNotifications(state));
     case "permission_requested":
     case "permission_resolved":
     case "attention_required":

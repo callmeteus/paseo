@@ -56,23 +56,29 @@ describe("requiresProviderPort", () => {
 describe("pending provider switch store", () => {
   it("stages a pick without committing it", () => {
     stageProviderSwitch("srv_a", "agent_1", {
+      kind: "model",
       targetServerId: "srv_a",
       provider: "cline",
       modelId: "cline-pro",
+      clearRouter: false,
     });
 
     expect(getProviderSwitch("srv_a", "agent_1")).toEqual({
+      kind: "model",
       targetServerId: "srv_a",
       provider: "cline",
       modelId: "cline-pro",
+      clearRouter: false,
     });
   });
 
   it("clears the staged pick when the user reverts to the current provider", () => {
     stageProviderSwitch("srv_a", "agent_1", {
+      kind: "model",
       targetServerId: "srv_a",
       provider: "cline",
       modelId: "cline-pro",
+      clearRouter: false,
     });
 
     clearProviderSwitch("srv_a", "agent_1");
@@ -82,24 +88,30 @@ describe("pending provider switch store", () => {
 
   it("takes the pick exactly once so one message commits one port", () => {
     stageProviderSwitch("srv_a", "agent_1", {
+      kind: "model",
       targetServerId: "srv_b",
       provider: "kilo",
       modelId: "kilo-max",
+      clearRouter: false,
     });
 
     expect(takeProviderSwitch("srv_a", "agent_1")).toEqual({
+      kind: "model",
       targetServerId: "srv_b",
       provider: "kilo",
       modelId: "kilo-max",
+      clearRouter: false,
     });
     expect(takeProviderSwitch("srv_a", "agent_1")).toBeNull();
   });
 
   it("keeps staged picks isolated per agent", () => {
     stageProviderSwitch("srv_a", "agent_1", {
+      kind: "model",
       targetServerId: "srv_a",
       provider: "cline",
       modelId: "cline-pro",
+      clearRouter: false,
     });
 
     expect(getProviderSwitch("srv_a", "agent_2")).toBeNull();

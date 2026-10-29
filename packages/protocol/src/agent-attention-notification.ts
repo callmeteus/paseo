@@ -1,6 +1,12 @@
 const NOTIFICATION_PREVIEW_LIMIT = 220;
 
-export type AgentAttentionReason = "finished" | "error" | "permission";
+export type AgentAttentionReason =
+  | "finished"
+  | "error"
+  | "permission"
+  | "question"
+  | "goal-paused"
+  | "goal-complete";
 
 export interface AgentAttentionNotificationData {
   [key: string]: unknown;
@@ -23,6 +29,8 @@ interface BuildAgentAttentionNotificationPayloadInput {
   agentId: string;
   assistantMessage?: string | null;
   permissionRequest?: NotificationPermissionRequest | null;
+  /** Goal objective, used by the goal-paused and goal-complete notifications. */
+  goalObjective?: string | null;
 }
 
 export interface NotificationPermissionRequest {
@@ -171,7 +179,10 @@ export function findLatestPermissionRequest(
 
 function resolveAgentAttentionTitle(reason: AgentAttentionReason): string {
   if (reason === "permission") return "Agent needs permission";
+  if (reason === "question") return "Agent has a question";
   if (reason === "error") return "Agent needs attention";
+  if (reason === "goal-paused") return "Goal paused";
+  if (reason === "goal-complete") return "Goal complete";
   return "Agent finished";
 }
 
@@ -181,15 +192,21 @@ function resolveAgentAttentionPreview(
   if (input.reason === "finished") {
     return buildNotificationPreview(input.assistantMessage);
   }
-  if (input.reason === "permission") {
+  if (input.reason === "permission" || input.reason === "question") {
     return buildNotificationPreview(buildPermissionDetails(input.permissionRequest));
+  }
+  if (input.reason === "goal-paused" || input.reason === "goal-complete") {
+    return buildNotificationPreview(input.goalObjective);
   }
   return null;
 }
 
 function resolveAgentAttentionFallbackBody(reason: AgentAttentionReason): string {
   if (reason === "permission") return "Permission requested.";
+  if (reason === "question") return "Answer the agent's question.";
   if (reason === "error") return "Encountered an error.";
+  if (reason === "goal-paused") return "The goal was paused.";
+  if (reason === "goal-complete") return "The goal was completed.";
   return "Finished working.";
 }
 

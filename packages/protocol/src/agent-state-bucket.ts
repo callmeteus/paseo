@@ -2,7 +2,15 @@ import type { AgentLifecycleStatus } from "./agent-lifecycle.js";
 import type { WorkspaceStateBucket } from "./messages.js";
 
 export type { WorkspaceStateBucket };
-export type AgentAttentionReason = "finished" | "error" | "permission" | null | undefined;
+export type AgentAttentionReason =
+  | "finished"
+  | "error"
+  | "permission"
+  | "question"
+  | "goal-paused"
+  | "goal-complete"
+  | null
+  | undefined;
 
 export interface AgentStateBucketInput {
   status: AgentLifecycleStatus;

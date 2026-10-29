@@ -48,6 +48,8 @@ const STORED_AGENT_SCHEMA = z.object({
   provider: z.string(),
   cwd: z.string(),
   workspaceId: z.string().optional(),
+  /** Model router bound to this chat; null/absent means it runs on its model only. */
+  modelRouterId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastActivityAt: z.string().optional(),
@@ -71,7 +73,10 @@ const STORED_AGENT_SCHEMA = z.object({
   persistence: PERSISTENCE_HANDLE_SCHEMA,
   lastError: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
-  attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
+  attentionReason: z
+    .enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"])
+    .nullable()
+    .optional(),
   attentionTimestamp: z.string().nullable().optional(),
   internal: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),

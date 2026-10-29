@@ -67,6 +67,7 @@ import {
   formatGoalPaused,
   formatGoalResumed,
   formatGoalStatus,
+  formatGoalRewriteFallback,
   isGoalCompleteText,
   parseGoalCommand,
   planGoalPrompt,
@@ -298,7 +299,7 @@ export interface ManagedImportableSessionsResult {
 export type AgentAttentionCallback = (params: {
   agentId: string;
   provider: AgentProvider;
-  reason: "finished" | "error" | "permission";
+  reason: "finished" | "error" | "permission" | "question" | "goal-paused" | "goal-complete";
 }) => void;
 
 export type AgentArchivedCallback = (agentId: string) => Promise<void> | void;
@@ -336,6 +337,8 @@ export interface CreateAgentOptions {
   timelineNextSeq?: number;
   // undefined is an explicit decision: the agent never appears in the sidebar.
   workspaceId: string | undefined;
+  /** Model router bound to the new chat; null/undefined means no fallback. */
+  modelRouterId?: string | null;
   owner?: AgentOwner;
   migratedFrom?: StoredAgentRecord["migratedFrom"];
   migratedTo?: StoredAgentRecord["migratedTo"];
@@ -381,6 +384,12 @@ export interface AgentManagerOptions {
     agentId: string;
     expectedTurnId: string;
   }) => Promise<void>;
+  /** Rewrites `/goal` text into a verifiable objective; null keeps the raw text. */
+  rewriteGoalObjective?: (input: {
+    objective: string;
+    cwd: string;
+    manager: AgentManager;
+  }) => Promise<string | null>;
   logger: Logger;
 }
 
@@ -413,7 +422,13 @@ export type AttentionState =
   | { requiresAttention: false }
   | {
       requiresAttention: true;
-      attentionReason: "finished" | "error" | "permission";
+      attentionReason:
+        | "finished"
+        | "error"
+        | "permission"
+        | "question"
+        | "goal-paused"
+        | "goal-complete";
       attentionTimestamp: Date;
     };
 
@@ -449,6 +464,11 @@ interface ManagedAgentBase {
    * Null/undefined for legacy agents created before ownership stamping.
    */
   workspaceId?: string;
+  /**
+   * Model router bound to this chat, or null/undefined when it runs on its
+   * provider/model only. Only bound chats fall back to another router target.
+   */
+  modelRouterId?: string | null;
   owner?: AgentOwner;
   capabilities: AgentCapabilityFlags;
   config: AgentSessionConfig;
@@ -851,6 +871,11 @@ export class AgentManager {
   private readonly goalContinuationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly goalAutoContinueCounts = new Map<string, number>();
   private readonly goalContinuationInFlight = new Set<string>();
+  /**
+   * Set right before a goal turn goes idle: the continuation is about to start,
+   * so the idle edge must not emit a "finished" notification for that turn.
+   */
+  private readonly suppressFinishedAttention = new Set<string>();
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
@@ -875,6 +900,7 @@ export class AgentManager {
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
+  private readonly rewriteGoalObjective?: AgentManagerOptions["rewriteGoalObjective"];
   private acceptingAgentRegistrations = true;
 
   constructor(options: AgentManagerOptions) {
@@ -898,6 +924,7 @@ export class AgentManager {
         options.rescueTimeouts?.interruptSessionMs ?? INTERRUPT_SESSION_TIMEOUT_MS,
     };
     this.beforeSteerUnavailableFallback = options.beforeSteerUnavailableFallback;
+    this.rewriteGoalObjective = options.rewriteGoalObjective;
     this.agentStreamCoalescer = new AgentStreamCoalescer({
       windowMs: options.agentStreamCoalesceWindowMs ?? AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS,
       timers: { setTimeout, clearTimeout },
@@ -1461,6 +1488,7 @@ export class AgentManager {
       timelineRows: options.timelineRows,
       timelineNextSeq: options.timelineNextSeq,
       workspaceId: options.workspaceId,
+      modelRouterId: options.modelRouterId,
       owner: options.owner,
       migratedFrom: options.migratedFrom,
       migratedTo: options.migratedTo,
@@ -1495,6 +1523,7 @@ export class AgentManager {
       lastUserMessageAt?: Date | null;
       labels?: Record<string, string>;
       workspaceId?: string;
+      modelRouterId?: string | null;
       owner?: AgentOwner;
       attention?: AttentionState;
       migratedFrom?: StoredAgentRecord["migratedFrom"];
@@ -1531,6 +1560,7 @@ export class AgentManager {
       lastUserMessageAt?: Date | null;
       labels?: Record<string, string>;
       workspaceId?: string;
+      modelRouterId?: string | null;
       owner?: AgentOwner;
       attention?: AttentionState;
       migratedFrom?: StoredAgentRecord["migratedFrom"];
@@ -2268,6 +2298,12 @@ export class AgentManager {
     if (agent.runtimeInfo) {
       agent.runtimeInfo = { ...agent.runtimeInfo, model: normalizedModelId };
     }
+    // A model switch is the user's answer to a failed provider turn. Do not
+    // leave the old error pinned to the agent while the new model starts.
+    agent.lastError = undefined;
+    if (agent.lifecycle === "error") {
+      Object.assign(agent, { lifecycle: "idle" satisfies AgentLifecycleStatus });
+    }
     this.refreshSessionPersistence(agent);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
@@ -2682,7 +2718,19 @@ export class AgentManager {
     const command = parseGoalCommand(prompt);
     if (command?.kind === "set") {
       const agent = this.requireSessionAgent(agentId);
-      const goal = this.writeAgentGoal(agent, { objective: command.objective, status: "active" });
+      const rewriteConfigured = Boolean(this.rewriteGoalObjective);
+      const rewritten = await this.rewriteGoalObjectiveFor(agent, command.objective);
+      const goal = this.writeAgentGoal(agent, {
+        objective: rewritten ?? command.objective,
+        status: "active",
+      });
+      if (rewriteConfigured && !rewritten) {
+        void this.appendTimelineItem(agentId, {
+          type: "notification",
+          level: "warning",
+          message: formatGoalRewriteFallback(),
+        });
+      }
       this.goalAutoContinueCounts.set(agentId, 0);
       this.cancelGoalContinuationTimer(agentId);
       return { prompt: buildGoalStartPrompt(goal), submittedPromptText: prompt };
@@ -2696,6 +2744,26 @@ export class AgentManager {
     // A real user message arrived: the auto-continuation count starts over.
     if (plan) this.goalAutoContinueCounts.delete(agentId);
     return plan;
+  }
+
+  private async rewriteGoalObjectiveFor(
+    agent: ActiveManagedAgent,
+    objective: string,
+  ): Promise<string | null> {
+    if (!this.rewriteGoalObjective) {
+      return null;
+    }
+    try {
+      const next = await this.rewriteGoalObjective({
+        objective,
+        cwd: agent.cwd,
+        manager: this,
+      });
+      return next?.trim() ? next.trim() : null;
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: agent.id }, "goal.objective.rewrite_threw");
+      return null;
+    }
   }
 
   private writeAgentGoal(
@@ -2720,8 +2788,54 @@ export class AgentManager {
     agent.goal = undefined;
     this.goalAutoContinueCounts.delete(agent.id);
     this.cancelGoalContinuationTimer(agent.id);
+    this.suppressFinishedAttention.delete(agent.id);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
+  }
+
+  /**
+   * Marks the chat as needing attention for a goal transition and notifies
+   * clients. Setting attention first makes the existing idle-edge check skip a
+   * second "finished" notification for the turn that just ended.
+   */
+  private markGoalAttention(
+    agent: ActiveManagedAgent,
+    reason: "goal-paused" | "goal-complete",
+  ): void {
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: reason,
+      attentionTimestamp: new Date(),
+    };
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    this.broadcastAgentAttention(agent, reason);
+  }
+
+  /**
+   * Pauses this chat's goal, optionally recording why. Used by `/goal pause` and
+   * by the `pause_goal` tool when the agent cannot make progress without the
+   * user. Returns false when no active goal exists.
+   */
+  pauseAgentGoal(agentId: string, reason?: string): boolean {
+    const agent = this.requireSessionAgent(agentId);
+    const goal = agent.goal;
+    if (!goal || goal.status !== "active") {
+      return false;
+    }
+    this.cancelGoalContinuationTimer(agentId);
+    this.goalAutoContinueCounts.delete(agentId);
+    const paused = this.writeAgentGoal(agent, { objective: goal.objective, status: "paused" });
+    const note = reason?.trim()
+      ? `${formatGoalPaused(paused)}\nReason: ${reason.trim()}`
+      : formatGoalPaused(paused);
+    void this.appendTimelineItem(agentId, {
+      type: "notification",
+      level: "info",
+      message: note,
+    });
+    this.markGoalAttention(agent, "goal-paused");
+    return true;
   }
 
   /**
@@ -2747,11 +2861,16 @@ export class AgentManager {
     const previousCount = this.goalAutoContinueCounts.get(agentId) ?? 0;
     if (previousCount >= AgentManager.MAX_GOAL_AUTO_CONTINUATIONS) {
       this.goalAutoContinueCounts.delete(agentId);
+      const currentGoal = agent.goal;
+      if (currentGoal?.status === "active") {
+        this.writeAgentGoal(agent, { objective: currentGoal.objective, status: "paused" });
+      }
       void this.appendTimelineItem(agentId, {
         type: "notification",
         level: "warning",
         message: formatGoalContinuationLimit(AgentManager.MAX_GOAL_AUTO_CONTINUATIONS),
       });
+      this.markGoalAttention(agent, "goal-paused");
       return;
     }
     const timer = setTimeout(() => {
@@ -2788,6 +2907,7 @@ export class AgentManager {
         level: "info",
         message: formatGoalComplete(goal),
       });
+      this.markGoalAttention(agent, "goal-complete");
       return;
     }
     this.goalContinuationInFlight.add(agentId);
@@ -2822,12 +2942,9 @@ export class AgentManager {
             text = formatGoalStatus(agent.goal);
             break;
           case "pause": {
-            const goal = agent.goal;
-            text = goal
-              ? formatGoalPaused(
-                  this.writeAgentGoal(agent, { objective: goal.objective, status: "paused" }),
-                )
-              : formatGoalStatus(undefined);
+            const paused = agent.goal ? this.pauseAgentGoal(agent.id) : false;
+            text =
+              paused && agent.goal ? formatGoalPaused(agent.goal) : formatGoalStatus(undefined);
             break;
           }
           case "resume": {
@@ -4010,6 +4127,7 @@ export class AgentManager {
       initialTitle?: string | null;
       publishWhenReady?: boolean;
       workspaceId?: string;
+      modelRouterId?: string | null;
       owner?: AgentOwner;
       migratedFrom?: StoredAgentRecord["migratedFrom"];
       migratedTo?: StoredAgentRecord["migratedTo"];
@@ -4203,6 +4321,7 @@ export class AgentManager {
           attention?: AttentionState;
           persistence?: AgentPersistenceHandle;
           workspaceId?: string;
+          modelRouterId?: string | null;
           owner?: AgentOwner;
           migratedFrom?: StoredAgentRecord["migratedFrom"];
           migratedTo?: StoredAgentRecord["migratedTo"];
@@ -4217,6 +4336,7 @@ export class AgentManager {
       provider: config.provider,
       cwd: config.cwd,
       workspaceId: options?.workspaceId,
+      modelRouterId: options?.modelRouterId,
       owner: options?.owner,
       session,
       capabilities: session.capabilities,
@@ -4489,11 +4609,49 @@ export class AgentManager {
     return this.registry;
   }
 
+  /**
+   * Binds this chat to a model router, or detaches it (null) so it runs on its
+   * provider/model alone. The binding is what the client's fallback watchdog
+   * reads: unbound chats are never ported by a router.
+   */
+  setAgentModelRouter(agentId: string, routerId: string | null): void {
+    const agent = this.requireSessionAgent(agentId);
+    const next = routerId?.trim() ? routerId.trim() : null;
+    if ((agent.modelRouterId ?? null) === next) {
+      return;
+    }
+    agent.modelRouterId = next;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+  }
+
+  /**
+   * Moves ownership of a loaded chat to another workspace. The cwd is untouched:
+   * workspaceId answers "which workspace owns it", not where it runs.
+   */
+  moveAgentToWorkspace(agentId: string, workspaceId: string): void {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent '${agentId}' is not loaded`);
+    }
+    if (agent.workspaceId === workspaceId) {
+      return;
+    }
+    agent.workspaceId = workspaceId;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+  }
+
   async swapProvider(
     agentId: string,
     targetProvider: string,
     targetModel: string | null,
-    options?: { archivePrevious?: boolean; force?: boolean },
+    options?: {
+      archivePrevious?: boolean;
+      force?: boolean;
+      /** Router binding for the ported chat; omitted/null detaches it. */
+      modelRouterId?: string | null;
+    },
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
     let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
@@ -4529,6 +4687,7 @@ export class AgentManager {
       portedTimeline: portedRows,
       archivePrevious: options?.archivePrevious,
       force: options?.force,
+      modelRouterId: options?.modelRouterId ?? null,
       logger: this.logger,
     });
     this.timelineStore.initialize(result.newAgentId, {
@@ -5075,7 +5234,14 @@ export class AgentManager {
         continue;
       }
 
-      this.recordAndDispatchTimelineItem(agent.id, item, event.provider, event.turnId);
+      this.recordAndDispatchTimelineItem(
+        agent.id,
+        item,
+        event.provider,
+        event.turnId,
+        undefined,
+        event.transient === true,
+      );
       if (item.type === "user_message") {
         agent.lastUserMessageAt = new Date();
         this.emitState(agent);
@@ -5104,6 +5270,11 @@ export class AgentManager {
       "agent.manager.turn.completed",
     );
     if (terminalDisposition === "stale") return;
+    if (this.shouldSuppressGoalFinish(agent, event)) {
+      // The goal watcher continues this chat; only the final goal state
+      // (complete, paused, stalled) deserves a notification.
+      this.suppressFinishedAttention.add(agent.id);
+    }
     if (event.usage) {
       agent.lastUsage = { ...agent.lastUsage, ...event.usage };
     }
@@ -5243,8 +5414,11 @@ export class AgentManager {
     const hadPendingPermissions = agent.pendingPermissions.size > 0;
     agent.pendingPermissions.set(event.request.id, event.request);
     this.refreshSessionPersistence(agent);
-    if (!hadPendingPermissions && !agent.internal) {
-      this.broadcastAgentAttention(agent, "permission");
+    const isQuestion = event.request.kind === "question";
+    if (!agent.internal && (isQuestion || !hadPendingPermissions)) {
+      // A question always notifies: the agent is blocked until the user
+      // answers, even when another permission is already pending.
+      this.broadcastAgentAttention(agent, isQuestion ? "question" : "permission");
     }
     this.emitState(agent);
   }
@@ -5291,17 +5465,21 @@ export class AgentManager {
     provider: AgentProvider,
     turnId?: string,
     options?: { providerMessageId?: string },
+    transient = false,
   ): AgentStreamEvent {
-    const row = this.recordTimeline(agentId, item, { ...options, turnId });
+    const row = transient
+      ? { seq: undefined, timestamp: new Date().toISOString() }
+      : this.recordTimeline(agentId, item, { ...options, turnId });
     const event: AgentStreamEvent = {
       type: "timeline",
       item,
       provider,
       ...(turnId !== undefined ? { turnId } : {}),
+      ...(transient ? { transient: true } : {}),
     };
     this.dispatchStream(agentId, event, {
-      seq: row.seq,
-      epoch: this.timelineStore.getEpoch(agentId),
+      ...(row.seq !== undefined ? { seq: row.seq } : {}),
+      ...(transient ? {} : { epoch: this.timelineStore.getEpoch(agentId) }),
       timestamp: row.timestamp,
     });
 
@@ -5496,9 +5674,14 @@ export class AgentManager {
     }
   }
 
+  private shouldSuppressGoalFinish(agent: ManagedAgent, event: AgentStreamEvent): boolean {
+    return event.type === "turn_completed" && agent.goal?.status === "active" && !agent.internal;
+  }
+
   private checkAndSetAttention(agent: ManagedAgent): void {
     const previousStatus = this.previousStatuses.get(agent.id);
     const currentStatus = agent.lifecycle;
+    const suppressFinished = this.suppressFinishedAttention.delete(agent.id);
 
     // Track the new status
     this.previousStatuses.set(agent.id, currentStatus);
@@ -5515,6 +5698,9 @@ export class AgentManager {
 
     // Check if agent transitioned from running to idle (finished)
     if (previousStatus === "running" && currentStatus === "idle") {
+      if (suppressFinished) {
+        return;
+      }
       agent.attention = {
         requiresAttention: true,
         attentionReason: "finished",
@@ -5635,7 +5821,7 @@ export class AgentManager {
 
   private broadcastAgentAttention(
     agent: ManagedAgent,
-    reason: "finished" | "error" | "permission",
+    reason: "finished" | "error" | "permission" | "question" | "goal-paused" | "goal-complete",
   ): void {
     if (isDelegatedAgent(agent)) {
       return;

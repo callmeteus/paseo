@@ -22,6 +22,7 @@ import {
   Columns2,
   Rows2,
   Ellipsis,
+  FolderInput,
   Maximize,
   Minimize,
   Plus,
@@ -46,6 +47,8 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { parentDirectory } from "@/add-project-flow/options";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import type { ShortcutKey } from "@/utils/format-shortcut";
@@ -130,6 +133,7 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
@@ -434,6 +438,8 @@ function TabContextMenuItem({
         return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
       case "pencil":
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+      case "folder-input":
+        return <ThemedFolderInput size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
       default:
@@ -950,6 +956,17 @@ function TabChip({
             if (entry.kind === "file-panel-open-with") {
               return <Fragment key={entry.key}>{openWith.trigger}</Fragment>;
             }
+            if (entry.kind === "file-open-directory") {
+              return (
+                <OpenInFileManagerMenuItem
+                  key={entry.key}
+                  surface="context"
+                  path={parentDirectory(entry.path)}
+                  label={entry.label}
+                  testID={entry.testID}
+                />
+              );
+            }
             return <TabContextMenuItem key={entry.key} entry={entry} />;
           })}
         </ContextMenuContent>
@@ -1116,6 +1133,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),
       rename: t("workspace.tabs.menu.rename"),
+      moveToWorkspace: t("workspace.tabs.menu.moveToWorkspace"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
       closeLeft: t("workspace.tabs.menu.closeLeft"),
@@ -1124,6 +1142,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       reloadAgent: t("workspace.tabs.menu.reloadAgent"),
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
+      openContainingDirectory: t("workspace.tabs.menu.openContainingDirectory"),
     }),
     [t],
   );

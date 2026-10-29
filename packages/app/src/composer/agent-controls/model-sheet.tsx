@@ -45,6 +45,8 @@ interface CompactModelSheetProps {
   glyphSize: number;
   canSwitchProvider: boolean;
   onRouterPicked?: (routerId: string | null) => void;
+  /** Router bound to the chat (or staged); undefined uses the default router. */
+  activeRouterId?: string | null;
   children: ReactNode;
 }
 
@@ -98,6 +100,7 @@ export function CompactModelSheet({
   glyphSize,
   canSwitchProvider,
   onRouterPicked,
+  activeRouterId,
   children,
 }: CompactModelSheetProps) {
   const { t } = useTranslation();
@@ -133,7 +136,7 @@ export function CompactModelSheet({
     serverId,
   });
   const ModelIcon = useProviderIcon(selectedProvider, serverId);
-  const activeRouterName = useActiveRouterName(serverId);
+  const activeRouterName = useActiveRouterName(serverId, activeRouterId);
   const hasSelectedProvider = selectedProvider.trim().length > 0;
   const rootHeader = useMemo(
     () => ({
@@ -332,6 +335,7 @@ export function CompactModelSheet({
             searchAllOnFocus={usesBottomSheet}
             rootBrowseContent={usesBottomSheet ? mobileRootContent : undefined}
             onRouterPicked={onRouterPicked}
+            selectedRouterId={activeRouterId}
           />
         </View>
         {!usesBottomSheet ? (
@@ -376,6 +380,7 @@ export function CompactModelSheet({
               scrolling={modelBrowserScrolling}
               searchAllOnFocus
               showProfilesSection={false}
+              selectedRouterId={activeRouterId}
             />
           </View>
         </AdaptiveModalSheet>

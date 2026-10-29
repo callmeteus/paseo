@@ -66,6 +66,8 @@ interface CombinedModelSelectorProps {
   };
   /** Called after the user picks (or clears) a router in the browser. */
   onRouterPicked?: (routerId: string | null) => void;
+  /** Router bound to the chat (or staged); undefined uses the default router. */
+  activeRouterId?: string | null;
 }
 
 export function CombinedModelSelector({
@@ -91,10 +93,11 @@ export function CombinedModelSelector({
   triggerFill = false,
   toolbar,
   onRouterPicked,
+  activeRouterId,
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
-  const activeRouterName = useActiveRouterName(serverId);
+  const activeRouterName = useActiveRouterName(serverId, activeRouterId);
   const modelBrowserScrolling = resolveModelBrowserScrolling({ isNative, isCompact });
   const anchorRef = useRef<View>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -209,6 +212,7 @@ export function CombinedModelSelector({
       isRetryingProvider={isRetryingProvider}
       scrolling={modelBrowserScrolling}
       onRouterPicked={onRouterPicked}
+      selectedRouterId={activeRouterId}
     />
   ) : (
     <View style={styles.sheetLoadingState}>

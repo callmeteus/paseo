@@ -29,7 +29,7 @@ import {
   shell,
   webContents,
 } from "electron";
-import { registerDaemonManager } from "./daemon/daemon-manager.js";
+import { ensureDesktopDaemonStarted, registerDaemonManager } from "./daemon/daemon-manager.js";
 import { parsePassthroughCliArgsFromArgv, runPassthroughCli } from "./daemon/cli/passthrough.js";
 import { closeAllTransportSessions } from "./daemon/local-transport.js";
 import {
@@ -966,6 +966,7 @@ async function bootstrap(): Promise<void> {
   });
   ensureNotificationCenterRegistration();
   registerDaemonManager();
+  void ensureDesktopDaemonStarted();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
   registerNotificationHandlers();

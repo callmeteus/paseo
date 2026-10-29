@@ -77,9 +77,13 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
   };
 }
 
-/** Name of the router new chats default to, or null when none is active. */
-export function useActiveRouterName(serverId: string | null): string | null {
+/** Name of the router a chat is bound to (or the default), or null when none. */
+export function useActiveRouterName(
+  serverId: string | null,
+  routerId?: string | null,
+): string | null {
   const { rows, selectedRouterId } = useRouterPicker(serverId);
-  if (!selectedRouterId) return null;
-  return rows.find((row) => row.id === selectedRouterId)?.name ?? null;
+  const resolvedId = routerId === undefined ? selectedRouterId : routerId;
+  if (!resolvedId) return null;
+  return rows.find((row) => row.id === resolvedId)?.name ?? null;
 }

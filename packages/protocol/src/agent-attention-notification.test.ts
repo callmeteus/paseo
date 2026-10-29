@@ -71,6 +71,47 @@ describe("buildAgentAttentionNotificationPayload", () => {
     });
   });
 
+  it("titles questions as a question and keeps the prompt as the body", () => {
+    const payload = buildAgentAttentionNotificationPayload({
+      reason: "question",
+      serverId: "srv-4",
+      workspaceId: "workspace-4",
+      agentId: "agent-4",
+      permissionRequest: {
+        id: "perm-2",
+        provider: "claude",
+        name: "AskUserQuestion",
+        kind: "question",
+        title: "Which database should it use?",
+        description: "Postgres / SQLite",
+      },
+    });
+
+    expect(payload.title).toBe("Agent has a question");
+    expect(payload.body).toBe("Which database should it use? - Postgres / SQLite");
+    expect(payload.data.reason).toBe("question");
+  });
+
+  it("uses the goal objective for goal transitions", () => {
+    const paused = buildAgentAttentionNotificationPayload({
+      reason: "goal-paused",
+      serverId: "srv-5",
+      workspaceId: "workspace-5",
+      agentId: "agent-5",
+      goalObjective: "Make CI green",
+    });
+    const complete = buildAgentAttentionNotificationPayload({
+      reason: "goal-complete",
+      serverId: "srv-5",
+      workspaceId: "workspace-5",
+      agentId: "agent-5",
+      goalObjective: "Make CI green",
+    });
+
+    expect(paused).toMatchObject({ title: "Goal paused", body: "Make CI green" });
+    expect(complete).toMatchObject({ title: "Goal complete", body: "Make CI green" });
+  });
+
   it("uses error-specific defaults when reason is error", () => {
     const payload = buildAgentAttentionNotificationPayload({
       reason: "error",

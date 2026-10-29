@@ -451,6 +451,8 @@ export type AgentStreamEvent =
       provider: AgentProvider;
       turnId?: string;
       timestamp?: string;
+      /** Live-only status row (for example a provider retry notice); never persisted. */
+      transient?: boolean;
     }
   | {
       type: "permission_requested";

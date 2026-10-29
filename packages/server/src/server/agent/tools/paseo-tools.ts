@@ -31,6 +31,7 @@ import {
   toAgentPayload,
 } from "../agent-projections.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
+import { findChatTextMatches } from "../chat-search/index.js";
 import type { AgentStorage } from "../agent-storage.js";
 import { AgentNotFoundError, ensureAgentLoaded } from "../agent-loading.js";
 import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
@@ -712,6 +713,7 @@ function createToolCatalog(
     ["get_agent_status", "getStatus"],
     ["get_agent_activity", "getActivity"],
     ["list_agents", "listAgents"],
+    ["search_chats", "searchChats"],
   ] as const satisfies ReadonlyArray<readonly [string, keyof HostOperations]>);
   const hostResolver = createHostResolver({
     serverId: options.serverId ?? "self",
@@ -730,6 +732,7 @@ function createToolCatalog(
       getStatus: (args, context) => localHostOperations.get("get_agent_status")!(args, context),
       getActivity: (args, context) => localHostOperations.get("get_agent_activity")!(args, context),
       listAgents: (args, context) => localHostOperations.get("list_agents")!(args, context),
+      searchChats: (args, context) => localHostOperations.get("search_chats")!(args, context),
     },
   });
   const registerTool = (
@@ -2181,6 +2184,161 @@ function createToolCatalog(
       return {
         content: [],
         structuredContent: ensureValidJson({ agents }),
+      };
+    },
+  );
+
+  registerTool(
+    "search_chats",
+    {
+      title: "Search chats",
+      description:
+        'Search every Paseo conversation on this host (including archived chats) for a text query and return the matching chats with short excerpts. Use it whenever the user refers to something discussed earlier in another chat (for example "we talked about X recently", "what did that chat conclude"), before asking them to repeat themselves. Follow up with get_agent_activity on the matching agentId to read the full conversation.',
+      inputSchema: {
+        query: z
+          .string()
+          .min(1)
+          .describe("Words to find. Spaces are treated as a phrase; matching ignores case."),
+        cwd: z.string().optional().describe("Only search chats working in this directory."),
+        sinceHours: z
+          .number()
+          .int()
+          .positive()
+          .max(24 * 365)
+          .optional()
+          .describe("Only search chats active in the last N hours."),
+        includeArchived: z.boolean().optional().default(true),
+        includeBackground: z.boolean().optional().default(true),
+        maxChats: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .optional()
+          .default(25)
+          .describe("Maximum chats to scan, newest first."),
+        matchesPerChat: z.number().int().positive().max(10).optional().default(3),
+      },
+      outputSchema: {
+        query: z.string(),
+        chats: z.array(
+          z.object({
+            agentId: z.string(),
+            title: z.string().nullable(),
+            provider: z.string(),
+            status: z.string(),
+            cwd: z.string(),
+            updatedAt: z.string(),
+            matches: z.array(
+              z.object({
+                seq: z.number(),
+                role: z.enum(["user", "assistant"]),
+                snippet: z.string(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({
+      query,
+      cwd,
+      sinceHours,
+      includeArchived = true,
+      includeBackground = true,
+      maxChats = 25,
+      matchesPerChat = 3,
+    }) => {
+      if (!options.workspaceRegistry) throw new Error("Workspace registry is not configured");
+      const directory = new AgentDirectory({
+        manager: agentManager,
+        storage: agentStorage,
+        workspaces: options.workspaceRegistry,
+        projectLive: (snapshot) =>
+          serializeSnapshotWithMetadata(agentStorage, snapshot, childLogger),
+        projectStored: (record) =>
+          buildStoredAgentPayload(
+            record,
+            new Set(providerSnapshotManager.listRegisteredProviderIds()),
+          ),
+        isProviderVisible: () => true,
+        isStoredProviderAvailable: (record) =>
+          isStoredAgentProviderAvailable(
+            record,
+            new Set(providerSnapshotManager.listRegisteredProviderIds()),
+          ),
+      });
+      const candidates = selectAgentListItems(
+        await directory.list({ includeBackground, includeArchived }),
+        {
+          cwd: cwd?.trim() ? expandUserPath(cwd) : undefined,
+          sinceHours,
+          limit: maxChats,
+        },
+      );
+      const chats = [];
+      for (const agent of candidates) {
+        await ensureAgentLoaded(agent.id, {
+          agentManager,
+          agentStorage,
+          logger: childLogger,
+        });
+        const matches = findChatTextMatches({
+          items: agentManager.getTimeline(agent.id).map((item, index) => ({
+            seq: index + 1,
+            item,
+          })),
+          query,
+          maxMatches: matchesPerChat,
+        });
+        if (matches.length > 0) {
+          chats.push({
+            agentId: agent.id,
+            title: agent.title,
+            provider: agent.provider,
+            status: agent.status,
+            cwd: agent.cwd,
+            updatedAt: agent.updatedAt,
+            matches,
+          });
+        }
+      }
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ query, chats }),
+      };
+    },
+  );
+
+  registerTool(
+    "pause_goal",
+    {
+      title: "Pause the goal",
+      description:
+        "Pause this chat's persistent goal when you cannot keep making progress without the user: missing access or a credential, a decision only they can make, an ambiguous requirement, or an external blocker. The goal watcher stops; the user resumes it with /goal resume. Explain the blocker in `reason` and tell the user in your reply.",
+      inputSchema: {
+        reason: z
+          .string()
+          .max(500)
+          .optional()
+          .describe("Short explanation of what blocks the goal, shown in the chat."),
+      },
+      outputSchema: {
+        paused: z.boolean(),
+        objective: z.string().nullable(),
+      },
+    },
+    async ({ reason }) => {
+      if (!callerAgentId) {
+        throw new PaseoToolInputError("pause_goal requires an agent-scoped session");
+      }
+      const paused = agentManager.pauseAgentGoal(callerAgentId, reason);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          paused,
+          objective: agentManager.getAgent(callerAgentId)?.goal?.objective ?? null,
+        }),
       };
     },
   );

@@ -67,7 +67,29 @@ export class OpenCodeRuntimeClient implements AgentClient {
     this.resolveCreateConfig = this.legacy.resolveCreateConfig;
     this.isCreateConfigUnattended = this.legacy.isCreateConfigUnattended;
   }
+  private externalServerUrl(): string | null {
+    const value = this.settings?.env?.PASEO_OPENCODE_SERVER_URL;
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  }
+
   private client(): Promise<OpenCodeAgentClient | OpenCodeV2AgentClient> {
+    const externalUrl = this.externalServerUrl();
+    if (externalUrl) {
+      this.selected ??= import("./v2/agent.js").then(
+        ({ OpenCodeV2AgentClient }) =>
+          new OpenCodeV2AgentClient({
+            logger: this.logger,
+            settings: this.settings,
+            managedProcesses: this.options.managedProcesses,
+            // A server that Paseo did not spawn cannot receive the bridge
+            // environment. Native Paseo tools must be configured on the
+            // external server itself.
+            bridge: undefined,
+          }),
+      );
+      return this.selected;
+    }
+
     this.selected ??= (async () => {
       let output: string;
       try {
@@ -106,9 +128,16 @@ export class OpenCodeRuntimeClient implements AgentClient {
     return this.selected;
   }
   async isAvailable() {
+    if (this.externalServerUrl()) return true;
     return this.legacy.isAvailable();
   }
   async getDiagnostic() {
+    const externalUrl = this.externalServerUrl();
+    if (externalUrl) {
+      return {
+        diagnostic: `OpenCode is configured to use the external server at ${externalUrl}. Paseo will not spawn or stop that server.`,
+      };
+    }
     return this.legacy.getDiagnostic();
   }
   async createSession(

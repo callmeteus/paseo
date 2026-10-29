@@ -18,7 +18,14 @@ export function AgentStatusDot({
 }: {
   status: string | null | undefined;
   requiresAttention: boolean | null | undefined;
-  attentionReason?: "finished" | "error" | "permission" | null;
+  attentionReason?:
+    | "finished"
+    | "error"
+    | "permission"
+    | "question"
+    | "goal-paused"
+    | "goal-complete"
+    | null;
   pendingPermissionCount?: number;
   showInactive?: boolean;
 }) {

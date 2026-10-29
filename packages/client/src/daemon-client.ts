@@ -456,7 +456,7 @@ export interface SendMessageOptions {
 
 export interface AgentAttentionRequiredNotification {
   agentId: string;
-  reason: "finished" | "error" | "permission";
+  reason: "finished" | "error" | "permission" | "question" | "goal-paused" | "goal-complete";
   timestamp: string;
   shouldNotify: boolean;
   notification?: AgentAttentionNotificationPayload;
@@ -472,6 +472,8 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   cwd?: string;
   env?: CreateAgentRequestMessage["env"];
   workspaceId?: string;
+  /** Model router that owns the new chat; null/absent means no fallback. */
+  modelRouterId?: string | null;
   callerAgentId?: string;
   initialPrompt?: string;
   idempotencyKey?: string;
@@ -2368,6 +2370,24 @@ export class DaemonClient {
     }
   }
 
+  /**
+   * Re-points a workspace at another existing directory on the same host. The
+   * workspace keeps its identity and chats; only its cwd/project change.
+   */
+  async relocateWorkspace(workspaceId: string, cwd: string): Promise<void> {
+    const response =
+      await this.sendNamespacedCorrelatedSessionRequest<"workspace.relocate.response">({
+        message: {
+          type: "workspace.relocate.request",
+          workspaceId,
+          cwd,
+        },
+      });
+    if (!response.accepted) {
+      throw new Error(response.error ?? "Failed to move the workspace");
+    }
+  }
+
   sendHeartbeat(params: {
     deviceType: "web" | "mobile";
     focusedAgentId: string | null;
@@ -3113,6 +3133,8 @@ export class DaemonClient {
     agentId: string;
     targetProvider: string;
     targetModel: string | null;
+    /** Router binding for the ported chat; omitted/null detaches it. */
+    modelRouterId?: string | null;
     archivePrevious?: boolean;
     force?: boolean;
     requestId?: string;
@@ -3124,6 +3146,7 @@ export class DaemonClient {
       agentId: options.agentId,
       targetProvider: options.targetProvider,
       targetModel: options.targetModel,
+      ...(options.modelRouterId !== undefined ? { modelRouterId: options.modelRouterId } : {}),
       ...(options.archivePrevious === false ? { archivePrevious: false } : {}),
       ...(options.force ? { force: true } : {}),
       requestId: resolvedRequestId,
@@ -3304,6 +3327,7 @@ export class DaemonClient {
       config,
       ...(options.env ? { env: options.env } : {}),
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
+      ...(options.modelRouterId !== undefined ? { modelRouterId: options.modelRouterId } : {}),
       ...(options.callerAgentId !== undefined ? { callerAgentId: options.callerAgentId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
       idempotencyKey: options.idempotencyKey,
@@ -4030,6 +4054,62 @@ export class DaemonClient {
       throw new Error(payload.error ?? "setAgentMode rejected");
     }
     return payload.notice ?? null;
+  }
+
+  /** Rebinds a chat to a model router, or detaches it (null) so it runs on its model only. */
+  async setAgentModelRouter(agentId: string, routerId: string | null): Promise<void> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.model_router.set.request",
+      agentId,
+      routerId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.model_router.set.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentModelRouter rejected");
+    }
+  }
+
+  /** Moves a chat's ownership to another workspace, keeping its cwd. */
+  async setAgentWorkspace(agentId: string, workspaceId: string): Promise<void> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.workspace.set.request",
+      agentId,
+      workspaceId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.workspace.set.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentWorkspace rejected");
+    }
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {

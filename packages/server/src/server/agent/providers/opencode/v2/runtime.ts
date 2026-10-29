@@ -28,6 +28,8 @@ interface Generation {
   users: number;
   stop(): Promise<void>;
   exited: Promise<Error>;
+  /** External servers outlive this runtime, so release must not stop them. */
+  persistent?: boolean;
 }
 export interface V2RuntimeOptions {
   logger: Logger;
@@ -54,6 +56,7 @@ function redactHelperLine(line: string): string {
 // The runtime owns a credential for each subprocess; sessions only receive its authenticated client.
 export class V2Runtime {
   private current: Promise<Generation> | null = null;
+  private external: Promise<Generation> | null = null;
   private generations = new Set<Generation>();
   private starts = new Set<Promise<Generation>>();
   private closed = false;
@@ -63,6 +66,10 @@ export class V2Runtime {
   async acquire(input: V2RuntimeAcquireOptions = {}): Promise<V2Connection> {
     if (this.closed) throw new Error("OpenCode runtime is closed");
     input.signal?.throwIfAborted();
+    const externalUrl = readExternalServerUrl(this.options.settings);
+    if (externalUrl) {
+      return await this.acquireExternal(input, externalUrl);
+    }
     let pending: Promise<Generation>;
     if (input.env || input.dedicated) {
       pending = this.startTracked(input.env);
@@ -105,6 +112,32 @@ export class V2Runtime {
     return connection;
   }
 
+  private async acquireExternal(
+    input: V2RuntimeAcquireOptions,
+    externalUrl: string,
+  ): Promise<V2Connection> {
+    if (input.env || input.dedicated) {
+      throw new Error(
+        "OpenCode is configured with an external server URL, so per-agent process environment and dedicated sessions are not available. Configure those on the external OpenCode server.",
+      );
+    }
+    this.external ??= this.startExternal(externalUrl).catch((error: unknown) => {
+      this.external = null;
+      throw error;
+    });
+    const generation = await raceProviderRefreshAbort(input.signal, this.external);
+    if (!this.generations.has(generation)) {
+      throw new Error("OpenCode external server is unavailable");
+    }
+    const connection = this.lease(generation, this.external);
+    if (input.signal?.aborted || this.closed) {
+      await connection.release();
+      input.signal?.throwIfAborted();
+      throw new Error("OpenCode runtime is closed");
+    }
+    return connection;
+  }
+
   private lease(generation: Generation, pending: Promise<Generation>): V2Connection {
     if (this.closed || !this.generations.has(generation))
       throw new Error("OpenCode helper server is no longer running");
@@ -115,6 +148,7 @@ export class V2Runtime {
       released = true;
       generation.users -= 1;
       if (generation.users !== 0) return;
+      if (generation.persistent) return;
       if (this.current === pending) this.current = null;
       this.generations.delete(generation);
       await generation.stop();
@@ -130,9 +164,37 @@ export class V2Runtime {
   async shutdown(): Promise<void> {
     this.closed = true;
     await Promise.allSettled(this.starts);
-    await Promise.all([...this.generations].map((generation) => generation.stop()));
+    await Promise.all(
+      [...this.generations]
+        .filter((generation) => !generation.persistent)
+        .map((generation) => generation.stop()),
+    );
     this.generations.clear();
     this.current = null;
+    this.external = null;
+  }
+
+  private async startExternal(url: string): Promise<Generation> {
+    const password = readExternalServerPassword(this.options.settings);
+    const client = createV2Client(url, password);
+    try {
+      await client.server.info({ signal: AbortSignal.timeout(30_000) });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`OpenCode external server at ${url} is unavailable: ${reason}`, {
+        cause: error,
+      });
+    }
+    const generation: Generation = {
+      client,
+      users: 0,
+      persistent: true,
+      stop: async () => undefined,
+      exited: new Promise<Error>(() => undefined),
+    };
+    this.generations.add(generation);
+    this.options.logger.info({ url }, "Using external OpenCode server");
+    return generation;
   }
 
   private startTracked(env?: Record<string, string>): Promise<Generation> {
@@ -302,4 +364,36 @@ export class V2Runtime {
       throw error;
     }
   }
+}
+
+function readExternalServerUrl(settings: ProviderRuntimeSettings | undefined): string | null {
+  const value = settings?.env?.PASEO_OPENCODE_SERVER_URL;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readExternalServerPassword(settings: ProviderRuntimeSettings | undefined): string | null {
+  const value = settings?.env?.PASEO_OPENCODE_SERVER_PASSWORD ?? settings?.env?.OPENCODE_PASSWORD;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function createV2Client(url: string, password: string | null): V2Api {
+  return OpenCode.make({
+    baseUrl: url,
+    ...(password
+      ? {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
+          },
+        }
+      : {}),
+    fetch: async (request, init) => {
+      const response = await fetch(request, init);
+      const html = response.headers.get("content-type")?.includes("text/html") ?? false;
+      if (!response.ok || html) {
+        const requestUrl = request instanceof Request ? request.url : String(request);
+        throw new OpenCodeHttpError(new URL(requestUrl).pathname, response.status, html);
+      }
+      return response;
+    },
+  });
 }

@@ -89,6 +89,7 @@ import {
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
+  type AgentAttentionReason,
 } from "@getpaseo/protocol/agent-attention-notification";
 import { createGitHubService } from "../services/github-service.js";
 import type { ForgeService } from "../services/forge-service.js";
@@ -2790,7 +2791,7 @@ export class VoiceAssistantWebSocketServer {
   private async broadcastAgentAttention(params: {
     agentId: string;
     provider: AgentProvider;
-    reason: "finished" | "error" | "permission";
+    reason: AgentAttentionReason;
   }): Promise<void> {
     const agent = this.agentManager.getAgent(params.agentId);
     if (!agent?.workspaceId) {
@@ -2827,6 +2828,7 @@ export class VoiceAssistantWebSocketServer {
       agentId: params.agentId,
       assistantMessage,
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
+      goalObjective: agent.goal?.objective ?? null,
     });
 
     const plan = computeNotificationPlan({

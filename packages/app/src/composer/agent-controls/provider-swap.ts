@@ -9,6 +9,7 @@ export interface AgentProviderSwapClient {
     agentId: string;
     targetProvider: string;
     targetModel: string | null;
+    modelRouterId?: string | null;
     archivePrevious?: boolean;
   }): Promise<AgentProviderSwapResult>;
 }
@@ -25,6 +26,8 @@ export interface PerformAgentProviderSwapInput {
   agentId: string;
   provider: string;
   modelId: string;
+  /** Router binding for the ported chat; undefined keeps the server default. */
+  modelRouterId?: string | null;
   /** False keeps the source agent open until the caller archives it. */
   archivePrevious?: boolean;
   persistPreference: (provider: string, modelId: string) => Promise<unknown>;
@@ -47,6 +50,7 @@ export async function performAgentProviderSwap(
     agentId: input.agentId,
     targetProvider: input.provider,
     targetModel: input.modelId || null,
+    ...(input.modelRouterId !== undefined ? { modelRouterId: input.modelRouterId } : {}),
     ...(input.archivePrevious === false ? { archivePrevious: false } : {}),
   });
 

@@ -16,6 +16,7 @@ import type { ConnectedHosts } from "../../connected-hosts/index.js";
 import { resolveRequiredProviderModel } from "../mcp-shared.js";
 import { selectAgentListItems } from "../agent-projections.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
+import { findChatTextMatches } from "../chat-search/index.js";
 import { expandUserPath } from "../../path-utils.js";
 import type { PaseoToolExecutionContext, PaseoToolResult } from "../tools/types.js";
 
@@ -43,6 +44,7 @@ export interface HostOperations {
   getStatus: HostOperation;
   getActivity: HostOperation;
   listAgents: HostOperation;
+  searchChats: HostOperation;
 }
 /** Connection authority at the host boundary, independent of child lifecycle. */
 export class HostObservationError extends Error {
@@ -336,6 +338,51 @@ export function createHostResolver(input: {
               includeBackground: args.includeBackground === true,
             });
             return result({ workspaces: entries.map(workspaceSummary) });
+          },
+          async searchChats(args) {
+            const query = z.string().min(1).parse(args.query);
+            const { entries } = await client.fetchAgents({
+              includeBackground: args.includeBackground === true,
+              filter: { includeArchived: args.includeArchived === true },
+            });
+            const candidates = selectAgentListItems(
+              entries.map((entry) => entry.agent),
+              {
+                cwd: (args.cwd as string | undefined)?.trim()
+                  ? expandUserPath(args.cwd as string)
+                  : undefined,
+                sinceHours: args.sinceHours as number | undefined,
+                limit: (args.maxChats as number | undefined) ?? 25,
+              },
+            );
+            const chats = [];
+            for (const agent of candidates) {
+              const timeline = await client.fetchAgentTimeline(agent.id, {
+                direction: "tail",
+                limit: 0,
+                projection: "projected",
+              });
+              const matches = findChatTextMatches({
+                items: timeline.entries.map((entry) => ({
+                  seq: entry.seqEnd,
+                  item: entry.item,
+                })),
+                query,
+                maxMatches: (args.matchesPerChat as number | undefined) ?? 3,
+              });
+              if (matches.length > 0) {
+                chats.push({
+                  agentId: agent.id,
+                  title: agent.title,
+                  provider: agent.provider,
+                  status: agent.status,
+                  cwd: agent.cwd,
+                  updatedAt: agent.updatedAt,
+                  matches,
+                });
+              }
+            }
+            return result({ query, chats });
           },
           async createWorkspace(args) {
             const isolation = z.enum(["local", "worktree"]).parse(args.isolation);

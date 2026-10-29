@@ -144,7 +144,7 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
   private configured = false;
 
   configure(input: AppUpdateRuntimeConfiguration): void {
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = !APP_UPDATES_DISABLED;
     autoUpdater.autoRunAppAfterInstall = true;
     // Paseo revalidates the current manifest before explicitly installing on quit.
     // Electron's built-in handler would install an older download without checking
@@ -238,6 +238,10 @@ const appUpdateService = createAppUpdateService({
   },
 });
 
+// TEMP: local builds are installed by hand and must never be replaced by an
+// upstream release. Remove this flag when the fork tracks git and merges master.
+const APP_UPDATES_DISABLED = true;
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -251,6 +255,17 @@ export async function checkForAppUpdate({
   releaseChannel: AppReleaseChannel;
   intent: AppUpdateCheckIntent;
 }): Promise<AppUpdateCheckResult> {
+  if (APP_UPDATES_DISABLED) {
+    return {
+      hasUpdate: false,
+      readyToInstall: false,
+      currentVersion,
+      latestVersion: currentVersion,
+      body: null,
+      date: null,
+      errorMessage: null,
+    };
+  }
   updateLifecycleLog.checkStarted({ currentVersion, releaseChannel, intent });
   const result = await appUpdateService.checkForAppUpdate({
     currentVersion,
@@ -279,6 +294,13 @@ export async function downloadAndInstallUpdate(
   },
   onBeforeQuit?: () => Promise<void>,
 ): Promise<AppUpdateInstallResult> {
+  if (APP_UPDATES_DISABLED) {
+    return {
+      installed: false,
+      version: null,
+      message: "Updates are disabled in this local build.",
+    };
+  }
   return appUpdateService.downloadAndInstallUpdate(
     { currentVersion, releaseChannel },
     onBeforeQuit,
@@ -294,6 +316,9 @@ export async function installAppUpdateOnQuit({
   releaseChannel: AppReleaseChannel;
   signal: AbortSignal;
 }): Promise<boolean> {
+  if (APP_UPDATES_DISABLED) {
+    return false;
+  }
   if (
     !shouldInstallAppUpdateOnQuit({
       platform: process.platform,

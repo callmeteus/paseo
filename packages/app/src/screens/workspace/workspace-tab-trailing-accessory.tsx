@@ -8,6 +8,7 @@ import {
   Copy,
   CopyX,
   Ellipsis,
+  FolderInput,
   Pencil,
   RotateCw,
   X,
@@ -21,6 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { FilePanelOpenWithMenu } from "@/file-panels";
 import type { WorkspaceTabMenuEntry } from "@/screens/workspace/workspace-tab-menu";
+import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
+import { parentDirectory } from "@/add-project-flow/options";
 import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
@@ -30,6 +33,7 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedX = withUnistyles(X);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -60,6 +64,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedCopyX size={16} uniProps={mutedColorMapping} />;
       case "pencil":
         return <ThemedPencil size={16} uniProps={mutedColorMapping} />;
+      case "folder-input":
+        return <ThemedFolderInput size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
       default:
@@ -121,6 +127,17 @@ export function MobileTabTrailingAccessory({
           if (entry.kind === "separator") return <DropdownMenuSeparator key={entry.key} />;
           if (entry.kind === "file-panel-open-with") {
             return <Fragment key={entry.key}>{openWith?.trigger}</Fragment>;
+          }
+          if (entry.kind === "file-open-directory") {
+            return (
+              <OpenInFileManagerMenuItem
+                key={entry.key}
+                surface="dropdown"
+                path={parentDirectory(entry.path)}
+                label={entry.label}
+                testID={entry.testID}
+              />
+            );
           }
           return <MobileTabDropdownMenuItem key={entry.key} entry={entry} />;
         })}
