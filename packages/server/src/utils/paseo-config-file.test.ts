@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isPlatform } from "../test-utils/platform.js";
 import { getWorktreeSetupCommands, getWorktreeTeardownCommands } from "./worktree.js";
 import {
+  readProjectChatInstructions,
   readPaseoConfigForEdit,
   statPaseoConfigPath,
   writePaseoConfigForEdit,
@@ -25,6 +26,22 @@ describe("paseo config file substrate", () => {
     const result = readPaseoConfigForEdit(tempDir);
 
     expect(result).toEqual({ ok: true, config: null, revision: null });
+  });
+
+  it("reads trimmed project chat instructions", () => {
+    writeFileSync(
+      join(tempDir, "paseo.json"),
+      JSON.stringify({ chat: { instructions: "  Follow the project conventions.  " } }),
+    );
+
+    expect(readProjectChatInstructions(tempDir)).toBe("Follow the project conventions.");
+  });
+
+  it("returns empty project chat instructions when missing or invalid", () => {
+    expect(readProjectChatInstructions(tempDir)).toBe("");
+
+    writeFileSync(join(tempDir, "paseo.json"), "{ invalid json\n");
+    expect(readProjectChatInstructions(tempDir)).toBe("");
   });
 
   it("returns invalid_project_config for invalid JSON", () => {

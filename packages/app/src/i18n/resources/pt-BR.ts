@@ -270,6 +270,54 @@ export const ptBR: TranslationResources = {
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",
     messageCapped: "Esta mensagem foi truncada ({{bytes}} bytes).",
+    providerError: {
+      badge: "Erro do provider",
+      unknownProvider: "Provider",
+      showDetails: "Ver detalhes",
+      hideDetails: "Ocultar detalhes",
+      kinds: {
+        usageLimit: {
+          title: "Limite de uso atingido",
+          description:
+            "{{provider}} atingiu o limite de uso. Troque de modelo ou ajuste seu plano.",
+        },
+        auth: {
+          title: "Login necessário",
+          description: "Reconecte o {{provider}} para continuar.",
+        },
+        rateLimit: {
+          title: "Muitas solicitações",
+          description: "Aguarde um instante e tente de novo.",
+        },
+        modelUnavailable: {
+          title: "Modelo indisponível",
+          description: "Este modelo não está disponível no {{provider}}. Escolha outro modelo.",
+        },
+        crash: {
+          title: "Provider parou",
+          description: "O {{provider}} parou inesperadamente. Tente de novo.",
+        },
+        unknown: {
+          title: "Não foi possível continuar",
+          description: "O {{provider}} retornou um erro.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "Limite do OpenCode Go atingido",
+            description: "Assine o OpenCode Go, conecte outro provider ou troque de modelo.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Limite do Cline atingido",
+            description:
+              "Seu plano do Cline atingiu o limite. Troque de modelo ou ajuste seu plano.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "Plano rejeitado",
       approvedPlan: "Plano aprovado",
@@ -3175,6 +3223,12 @@ export const ptBR: TranslationResources = {
         commitMessagePlaceholder: "Use Conventional Commits com escopo",
         pullRequest: "Pull requests",
         pullRequestPlaceholder: "Comece com um resumo de um parágrafo e inclua uma seção Test plan",
+      },
+      chatInstructions: {
+        title: "Instruções para novos chats",
+        info: "Instruções do projeto adicionadas ao system prompt de todo chat novo criado aqui. Chats existentes mantêm o prompt com que começaram.",
+        placeholder:
+          "Descreva convenções, notas de arquitetura ou regras que o agente deve seguir neste projeto",
       },
       writeFailures: {
         staleTitle: "Configuração alterada no disco",

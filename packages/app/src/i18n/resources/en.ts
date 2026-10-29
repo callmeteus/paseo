@@ -262,6 +262,52 @@ export const en = {
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",
     messageCapped: "This message was capped ({{bytes}} bytes).",
+    providerError: {
+      badge: "Provider error",
+      unknownProvider: "Provider",
+      showDetails: "Show details",
+      hideDetails: "Hide details",
+      kinds: {
+        usageLimit: {
+          title: "Usage limit reached",
+          description: "{{provider}} reached its usage limit. Switch models or adjust your plan.",
+        },
+        auth: {
+          title: "Sign-in required",
+          description: "Reconnect {{provider}} to continue.",
+        },
+        rateLimit: {
+          title: "Too many requests",
+          description: "Wait a moment and try again.",
+        },
+        modelUnavailable: {
+          title: "Model unavailable",
+          description: "This model is not available on {{provider}}. Pick another model.",
+        },
+        crash: {
+          title: "Provider stopped",
+          description: "{{provider}} stopped unexpectedly. Try again.",
+        },
+        unknown: {
+          title: "Couldn't continue",
+          description: "{{provider}} returned an error.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "OpenCode Go limit reached",
+            description: "Subscribe to OpenCode Go, connect another provider, or switch models.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Cline limit reached",
+            description: "Your Cline plan reached its limit. Switch models or adjust your plan.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "Rejected plan",
       approvedPlan: "Approved plan",
@@ -3258,6 +3304,12 @@ export const en = {
         commitMessagePlaceholder: "Use Conventional Commits with a scope",
         pullRequest: "Pull requests",
         pullRequestPlaceholder: "Lead with a one-paragraph summary, include a Test plan section",
+      },
+      chatInstructions: {
+        title: "Instructions for new chats",
+        info: "Project instructions appended to the system prompt of every new chat created here. Existing chats keep the prompt they started with.",
+        placeholder:
+          "Describe conventions, architecture notes, or rules the agent should follow in this project",
       },
       writeFailures: {
         staleTitle: "Config changed on disk",

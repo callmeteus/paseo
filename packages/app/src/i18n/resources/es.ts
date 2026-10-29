@@ -270,6 +270,52 @@ export const es: TranslationResources = {
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",
     messageCapped: "Este mensaje fue truncado ({{bytes}} bytes).",
+    providerError: {
+      badge: "Error del provider",
+      unknownProvider: "Provider",
+      showDetails: "Ver detalles",
+      hideDetails: "Ocultar detalles",
+      kinds: {
+        usageLimit: {
+          title: "Límite de uso alcanzado",
+          description: "{{provider}} alcanzó su límite de uso. Cambia de modelo o ajusta tu plan.",
+        },
+        auth: {
+          title: "Inicio de sesión necesario",
+          description: "Vuelve a conectar {{provider}} para continuar.",
+        },
+        rateLimit: {
+          title: "Demasiadas solicitudes",
+          description: "Espera un momento e inténtalo de nuevo.",
+        },
+        modelUnavailable: {
+          title: "Modelo no disponible",
+          description: "Este modelo no está disponible en {{provider}}. Elige otro modelo.",
+        },
+        crash: {
+          title: "El provider se detuvo",
+          description: "{{provider}} se detuvo inesperadamente. Inténtalo de nuevo.",
+        },
+        unknown: {
+          title: "No se pudo continuar",
+          description: "{{provider}} devolvió un error.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "Límite de OpenCode Go alcanzado",
+            description: "Suscríbete a OpenCode Go, conecta otro provider o cambia de modelo.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Límite de Cline alcanzado",
+            description: "Tu plan de Cline alcanzó su límite. Cambia de modelo o ajusta tu plan.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "Plan rechazado",
       approvedPlan: "Plan aprobado",
@@ -3195,6 +3241,12 @@ export const es: TranslationResources = {
         pullRequest: "Solicitudes de extracción",
         pullRequestPlaceholder:
           "Liderar con un resumen de un párrafo, incluir una sección de plan de prueba",
+      },
+      chatInstructions: {
+        title: "Instrucciones para chats nuevos",
+        info: "Instrucciones del proyecto añadidas al system prompt de cada chat nuevo creado aquí. Los chats existentes conservan el prompt con el que empezaron.",
+        placeholder:
+          "Describe convenciones, notas de arquitectura o reglas que el agente debe seguir en este proyecto",
       },
       writeFailures: {
         staleTitle: "Configuración cambiada en el disco",

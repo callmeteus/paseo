@@ -54,6 +54,30 @@ export function readPaseoConfigJson(repoRoot: string): unknown {
   return JSON.parse(readFileSync(configPath, "utf8"));
 }
 
+const projectChatInstructionsCache = new Map<string, { revision: string; instructions: string }>();
+
+/**
+ * Reads `chat.instructions` for a project. Cached by config revision so agent
+ * creation does not re-parse paseo.json on every new chat.
+ */
+export function readProjectChatInstructions(repoRoot: string): string {
+  const configPath = resolvePaseoConfigPath(repoRoot);
+  const revision = statPaseoConfigPath(repoRoot);
+  const cacheKey = revision ? `${revision.mtimeMs}:${revision.size}` : "missing";
+  const cached = projectChatInstructionsCache.get(configPath);
+  if (cached?.revision === cacheKey) {
+    return cached.instructions;
+  }
+
+  const result = readPaseoConfigForEdit(repoRoot);
+  const instructions =
+    result.ok && typeof result.config?.chat?.instructions === "string"
+      ? result.config.chat.instructions.trim()
+      : "";
+  projectChatInstructionsCache.set(configPath, { revision: cacheKey, instructions });
+  return instructions;
+}
+
 export function readPaseoConfigForEdit(repoRoot: string): ReadPaseoConfigForEditResult {
   try {
     const json = readPaseoConfigJson(repoRoot);

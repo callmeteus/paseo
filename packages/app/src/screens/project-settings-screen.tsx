@@ -562,6 +562,11 @@ function ProjectConfigForm({
     [updateDraft],
   );
 
+  const handleChatInstructionsChange = useCallback(
+    (text: string) => updateDraft((d) => ({ ...d, chatInstructions: text })),
+    [updateDraft],
+  );
+
   const handleRemoveScript = useCallback(
     async (script: ProjectScriptDraft) => {
       const ok = await confirmDialog({
@@ -773,6 +778,21 @@ function ProjectConfigForm({
           />
         ))}
       </SettingsGroup>
+
+      <SettingsSection
+        title={t("settings.project.chatInstructions.title")}
+        info={t("settings.project.chatInstructions.info")}
+        testID="chat-instructions-section"
+        flush
+      >
+        <SettingsTextAreaCard
+          testID="chat-instructions-input"
+          accessibilityLabel={t("settings.project.chatInstructions.title")}
+          value={draft.chatInstructions}
+          onChangeText={handleChatInstructionsChange}
+          placeholder={t("settings.project.chatInstructions.placeholder")}
+        />
+      </SettingsSection>
 
       {isStale ? (
         <View style={styles.calloutWrap}>

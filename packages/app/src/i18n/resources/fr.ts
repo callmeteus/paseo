@@ -271,6 +271,55 @@ export const fr: TranslationResources = {
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
     messageCapped: "Ce message a été tronqué ({{bytes}} octets).",
+    providerError: {
+      badge: "Erreur du provider",
+      unknownProvider: "Provider",
+      showDetails: "Afficher les détails",
+      hideDetails: "Masquer les détails",
+      kinds: {
+        usageLimit: {
+          title: "Limite d’utilisation atteinte",
+          description:
+            "{{provider}} a atteint sa limite d’utilisation. Changez de modèle ou ajustez votre offre.",
+        },
+        auth: {
+          title: "Connexion requise",
+          description: "Reconnectez {{provider}} pour continuer.",
+        },
+        rateLimit: {
+          title: "Trop de requêtes",
+          description: "Patientez un instant et réessayez.",
+        },
+        modelUnavailable: {
+          title: "Modèle indisponible",
+          description: "Ce modèle n’est pas disponible sur {{provider}}. Choisissez-en un autre.",
+        },
+        crash: {
+          title: "Le provider s’est arrêté",
+          description: "{{provider}} s’est arrêté de façon inattendue. Réessayez.",
+        },
+        unknown: {
+          title: "Impossible de continuer",
+          description: "{{provider}} a renvoyé une erreur.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "Limite OpenCode Go atteinte",
+            description:
+              "Abonnez-vous à OpenCode Go, connectez un autre provider ou changez de modèle.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Limite Cline atteinte",
+            description:
+              "Votre offre Cline a atteint sa limite. Changez de modèle ou ajustez votre offre.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "Plan refusé",
       approvedPlan: "Plan approuvé",
@@ -3202,6 +3251,12 @@ export const fr: TranslationResources = {
         pullRequest: "Pull requests",
         pullRequestPlaceholder:
           "Commencez par un résumé d’un paragraphe et incluez une section « Test plan »",
+      },
+      chatInstructions: {
+        title: "Instructions pour les nouveaux chats",
+        info: "Instructions du projet ajoutées au system prompt de chaque nouveau chat créé ici. Les chats existants conservent le prompt avec lequel ils ont démarré.",
+        placeholder:
+          "Décrivez les conventions, notes d’architecture ou règles que l’agent doit suivre dans ce projet",
       },
       writeFailures: {
         staleTitle: "Configuration modifiée sur le disque",

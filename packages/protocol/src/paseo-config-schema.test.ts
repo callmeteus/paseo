@@ -33,6 +33,17 @@ describe("paseo config schema", () => {
     });
   });
 
+  it("parses project chat instructions and keeps unknown sibling fields", () => {
+    const parsed = PaseoConfigRawSchema.parse({
+      chat: { instructions: "Follow the project conventions.", futureField: 7 },
+    });
+
+    expect(parsed.chat).toEqual({
+      instructions: "Follow the project conventions.",
+      futureField: 7,
+    });
+  });
+
   it("parses service port allocation", () => {
     expect(
       PaseoConfigSchema.parse({

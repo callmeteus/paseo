@@ -16,6 +16,7 @@ function emptyDraft(): ProjectConfigDraft {
       pullRequest: "",
     },
     metadataGenerationBase: undefined,
+    chatInstructions: "",
   };
 }
 
@@ -281,6 +282,36 @@ describe("applyDraftToConfig", () => {
     draft.metadataPrompts.branchName = "";
     const next = applyDraftToConfig({ draft, base });
     expect(next.metadataGeneration).toBeUndefined();
+  });
+
+  it("reads project chat instructions", () => {
+    const draft = configToDraft({
+      chat: { instructions: "Follow the project conventions." },
+    });
+    expect(draft.chatInstructions).toBe("Follow the project conventions.");
+  });
+
+  it("writes project chat instructions and preserves sibling chat fields", () => {
+    const base = PaseoConfigRawSchema.parse({
+      chat: { futureField: 7 },
+    });
+    const draft = configToDraft(base);
+    draft.chatInstructions = "  Follow the project conventions.  ";
+    const next = applyDraftToConfig({ draft, base });
+    expect(next.chat).toEqual({
+      futureField: 7,
+      instructions: "Follow the project conventions.",
+    });
+  });
+
+  it("drops the chat field when instructions are empty", () => {
+    const base = PaseoConfigRawSchema.parse({
+      chat: { instructions: "Old instructions." },
+    });
+    const draft = configToDraft(base);
+    draft.chatInstructions = "   ";
+    const next = applyDraftToConfig({ draft, base });
+    expect(next.chat).toBeUndefined();
   });
 
   it("preserves legacy and unknown sibling fields inside metadataGeneration on round-trip", () => {

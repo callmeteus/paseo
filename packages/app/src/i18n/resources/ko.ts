@@ -267,6 +267,54 @@ export const ko: TranslationResources = {
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
     messageCapped: "이 메시지는 길이 제한으로 잘렸습니다({{bytes}}바이트).",
+    providerError: {
+      badge: "Provider 오류",
+      unknownProvider: "Provider",
+      showDetails: "세부 정보 보기",
+      hideDetails: "세부 정보 숨기기",
+      kinds: {
+        usageLimit: {
+          title: "사용 한도에 도달했습니다",
+          description:
+            "{{provider}}의 사용 한도에 도달했습니다. 모델을 전환하거나 요금제를 조정하세요.",
+        },
+        auth: {
+          title: "로그인이 필요합니다",
+          description: "계속하려면 {{provider}}를 다시 연결하세요.",
+        },
+        rateLimit: {
+          title: "요청이 너무 많습니다",
+          description: "잠시 기다린 후 다시 시도하세요.",
+        },
+        modelUnavailable: {
+          title: "모델을 사용할 수 없습니다",
+          description: "이 모델은 {{provider}}에서 사용할 수 없습니다. 다른 모델을 선택하세요.",
+        },
+        crash: {
+          title: "Provider가 중지되었습니다",
+          description: "{{provider}}가 예기치 않게 중지되었습니다. 다시 시도하세요.",
+        },
+        unknown: {
+          title: "계속할 수 없습니다",
+          description: "{{provider}}가 오류를 반환했습니다.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "OpenCode Go 한도에 도달했습니다",
+            description: "OpenCode Go를 구독하거나 다른 provider를 연결하거나 모델을 전환하세요.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Cline 한도에 도달했습니다",
+            description:
+              "Cline 요금제가 한도에 도달했습니다. 모델을 전환하거나 요금제를 조정하세요.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "거부된 계획",
       approvedPlan: "승인된 계획",
@@ -3145,6 +3193,12 @@ export const ko: TranslationResources = {
         commitMessagePlaceholder: "스코프와 함께 Conventional Commits를 사용하세요",
         pullRequest: "풀 리퀘스트",
         pullRequestPlaceholder: "한 문단 요약으로 시작하고 테스트 계획 섹션을 포함하세요",
+      },
+      chatInstructions: {
+        title: "새 채팅 지침",
+        info: "이 프로젝트에서 생성되는 모든 새 채팅의 system prompt에 추가되는 프로젝트 지침입니다. 기존 채팅은 시작할 때의 prompt를 유지합니다.",
+        placeholder:
+          "이 프로젝트에서 에이전트가 따라야 할 규칙, 아키텍처 노트 또는 관례를 설명하세요",
       },
       writeFailures: {
         staleTitle: "디스크에서 구성이 변경되었습니다",

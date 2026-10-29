@@ -404,6 +404,8 @@ export interface AgentManagerOptions {
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   appendSystemPrompt?: string;
+  /** Resolves project-level instructions applied to new chats created in a cwd. */
+  resolveProjectInstructions?: (cwd: string) => Promise<string>;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
   beforeSteerUnavailableFallback?: (input: {
@@ -1098,6 +1100,7 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private readonly resolveProjectInstructions?: (cwd: string) => Promise<string>;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
@@ -1120,6 +1123,7 @@ export class AgentManager {
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
+    this.resolveProjectInstructions = options.resolveProjectInstructions;
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
       reloadSessionCloseMs:
@@ -1663,11 +1667,13 @@ export class AgentManager {
     if (!options.preserveTimeline) {
       await this.deleteAgentState(resolvedAgentId);
     }
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      config,
-      resolvedAgentId,
-      { env: options?.env },
-    );
+    const {
+      storedConfig,
+      launchConfig: preparedLaunchConfig,
+      paseoToolPolicy,
+    } = await this.prepareSessionConfig(config, resolvedAgentId, { env: options?.env });
+    const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
+    const launchConfig = this.appendSystemPromptText(preparedLaunchConfig, projectInstructions);
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -6406,6 +6412,32 @@ export class AgentManager {
           daemonAppendSystemPrompt,
         }
       : next;
+  }
+
+  private appendSystemPromptText(
+    config: AgentSessionConfig,
+    prompt: string | null | undefined,
+  ): AgentSessionConfig {
+    const trimmed = prompt?.trim();
+    if (!trimmed) return config;
+    const existing = config.daemonAppendSystemPrompt?.trim();
+    return {
+      ...config,
+      daemonAppendSystemPrompt: existing ? `${existing}\n\n${trimmed}` : trimmed,
+    };
+  }
+
+  private async readProjectInstructions(cwd: string): Promise<string> {
+    if (!this.resolveProjectInstructions) return "";
+    try {
+      return (await this.resolveProjectInstructions(cwd)).trim();
+    } catch (error) {
+      this.logger.warn(
+        { cwd, err: error },
+        "Failed to resolve project chat instructions; creating chat without them",
+      );
+      return "";
+    }
   }
 
   private async buildLaunchContext(

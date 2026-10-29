@@ -269,6 +269,54 @@ export const ru: TranslationResources = {
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",
     messageCapped: "Это сообщение было обрезано ({{bytes}} байт).",
+    providerError: {
+      badge: "Ошибка provider",
+      unknownProvider: "Provider",
+      showDetails: "Показать детали",
+      hideDetails: "Скрыть детали",
+      kinds: {
+        usageLimit: {
+          title: "Достигнут лимит использования",
+          description:
+            "{{provider}} достиг лимита использования. Смените модель или настройте тариф.",
+        },
+        auth: {
+          title: "Требуется вход",
+          description: "Переподключите {{provider}}, чтобы продолжить.",
+        },
+        rateLimit: {
+          title: "Слишком много запросов",
+          description: "Подождите немного и повторите попытку.",
+        },
+        modelUnavailable: {
+          title: "Модель недоступна",
+          description: "Эта модель недоступна в {{provider}}. Выберите другую модель.",
+        },
+        crash: {
+          title: "Provider остановился",
+          description: "{{provider}} неожиданно остановился. Повторите попытку.",
+        },
+        unknown: {
+          title: "Не удалось продолжить",
+          description: "{{provider}} вернул ошибку.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "Достигнут лимит OpenCode Go",
+            description:
+              "Оформите подписку OpenCode Go, подключите другой provider или смените модель.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Достигнут лимит Cline",
+            description: "Ваш тариф Cline достиг лимита. Смените модель или настройте тариф.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "Отклонённый план",
       approvedPlan: "Одобренный план",
@@ -3187,6 +3235,12 @@ export const ru: TranslationResources = {
         pullRequest: "PR",
         pullRequestPlaceholder:
           "Начинайте с краткого резюме в один абзац и добавляйте раздел «План тестирования».",
+      },
+      chatInstructions: {
+        title: "Инструкции для новых чатов",
+        info: "Инструкции проекта, добавляемые в system prompt каждого нового чата, созданного здесь. Существующие чаты сохраняют prompt, с которым были начаты.",
+        placeholder:
+          "Опишите правила, заметки об архитектуре или соглашения, которых агент должен придерживаться в этом проекте",
       },
       writeFailures: {
         staleTitle: "Конфигурация изменена на диске",

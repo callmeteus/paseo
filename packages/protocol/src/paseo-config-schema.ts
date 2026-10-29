@@ -71,11 +71,20 @@ export const PaseoMetadataGenerationSchema = z
   .passthrough()
   .catch({});
 
+export const PaseoChatConfigSchema = z
+  .object({
+    /** Instructions appended to the system prompt of chats created in this project. */
+    instructions: z.string().optional(),
+  })
+  .passthrough()
+  .catch({});
+
 export const PaseoConfigRawSchema = z
   .object({
     worktree: PaseoWorktreeConfigRawSchema.optional(),
     scripts: z.record(z.string(), PaseoScriptEntryRawSchema).optional(),
     metadataGeneration: PaseoMetadataGenerationSchema.optional(),
+    chat: PaseoChatConfigSchema.optional(),
   })
   .passthrough();
 
@@ -114,6 +123,7 @@ export const ProjectConfigRpcErrorSchema = z.discriminatedUnion("code", [
 export type PaseoScriptEntryRaw = z.infer<typeof PaseoScriptEntryRawSchema>;
 export type PaseoMetadataGenerationEntry = z.infer<typeof PaseoMetadataGenerationEntrySchema>;
 export type PaseoMetadataGeneration = z.infer<typeof PaseoMetadataGenerationSchema>;
+export type PaseoChatConfig = z.infer<typeof PaseoChatConfigSchema>;
 export type PaseoServicePortAllocation = z.infer<typeof PaseoServicePortAllocationSchema>;
 export type PaseoConfigRaw = z.infer<typeof PaseoConfigRawSchema>;
 export type PaseoConfig = z.infer<typeof PaseoConfigSchema>;

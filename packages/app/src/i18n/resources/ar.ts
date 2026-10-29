@@ -266,6 +266,52 @@ export const ar: TranslationResources = {
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
     messageCapped: "تم اقتطاع هذه الرسالة ({{bytes}} بايت).",
+    providerError: {
+      badge: "خطأ في provider",
+      unknownProvider: "Provider",
+      showDetails: "إظهار التفاصيل",
+      hideDetails: "إخفاء التفاصيل",
+      kinds: {
+        usageLimit: {
+          title: "تم الوصول إلى حد الاستخدام",
+          description: "وصل {{provider}} إلى حد الاستخدام. بدّل النموذج أو عدّل خطتك.",
+        },
+        auth: {
+          title: "تسجيل الدخول مطلوب",
+          description: "أعد توصيل {{provider}} للمتابعة.",
+        },
+        rateLimit: {
+          title: "طلبات كثيرة جدًا",
+          description: "انتظر لحظة ثم حاول مرة أخرى.",
+        },
+        modelUnavailable: {
+          title: "النموذج غير متاح",
+          description: "هذا النموذج غير متاح على {{provider}}. اختر نموذجًا آخر.",
+        },
+        crash: {
+          title: "توقف provider",
+          description: "توقف {{provider}} بشكل غير متوقع. حاول مرة أخرى.",
+        },
+        unknown: {
+          title: "تعذر المتابعة",
+          description: "أعاد {{provider}} خطأً.",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "تم الوصول إلى حد OpenCode Go",
+            description: "اشترك في OpenCode Go، أو صِل provider آخر، أو بدّل النموذج.",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "تم الوصول إلى حد Cline",
+            description: "وصلت خطة Cline إلى حدها. بدّل النموذج أو عدّل خطتك.",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "خطة مرفوضة",
       approvedPlan: "خطة معتمدة",
@@ -3164,6 +3210,12 @@ export const ar: TranslationResources = {
         commitMessagePlaceholder: "استخدم الالتزامات التقليدية مع النطاق",
         pullRequest: "سحب الطلبات",
         pullRequestPlaceholder: "ابدأ بملخص من فقرة واحدة، مع تضمين قسم لخطة الاختبار",
+      },
+      chatInstructions: {
+        title: "تعليمات للمحادثات الجديدة",
+        info: "تعليمات المشروع التي تُضاف إلى system prompt لكل محادثة جديدة تُنشأ هنا. تحتفظ المحادثات الحالية بالـ prompt الذي بدأت به.",
+        placeholder:
+          "صف الاصطلاحات أو ملاحظات البنية أو القواعد التي يجب أن يتبعها الوكيل في هذا المشروع",
       },
       writeFailures: {
         staleTitle: "تم تغيير التكوين على القرص",

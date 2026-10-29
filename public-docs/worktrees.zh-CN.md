@@ -95,6 +95,20 @@ paseo workspace create \
 }
 ```
 
+## 新聊天指令 {#new-chat-instructions}
+
+`chat.instructions` 会附加到在该 Project 中创建的每个新聊天的 system prompt。现有聊天会保留其开始时的 prompt。
+
+```json
+{
+  "chat": {
+    "instructions": "使用 TypeScript 严格模式。保持组件小而集中，并与测试放在一起。"
+  }
+}
+```
+
+Project 设置界面编辑的是同一个字段。Paseo 会在拥有该工作区的 host 上，从工作区的仓库根目录读取它。
+
 ## Setup 与 teardown {#setup-and-teardown}
 
 `setup` 在 worktree 创建后运行一次。新的 worktree 没有安装依赖，也没有被忽略的文件（例如 `.env`），因此请用 setup 安装和复制你需要的内容。`teardown` 在归档期间、目录被删除之前运行。

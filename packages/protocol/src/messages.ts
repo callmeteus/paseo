@@ -129,6 +129,7 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  PaseoChatConfigSchema,
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -137,6 +138,7 @@ import {
   PaseoWorktreeConfigRawSchema,
   PaseoConfigRevisionSchema,
   ProjectConfigRpcErrorSchema,
+  type PaseoChatConfig,
   type PaseoConfigRaw,
   type PaseoConfigRevision,
   type PaseoMetadataGeneration,
@@ -145,12 +147,14 @@ import {
   type ProjectConfigRpcError,
 } from "./paseo-config-schema.js";
 export {
+  PaseoChatConfigSchema,
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
   PaseoMetadataGenerationSchema,
   PaseoScriptEntryRawSchema,
   PaseoWorktreeConfigRawSchema,
+  type PaseoChatConfig,
   type PaseoConfigRaw,
   type PaseoConfigRevision,
   type PaseoMetadataGeneration,

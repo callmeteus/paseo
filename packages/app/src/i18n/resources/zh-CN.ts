@@ -266,6 +266,52 @@ export const zhCN: TranslationResources = {
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",
     messageCapped: "此消息已被截断（{{bytes}} 字节）。",
+    providerError: {
+      badge: "Provider 错误",
+      unknownProvider: "Provider",
+      showDetails: "显示详情",
+      hideDetails: "隐藏详情",
+      kinds: {
+        usageLimit: {
+          title: "已达到使用上限",
+          description: "{{provider}} 已达到使用上限。请切换模型或调整套餐。",
+        },
+        auth: {
+          title: "需要登录",
+          description: "请重新连接 {{provider}} 以继续。",
+        },
+        rateLimit: {
+          title: "请求过多",
+          description: "请稍等片刻后重试。",
+        },
+        modelUnavailable: {
+          title: "模型不可用",
+          description: "此模型在 {{provider}} 上不可用。请选择其他模型。",
+        },
+        crash: {
+          title: "Provider 已停止",
+          description: "{{provider}} 意外停止。请重试。",
+        },
+        unknown: {
+          title: "无法继续",
+          description: "{{provider}} 返回了一个错误。",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "已达到 OpenCode Go 上限",
+            description: "请订阅 OpenCode Go、连接其他 provider，或切换模型。",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "已达到 Cline 上限",
+            description: "你的 Cline 套餐已达到上限。请切换模型或调整套餐。",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "已拒绝的计划",
       approvedPlan: "已批准的计划",
@@ -3093,6 +3139,11 @@ export const zhCN: TranslationResources = {
         commitMessagePlaceholder: "使用带 scope 的 Conventional Commits",
         pullRequest: "Pull requests",
         pullRequestPlaceholder: "先写一段摘要，并包含 Test plan 部分",
+      },
+      chatInstructions: {
+        title: "新聊天指令",
+        info: "添加到在此 Project 中创建的每个新聊天的 system prompt 的项目指令。现有聊天会保留其开始时的 prompt。",
+        placeholder: "描述 agent 在此 Project 中应遵循的约定、架构说明或规则",
       },
       writeFailures: {
         staleTitle: "磁盘上的配置已变更",

@@ -28,6 +28,7 @@ export interface ProjectConfigDraft {
   scripts: ProjectScriptDraft[];
   metadataPrompts: Record<MetadataPromptKey, string>;
   metadataGenerationBase: PaseoMetadataGeneration | undefined;
+  chatInstructions: string;
 }
 
 interface LifecycleProjection {
@@ -143,12 +144,27 @@ export function configToDraft(config: PaseoConfigRaw | null | undefined): Projec
     scripts,
     metadataPrompts,
     metadataGenerationBase: metadataGeneration,
+    chatInstructions: config?.chat?.instructions ?? "",
   };
 }
 
 interface ApplyDraftInput {
   draft: ProjectConfigDraft;
   base: PaseoConfigRaw | null | undefined;
+}
+
+function chatConfigWithInstructions(
+  base: PaseoConfigRaw,
+  instructions: string,
+): Record<string, unknown> | undefined {
+  const next: Record<string, unknown> = { ...base.chat };
+  const trimmed = instructions.trim();
+  if (trimmed.length === 0) {
+    delete next.instructions;
+  } else {
+    next.instructions = trimmed;
+  }
+  return Object.keys(next).length === 0 ? undefined : next;
 }
 
 export function applyDraftToConfig(input: ApplyDraftInput): PaseoConfigRaw {
@@ -227,6 +243,12 @@ export function applyDraftToConfig(input: ApplyDraftInput): PaseoConfigRaw {
   }
 
   const result: Record<string, unknown> = { ...baseConfig };
+  const nextChat = chatConfigWithInstructions(baseConfig, input.draft.chatInstructions);
+  if (nextChat === undefined) {
+    delete result.chat;
+  } else {
+    result.chat = nextChat;
+  }
   if (Object.keys(nextWorktree).length === 0) {
     delete result.worktree;
   } else {

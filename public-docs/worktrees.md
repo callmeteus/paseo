@@ -97,6 +97,20 @@ Drop a `paseo.json` in your repo root. Paseo reads it from the committed version
 }
 ```
 
+## New chat instructions
+
+`chat.instructions` is appended to the system prompt of every new chat created in the project. Existing chats keep the prompt they started with.
+
+```json
+{
+  "chat": {
+    "instructions": "Use TypeScript strict mode. Keep components small and colocated with their tests."
+  }
+}
+```
+
+The project settings screen edits the same field. Paseo reads it from the workspace's repository root on the host that owns the workspace.
+
 ## Setup and teardown
 
 `setup` runs once after the worktree is created. A fresh worktree has no installed dependencies and no ignored files (like `.env`), so use setup to install and copy what you need. `teardown` runs during archive, before the directory is removed.

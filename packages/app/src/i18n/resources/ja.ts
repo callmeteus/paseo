@@ -269,6 +269,56 @@ export const ja: TranslationResources = {
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
     messageCapped: "このメッセージは上限で切り詰められました（{{bytes}}バイト）。",
+    providerError: {
+      badge: "Provider エラー",
+      unknownProvider: "Provider",
+      showDetails: "詳細を表示",
+      hideDetails: "詳細を隠す",
+      kinds: {
+        usageLimit: {
+          title: "利用上限に達しました",
+          description:
+            "{{provider}} が利用上限に達しました。モデルを切り替えるか、プランを調整してください。",
+        },
+        auth: {
+          title: "サインインが必要です",
+          description: "続行するには {{provider}} を再接続してください。",
+        },
+        rateLimit: {
+          title: "リクエストが多すぎます",
+          description: "少し待ってから再試行してください。",
+        },
+        modelUnavailable: {
+          title: "モデルを利用できません",
+          description:
+            "このモデルは {{provider}} では利用できません。別のモデルを選択してください。",
+        },
+        crash: {
+          title: "Provider が停止しました",
+          description: "{{provider}} が予期せず停止しました。再試行してください。",
+        },
+        unknown: {
+          title: "続行できませんでした",
+          description: "{{provider}} がエラーを返しました。",
+        },
+      },
+      providers: {
+        opencode: {
+          usageLimit: {
+            title: "OpenCode Go の上限に達しました",
+            description:
+              "OpenCode Go を購読するか、別の provider を接続するか、モデルを切り替えてください。",
+          },
+        },
+        cline: {
+          usageLimit: {
+            title: "Cline の上限に達しました",
+            description:
+              "Cline プランが上限に達しました。モデルを切り替えるか、プランを調整してください。",
+          },
+        },
+      },
+    },
     permission: {
       rejectedPlan: "却下されたプラン",
       approvedPlan: "承認されたプラン",
@@ -3162,6 +3212,12 @@ export const ja: TranslationResources = {
         commitMessagePlaceholder: "スコープ付きのConventional Commitsを使用",
         pullRequest: "プルリクエスト",
         pullRequestPlaceholder: "1段落の要約で始め、テスト計画セクションを含める",
+      },
+      chatInstructions: {
+        title: "新しいチャットへの指示",
+        info: "このプロジェクトで作成されるすべての新しいチャットの system prompt に追加されるプロジェクト指示です。既存のチャットは開始時の prompt を維持します。",
+        placeholder:
+          "このプロジェクトでエージェントが従うべき規約、アーキテクチャのメモ、ルールを記述してください",
       },
       writeFailures: {
         staleTitle: "設定がディスク上で変更されました",
