@@ -76,11 +76,11 @@ For alternative endpoints, multiple profiles, custom binaries, and ACP agents, s
 
 The same mismatch shows up anywhere Paseo runs your tools, an agent, or a terminal, reporting `command not found` for something you use every day.
 
-When you open the **desktop app** from the Dock or Finder, the OS hands it a stripped-down environment, not your terminal's `PATH`. To compensate, Paseo runs your login shell once at startup (`$SHELL -i -l -c`), captures its environment, and hands that to the daemon and everything it spawns. The rule of thumb: **if a brand-new terminal can run the command, Paseo should too.** That's also the test, open a fresh terminal and try it there.
+When you open the **desktop app** from the Dock, Finder, or an app menu, the OS hands it a stripped-down environment, not your terminal's `PATH`. To compensate, Paseo runs your login shell once at startup (`$SHELL -i -l -c`), captures its environment, and hands that to the daemon and everything it spawns. For bash, that capture also sources `~/.bashrc`. A login shell skips that file when `~/.bash_profile` exists, and a new terminal loads it. That is where nvm and similar version managers usually add their bins. The rule of thumb: **if a brand-new terminal can run the command, Paseo should too.** That's also the test, open a fresh terminal and try it there.
 
 When you start the daemon yourself from a terminal (`paseo`), there's no login-shell step, it simply inherits that terminal's environment.
 
-Either way, the fix for a missing tool lives in your shell config (`.zshrc`, `.zprofile`, …), not in Paseo. Tools installed through version managers (asdf, mise, nvm, …) are the usual offenders, make sure they initialize for a clean login shell, not only inside one you've already opened.
+A tool that is still missing is absent from both the login shell and `~/.bashrc` (or `~/.zshrc`). Shell functions and aliases stay invisible, because Paseo runs the binary.
 
 This login-shell step runs on macOS and Linux. On Windows, Paseo uses the environment it was launched with.
 

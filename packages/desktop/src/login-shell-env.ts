@@ -227,6 +227,25 @@ function getSystemShell(
   return deps.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
 }
 
+/**
+ * Prefix that loads `~/.bashrc` before the environment dump.
+ *
+ * A bash login shell reads `~/.bash_profile` and skips `~/.bashrc`. A new
+ * terminal is an interactive non-login shell, so it does load `~/.bashrc`,
+ * which is where nvm and other version managers put their bins.
+ *
+ * @param shellName - Basename of the user's shell
+ * @returns Commands to run first, or an empty string when the shell is not bash
+ */
+function bashRcSourcePrefix(shellName: string): string {
+  if (shellName !== "bash") {
+    return "";
+  }
+
+  // `return` inside .bashrc leaves the sourced file. The dump after `;` still runs.
+  return '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"; ';
+}
+
 function shellEnvCommand({ shell, mark }: { shell: string; mark: string }): ShellEnvCommand {
   const name = basename(shell);
 
@@ -267,8 +286,9 @@ function shellEnvCommand({ shell, mark }: { shell: string; mark: string }): Shel
     };
   }
 
+  const dump = `'${process.execPath}' -p '"${mark}" + JSON.stringify(process.env) + "${mark}"'`;
   return {
-    command: `'${process.execPath}' -p '"${mark}" + JSON.stringify(process.env) + "${mark}"'`,
+    command: `${bashRcSourcePrefix(name)}${dump}`,
     attempts: [
       { kind: "interactive", shellArgs: ["-i", "-l", "-c"] },
       { kind: "non-interactive", shellArgs: ["-l", "-c"] },
@@ -492,7 +512,8 @@ function resolveShellEnv({ deps, timeoutMs }: ResolveShellEnvInput): ResolvedShe
  * On macOS/Linux, Electron inherits a minimal environment when launched from
  * Finder/Dock. Spawn the user's login shell and capture its full environment
  * via Node's JSON.stringify(process.env), so the daemon and all child processes
- * see the same tools and variables as a normal terminal session.
+ * see the same tools and variables as a normal terminal session. Bash also
+ * sources `~/.bashrc` during that capture, because login bash skips it.
  *
  * Approach borrowed from VS Code (src/vs/platform/shell/node/shellEnv.ts).
  */
