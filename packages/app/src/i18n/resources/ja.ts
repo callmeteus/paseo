@@ -2451,6 +2451,7 @@ export const ja: TranslationResources = {
         downloading: "ダウンロード中...",
         downloadingPercent: "ダウンロード中 {{percent}}%",
         extracting: "展開中...",
+        starting: "起動中...",
         delete: "削除",
         deleteAction: "{{label}} を削除",
         deleteTitle: "{{label}} を削除しますか？",

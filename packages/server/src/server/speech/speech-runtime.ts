@@ -211,7 +211,7 @@ function buildVoiceFeatureReadiness(params: {
         enabled: true,
         available: false,
         reasonCode: "model_download_failed",
-        message: `Voice features are unavailable: model download failed (${params.backgroundDownloadError}).`,
+        message: `Voice features are unavailable: model installation failed (${params.backgroundDownloadError}).`,
         retryable: false,
         missingModelIds,
       };
@@ -689,11 +689,11 @@ export function createSpeechService(
 
   const downloadLocalModel = (modelId: LocalSpeechModelId): void => {
     void requireModelLibrary()
-      .download(modelId)
-      .then(() => runMonitorTick())
+      .download(modelId, { afterExtract: runReconcile })
       .catch((error) => {
         logger.warn({ err: error, modelId }, "Local speech model download failed");
-      });
+      })
+      .finally(() => scheduleMonitor());
   };
 
   const deleteLocalModel = async (modelId: LocalSpeechModelId): Promise<void> => {

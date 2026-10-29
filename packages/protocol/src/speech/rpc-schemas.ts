@@ -148,7 +148,7 @@ export const LocalSpeechModelSchema = z
     isDefault: z.boolean(),
     // Selected by an enabled feature; the daemon keeps it installed.
     inUse: z.boolean(),
-    // "installed" | "not_installed" | "downloading" | "extracting" | "failed".
+    // "installed" | "not_installed" | "downloading" | "extracting" | "loading" | "failed".
     status: z.string(),
     receivedBytes: z.number().optional(),
     totalBytes: z.number().optional(),

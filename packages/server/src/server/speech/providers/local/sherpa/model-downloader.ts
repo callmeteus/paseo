@@ -1,12 +1,13 @@
-import { createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, open, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type pino from "pino";
+import * as tar from "tar";
+import unbzip2 from "unbzip2-stream";
 
 import { getSherpaOnnxModelSpec, type SherpaOnnxModelId } from "./model-catalog.js";
-import { spawnProcess } from "../../../../../utils/spawn.js";
 
 export type SherpaOnnxModelInstallProgress =
   | { phase: "downloading"; receivedBytes: number; totalBytes: number }
@@ -84,24 +85,44 @@ async function downloadToFile(options: DownloadToFileOptions): Promise<void> {
   }
 }
 
-async function extractTarArchive(
+async function isBzip2Archive(archivePath: string): Promise<boolean> {
+  const handle = await open(archivePath, "r");
+  try {
+    const magic = Buffer.alloc(3);
+    const { bytesRead } = await handle.read(magic, 0, magic.length, 0);
+    return bytesRead === magic.length && magic.toString("ascii") === "BZh";
+  } finally {
+    await handle.close();
+  }
+}
+
+// Windows ships bsdtar without bzip2, and Linux systems can lack the bzip2 helper
+// entirely, so decompress and untar in-process instead of spawning `tar`.
+export async function extractTarArchive(
   archivePath: string,
   destDir: string,
   signal?: AbortSignal,
 ): Promise<void> {
   await mkdir(destDir, { recursive: true });
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawnProcess("tar", ["xf", archivePath, "-C", destDir], {
-      stdio: "inherit",
-      signal,
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar exited with code ${code}`));
-    });
+  const unpack = tar.x({
+    cwd: destDir,
+    preservePaths: false,
+    strict: true,
   });
+
+  try {
+    if (await isBzip2Archive(archivePath)) {
+      await pipeline(createReadStream(archivePath), unbzip2(), unpack, { signal });
+    } else {
+      await pipeline(createReadStream(archivePath), unpack, { signal });
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to extract ${path.basename(archivePath)}: ${reason}`, {
+      cause: error,
+    });
+  }
 }
 
 interface SherpaOnnxModelPaths {
@@ -226,7 +247,7 @@ export async function ensureSherpaOnnxModel(
     logger.info({ modelDir }, "Model download completed");
     return modelDir;
   } catch (error) {
-    logger.error({ err: error }, "Model download failed");
+    logger.error({ err: error }, "Model installation failed");
     throw error;
   }
 }

@@ -2552,6 +2552,7 @@ export const en = {
         downloading: "Downloading...",
         downloadingPercent: "Downloading {{percent}}%",
         extracting: "Extracting...",
+        starting: "Starting...",
         delete: "Delete",
         deleteAction: "Delete {{label}}",
         deleteTitle: "Delete {{label}}?",

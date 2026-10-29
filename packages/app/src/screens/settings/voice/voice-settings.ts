@@ -182,6 +182,7 @@ export type LocalModelState =
   | { kind: "not_installed" }
   | { kind: "downloading"; percent: number | null }
   | { kind: "extracting" }
+  | { kind: "loading" }
   | { kind: "failed"; error: string };
 
 export function getLocalModelState(model: LocalSpeechModel): LocalModelState {
@@ -198,6 +199,8 @@ export function getLocalModelState(model: LocalSpeechModel): LocalModelState {
     }
     case "extracting":
       return { kind: "extracting" };
+    case "loading":
+      return { kind: "loading" };
     case "failed":
       return { kind: "failed", error: model.error ?? "" };
     default:
@@ -206,7 +209,9 @@ export function getLocalModelState(model: LocalSpeechModel): LocalModelState {
 }
 
 export function isLocalModelBusy(model: LocalSpeechModel): boolean {
-  return model.status === "downloading" || model.status === "extracting";
+  return (
+    model.status === "downloading" || model.status === "extracting" || model.status === "loading"
+  );
 }
 
 export function formatModelSize(bytes: number): string {

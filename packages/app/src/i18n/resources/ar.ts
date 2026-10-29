@@ -2462,6 +2462,7 @@ export const ar: TranslationResources = {
         downloading: "جارٍ التنزيل...",
         downloadingPercent: "جارٍ التنزيل {{percent}}%",
         extracting: "جارٍ الاستخراج...",
+        starting: "جارٍ التشغيل...",
         delete: "حذف",
         deleteAction: "حذف {{label}}",
         deleteTitle: "حذف {{label}}؟",

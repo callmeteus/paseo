@@ -2463,6 +2463,7 @@ export const ptBR: TranslationResources = {
         downloading: "Baixando...",
         downloadingPercent: "Baixando {{percent}}%",
         extracting: "Extraindo...",
+        starting: "Iniciando...",
         delete: "Excluir",
         deleteAction: "Excluir {{label}}",
         deleteTitle: "Excluir {{label}}?",

@@ -16,6 +16,7 @@ export type LocalSpeechModelInstallState =
   | { status: "not_installed" }
   | { status: "downloading"; receivedBytes: number; totalBytes: number }
   | { status: "extracting" }
+  | { status: "loading" }
   | { status: "failed"; error: string };
 
 export interface LocalSpeechModelEntry {
@@ -25,12 +26,18 @@ export interface LocalSpeechModelEntry {
 
 type InFlightState = Extract<
   LocalSpeechModelInstallState,
-  { status: "downloading" | "extracting" }
+  { status: "downloading" | "extracting" | "loading" }
 >;
 
 interface InFlightDownload {
   promise: Promise<string>;
   state: InFlightState;
+}
+
+interface DownloadLocalSpeechModelOptions {
+  // Runs after extraction, while the model still reports a busy state, so callers can
+  // initialize their services before the model appears installed.
+  afterExtract?: () => Promise<void>;
 }
 
 export class LocalSpeechModelBusyError extends Error {
@@ -72,7 +79,10 @@ export class LocalSpeechModelLibrary {
     return modelIds.filter((_modelId, index) => !installed[index]);
   }
 
-  download(modelId: LocalSpeechModelId): Promise<string> {
+  download(
+    modelId: LocalSpeechModelId,
+    options?: DownloadLocalSpeechModelOptions,
+  ): Promise<string> {
     const existing = this.inFlight.get(modelId);
     if (existing) {
       return existing.promise;
@@ -98,6 +108,13 @@ export class LocalSpeechModelLibrary {
             : { status: "extracting" };
       },
     })
+      .then(async (modelDir) => {
+        if (options?.afterExtract) {
+          entry.state = { status: "loading" };
+          await options.afterExtract();
+        }
+        return modelDir;
+      })
       .catch((error: unknown) => {
         this.failures.set(modelId, error instanceof Error ? error.message : String(error));
         throw error;

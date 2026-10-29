@@ -2478,6 +2478,7 @@ export const fr: TranslationResources = {
         downloading: "Téléchargement...",
         downloadingPercent: "Téléchargement {{percent}} %",
         extracting: "Extraction...",
+        starting: "Démarrage...",
         delete: "Supprimer",
         deleteAction: "Supprimer {{label}}",
         deleteTitle: "Supprimer {{label}} ?",

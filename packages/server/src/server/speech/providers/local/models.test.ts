@@ -63,6 +63,35 @@ describe("local speech models", () => {
     expect(await library.listMissing([modelId])).toEqual([]);
   });
 
+  test("reports loading until afterExtract finishes", async () => {
+    const { modelsDir } = setupModelsDirWithArchive();
+    const library = new LocalSpeechModelLibrary(modelsDir, logger);
+    let releaseAfterExtract!: () => void;
+    const afterExtractGate = new Promise<void>((resolve) => {
+      releaseAfterExtract = resolve;
+    });
+    let afterExtractStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      afterExtractStarted = resolve;
+    });
+
+    const download = library.download(modelId, {
+      afterExtract: async () => {
+        afterExtractStarted();
+        await afterExtractGate;
+      },
+    });
+    await started;
+
+    const stateOf = async () =>
+      (await library.list()).find((entry) => entry.spec.id === modelId)?.state;
+    expect(await stateOf()).toEqual({ status: "loading" });
+
+    releaseAfterExtract();
+    await download;
+    expect(await stateOf()).toEqual({ status: "installed" });
+  });
+
   test("lists install state and deletes an installed model", async () => {
     const { modelsDir } = setupModelsDirWithArchive();
     const library = new LocalSpeechModelLibrary(modelsDir, logger);

@@ -340,9 +340,10 @@ function LocalModelList({
 
 function progressLabel(
   t: TFunction,
-  state: Extract<LocalModelState, { kind: "downloading" | "extracting" }>,
+  state: Extract<LocalModelState, { kind: "downloading" | "extracting" | "loading" }>,
 ): string {
   if (state.kind === "extracting") return t("settings.voice.models.extracting");
+  if (state.kind === "loading") return t("settings.voice.models.starting");
   if (state.percent === null) return t("settings.voice.models.downloading");
   return t("settings.voice.models.downloadingPercent", { percent: state.percent });
 }
@@ -453,7 +454,7 @@ function LocalModelRow({
   const downloadLabel =
     state.kind === "failed" ? t("settings.voice.retry") : t("settings.voice.models.download");
   let control = null;
-  if (state.kind === "downloading" || state.kind === "extracting") {
+  if (state.kind === "downloading" || state.kind === "extracting" || state.kind === "loading") {
     control = (
       <View style={styles.progress}>
         <LoadingSpinner size="small" color={styles.spinnerColor.color} />

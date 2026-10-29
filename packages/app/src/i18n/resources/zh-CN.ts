@@ -2402,6 +2402,7 @@ export const zhCN: TranslationResources = {
         downloading: "正在下载...",
         downloadingPercent: "正在下载 {{percent}}%",
         extracting: "正在解压...",
+        starting: "正在启动...",
         delete: "删除",
         deleteAction: "删除 {{label}}",
         deleteTitle: "删除 {{label}}？",

@@ -104,6 +104,10 @@ describe("voice settings", () => {
     });
   });
 
+  it("reports the final model startup as a loading state", () => {
+    expect(getLocalModelState(model({ status: "loading" }))).toEqual({ kind: "loading" });
+  });
+
   it("formats download sizes", () => {
     expect(formatModelSize(482_468_385)).toBe("482 MB");
     expect(formatModelSize(1_250_000_000)).toBe("1.3 GB");

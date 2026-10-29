@@ -2438,6 +2438,7 @@ export const ko: TranslationResources = {
         downloading: "다운로드 중...",
         downloadingPercent: "다운로드 중 {{percent}}%",
         extracting: "압축 해제 중...",
+        starting: "시작 중...",
         delete: "삭제",
         deleteAction: "{{label}} 삭제",
         deleteTitle: "{{label}}을(를) 삭제할까요?",

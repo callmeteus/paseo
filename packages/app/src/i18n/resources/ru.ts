@@ -2464,6 +2464,7 @@ export const ru: TranslationResources = {
         downloading: "Скачивание...",
         downloadingPercent: "Скачивание {{percent}}%",
         extracting: "Распаковка...",
+        starting: "Запуск...",
         delete: "Удалить",
         deleteAction: "Удалить {{label}}",
         deleteTitle: "Удалить {{label}}?",
