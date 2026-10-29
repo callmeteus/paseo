@@ -112,7 +112,7 @@ test.each([
   try {
     await writeFile(script, initialSource);
     expect((await client.listFeatures({ provider: "opencode", cwd: root }))[0]?.label).toBe(
-      "Auto Accept",
+      "Auto-accept",
     );
     await writeFile(script, 'console.log("opencode v2.0.10")');
     expect((await client.listFeatures({ provider: "opencode", cwd: root }))[0]?.label).toBe(

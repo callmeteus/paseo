@@ -876,10 +876,11 @@ function buildACPAutoAcceptFeature(config: AgentSessionConfig): AgentFeature {
   return {
     type: "toggle",
     id: ACP_AUTO_ACCEPT_FEATURE_ID,
-    label: "Auto Accept",
+    label: "Auto-accept",
     description: "Automatically approves ACP permission prompts.",
-    tooltip: "Auto accept permission prompts",
+    tooltip: "Auto-accept permission prompts",
     icon: "shield-check",
+    desktopTrigger: "label",
     value: isACPAutoAcceptEnabled(config),
   };
 }

@@ -2138,7 +2138,7 @@ describe("ACPAgentClient config features", () => {
       expect.objectContaining({
         type: "toggle",
         id: "auto_accept",
-        label: "Auto Accept",
+        label: "Auto-accept",
         value: true,
       }),
     ]);

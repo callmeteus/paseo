@@ -52,7 +52,13 @@ describe("OpenCode v2 helper isolation", () => {
 describe("OpenCode v2 features", () => {
   test("reports the auto-accept toggle from the session value", () => {
     expect(features({ provider: "opencode", cwd: "/tmp/project" })).toEqual([
-      { type: "toggle", id: "auto_accept", label: "Auto-accept", value: false },
+      {
+        type: "toggle",
+        id: "auto_accept",
+        label: "Auto-accept",
+        desktopTrigger: "label",
+        value: false,
+      },
     ]);
     expect(
       features({
@@ -60,6 +66,14 @@ describe("OpenCode v2 features", () => {
         cwd: "/tmp/project",
         featureValues: { auto_accept: true },
       }),
-    ).toEqual([{ type: "toggle", id: "auto_accept", label: "Auto-accept", value: true }]);
+    ).toEqual([
+      {
+        type: "toggle",
+        id: "auto_accept",
+        label: "Auto-accept",
+        desktopTrigger: "label",
+        value: true,
+      },
+    ]);
   });
 });

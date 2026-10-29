@@ -130,7 +130,7 @@ describe("OpenCode auto_accept feature", () => {
       expect.objectContaining({
         type: "toggle",
         id: "auto_accept",
-        label: "Auto Accept",
+        label: "Auto-accept",
         value: true,
       }),
     ]);

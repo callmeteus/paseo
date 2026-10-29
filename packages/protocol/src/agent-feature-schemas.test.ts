@@ -65,6 +65,21 @@ describe("agent feature schemas", () => {
     },
   );
 
+  it.each(["icon", "label"])(
+    "preserves the %s desktop trigger for toggle features",
+    (desktopTrigger) => {
+      const feature = {
+        type: "toggle",
+        id: "auto_accept",
+        label: "Auto-accept",
+        icon: "shield-check",
+        value: true,
+        desktopTrigger,
+      };
+      expect(AgentFeatureSchema.parse(feature)).toEqual(feature);
+    },
+  );
+
   it("rejects invalid features", () => {
     const invalidDiscriminator = AgentFeatureSchema.safeParse({
       type: "slider",

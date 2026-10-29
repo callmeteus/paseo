@@ -171,10 +171,11 @@ describe("CursorACPAgentClient model discovery", () => {
       {
         type: "toggle",
         id: "auto_accept",
-        label: "Auto Accept",
+        label: "Auto-accept",
         description: "Automatically approves ACP permission prompts.",
-        tooltip: "Auto accept permission prompts",
+        tooltip: "Auto-accept permission prompts",
         icon: "shield-check",
+        desktopTrigger: "label",
         value: false,
       },
       {

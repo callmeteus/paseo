@@ -17,6 +17,7 @@ export function features(config: AgentSessionConfig): AgentFeature[] {
       type: "toggle",
       id: "auto_accept",
       label: "Auto-accept",
+      desktopTrigger: "label",
       value: config.featureValues?.["auto_accept"] === true,
     },
   ];

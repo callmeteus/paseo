@@ -136,6 +136,8 @@ export interface AgentFeatureToggle {
   description?: string;
   tooltip?: string;
   icon?: string;
+  /** Desktop toolbar presentation; omitted means icon-only. Mobile selectors stay labeled. */
+  desktopTrigger?: "icon" | "label";
   value: boolean;
 }
 

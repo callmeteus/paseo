@@ -1387,7 +1387,7 @@ function DesktopFeatureItem({
             )}
             surface="toolbar"
             label={feature.label}
-            showToolbarLabel={false}
+            showToolbarLabel={feature.desktopTrigger === "label"}
             disabled={disabled}
             onPress={handleTogglePress}
             accessibilityLabel={getFeatureTooltip(feature)}

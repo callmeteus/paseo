@@ -298,10 +298,11 @@ function buildOpenCodeAutoAcceptFeature(config: AgentSessionConfig): AgentFeatur
   return {
     type: "toggle",
     id: OPENCODE_AUTO_ACCEPT_FEATURE_ID,
-    label: "Auto Accept",
+    label: "Auto-accept",
     description: "Automatically approves OpenCode tool permission prompts.",
-    tooltip: "Auto accept permission prompts",
+    tooltip: "Auto-accept permission prompts",
     icon: "shield-check",
+    desktopTrigger: "label",
     value: isOpenCodeAutoAcceptEnabled(config),
   };
 }
