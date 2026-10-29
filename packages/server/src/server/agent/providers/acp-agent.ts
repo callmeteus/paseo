@@ -324,6 +324,10 @@ const ACP_PROBE_CLOSE_TIMEOUT_MS = 2_000;
 const ACP_CLOSE_REQUEST_TIMEOUT_MS = 2_000;
 const ACP_IMPORT_HISTORY_LOAD_TIMEOUT_MS = 30_000;
 const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
+// A provider that never answers `session/prompt` leaves the chat loading
+// forever. Two minutes without any session update (or while a permission is
+// pending) is a hung turn, not a slow one.
+const ACP_TURN_IDLE_TIMEOUT_MS = 120_000;
 
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
@@ -1760,6 +1764,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
+  private turnIdleTimeout: ReturnType<typeof setTimeout> | null = null;
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
   private historyPending = false;
@@ -1970,6 +1975,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");
     }
+    if (
+      promptIncludesImage(prompt) &&
+      this.agentCapabilities?.promptCapabilities?.image === false
+    ) {
+      throw new Error(
+        `${this.config.provider} does not support image input. Remove the image or switch models.`,
+      );
+    }
 
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     const turnId = randomUUID();
@@ -1980,6 +1993,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.emitBootstrapThreadEvent();
     this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
     this.emitSubmittedUserMessage(prompt, messageId, turnId, options?.clientMessageId);
+    this.armTurnIdleTimeout(turnId);
 
     void this.connection
       .prompt({
@@ -1992,6 +2006,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         return;
       })
       .catch((error) => {
+        if (this.activeForegroundTurnId !== turnId) return;
         const summary = summarizeACPRequestError(error);
         this.finishTurn({
           type: "turn_failed",
@@ -2513,6 +2528,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
           }
         : { outcome: { outcome: "cancelled" } },
     );
+    this.touchTurnIdleTimeout();
 
     this.pushEvent({
       type: "permission_resolved",
@@ -2570,6 +2586,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
     this.closed = true;
 
+    this.clearTurnIdleTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     this.settleCommandsReady();
 
@@ -2683,6 +2700,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
 
+    this.touchTurnIdleTimeout();
     const events = this.translateSessionUpdate(params.update);
     this.logger.trace(
       {
@@ -3340,6 +3358,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private handlePromptResponse(response: PromptResponse, turnId: string): void {
+    // An idle watchdog may have failed this turn already. Ignore a late answer
+    // instead of emitting a second terminal event.
+    if (this.activeForegroundTurnId !== turnId) return;
     this.currentTurnUsage = mapACPUsage(response.usage) ?? this.currentTurnUsage;
 
     switch (response.stopReason) {
@@ -3430,9 +3451,61 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
+  private hasActiveToolOrTerminal(): boolean {
+    for (const tool of this.toolCalls.values()) {
+      if (tool.status === "pending" || tool.status === "in_progress") {
+        return true;
+      }
+    }
+    for (const terminal of this.terminalEntries.values()) {
+      if (terminal.running) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private armTurnIdleTimeout(turnId: string): void {
+    this.clearTurnIdleTimeout();
+    this.turnIdleTimeout = setTimeout(() => {
+      this.turnIdleTimeout = null;
+      if (this.activeForegroundTurnId !== turnId) return;
+      // A pending permission or a running tool blocks the provider on purpose;
+      // keep waiting instead of failing work that is still in progress.
+      if (this.pendingPermissions.size > 0 || this.hasActiveToolOrTerminal()) {
+        this.armTurnIdleTimeout(turnId);
+        return;
+      }
+      const message = `${this.config.provider} stopped responding after ${ACP_TURN_IDLE_TIMEOUT_MS}ms without activity`;
+      if (this.connection && this.sessionId) {
+        void this.connection.cancel({ sessionId: this.sessionId }).catch(() => undefined);
+      }
+      this.finishTurn({
+        type: "turn_failed",
+        provider: this.provider,
+        error: message,
+        diagnostic: this.collectDiagnostic(message),
+        turnId,
+      });
+    }, ACP_TURN_IDLE_TIMEOUT_MS);
+  }
+
+  private touchTurnIdleTimeout(): void {
+    if (this.activeForegroundTurnId) {
+      this.armTurnIdleTimeout(this.activeForegroundTurnId);
+    }
+  }
+
+  private clearTurnIdleTimeout(): void {
+    if (!this.turnIdleTimeout) return;
+    clearTimeout(this.turnIdleTimeout);
+    this.turnIdleTimeout = null;
+  }
+
   private finishTurn(
     event: Extract<AgentStreamEvent, { type: "turn_completed" | "turn_failed" | "turn_canceled" }>,
   ): void {
+    this.clearTurnIdleTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     // A turn that ends without completing leaves no way to answer its open
     // permission requests, so tell the agent they were cancelled.
@@ -3676,6 +3749,10 @@ function normalizeMcpServers(servers?: Record<string, McpServerConfig>): McpServ
       })),
     } satisfies McpServer;
   });
+}
+
+function promptIncludesImage(prompt: AgentPromptInput): boolean {
+  return typeof prompt !== "string" && prompt.some((block) => block.type === "image");
 }
 
 function toACPContentBlocks(prompt: AgentPromptInput): ContentBlock[] {

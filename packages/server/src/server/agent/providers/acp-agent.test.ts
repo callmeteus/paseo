@@ -99,7 +99,11 @@ describe("buildACPClientCapabilities", () => {
 
 interface ACPSessionInternals {
   sessionId: string | null;
-  connection: { prompt: (...args: unknown[]) => Promise<PromptResponse> };
+  connection: {
+    prompt: (...args: unknown[]) => Promise<PromptResponse>;
+    cancel?: (input: { sessionId: string }) => Promise<void>;
+  };
+  agentCapabilities: { promptCapabilities?: { image?: boolean } } | null;
   activeForegroundTurnId: string | null;
   configOptions: SessionConfigOption[];
   translateSessionUpdate(update: SessionUpdate): AgentStreamEvent[];
@@ -2971,6 +2975,50 @@ describe("ACPAgentSession", () => {
       turnId,
     });
     expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+  });
+
+  test("startTurn rejects image prompts when the agent does not advertise image support", async () => {
+    const session = createSession();
+    const prompt = vi.fn();
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    asInternals<ACPSessionInternals>(session).agentCapabilities = {
+      promptCapabilities: { image: false },
+    };
+    asInternals<ACPSessionInternals>(session).connection = { prompt };
+
+    await expect(
+      session.startTurn([{ type: "image", data: "AAAA", mimeType: "image/png" }]),
+    ).rejects.toThrow("does not support image input");
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  test("fails a turn that stops producing activity instead of loading forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).agentCapabilities = {
+        promptCapabilities: { image: true },
+      };
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("stopped responding"),
+      });
+      expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("startTurn emits the submitted user message even when ACP does not echo it", async () => {
