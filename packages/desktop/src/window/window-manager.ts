@@ -12,6 +12,7 @@ import {
 
 import type { WindowState, WindowStateStore } from "../settings/window-state.js";
 import type { DesktopWindowChromeMode } from "./chrome.js";
+import { popupContextMenu } from "./context-menu-popup.js";
 
 const WINDOW_STATE_SAVE_DEBOUNCE_MS = 400;
 const MAC_TRAFFIC_LIGHT_POSITION = { x: 16, y: 14 } as const;
@@ -390,7 +391,7 @@ export function buildStandardContextMenuItems(
 export function setupDefaultContextMenu(win: BrowserWindow): void {
   win.webContents.on("context-menu", (_event, params) => {
     const menu = Menu.buildFromTemplate(buildStandardContextMenuItems(win.webContents, params));
-    menu.popup({ window: win });
+    popupContextMenu(menu, win);
   });
 }
 

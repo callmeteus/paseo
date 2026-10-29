@@ -45,6 +45,7 @@ import {
   setupDragDropPrevention,
   buildStandardContextMenuItems,
 } from "./window/window-manager.js";
+import { popupContextMenu } from "./window/context-menu-popup.js";
 import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/index.js";
 import { showWindowWhenReady } from "./window/show-when-ready.js";
 import { resolveDesktopWindowChromeMode, windowChromeModeArgument } from "./window/chrome.js";
@@ -221,7 +222,7 @@ function showBrowserWebviewContextMenu(
           },
         ]),
   ]);
-  menu.popup({ window: win });
+  popupContextMenu(menu, win);
 }
 
 function getBrowserPopupWindowOptions(

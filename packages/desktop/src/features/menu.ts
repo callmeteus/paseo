@@ -1,5 +1,6 @@
 import { app, Menu, BrowserWindow, ipcMain } from "electron";
 import { getActivePaseoBrowserWebContentsForHostWindow } from "./browser-webviews/index.js";
+import { popupContextMenu } from "../window/context-menu-popup.js";
 
 interface ShowContextMenuInput {
   kind?: "terminal";
@@ -225,7 +226,7 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
       },
     ]);
 
-    contextMenu.popup({ window: win });
+    popupContextMenu(contextMenu, win);
   });
 
   // Disable the zoom accelerators while capturing a shortcut so combos like
