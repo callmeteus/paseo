@@ -41,13 +41,18 @@ const GOAL_PROMPT_SUFFIX = "</paseo-goal>";
 export const GOAL_COMPLETE_MARKER = "<paseo-goal-complete>";
 
 /**
- * Parse `/goal ...`. Returns null when the text is not a goal command, so the
- * caller can forward it to the provider untouched.
+ * Parse `/goal ...`. The token may appear anywhere in the message, so a user can
+ * write "please /goal fix the flaky tests" or "fix the flaky tests /goal".
+ * Returns null when the text is not a goal command, so the caller can forward it
+ * to the provider untouched.
  */
 export function parseGoalCommand(text: string): GoalCommand | null {
   const trimmed = text.trim();
-  if (!/^\/goal(?:\s|$)/i.test(trimmed)) return null;
-  const args = trimmed.slice(GOAL_COMMAND_NAME.length + 1).trim();
+  const token = /(^|\s)\/goal(?=\s|$)/i.exec(trimmed);
+  if (!token) return null;
+  const before = trimmed.slice(0, token.index + token[1].length);
+  const after = trimmed.slice(token.index + token[0].length);
+  const args = `${before} ${after}`.replace(/\s+/g, " ").trim();
   if (!args) return { kind: "status" };
   switch (args.toLowerCase()) {
     case "pause":
@@ -88,6 +93,10 @@ export function formatGoalResumed(goal: AgentGoal): string {
 
 export function formatGoalCleared(): string {
   return "Goal cleared.";
+}
+
+export function formatGoalRewriteFallback(): string {
+  return "Goal saved as written: the objective could not be rewritten automatically. Edit the goal to make it verifiable.";
 }
 
 function buildGoalPreamble(goal: AgentGoal, instruction: string): string {

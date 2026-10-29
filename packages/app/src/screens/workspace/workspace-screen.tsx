@@ -146,6 +146,8 @@ import {
   WorkspaceDesktopTabsRow,
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
+import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
+import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
@@ -2004,6 +2006,9 @@ function WorkspaceScreenContent({
         }
 
         if (closePolicy.kind === "layout-only") {
+          if (persistenceKey) {
+            hideWorkspaceAgent(persistenceKey, agentId);
+          }
           return;
         }
 
@@ -2015,6 +2020,7 @@ function WorkspaceScreenContent({
       archiveAgent,
       closeTab,
       closeWorkspaceTabWithCleanup,
+      hideWorkspaceAgent,
       normalizedServerId,
       persistenceKey,
       t,
@@ -2291,6 +2297,8 @@ function WorkspaceScreenContent({
             useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
           if (resolveCloseAgentTabPolicy(latestAgent).kind === "archive-on-close") {
             await archiveAgent({ serverId: normalizedServerId, agentId });
+          } else if (persistenceKey) {
+            hideWorkspaceAgent(persistenceKey, agentId);
           }
         },
         closeWorkspaceTabWithCleanup: (cleanupInput) => {
@@ -2315,6 +2323,7 @@ function WorkspaceScreenContent({
       client,
       closeTab,
       closeWorkspaceTabWithCleanup,
+      hideWorkspaceAgent,
       normalizedServerId,
       normalizedWorkspaceId,
       persistenceKey,
@@ -3767,6 +3776,8 @@ function WorkspaceScreenContent({
         toast={toast}
       >
         {renderedWorkspaceScreen}
+        <MoveAgentToWorkspaceSheet />
+        <MoveWorkspaceToFolderSheet />
       </AssistantFileLinkResolverProvider>
     </WorkspaceContentProviders>
   );

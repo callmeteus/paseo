@@ -276,6 +276,25 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
+export async function ensureDesktopDaemonStarted(): Promise<void> {
+  try {
+    const settings = await getDesktopSettingsStore().get();
+    if (!settings.daemon.manageBuiltInDaemon) return;
+    const current = await resolveDesktopDaemonStatus();
+    if (current.status === "running" || current.status === "starting") return;
+    logDesktopDaemonLifecycle("auto-starting built-in daemon", {
+      status: current.status,
+      home: current.home,
+      pid: current.pid,
+    });
+    await startDaemon();
+  } catch (error) {
+    logDesktopDaemonLifecycle("auto-start failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function startDaemon(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 

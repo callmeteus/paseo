@@ -196,9 +196,12 @@ interface ModelBrowserProps {
   showProfilesSection?: boolean;
   /**
    * Called after the user picks (or clears) a router from the section below.
-   * Receives the picked router id, or null when the pick was cleared.
+   * Receives the picked router id, or null when the pick was cleared. When
+   * omitted, the pick writes the daemon-wide default router for new chats.
    */
   onRouterPicked?: (routerId: string | null) => void;
+  /** Router selection to highlight; undefined falls back to the default router. */
+  selectedRouterId?: string | null;
 }
 
 interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "scrolling"> {
@@ -1445,13 +1448,19 @@ function ModelBrowserContent({
   rootBrowseContent,
   showProfilesSection = true,
   onRouterPicked,
+  selectedRouterId,
 }: ModelBrowserContentProps) {
   const { t } = useTranslation();
   const routerPicker = useRouterPicker(serverId);
+  const highlightedRouterId =
+    selectedRouterId !== undefined ? selectedRouterId : routerPicker.selectedRouterId;
   const handleRouterSelect = useCallback(
     (routerId: string | null) => {
+      if (onRouterPicked) {
+        onRouterPicked(routerId);
+        return;
+      }
       void routerPicker.select(routerId);
-      onRouterPicked?.(routerId);
     },
     [onRouterPicked, routerPicker],
   );
@@ -1546,7 +1555,7 @@ function ModelBrowserContent({
       {routerPicker.rows.length > 0 ? (
         <RoutersPickerSection
           rows={routerPicker.rows}
-          selectedRouterId={routerPicker.selectedRouterId}
+          selectedRouterId={highlightedRouterId}
           onSelect={handleRouterSelect}
         />
       ) : null}
@@ -1602,6 +1611,7 @@ export function ModelBrowser({
   rootBrowseContent,
   showProfilesSection,
   onRouterPicked,
+  selectedRouterId,
 }: ModelBrowserProps) {
   return (
     <ModelBrowserContent
@@ -1626,6 +1636,7 @@ export function ModelBrowser({
       rootBrowseContent={rootBrowseContent}
       showProfilesSection={showProfilesSection}
       onRouterPicked={onRouterPicked}
+      selectedRouterId={selectedRouterId}
     />
   );
 }

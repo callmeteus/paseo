@@ -1,4 +1,10 @@
-import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
+import {
+  useMemo,
+  useCallback,
+  type ComponentProps,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -7,6 +13,7 @@ import {
   Circle,
   CircleCheck,
   Copy,
+  FolderInput,
   MoreVertical,
   Pencil,
   Pin,
@@ -14,6 +21,7 @@ import {
   Tag,
 } from "lucide-react-native";
 import { isWeb } from "@/constants/platform";
+import { openMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -52,6 +60,7 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedCopy = withUnistyles(Copy);
+const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedArchive = withUnistyles(Archive);
 const ThemedCircle = withUnistyles(Circle);
 const ThemedPencil = withUnistyles(Pencil);
@@ -62,6 +71,9 @@ const ThemedTag = withUnistyles(Tag);
 
 const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapping} />;
 const renameLeadingIcon = <ThemedPencil size={14} uniProps={foregroundMutedColorMapping} />;
+const moveToFolderLeadingIcon = (
+  <ThemedFolderInput size={14} uniProps={foregroundMutedColorMapping} />
+);
 const markAsReadLeadingIcon = (
   <ThemedCircleCheck size={14} uniProps={foregroundMutedColorMapping} />
 );
@@ -127,6 +139,34 @@ function WorkspaceMenuItem({
   return <DropdownMenuItem {...props}>{children}</DropdownMenuItem>;
 }
 
+function MoveWorkspaceToFolderMenuItem({
+  surface,
+  workspaceKey,
+  serverId,
+  workspaceId,
+}: {
+  surface: MenuSurface;
+  workspaceKey: string;
+  serverId: string;
+  workspaceId: string;
+}): ReactNode {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => {
+    openMoveWorkspaceToFolder({ serverId, workspaceId });
+  }, [serverId, workspaceId]);
+
+  return (
+    <WorkspaceMenuItem
+      surface={surface}
+      testID={`sidebar-workspace-menu-move-to-folder-${workspaceKey}`}
+      leading={moveToFolderLeadingIcon}
+      onSelect={handleSelect}
+    >
+      {t("sidebar.workspace.actions.moveToFolder")}
+    </WorkspaceMenuItem>
+  );
+}
+
 function SidebarWorkspaceMenuItems({
   surface,
   workspaceKey,
@@ -187,6 +227,14 @@ function SidebarWorkspaceMenuItems({
         >
           {t("sidebar.workspace.actions.rename")}
         </WorkspaceMenuItem>
+      ) : null}
+      {serverId && workspaceId ? (
+        <MoveWorkspaceToFolderMenuItem
+          surface={surface}
+          workspaceKey={workspaceKey}
+          serverId={serverId}
+          workspaceId={workspaceId}
+        />
       ) : null}
       {onMarkAsRead ? (
         <WorkspaceMenuItem

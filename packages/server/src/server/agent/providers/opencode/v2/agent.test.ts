@@ -7,6 +7,10 @@ import { OpenCodeV2AgentClient } from "./agent.js";
 import { V2Harness } from "../test-utils/v2-harness.js";
 import type { V2Api } from "./api.js";
 
+function isRetryTimelineEvent(event: AgentStreamEvent): boolean {
+  return event.type === "timeline" && event.transient === true && event.item.type === "error";
+}
+
 function terminalEvents(events: AgentStreamEvent[]) {
   return events.filter(
     (event) =>
@@ -17,6 +21,45 @@ function terminalEvents(events: AgentStreamEvent[]) {
 }
 
 describe("OpenCode v2 session lifecycle", () => {
+  test("forwards provider retry status as a transient timeline row", async () => {
+    const harness = new V2Harness();
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    try {
+      harness.push({
+        id: "retry-2",
+        created: 3,
+        type: "session.status",
+        data: {
+          sessionID: "session",
+          status: {
+            type: "retry",
+            attempt: 2,
+            message: "Upstream request failed: rate limit exceeded",
+            next: Date.now() + 400_000,
+          },
+        },
+      });
+      await expect
+        .poll(() => events.find(isRetryTimelineEvent))
+        .toMatchObject({
+          type: "timeline",
+          transient: true,
+          item: {
+            type: "error",
+            message: expect.stringContaining("Provider retry (attempt 2): Upstream request failed"),
+          },
+        });
+    } finally {
+      await session.close();
+    }
+  });
+
   test("completes from execution events without a long-lived HTTP wait", async () => {
     const harness = new V2Harness();
     harness.prompt = async (input) => {

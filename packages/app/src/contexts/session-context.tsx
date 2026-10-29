@@ -160,7 +160,8 @@ function resolveAgentAttentionNotification(
     workspaceId: input.workspaceId,
     agentId: input.agentId,
     assistantMessage: input.reason === "finished" ? input.assistantMessage : null,
-    permissionRequest: input.reason === "permission" ? input.permissionRequest : null,
+    permissionRequest:
+      input.reason === "permission" || input.reason === "question" ? input.permissionRequest : null,
   });
 }
 
@@ -257,7 +258,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const notifyAgentAttention = useCallback(
     (params: {
       agentId: string;
-      reason: "finished" | "error" | "permission";
+      reason: "finished" | "error" | "permission" | "question" | "goal-paused" | "goal-complete";
       timestamp: string;
       notification?: AgentAttentionNotificationPayload;
     }) => {

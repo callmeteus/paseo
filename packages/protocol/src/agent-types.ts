@@ -445,7 +445,7 @@ export type AgentStreamEvent =
   | {
       type: "attention_required";
       provider: AgentProvider;
-      reason: "finished" | "error" | "permission";
+      reason: "finished" | "error" | "permission" | "question" | "goal-paused" | "goal-complete";
       timestamp: string;
     };
 

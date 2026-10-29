@@ -49,7 +49,14 @@ export interface PluginAgentSnapshot {
   readonly currentModeId: string | null;
   readonly thinkingOptionId: string | null;
   readonly requiresAttention: boolean;
-  readonly attentionReason: "finished" | "error" | "permission" | null;
+  readonly attentionReason:
+    | "finished"
+    | "error"
+    | "permission"
+    | "question"
+    | "goal-paused"
+    | "goal-complete"
+    | null;
   readonly parentAgentId: string | null;
   readonly labels: Readonly<Record<string, string>>;
 }

@@ -466,6 +466,22 @@ export class OpenCodeV2Session implements AgentSession {
       });
       return;
     }
+    if (event.type === "session.status" && event.data.status.type === "retry") {
+      const status = event.data.status;
+      const message = status.message.trim();
+      this.emitTimeline({
+        type: "timeline",
+        provider: "opencode",
+        transient: true,
+        item: {
+          type: "error",
+          message: message
+            ? `Provider retry (attempt ${status.attempt}): ${message}`
+            : `Provider retry (attempt ${status.attempt})`,
+        },
+      });
+      return;
+    }
     if (event.type === "session.text.delta" || event.type === "session.reasoning.delta") {
       const isText = event.type === "session.text.delta";
       // A structured-output turn supplies its answer through a tool, so streamed

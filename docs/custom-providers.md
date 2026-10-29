@@ -69,6 +69,7 @@ per-agent examples and provider-specific keys.
 - [Alibaba Cloud (Qwen) coding plan](#alibaba-cloud-qwen-coding-plan)
 - [Codex with a custom OpenAI-compatible endpoint](#codex-with-a-custom-openai-compatible-endpoint)
 - [Multiple profiles for the same provider](#multiple-profiles-for-the-same-provider)
+- [OpenCode external server](#opencode-external-server)
 - [Custom binary for a provider](#custom-binary-for-a-provider)
 - [Disabling a provider](#disabling-a-provider)
 - [ACP providers](#acp-providers)
@@ -339,6 +340,35 @@ You can also combine profiles with model overrides to pin specific models per pr
   }
 }
 ```
+
+---
+
+## OpenCode external server
+
+By default Paseo spawns and owns an `opencode serve` helper. If OpenCode
+already runs as an external v2 server, point Paseo at it instead. Paseo then
+only connects: it does not spawn, stop, or reap that process, so a Paseo restart
+does not interrupt a running OpenCode turn.
+
+```json
+{
+  "agents": {
+    "providers": {
+      "opencode": {
+        "env": {
+          "PASEO_OPENCODE_SERVER_URL": "http://127.0.0.1:4096",
+          "PASEO_OPENCODE_SERVER_PASSWORD": "optional-basic-auth-password"
+        }
+      }
+    }
+  }
+}
+```
+
+The external server must expose the OpenCode v2 API. Because Paseo did not
+spawn it, it cannot inject the Paseo bridge environment; configure the Paseo
+plugin on the external server if you need Paseo-native tools. Per-agent process
+environment and dedicated sessions are rejected in this mode.
 
 ---
 

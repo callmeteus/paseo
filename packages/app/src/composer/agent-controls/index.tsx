@@ -71,6 +71,7 @@ import {
   planProviderSwitch,
   resolveDisplayModelId,
   resolveDisplayProvider,
+  resolveDisplayRouterId,
   stageProviderSwitch,
   updateStagedProviderModel,
   usePendingProviderSwitch,
@@ -93,7 +94,6 @@ import { ComposerControlLayoutProvider } from "@/composer/agent-controls/layout-
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
-import { portAgentToFallbackRouter } from "@/model-routers/port-to-fallback-target";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
@@ -143,6 +143,8 @@ interface ControlledAgentControlsProps {
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** Router the chat is bound to (or staged), for the selector subtitle. */
+  activeRouterId?: string | null;
   /** Called after the user picks (or clears) a router in the model selector. */
   onRouterPicked?: (routerId: string | null) => void;
 }
@@ -177,6 +179,7 @@ export interface DraftAgentControlsProps {
   disabled?: boolean;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
 }
 
@@ -412,6 +415,7 @@ type AgentControlsSlice = {
   cwd: string | null;
   runtimeModelId: string | null;
   model: string | null | undefined;
+  modelRouterId: string | null | undefined;
   features: AgentFeature[] | undefined;
   runtimeThinkingOptionId: string | null;
   thinkingOptionId: string | null | undefined;
@@ -432,6 +436,7 @@ function selectAgentControlsSlice(
     cwd: currentAgent.cwd,
     runtimeModelId: currentAgent.runtimeInfo?.model ?? null,
     model: currentAgent.model,
+    modelRouterId: currentAgent.modelRouterId ?? null,
     features: currentAgent.features,
     runtimeThinkingOptionId: currentAgent.runtimeInfo?.thinkingOptionId ?? null,
     thinkingOptionId: currentAgent.thinkingOptionId,
@@ -521,6 +526,7 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  activeRouterId,
   onRouterPicked,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
@@ -811,6 +817,7 @@ function ControlledAgentControls({
             handleCloseSheet={handleCloseSheet}
             modelSelectorServerId={modelSelectorServerId}
             onRouterPicked={onRouterPicked}
+            activeRouterId={activeRouterId}
           />
         ) : (
           <SheetAgentControlsContent
@@ -849,6 +856,7 @@ function ControlledAgentControls({
             modelSelectorServerId={modelSelectorServerId}
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
             onRouterPicked={onRouterPicked}
+            activeRouterId={activeRouterId}
           />
         )}
       </View>
@@ -912,6 +920,7 @@ interface DesktopAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
+  activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
 }
 
@@ -971,6 +980,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleCloseSheet,
     modelSelectorServerId,
     onRouterPicked,
+    activeRouterId,
   } = props;
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
@@ -1035,6 +1045,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 desktopMinWidth={360}
                 toolbar={modelToolbar}
                 onRouterPicked={onRouterPicked}
+                activeRouterId={activeRouterId}
               />
             </View>
           </TooltipTrigger>
@@ -1175,6 +1186,7 @@ interface SheetAgentControlsContentProps {
   glyphSize: number;
   modelSelectorServerId: string | null;
   canSwitchProvider: boolean;
+  activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
 }
 
@@ -1216,6 +1228,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     modelSelectorServerId,
     canSwitchProvider,
     onRouterPicked,
+    activeRouterId,
   } = props;
 
   const thinkingAnchorRef = useRef<View | null>(null);
@@ -1303,6 +1316,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       serverId={modelSelectorServerId}
       glyphSize={glyphSize}
       canSwitchProvider={canSwitchProvider}
+      activeRouterId={activeRouterId}
       onRouterPicked={onRouterPicked}
     >
       {sheetControls}
@@ -1740,28 +1754,6 @@ export const AgentControls = memo(function AgentControls({
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
 
-  const handleSelectModel = useCallback(
-    async (modelId: string) => {
-      if (!client || !agentProvider) {
-        return;
-      }
-      try {
-        await client.setAgentModel(agentId, modelId);
-        await updatePreferences((current) =>
-          mergeProviderPreferences({
-            preferences: current,
-            provider: agentProvider,
-            updates: { model: modelId },
-          }),
-        );
-      } catch (error) {
-        console.warn("[AgentControls] setAgentModel or persist preference failed", error);
-        toast.error(toErrorMessage(error));
-      }
-    },
-    [agentId, agentProvider, client, toast, updatePreferences],
-  );
-
   const handleSelectProviderAndModel = useCallback(
     async (provider: string, modelId: string, targetServerId?: string | null) => {
       const plan = planProviderSwitch({
@@ -1780,21 +1772,19 @@ export const AgentControls = memo(function AgentControls({
         toast.error(t(plan.messageKey));
         return;
       }
-      if (plan.kind === "model") {
-        clearProviderSwitch(serverId, agentId);
-        await handleSelectModel(modelId);
-        return;
-      }
-      // Porting archives this agent and creates a new one, so the pick is staged
-      // and committed by the next message instead of yanking the chat away now.
+      // Every target pick is staged and committed by the next message: a port
+      // would archive this agent, and even a plain model change must not apply
+      // to a goal auto-continuation the user did not send.
       stageProviderSwitch(serverId, agentId, {
+        kind: "model",
         targetServerId: plan.targetHost,
         provider,
         modelId,
+        clearRouter: Boolean(agent?.modelRouterId),
       });
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agentId, agentProvider, handleSelectModel, serverId, supportsProviderSwap, t, toast],
+    [agent?.modelRouterId, agentId, agentProvider, serverId, supportsProviderSwap, t, toast],
   );
 
   /**
@@ -1804,11 +1794,22 @@ export const AgentControls = memo(function AgentControls({
    */
   const handleSelectModelFromPicker = useCallback(
     (modelId: string) => {
-      if (!updateStagedProviderModel(serverId, agentId, modelId)) {
-        void handleSelectModel(modelId);
+      if (updateStagedProviderModel(serverId, agentId, modelId)) {
+        return;
       }
+      if (!agentProvider) {
+        return;
+      }
+      stageProviderSwitch(serverId, agentId, {
+        kind: "model",
+        targetServerId: serverId,
+        provider: agentProvider,
+        modelId,
+        clearRouter: Boolean(agent?.modelRouterId),
+      });
+      toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agentId, handleSelectModel, serverId],
+    [agent?.modelRouterId, agentId, agentProvider, serverId, t, toast],
   );
 
   useEffect(() => {
@@ -1970,23 +1971,32 @@ export const AgentControls = memo(function AgentControls({
 
   const handleRouterPicked = useCallback(
     (routerId: string | null) => {
-      // Picking a fallback router on an existing chat ports it to the router's
-      // first target through the regular provider-switch port flow.
-      if (!routerId || !client || !agent) return;
-      void portAgentToFallbackRouter({ client, serverId, agentId, routerId }).then((result) => {
-        if (result.outcome === "ported") {
-          toast.show(t("settings.modelRouters.fallbackMoved", { provider: result.provider }), {
-            variant: "info",
-            durationMs: 4000,
-          });
+      if (!agent) {
+        return;
+      }
+      if (routerId) {
+        // Router picks are staged like model picks: the port happens on the
+        // next send, never under the user's cursor.
+        stageProviderSwitch(serverId, agentId, {
+          kind: "router",
+          targetServerId: serverId,
+          routerId,
+        });
+      } else {
+        if (!agentProvider) {
           return;
         }
-        if (result.outcome === "no-target") toast.error(t("settings.modelRouters.noMoreTargets"));
-        if (result.outcome === "failed") toast.error(result.reason);
-        return undefined;
-      });
+        stageProviderSwitch(serverId, agentId, {
+          kind: "model",
+          targetServerId: serverId,
+          provider: agentProvider,
+          modelId: agent.runtimeModelId ?? agent.model ?? "",
+          clearRouter: true,
+        });
+      }
+      toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent, agentId, client, serverId, t, toast],
+    [agent, agentId, agentProvider, serverId, t, toast],
   );
 
   if (!agent) {
@@ -2002,6 +2012,7 @@ export const AgentControls = memo(function AgentControls({
         modelSelectorProviders={agentModelSelectorProviders}
         modelOptions={modelOptions}
         selectedModelId={resolveDisplayModelId(pendingProviderSwitch, modelSelection.activeModelId)}
+        activeRouterId={resolveDisplayRouterId(pendingProviderSwitch, agent.modelRouterId)}
         onSelectModel={handleSelectModelFromPicker}
         onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}

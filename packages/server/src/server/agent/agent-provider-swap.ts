@@ -17,6 +17,11 @@ export interface SwapProviderInput {
   portedTimeline?: readonly AgentTimelineRow[];
   /** Defaults to true. False leaves the source agent for the client to archive. */
   archivePrevious?: boolean;
+  /**
+   * Router binding for the ported chat. Omitted (or null) detaches it, matching
+   * a switch to a plain model; the binding is never inherited from the source.
+   */
+  modelRouterId?: string | null;
   /** True allows a same provider+model port (repairs a corrupt session). */
   force?: boolean;
   logger?: Logger;
@@ -204,6 +209,9 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
     lastStatus: "closed",
     lastModeId: null,
     archivedAt: null,
+    // A port never inherits the source's router binding: the caller decides
+    // whether the ported chat runs on a router or on a plain model.
+    modelRouterId: input.modelRouterId ?? null,
     // A port starts a new branch: it must not inherit the source's outgoing
     // link (that stale pointer hides the ported tab from the tab bar).
     migratedTo: undefined,

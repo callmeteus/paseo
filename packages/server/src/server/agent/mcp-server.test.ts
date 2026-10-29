@@ -273,6 +273,7 @@ function buildAgentManagerSpies() {
     hasInFlightRun: vi.fn().mockReturnValue(false),
     steerOrReplaceActiveTurn: async () => ({ status: "inactive" as const }),
     tryRunOutOfBand: vi.fn().mockReturnValue(false),
+    planGoalTurn: vi.fn().mockResolvedValue(null),
     subscribe: vi.fn().mockReturnValue(() => {}),
     streamAgent: vi.fn(() => (async function* noop() {})()),
     waitForAgentRunStart: vi.fn().mockResolvedValue(undefined),
@@ -629,6 +630,10 @@ class BoundaryAgentManagerFake {
 
   public listAgents(): ManagedAgent[] {
     return [];
+  }
+
+  public async planGoalTurn(): Promise<null> {
+    return null;
   }
 }
 

@@ -2,14 +2,28 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { performCrossHostPort } from "./cross-host-port";
 import { performAgentProviderSwap } from "./provider-swap";
-import type { PendingProviderSwitch } from "./pending-provider-switch";
+import type { StagedModelTarget } from "./pending-provider-switch";
+
+/**
+ * Router binding carried by a staged model switch: an explicit pick wins, then
+ * a detach, otherwise the port keeps the server default.
+ */
+function resolveRouterBinding(pending: StagedModelTarget): { modelRouterId?: string | null } {
+  if (pending.routerId !== undefined) {
+    return { modelRouterId: pending.routerId };
+  }
+  if (pending.clearRouter) {
+    return { modelRouterId: null };
+  }
+  return {};
+}
 
 export interface ApplyProviderSwitchInput {
   sourceClient: DaemonClient;
   sourceServerId: string;
   agentId: string;
   workspaceId: string | null;
-  pending: PendingProviderSwitch;
+  pending: StagedModelTarget;
   persistPreference: (provider: string, modelId: string) => Promise<unknown>;
   onPreferencePersistError?: (error: unknown) => void;
 }
@@ -42,6 +56,7 @@ export async function applyProviderSwitch(
       agentId: input.agentId,
       provider: input.pending.provider,
       modelId: input.pending.modelId,
+      ...resolveRouterBinding(input.pending),
       archivePrevious: false,
       persistPreference: input.persistPreference,
       onPreferencePersistError: input.onPreferencePersistError,

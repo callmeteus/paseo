@@ -28,7 +28,13 @@ describe("applyProviderSwitch", () => {
       sourceServerId: "srv_a",
       agentId: "agent-old",
       workspaceId: "ws_1",
-      pending: { targetServerId: "srv_a", provider: "cline", modelId: "cline-pro" },
+      pending: {
+        kind: "model",
+        targetServerId: "srv_a",
+        provider: "cline",
+        modelId: "cline-pro",
+        clearRouter: false,
+      },
       persistPreference,
     });
 
@@ -58,7 +64,13 @@ describe("applyProviderSwitch", () => {
         sourceServerId: "srv_a",
         agentId: "agent-old",
         workspaceId: null,
-        pending: { targetServerId: "srv_a", provider: "cline", modelId: "" },
+        pending: {
+          kind: "model",
+          targetServerId: "srv_a",
+          provider: "cline",
+          modelId: "",
+          clearRouter: false,
+        },
         persistPreference: async () => undefined,
       }),
     ).rejects.toThrow("provider unavailable");

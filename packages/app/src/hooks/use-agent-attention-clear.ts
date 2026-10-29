@@ -8,7 +8,15 @@ import {
 import { getIsAppActivelyVisible } from "@/utils/app-visibility";
 import { isWeb } from "@/constants/platform";
 
-type AttentionReason = "finished" | "error" | "permission" | null | undefined;
+type AttentionReason =
+  | "finished"
+  | "error"
+  | "permission"
+  | "question"
+  | "goal-paused"
+  | "goal-complete"
+  | null
+  | undefined;
 
 interface UseAgentAttentionClearParams {
   agentId: string | null | undefined;

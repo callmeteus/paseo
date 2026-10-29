@@ -1,5 +1,6 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
+import { openMoveAgentToWorkspace } from "@/screens/workspace/move-agent-to-workspace-store";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 
@@ -11,6 +12,7 @@ export interface WorkspaceTabMenuLabels {
   copyTerminalId: string;
   copyFilePath: string;
   rename: string;
+  moveToWorkspace: string;
   closeAbove: string;
   closeBelow: string;
   closeLeft: string;
@@ -19,6 +21,7 @@ export interface WorkspaceTabMenuLabels {
   reloadAgent: string;
   reloadAgentTooltip: string;
   close: string;
+  openContainingDirectory: string;
 }
 
 export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
@@ -27,6 +30,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   copyTerminalId: i18n.t("workspace.tabs.menu.copyTerminalId"),
   copyFilePath: i18n.t("workspace.tabs.menu.copyFilePath"),
   rename: i18n.t("workspace.tabs.menu.rename"),
+  moveToWorkspace: i18n.t("workspace.tabs.menu.moveToWorkspace"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
   closeLeft: i18n.t("workspace.tabs.menu.closeLeft"),
@@ -35,6 +39,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   reloadAgent: i18n.t("workspace.tabs.menu.reloadAgent"),
   reloadAgentTooltip: i18n.t("workspace.tabs.menu.reloadAgentTooltip"),
   close: i18n.t("workspace.tabs.menu.close"),
+  openContainingDirectory: i18n.t("workspace.tabs.menu.openContainingDirectory"),
 };
 
 export type WorkspaceTabMenuEntry =
@@ -49,6 +54,7 @@ export type WorkspaceTabMenuEntry =
         | "arrow-right-to-line"
         | "copy-x"
         | "pencil"
+        | "folder-input"
         | "x";
       hint?: string;
       tooltip?: string;
@@ -65,6 +71,14 @@ export type WorkspaceTabMenuEntry =
       /** Where the file tab's "Open with…" row goes; it renders only for files with several panels. */
       kind: "file-panel-open-with";
       key: string;
+    }
+  | {
+      /** Opens the folder that contains a file tab's file. */
+      kind: "file-open-directory";
+      key: string;
+      path: string;
+      label: string;
+      testID: string;
     };
 
 interface BuildWorkspaceTabMenuEntriesInput {
@@ -247,6 +261,13 @@ export function buildWorkspaceTabMenuEntries(
       },
     });
     entries.push({ kind: "file-panel-open-with", key: "file-panel-open-with" });
+    entries.push({
+      kind: "file-open-directory",
+      key: "file-open-directory",
+      path: filePath,
+      label: labels.openContainingDirectory,
+      testID: `${menuTestIDBase}-open-directory`,
+    });
   }
 
   if (tab.target.kind === "agent" || tab.target.kind === "terminal") {
@@ -260,6 +281,19 @@ export function buildWorkspaceTabMenuEntries(
         onRenameTab(tab);
       },
     });
+    if (tab.target.kind === "agent") {
+      const { agentId } = tab.target;
+      entries.push({
+        kind: "item",
+        key: "move-to-workspace",
+        label: labels.moveToWorkspace,
+        icon: "folder-input",
+        testID: `${menuTestIDBase}-move-to-workspace`,
+        onSelect: () => {
+          openMoveAgentToWorkspace(agentId);
+        },
+      });
+    }
     entries.push({
       kind: "separator",
       key: "rename-separator",

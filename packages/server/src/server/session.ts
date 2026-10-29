@@ -221,7 +221,7 @@ import {
   matchesAgentUpdatesFilter,
   type AgentUpdatesService,
 } from "./session/agent-updates/agent-updates-service.js";
-import { expandTilde } from "../utils/path.js";
+import { areEquivalentPaths, expandTilde } from "../utils/path.js";
 import {
   searchDirectoryEntries,
   WORKSPACE_SEARCH_HIDDEN_DIRECTORIES,
@@ -2765,6 +2765,10 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.model_router.set.request":
+        return this.handleAgentModelRouterSetRequest(msg.agentId, msg.routerId, msg.requestId);
+      case "agent.workspace.set.request":
+        return this.handleAgentWorkspaceSetRequest(msg.agentId, msg.workspaceId, msg.requestId);
       default:
         return undefined;
     }
@@ -3139,6 +3143,8 @@ export class Session {
         return this.handleWorkspaceClearAttentionRequest(msg);
       case "workspace.mark_unread.request":
         return this.handleWorkspaceMarkUnreadRequest(msg);
+      case "workspace.relocate.request":
+        return this.handleWorkspaceRelocateRequest(msg);
       default:
         return undefined;
     }
@@ -3168,6 +3174,7 @@ export class Session {
           msg.requestId,
           msg.archivePrevious ?? true,
           msg.force ?? false,
+          msg.modelRouterId ?? null,
         );
       case "agent.export_snapshot.request":
         return this.handleExportSnapshotRequest(msg.agentId, msg.requestId);
@@ -3375,6 +3382,7 @@ export class Session {
     requestId: string,
     archivePrevious = true,
     force = false,
+    modelRouterId?: string | null,
   ): Promise<void> {
     this.sessionLogger.info({ agentId, targetProvider }, "Swapping agent provider");
 
@@ -3382,6 +3390,7 @@ export class Session {
       const result = await this.agentManager.swapProvider(agentId, targetProvider, targetModel, {
         archivePrevious,
         force,
+        modelRouterId: modelRouterId ?? null,
       });
 
       if (archivePrevious && this.agentManager.getAgent(agentId)) {
@@ -3561,6 +3570,105 @@ export class Session {
     }
 
     return { agentId, archivedAt };
+  }
+
+  private async handleAgentModelRouterSetRequest(
+    agentId: string,
+    routerId: string | null,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      this.agentManager.setAgentModelRouter(agentId, routerId);
+      this.emit({
+        type: "agent.model_router.set.response",
+        payload: {
+          requestId,
+          agentId,
+          routerId: routerId ?? null,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to update the chat's router");
+      this.sessionLogger.error(
+        { err: error, agentId, routerId, requestId },
+        "Failed to update the chat's router",
+      );
+      this.emit({
+        type: "agent.model_router.set.response",
+        payload: {
+          requestId,
+          agentId,
+          routerId: routerId ?? null,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleAgentWorkspaceSetRequest(
+    agentId: string,
+    workspaceId: string,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      if (!workspace || workspace.archivedAt) {
+        throw new Error("Target workspace not found or archived");
+      }
+      const liveAgent = this.agentManager.getAgent(agentId);
+      const storedRecord = liveAgent ? null : await this.agentStorage.get(agentId);
+      if (!liveAgent && !storedRecord) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      const previousWorkspaceId = liveAgent?.workspaceId ?? storedRecord?.workspaceId;
+      if (liveAgent) {
+        this.agentManager.moveAgentToWorkspace(agentId, workspaceId);
+      } else if (storedRecord) {
+        await this.agentStorage.upsert({
+          ...storedRecord,
+          workspaceId,
+          updatedAt: new Date().toISOString(),
+        });
+        const next = await this.agentStorage.get(agentId);
+        if (next) await this.agentUpdates.emitStoredRecord(next);
+      }
+      await this.emitWorkspaceUpdatesForWorkspaceIds(
+        new Set(
+          [previousWorkspaceId, workspaceId].filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
+        ),
+      );
+      this.emit({
+        type: "agent.workspace.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workspaceId,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to move the chat to another workspace");
+      this.sessionLogger.error(
+        { err: error, agentId, workspaceId, requestId },
+        "Failed to move the chat to another workspace",
+      );
+      this.emit({
+        type: "agent.workspace.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workspaceId,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
   }
 
   private async handleDetachAgentRequest(agentId: string, requestId: string): Promise<void> {
@@ -4630,6 +4738,7 @@ export class Session {
           agentId,
           config: resolvedIntent.config,
           workspaceId: resolvedIntent.intent.workspaceId,
+          modelRouterId: msg.modelRouterId ?? null,
           initialPrompt,
           source: msg.callerAgentId
             ? { kind: "agent-message", agentId: msg.callerAgentId }
@@ -7860,6 +7969,75 @@ export class Session {
                 .join("; "),
       },
     });
+  }
+
+  private async handleWorkspaceRelocateRequest(
+    request: Extract<SessionInboundMessage, { type: "workspace.relocate.request" }>,
+  ): Promise<void> {
+    const { requestId, workspaceId } = request;
+    let targetCwd = request.cwd;
+    try {
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      if (!workspace || workspace.archivedAt) {
+        throw new Error(`Workspace not found: ${workspaceId}`);
+      }
+      if (workspace.kind === "worktree") {
+        throw new Error(
+          "Worktree workspaces are tied to their backing checkout and cannot be moved to another folder.",
+        );
+      }
+      targetCwd = resolve(expandTilde(request.cwd.trim()));
+      if (areEquivalentPaths(workspace.cwd, targetCwd)) {
+        throw new Error("The workspace already uses this folder.");
+      }
+      if (!(await this.filesystem.isDirectory(targetCwd))) {
+        throw new Error(`Folder not found: ${targetCwd}`);
+      }
+      const project = await this.workspaceProvisioning.findOrCreateProjectForDirectory(targetCwd);
+      const updated = await this.workspaceRegistry.update(workspaceId, (record) => ({
+        ...record,
+        cwd: targetCwd,
+        projectId: project.projectId,
+        worktreeRoot: null,
+        mainRepoRoot: null,
+        updatedAt: new Date().toISOString(),
+      }));
+      if (!updated) {
+        throw new Error(`Workspace disappeared while moving: ${workspaceId}`);
+      }
+      await this.reconcileWorkspaceGitObservers();
+      await this.emitWorkspaceUpdatesForWorkspaceIds([workspaceId]);
+      this.sessionLogger.info(
+        { workspaceId, cwd: targetCwd, requestId },
+        "Workspace re-pointed to another folder",
+      );
+      this.emit({
+        type: "workspace.relocate.response",
+        payload: {
+          requestId,
+          workspaceId,
+          cwd: targetCwd,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.sessionLogger.error(
+        { err: error, workspaceId, cwd: targetCwd, requestId },
+        "Failed to move workspace to another folder",
+      );
+      this.emit({
+        type: "workspace.relocate.response",
+        payload: {
+          requestId,
+          workspaceId,
+          cwd: targetCwd,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
   }
 
   private async handleWorkspaceMarkUnreadRequest(

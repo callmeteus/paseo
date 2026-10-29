@@ -56,6 +56,19 @@ test("records the runtime once and retains its position across resume", async ()
   }
 });
 
+test("keeps the provider available when an external server URL is configured", async () => {
+  const { OpenCodeRuntimeClient } = await import("./runtime-client.js");
+  const { createTestLogger } = await import("../../../../test-utils/test-logger.js");
+  const client = new OpenCodeRuntimeClient(createTestLogger(), {
+    env: { PASEO_OPENCODE_SERVER_URL: "http://127.0.0.1:4096" },
+  });
+  try {
+    await expect(client.isAvailable()).resolves.toBe(true);
+  } finally {
+    await client.shutdown();
+  }
+});
+
 test("retries a rejected version probe after the configured binary changes", async () => {
   const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");

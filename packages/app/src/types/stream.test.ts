@@ -1643,6 +1643,49 @@ describe("stream reducer canonical tool calls", () => {
 });
 
 describe("turn lifecycle events", () => {
+  it("keeps one live retry notice and clears it when the turn settles", () => {
+    const retry = (attempt: number): AgentStreamEventPayload => ({
+      type: "timeline",
+      provider: "opencode",
+      transient: true,
+      item: { type: "error", message: `Provider retry (attempt ${attempt}): rate limited` },
+    });
+
+    let state = reduceStreamUpdate([], retry(1), new Date(1));
+    state = reduceStreamUpdate(state, retry(2), new Date(2));
+
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({
+      kind: "notification",
+      message: "Provider retry (attempt 2): rate limited",
+    });
+
+    state = reduceStreamUpdate(
+      state,
+      { type: "turn_completed", provider: "opencode" },
+      new Date(3),
+    );
+    expect(state).toHaveLength(0);
+  });
+
+  it("drops persisted retry notices while hydrating history", () => {
+    const state = hydrateStreamState(
+      [
+        {
+          event: {
+            type: "timeline",
+            provider: "opencode",
+            item: { type: "error", message: "Provider retry (attempt 1): rate limited" },
+          },
+          timestamp: new Date(1),
+        },
+      ],
+      { source: "canonical" },
+    );
+
+    expect(state).toHaveLength(0);
+  });
+
   it("finalizes active stream items without adding timeline rows", () => {
     const startedAt = new Date("2025-01-01T12:00:00Z");
     const completedAt = new Date("2025-01-01T12:00:05Z");

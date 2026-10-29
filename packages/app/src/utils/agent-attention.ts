@@ -4,7 +4,15 @@ interface ShouldClearAgentAttentionInput {
   agentId: string | null | undefined;
   isConnected: boolean;
   requiresAttention: boolean | null | undefined;
-  attentionReason?: "finished" | "error" | "permission" | null | undefined;
+  attentionReason?:
+    | "finished"
+    | "error"
+    | "permission"
+    | "question"
+    | "goal-paused"
+    | "goal-complete"
+    | null
+    | undefined;
   trigger?: AgentAttentionClearTrigger;
   hasDeferredFocusEntryClear?: boolean;
 }
@@ -17,7 +25,10 @@ export type AgentAttentionClearTrigger =
 
 const ATTENTION_REASON_PRIORITY = {
   permission: 0,
+  question: 0,
   error: 1,
+  "goal-paused": 2,
+  "goal-complete": 2,
   finished: 2,
 } as const;
 

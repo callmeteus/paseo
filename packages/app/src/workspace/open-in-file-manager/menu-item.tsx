@@ -13,6 +13,8 @@ interface OpenInFileManagerMenuItemProps {
   path?: string | null;
   testID: string;
   surface?: "context" | "dropdown";
+  /** Override the menu label; defaults to "Open in file manager". */
+  label?: string;
 }
 
 const ThemedFolderOpen = withUnistyles(FolderOpen);
@@ -27,6 +29,7 @@ export function OpenInFileManagerMenuItem({
   path,
   testID,
   surface = "dropdown",
+  label,
 }: OpenInFileManagerMenuItemProps) {
   const { t } = useTranslation();
   const toast = useToast();
@@ -52,17 +55,17 @@ export function OpenInFileManagerMenuItem({
     return null;
   }
 
-  const label = t("sidebar.project.actions.openFolder");
+  const resolvedLabel = label ?? t("sidebar.project.actions.openFolder");
   if (surface === "context") {
     return (
       <ContextMenuItem testID={testID} leading={leadingIcon} onSelect={openInFileManager}>
-        {label}
+        {resolvedLabel}
       </ContextMenuItem>
     );
   }
   return (
     <DropdownMenuItem testID={testID} leading={leadingIcon} onSelect={openInFileManager}>
-      {label}
+      {resolvedLabel}
     </DropdownMenuItem>
   );
 }

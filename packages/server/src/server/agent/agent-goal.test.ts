@@ -25,7 +25,22 @@ describe("parseGoalCommand", () => {
   test("returns null for text that is not a goal command", () => {
     expect(parseGoalCommand("fix the bug")).toBeNull();
     expect(parseGoalCommand("/goalkeeper fix the bug")).toBeNull();
-    expect(parseGoalCommand("please run /goal")).toBeNull();
+    expect(parseGoalCommand("run /goalkeeper")).toBeNull();
+  });
+
+  test("finds the token anywhere in the message", () => {
+    expect(parseGoalCommand("please run /goal")).toEqual({
+      kind: "set",
+      objective: "please run",
+    });
+    expect(parseGoalCommand("fix the flaky tests /goal")).toEqual({
+      kind: "set",
+      objective: "fix the flaky tests",
+    });
+    expect(parseGoalCommand("please /goal fix the flaky tests")).toEqual({
+      kind: "set",
+      objective: "please fix the flaky tests",
+    });
   });
 
   test("parses the objective in any casing", () => {

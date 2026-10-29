@@ -56,6 +56,52 @@ function countMatches(text: string, pattern: RegExp): number {
   return count;
 }
 
+const SNIPPET_CONTEXT_CHARS = 90;
+
+export interface ChatTextMatch {
+  seq: number;
+  role: "user" | "assistant";
+  snippet: string;
+}
+
+/**
+ * Finds the first occurrence of `query` in each user/assistant message and
+ * returns a readable excerpt around it. Used by cross-chat search (MCP
+ * `search_chats`), where the caller needs context rather than a count.
+ */
+export function findChatTextMatches(input: {
+  items: readonly {
+    seq: number;
+    item: { type: string; text?: string };
+  }[];
+  query: string;
+  maxMatches?: number;
+}): ChatTextMatch[] {
+  const maxMatches = input.maxMatches ?? 3;
+  if (!input.query.trim() || maxMatches <= 0) return [];
+  const pattern = searchPattern(input.query);
+  const results: ChatTextMatch[] = [];
+  for (const entry of input.items) {
+    const item = entry.item;
+    if (item.type !== "user_message" && item.type !== "assistant_message") continue;
+    if (typeof item.text !== "string") continue;
+    const text = item.text.replace(/\r/g, "");
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    if (!match) continue;
+    const start = Math.max(0, match.index - SNIPPET_CONTEXT_CHARS);
+    const end = Math.min(text.length, match.index + match[0].length + SNIPPET_CONTEXT_CHARS);
+    const excerpt = text.slice(start, end).replace(/\s+/g, " ").trim();
+    results.push({
+      seq: entry.seq,
+      role: item.type === "user_message" ? "user" : "assistant",
+      snippet: `${start > 0 ? "…" : ""}${excerpt}${end < text.length ? "…" : ""}`,
+    });
+    if (results.length >= maxMatches) break;
+  }
+  return results;
+}
+
 export async function searchTimeline({ rows, query, cursor = 0 }: SearchInput) {
   const locations: SearchLocation[] = [];
   if (!query.trim()) return { locations, nextCursor: null };

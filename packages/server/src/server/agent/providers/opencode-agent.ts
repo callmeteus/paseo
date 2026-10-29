@@ -3181,6 +3181,7 @@ function appendOpenCodeSessionStatus(
     events.push({
       type: "timeline",
       provider: "opencode",
+      transient: true,
       item: { type: "error", message: text },
     });
     return;

@@ -820,6 +820,8 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     provider: AgentProviderSchema,
     item: AgentTimelineItemPayloadSchema,
     turnId: z.string().optional(),
+    /** A live-only row that clients may show but must not treat as history. */
+    transient: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("permission_requested"),
@@ -835,7 +837,7 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("attention_required"),
     provider: AgentProviderSchema,
-    reason: z.enum(["finished", "error", "permission"]),
+    reason: z.enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"]),
     timestamp: z.string(),
     shouldNotify: z.boolean(),
     notification: z
@@ -846,7 +848,14 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
           serverId: z.string(),
           workspaceId: z.string().optional(),
           agentId: z.string(),
-          reason: z.enum(["finished", "error", "permission"]),
+          reason: z.enum([
+            "finished",
+            "error",
+            "permission",
+            "question",
+            "goal-paused",
+            "goal-complete",
+          ]),
         }),
       })
       .optional(),
@@ -901,7 +910,10 @@ export const AgentSnapshotPayloadSchema = z.object({
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()).default({}),
   requiresAttention: z.boolean().optional(),
-  attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
+  attentionReason: z
+    .enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"])
+    .nullable()
+    .optional(),
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
@@ -923,6 +935,12 @@ export const AgentSnapshotPayloadSchema = z.object({
     .optional(),
   // Private helper marker, retained for exact-ID snapshots and older wire messages.
   internal: z.boolean().optional(),
+  /**
+   * Model router this chat is bound to, or null/absent when the chat runs on a
+   * plain model. The binding is per chat: only bound chats fall back to another
+   * router target when the provider fails.
+   */
+  modelRouterId: z.string().nullable().optional(),
   /** Daemon-level `/goal` state, shared by every provider. */
   goal: z
     .object({
@@ -951,7 +969,10 @@ export const AgentListItemPayloadSchema = z.object({
   lastUserMessageAt: z.string().nullable(),
   archivedAt: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
-  attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
+  attentionReason: z
+    .enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"])
+    .nullable()
+    .optional(),
   attentionTimestamp: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   providerUnavailable: z.boolean().optional(),
@@ -1826,6 +1847,11 @@ export const CreateAgentRequestMessageSchema = z.object({
   git: GitSetupOptionsSchema.optional(),
   worktree: CreateAgentWorktreeTargetSchema.optional(),
   autoArchive: z.boolean().optional(),
+  /**
+   * Model router that owns the new chat. Null/absent means the chat runs on the
+   * provider/model in `config` with no fallback.
+   */
+  modelRouterId: z.string().nullable().optional(),
   // An ephemeral helper: the daemon never persists, lists, flags or announces
   // it, and plugin lifecycle hooks skip it. Lives on the request rather than
   // in the config schema, which is reused for updates. Retained for wire parsing;
@@ -1851,6 +1877,11 @@ export const AgentSwapProviderRequestSchema = z.object({
   targetProvider: z.string(),
   targetModel: z.string().nullable().optional(),
   /**
+   * Router binding carried by the ported chat. Omitted keeps the source
+   * binding; null detaches it (switching the chat to a plain model).
+   */
+  modelRouterId: z.string().nullable().optional(),
+  /**
    * When false the source agent stays unarchived; the client archives it after
    * it has switched to the new agent, so the old chat does not vanish mid-port.
    */
@@ -1874,6 +1905,8 @@ export const AgentImportSnapshotRequestSchema = z.object({
   snapshot: AgentSnapshotSchema,
   targetProvider: z.string(),
   targetModel: z.string().nullable().optional(),
+  /** Router binding to stamp on the imported chat. Absent means none. */
+  modelRouterId: z.string().nullable().optional(),
   workspaceId: z.string().optional(),
   sourceHost: z.string().optional(),
   requestId: z.string(),
@@ -2159,6 +2192,44 @@ export const AgentDetachRequestMessageSchema = z.object({
 export const AgentDetachResponseMessageSchema = z.object({
   type: z.literal("agent.detach.response"),
   payload: AgentActionResponsePayloadSchema,
+});
+
+/** Rebinds a chat to a model router, or detaches it (null) so it runs on its model only. */
+export const AgentModelRouterSetRequestMessageSchema = z.object({
+  type: z.literal("agent.model_router.set.request"),
+  agentId: z.string(),
+  routerId: z.string().nullable(),
+  requestId: z.string(),
+});
+
+/** Moves a chat's ownership to another workspace without changing its cwd. */
+export const AgentWorkspaceSetRequestMessageSchema = z.object({
+  type: z.literal("agent.workspace.set.request"),
+  agentId: z.string(),
+  workspaceId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentWorkspaceSetResponseMessageSchema = z.object({
+  type: z.literal("agent.workspace.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    workspaceId: z.string(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentModelRouterSetResponseMessageSchema = z.object({
+  type: z.literal("agent.model_router.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    routerId: z.string().nullable(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
@@ -2836,6 +2907,29 @@ export const WorkspaceMarkUnreadRequestSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * Re-points an existing workspace at another directory on the same host. The
+ * workspace keeps its identity, title, labels and chats; its cwd, project
+ * membership and scripts move to the new folder.
+ */
+export const WorkspaceRelocateRequestSchema = z.object({
+  type: z.literal("workspace.relocate.request"),
+  workspaceId: z.string(),
+  cwd: z.string().min(1),
+  requestId: z.string(),
+});
+
+export const WorkspaceRelocateResponseSchema = z.object({
+  type: z.literal("workspace.relocate.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    cwd: z.string(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 // Highlighted diff token schema
 // Note: style can be a compound class name (e.g., "heading meta") from the syntax highlighter
 const HighlightTokenSchema = z.object({
@@ -3455,6 +3549,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureRequestMessageSchema,
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentModelRouterSetRequestMessageSchema,
+  AgentWorkspaceSetRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -3510,6 +3606,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CreationSubscribeRequestSchema,
   WorkspaceClearAttentionRequestSchema,
   WorkspaceMarkUnreadRequestSchema,
+  WorkspaceRelocateRequestSchema,
   FileExplorerRequestSchema,
   FileSubscribeRequestSchema,
   FileUnsubscribeRequestSchema,
@@ -5013,7 +5110,7 @@ export const AgentAttentionRequiredMessageSchema = z.object({
   payload: z.object({
     subscriptionId: z.string().optional(),
     agentId: z.string(),
-    reason: z.enum(["finished", "error", "permission"]),
+    reason: z.enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"]),
     timestamp: z.string(),
     shouldNotify: z.boolean(),
     notification: z
@@ -5024,7 +5121,14 @@ export const AgentAttentionRequiredMessageSchema = z.object({
           serverId: z.string(),
           workspaceId: z.string().optional(),
           agentId: z.string(),
-          reason: z.enum(["finished", "error", "permission"]),
+          reason: z.enum([
+            "finished",
+            "error",
+            "permission",
+            "question",
+            "goal-paused",
+            "goal-complete",
+          ]),
         }),
       })
       .optional(),
@@ -7190,6 +7294,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   CreationSubscribeResponseSchema,
   WorkspaceClearAttentionResponseSchema,
   WorkspaceMarkUnreadResponseSchema,
+  WorkspaceRelocateResponseSchema,
   SendAgentMessageResponseMessageSchema,
   SetVoiceModeResponseMessageSchema,
   DaemonGetStatusResponseSchema,
@@ -7210,6 +7315,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentFeatureResponseMessageSchema,
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentModelRouterSetResponseMessageSchema,
+  AgentWorkspaceSetResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -7414,6 +7521,12 @@ export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingRes
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentConfigApplyResponseMessage = z.infer<typeof AgentConfigApplyResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentModelRouterSetResponseMessage = z.infer<
+  typeof AgentModelRouterSetResponseMessageSchema
+>;
+export type AgentWorkspaceSetResponseMessage = z.infer<
+  typeof AgentWorkspaceSetResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -7583,6 +7696,10 @@ export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequ
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentModelRouterSetRequestMessage = z.infer<
+  typeof AgentModelRouterSetRequestMessageSchema
+>;
+export type AgentWorkspaceSetRequestMessage = z.infer<typeof AgentWorkspaceSetRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;
@@ -7701,6 +7818,8 @@ export type ProjectGithubCloneProtocol = z.infer<typeof ProjectGithubCloneProtoc
 export type ArchiveWorkspaceRequest = z.infer<typeof ArchiveWorkspaceRequestSchema>;
 export type WorkspaceClearAttentionRequest = z.infer<typeof WorkspaceClearAttentionRequestSchema>;
 export type WorkspaceMarkUnreadRequest = z.infer<typeof WorkspaceMarkUnreadRequestSchema>;
+export type WorkspaceRelocateRequest = z.infer<typeof WorkspaceRelocateRequestSchema>;
+export type WorkspaceRelocateResponse = z.infer<typeof WorkspaceRelocateResponseSchema>;
 export type FileExplorerRequest = z.infer<typeof FileExplorerRequestSchema>;
 export type FileExplorerResponse = z.infer<typeof FileExplorerResponseSchema>;
 export type FileVersion = z.infer<typeof FileVersionSchema>;

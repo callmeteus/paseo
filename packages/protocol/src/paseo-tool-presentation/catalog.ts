@@ -161,6 +161,14 @@ export const PASEO_TOOL_CATALOG = {
     label: "List agents",
     detail: { inputOrder: ["cwd", "statuses", "sinceHours", "limit", "includeArchived"] },
   },
+  search_chats: {
+    label: "Search chats",
+    detail: { inputOrder: ["query", "cwd", "sinceHours", "maxChats"] },
+  },
+  pause_goal: {
+    label: "Pause goal",
+    detail: { inputOrder: ["reason"] },
+  },
   update_agent: {
     label: "Update agent",
     context: fieldOrTargetAgent("name"),
