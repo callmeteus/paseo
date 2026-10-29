@@ -46,7 +46,7 @@ in
 
     port = lib.mkOption {
       type = lib.types.port;
-      default = 6767;
+      default = 17000;
       description = "Port for the Paseo daemon to listen on.";
     };
 

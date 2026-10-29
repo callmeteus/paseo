@@ -20,7 +20,9 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import invariant from "tiny-invariant";
 import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
+import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
+import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { ComposerDock } from "@/composer/dock";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -80,6 +82,7 @@ import {
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
+import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
 import {
@@ -94,7 +97,7 @@ import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
 import { useSettings } from "@/hooks/use-settings";
 import type { Theme } from "@/styles/theme";
 import type { PendingPermission } from "@/types/shared";
-import type { StreamItem, TodoEntry } from "@/types/stream";
+import type { PortingItem, StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
@@ -102,6 +105,7 @@ import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agen
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildDraftAgentSetup, type ClientSlashCommand } from "@/client-slash-commands";
+import { useRouterFallback } from "@/model-routers/use-router-fallback";
 
 interface ChatAgentStateShape {
   serverId: string | null;
@@ -405,6 +409,32 @@ const EMPTY_MESSAGE_SUBMISSIONS = [] as const;
 const EMPTY_PENDING_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_PENDING_PERMISSION_LIST: PendingPermission[] = [];
 
+function insertCompletedPortingMarker(
+  items: StreamItem[],
+  migratedFrom: { provider: string; portedAt?: string } | undefined,
+  agentId: string,
+  agentProvider: string,
+): StreamItem[] {
+  if (!migratedFrom || items.some((item) => item.kind === "porting")) {
+    return items;
+  }
+  const portedAt = migratedFrom.portedAt ? new Date(migratedFrom.portedAt).getTime() : null;
+  const boundary =
+    portedAt === null
+      ? items.length
+      : items.findIndex((item) => item.timestamp.getTime() > portedAt);
+  const index = boundary < 0 ? items.length : boundary;
+  const marker: PortingItem = {
+    kind: "porting",
+    id: `porting:${agentId}`,
+    timestamp: portedAt === null ? new Date() : new Date(portedAt),
+    status: "completed",
+    fromProvider: migratedFrom.provider as PortingItem["fromProvider"],
+    toProvider: agentProvider,
+  };
+  return [...items.slice(0, index), marker, ...items.slice(index)];
+}
+
 type RouteBottomAnchorRequest = ReturnType<typeof deriveRouteBottomAnchorRequest>;
 
 function findActiveCreateHandoff(input: {
@@ -695,6 +725,7 @@ function ChatAgentContent({
   const agentState = useSessionStore(
     useShallow((state) => selectChatAgentState(state, serverId, agentId)),
   );
+  useRouterFallback({ serverId, agentId, client, isConnected });
   const projectPlacement = useStoreWithEqualityFn(
     useSessionStore,
     (state) => {
@@ -1109,7 +1140,11 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   });
   const hasPluginComposerPills = useHasPluginComposerPills(serverId, workspaceId, agentId);
   const hasActiveComposer = !agentState.archivedAt && !isArchivingCurrentAgent;
+  const parentAgentId = useParentAgentId(serverId, agentId);
+  // With a composer the parent is a pill above it; without one, the box takes the composer's place.
+  const parentPillAgentId = showsComposer ? parentAgentId : null;
   const hasVisibleAgentTracks = hasAgentTracks({
+    parentAgentId: parentPillAgentId,
     subagentRows,
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,
@@ -1161,6 +1196,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
+  const parentCallout = parentAgentId ? (
+    <ParentAgentCallout serverId={serverId} parentAgentId={parentAgentId} />
+  ) : null;
   const composerSection = showsComposer ? (
     <RenderProfile id={`AgentComposerSection:${agentId}`}>
       <AgentComposerSection
@@ -1179,7 +1217,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
         onMessageSent={handleMessageSent}
       />
     </RenderProfile>
-  ) : null;
+  ) : (
+    parentCallout
+  );
   const streamContent = (
     <View style={animatedStaticStyles.content}>
       {showsComposer ? null : <SheetAgentFacts serverId={serverId} agentId={agentId} />}
@@ -1203,6 +1243,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           serverId={serverId}
           workspaceId={workspaceId}
           agentId={agentId}
+          parentAgentId={parentPillAgentId}
           subagentRows={subagentRows}
           tasks={tasks}
           archiveFinishedStatus={archiveFinishedSubagents.status}
@@ -1354,9 +1395,17 @@ const AgentStreamSection = memo(function AgentStreamSection({
   const bottomOverlayControlClearance = hasVisibleComposerTracks
     ? resolveComposerTrackControlClearance(isCompactFormFactor)
     : 0;
-  const streamItemsRaw = useSessionStore((state) =>
-    agentId ? state.sessions[serverId]?.agentStreamTail?.get(agentId) : undefined,
-  );
+  const streamItemsRaw = useAgentStreamTail(serverId, agentId);
+  const migratedFrom = useSessionStore((state) => {
+    if (!agentId) {
+      return undefined;
+    }
+    const session = state.sessions[serverId];
+    return (
+      session?.agents.get(agentId)?.migratedFrom ??
+      session?.agentDetails?.get(agentId)?.migratedFrom
+    );
+  });
   const pendingMessageSubmissions = useSessionStore(
     useShallow((state) =>
       agentId
@@ -1371,7 +1420,28 @@ const AgentStreamSection = memo(function AgentStreamSection({
         : { isActive: false, isCancelling: false, startedAt: null, turnId: null },
     ),
   );
-  const streamItems = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
+  const portingActivity = usePortingActivity(serverId, agentId ?? "");
+  const streamItems = useMemo(() => {
+    const items = streamItemsRaw ?? EMPTY_STREAM_ITEMS;
+    const withMigrationMarker = insertCompletedPortingMarker(
+      items,
+      migratedFrom,
+      agent.id ?? "",
+      agent.provider ?? "",
+    );
+    if (!portingActivity) {
+      return withMigrationMarker;
+    }
+    const activeMarker: PortingItem = {
+      kind: "porting",
+      id: `porting-active:${agent.id}`,
+      timestamp: new Date(),
+      status: "loading",
+      fromProvider: agent.provider,
+      toProvider: portingActivity.toProvider as PortingItem["toProvider"],
+    };
+    return [...withMigrationMarker, activeMarker];
+  }, [agent.id, agent.provider, migratedFrom, portingActivity, streamItemsRaw]);
   const pendingPermissionList = useStoreWithEqualityFn(
     useSessionStore,
     (state) => {

@@ -2,13 +2,13 @@ import { expect, test } from "vitest";
 import { parseHostTarget } from "./host-target.js";
 
 test.each([
-  ["127.0.0.1:6767", "tcp://127.0.0.1:6767"],
+  ["127.0.0.1:17000", "tcp://127.0.0.1:17000"],
   ["4321", "tcp://127.0.0.1:4321"],
   ["[::1]:4321", "tcp://[::1]:4321"],
   ["unix:///tmp/paseo.sock", "unix:///tmp/paseo.sock"],
   ["pipe://\\\\.\\pipe\\paseo", "pipe://\\\\.\\pipe\\paseo"],
   ["wss://example.com/custom?token=secret", "wss://example.com"],
-  ["tcp://example.com:6767?password=secret", "tcp://example.com:6767"],
+  ["tcp://example.com:17000?password=secret", "tcp://example.com:17000"],
 ])(
   "the shared connector accepts %s and exposes only safe display text",
   (connection, description) => {
@@ -31,20 +31,20 @@ test.each([
   "unix://",
   "tcp://host:0",
   "C:\\Users\\socket",
-  "alice:example-secret@localhost:6767",
-  "not-a-scheme://localhost:6767",
-  "localhost/path:6767",
-  "localhost?password=example-secret:6767",
-  "localhost#example-secret:6767",
-  "tcp://localhost/path:6767",
-  "relay://alice:example-secret@localhost:6767/server?key=private",
+  "alice:example-secret@localhost:17000",
+  "not-a-scheme://localhost:17000",
+  "localhost/path:17000",
+  "localhost?password=example-secret:17000",
+  "localhost#example-secret:17000",
+  "tcp://localhost/path:17000",
+  "relay://alice:example-secret@localhost:17000/server?key=private",
 ])("invalid target syntax is rejected without echoing %s", (connection) => {
   expect(() => parseHostTarget(connection)).toThrow("Invalid host connection");
 });
 
 test("SSH aliases and DNS names retain their connection semantics", () => {
-  expect(parseHostTarget("build-box.example.:6767").description).toBe(
-    "tcp://build-box.example.:6767",
+  expect(parseHostTarget("build-box.example.:17000").description).toBe(
+    "tcp://build-box.example.:17000",
   );
   expect(parseHostTarget("ssh://deploy@my_ssh-alias")).toMatchObject({
     kind: "ssh",
@@ -54,15 +54,15 @@ test("SSH aliases and DNS names retain their connection semantics", () => {
 
 test("encoded SSH usernames cannot leak into the target description", () => {
   expect(parseHostTarget("ssh://alice%3Aexample-secret@my-alias").description).toBe(
-    "ssh://my-alias (daemon port 6767)",
+    "ssh://my-alias (daemon port 17000)",
   );
 });
 
 test("pairing offers cannot publish a credential-bearing or malformed relay authority", () => {
   for (const endpoint of [
-    "alice:example-secret@localhost:6767",
-    "localhost/path:6767",
-    "localhost?token=example-secret:6767",
+    "alice:example-secret@localhost:17000",
+    "localhost/path:17000",
+    "localhost?token=example-secret:17000",
   ]) {
     const offer = {
       v: 2,

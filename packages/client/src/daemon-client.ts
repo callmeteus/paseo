@@ -19,7 +19,9 @@ import { CreationClient } from "./creation/index.js";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
+import type { LocalSpeechModel } from "@getpaseo/protocol/speech/rpc-schemas";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
+import type { AgentSnapshot } from "@getpaseo/protocol/agent-snapshot";
 import type { AgentAttentionNotificationPayload } from "@getpaseo/protocol/agent-attention-notification";
 import { MAX_WEBSOCKET_MESSAGE_BYTES } from "@getpaseo/protocol/websocket-message-limit";
 import {
@@ -3107,6 +3109,118 @@ export class DaemonClient {
     return { agent: payload.agent, project: payload.project ?? null };
   }
 
+  async swapAgentProvider(options: {
+    agentId: string;
+    targetProvider: string;
+    targetModel: string | null;
+    archivePrevious?: boolean;
+    force?: boolean;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<{ newAgentId: string | null; previousAgentId: string; error: string | null }> {
+    const resolvedRequestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.swap_provider.request",
+      agentId: options.agentId,
+      targetProvider: options.targetProvider,
+      targetModel: options.targetModel,
+      ...(options.archivePrevious === false ? { archivePrevious: false } : {}),
+      ...(options.force ? { force: true } : {}),
+      requestId: resolvedRequestId,
+    });
+    const payload = await this.sendRequest({
+      requestId: resolvedRequestId,
+      message,
+      timeout: options.timeout,
+      select: (msg) => {
+        if (msg.type !== "agent.swap_provider.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== resolvedRequestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    return payload;
+  }
+
+  async exportAgentSnapshot(options: {
+    agentId: string;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<AgentSnapshot> {
+    const resolvedRequestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.export_snapshot.request",
+      agentId: options.agentId,
+      requestId: resolvedRequestId,
+    });
+    const payload = await this.sendRequest({
+      requestId: resolvedRequestId,
+      message,
+      timeout: options.timeout,
+      select: (msg) => {
+        if (msg.type !== "agent.export_snapshot.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== resolvedRequestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    if (!payload.snapshot) {
+      throw new Error("Agent snapshot export returned no snapshot");
+    }
+    return payload.snapshot;
+  }
+
+  async importAgentSnapshot(options: {
+    snapshot: AgentSnapshot;
+    targetProvider: string;
+    targetModel?: string | null;
+    workspaceId?: string;
+    sourceHost?: string;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<string> {
+    const resolvedRequestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.import_snapshot.request",
+      snapshot: options.snapshot,
+      targetProvider: options.targetProvider,
+      targetModel: options.targetModel ?? null,
+      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+      ...(options.sourceHost ? { sourceHost: options.sourceHost } : {}),
+      requestId: resolvedRequestId,
+    });
+    const payload = await this.sendRequest({
+      requestId: resolvedRequestId,
+      message,
+      timeout: options.timeout,
+      select: (msg) => {
+        if (msg.type !== "agent.import_snapshot.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== resolvedRequestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (payload.error) {
+      throw new Error(payload.error);
+    }
+    if (!payload.agentId) {
+      throw new Error("Agent snapshot import returned no agent");
+    }
+    return payload.agentId;
+  }
+
   // ============================================================================
   // Agent Lifecycle
   // ============================================================================
@@ -3258,11 +3372,22 @@ export class DaemonClient {
     });
   }
 
-  async archiveAgent(agentId: string): Promise<{ archivedAt: string }> {
+  async archiveAgent(
+    agentId: string,
+    options?: {
+      migratedTo?: {
+        provider: string;
+        agentId: string;
+        host?: string;
+        portedAt?: string;
+      };
+    },
+  ): Promise<{ archivedAt: string }> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
       type: "archive_agent_request",
       agentId,
+      ...(options?.migratedTo ? { migratedTo: options.migratedTo } : {}),
       requestId,
     });
     const result = await this.sendRequest({
@@ -5545,6 +5670,34 @@ export class DaemonClient {
       },
       responseType: "set_daemon_config_response",
     });
+  }
+
+  async listLocalSpeechModels(requestId?: string): Promise<LocalSpeechModel[]> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "speech.local_models.list.request" },
+      responseType: "speech.local_models.list.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.models;
+  }
+
+  async downloadLocalSpeechModel(modelId: string, requestId?: string): Promise<void> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "speech.local_models.download.request", modelId },
+      responseType: "speech.local_models.download.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+  }
+
+  async deleteLocalSpeechModel(modelId: string, requestId?: string): Promise<void> {
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "speech.local_models.delete.request", modelId },
+      responseType: "speech.local_models.delete.response",
+    });
+    if (payload.error) throw new Error(payload.error);
   }
 
   sendBrowserAutomationExecuteResponse(response: BrowserAutomationExecuteResponse): void {

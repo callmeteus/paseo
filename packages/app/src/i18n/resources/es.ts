@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const es: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "No hay meta definida. Uso: /goal <objetivo> | /goal pause | /goal resume | /goal clear",
+    status: "Meta ({{status}}): {{objective}}",
+    activeLabel: "activa",
+    pausedLabel: "en pausa",
+    set: "Meta definida: {{objective}}",
+    paused: "Meta en pausa: {{objective}}",
+    resumed: "Meta reanudada: {{objective}}",
+    cleared: "Meta eliminada.",
+    complete: "Meta completada: {{objective}}",
+    continuousLimit:
+      "La meta no se completó tras {{max}} intentos. El vigilante se detuvo; envía otro mensaje o /goal resume para reiniciarlo.",
+  },
   paneFind: {
     connectionFailure:
       "No se pudo buscar en este chat. Comprueba la conexión con el host y vuelve a intentarlo.",
@@ -134,6 +148,8 @@ export const es: TranslationResources = {
       sendAndInterrupt: "Enviar e interrumpir",
       sendAndSteer: "Enviar y orientar",
       sendMessage: "enviar mensaje",
+      longPressToQueue: "Mantén pulsado para poner en cola",
+      longPressToSendNow: "Mantén pulsado para enviar ahora",
       queue: "Cola",
       send: "Enviar",
     },
@@ -191,6 +207,18 @@ export const es: TranslationResources = {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",
     },
+    goal: {
+      active: "Objetivo",
+      paused: "Objetivo en pausa",
+      edit: "Editar objetivo",
+      info: "Detalles del objetivo",
+      clear: "Eliminar objetivo",
+      collapse: "Ocultar objetivo",
+      show: "Mostrar objetivo",
+      pause: "Pausar objetivo",
+      resume: "Reanudar objetivo",
+      stop: "Detener objetivo",
+    },
     github: {
       searching: "Búsqueda...",
       noResults: "No se encontraron resultados.",
@@ -204,6 +232,11 @@ export const es: TranslationResources = {
     provider: {
       fallback: "Proveedor",
       select: "Seleccionar proveedor de agente",
+      portingUnsupported: "Actualiza este host antes de cambiar el proveedor de un agente",
+      pendingOnNextMessage: "El cambio de proveedor se aplicará cuando envíes tu próximo mensaje",
+      crossHostUnsupported:
+        "El host de destino necesita actualizarse para aceptar agentes portados",
+      targetHostDisconnected: "El host de destino no está conectado",
     },
     thinking: {
       title: "Pensamiento",
@@ -401,6 +434,10 @@ export const es: TranslationResources = {
       manual: "Contexto compactado manualmente",
       withTokens: "Contexto compactado (tokens{{tokens}}K)",
       completed: "Contexto compactado",
+    },
+    porting: {
+      loading: "Portando contexto...",
+      completed: "Contexto portado a {{provider}}",
     },
   },
   importSession: {
@@ -1699,6 +1736,7 @@ export const es: TranslationResources = {
     error: "Error",
     defaultModel: "Por defecto",
     profiles: "Perfiles",
+    routers: "Enrutadores",
     providers: "Proveedores",
     model: "Modelo",
     editProfiles: "Editar",
@@ -1956,6 +1994,13 @@ export const es: TranslationResources = {
     backdrop: "Fondo del menú",
   },
   subagents: {
+    parent: {
+      backToParent: "Volver al padre",
+      backTo: "Volver a {{label}}",
+      parent: "Padre",
+      parentAgent: "Agente padre",
+      openParent: "Abrir padre",
+    },
     title: "Subagentes",
     pillLabelOne: "1 subagente",
     pillLabelMany: "{{count}} subagentes",
@@ -2055,6 +2100,12 @@ export const es: TranslationResources = {
     subAgentActivity: "Actividad de subagente",
     input: "Aporte",
     output: "Producción",
+  },
+  turnSummary: {
+    messages: {
+      one: "escribió {{count}} mensaje",
+      other: "escribió {{count}} mensajes",
+    },
   },
   toolCallGroup: {
     editedFiles: {
@@ -2166,6 +2217,26 @@ export const es: TranslationResources = {
       codeReview: "Revisión de código",
       credits: "Créditos",
       monthlyCredits: "Créditos mensuales",
+      rolling: "Rotativo",
+      spent: "Gastado",
+      tokens: "Tokens",
+    },
+    details: {
+      sessions: "Sesiones",
+      input: "Entrada",
+      output: "Salida",
+      prompts: "Prompts",
+      steps: "Pasos",
+      cacheRead: "Caché leída",
+      since: "Desde",
+    },
+    plan: {
+      local: "Local",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (local)",
+      kiloLocal: "Kilo (local)",
+      clineLocal: "Cline (local)",
     },
     duration: {
       days: "{{value}} d",
@@ -2257,6 +2328,7 @@ export const es: TranslationResources = {
       connections: "Conexiones",
       agents: "Agents",
       metadata: "Metadatos",
+      voice: "Voz",
       workspaces: "Workspaces",
       providers: "Proveedores",
       usage: "Uso",
@@ -2278,6 +2350,119 @@ export const es: TranslationResources = {
       modelHint: "Solo se usa este modelo. Si falla, Paseo no prueba otro modelo",
       docs: "Documentación",
       saveError: "No se pudo actualizar la generación de metadatos",
+    },
+    modelRouters: {
+      title: "Enrutadores de modelos",
+      description:
+        "Agrupa proveedores y modelos detrás de una elección. El fallback pasa al siguiente destino cuando se acaban los créditos o la cuota; la distribución reparte nuevos chats entre destinos.",
+      empty: "Aún no hay enrutadores. Crea uno o empieza con un preset.",
+      modeFallback: "Fallback",
+      modeDistribution: "Distribución",
+      defaultBadge: "predeterminado",
+      setDefault: "Usar en chats nuevos",
+      unsetDefault: "Dejar de usar",
+      edit: "Editar",
+      delete: "Eliminar",
+      create: "Nuevo enrutador",
+      addTarget: "Añadir destino",
+      removeTarget: "Quitar",
+      cancel: "Cancelar",
+      save: "Guardar",
+      namePlaceholder: "Nombre del enrutador",
+      invalidTitle: "Enrutador incompleto",
+      invalidBody: "Ponle un nombre y al menos un destino.",
+      saveError: "No se pudieron guardar los enrutadores",
+      fallbackMoved: "Chat movido a {{provider}} porque el proveedor anterior se agotó",
+      noMoreTargets: "No queda ningún destino de fallback para este chat",
+      retryingProvider: "{{provider}} se cerró. Reintentando en el mismo proveedor…",
+      crashPersists:
+        "{{provider}} sigue fallando. Revisa el CLI del proveedor e inténtalo de nuevo.",
+      sessionRepaired:
+        "La sesión estaba corrupta en el upstream. Inicié una sesión limpia de {{provider}} con el historial.",
+      targetCount: "{{count}} destinos",
+      usePreset: "Usar preset",
+      wizard: {
+        title: "Nuevo enrutador",
+        choose: "Empieza con un preset o crea tu propia lista.",
+        manual: "Crear manualmente",
+        manualHint: "Elige proveedor y modelo de cada destino, en orden.",
+        startManual: "Crear",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary:
+            "Modelos gratuitos de laboratorios premium, de los más fuertes a los más baratos.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary:
+            "Modelos open weight gratuitos, familias punteras primero, modelos pequeños al final.",
+        },
+      },
+    },
+    voice: {
+      offline: "Conéctate a este host para configurar la voz.",
+      updateHost: "Actualiza el host para configurar la voz.",
+      saveError: "No se pudo actualizar la configuración de voz",
+      provider: "Proveedor",
+      providers: {
+        local: "Local",
+        openai: "OpenAI",
+      },
+      voice: "Voz",
+      save: "Guardar",
+      retry: "Reintentar",
+      cancel: "Cancelar",
+      model: "Modelo",
+      language: "Idioma",
+      languagePlaceholder: "Detección automática",
+      setBy: "Definido por {{name}}",
+      unknownProvider: "Actualiza la app para configurar {{provider}}",
+      sites: {
+        dictationStt: "Voz a texto",
+        voiceModeStt: "Escucha",
+        voiceModeTts: "Habla",
+      },
+      dictation: {
+        title: "Dictado",
+        enabled: "Dictado",
+        enabledHint: "Habla en el cuadro de mensaje en lugar de escribir",
+      },
+      voiceMode: {
+        title: "Modo de voz",
+        info: "El modo de voz transcribe lo que dices y lee en voz alta las respuestas del agente.",
+        enabled: "Modo de voz",
+        enabledHint: "Habla con tus agentes sin usar las manos",
+      },
+      openai: {
+        apiKey: "Clave de API",
+        apiKeyHint: "Se guarda en el host y no se vuelve a mostrar.",
+        keyPlaceholder: "sk-...",
+        savedKeyPlaceholder: "Guardada",
+        missingKey: "Falta la clave de API",
+        baseUrl: "URL base",
+        baseUrlHint: "Para servidores compatibles con OpenAI. Déjala vacía para usar OpenAI.",
+      },
+      models: {
+        loading: "Cargando modelos...",
+        loadError: "No se pudieron cargar los modelos locales",
+        none: "No hay modelos disponibles",
+        downloaded: "Descargado",
+        inUse: "En uso",
+        recommended: "Recomendado",
+        download: "Descargar",
+        downloadAction: "Descargar {{label}}",
+        downloading: "Descargando...",
+        downloadingPercent: "Descargando {{percent}} %",
+        extracting: "Extrayendo...",
+        delete: "Eliminar",
+        deleteAction: "Eliminar {{label}}",
+        deleteTitle: "¿Eliminar {{label}}?",
+        deleteMessage: "Esto libera {{size}}. Puedes volver a descargarlo más tarde.",
+        languages: "Idiomas de {{label}}",
+        moreLanguages: "{{languages}} y {{count}} más",
+      },
     },
     general: {
       title: "General",
@@ -2328,12 +2513,13 @@ export const es: TranslationResources = {
         description:
           "Mostrar los bloques de pensamiento y razonamiento del agente totalmente expandidos de forma predeterminada",
       },
-      toolCallDetail: {
-        label: "Visualización de llamadas a herramientas",
-        description: "Cómo aparecen las llamadas a herramientas en la cronología",
+      chatDisplay: {
+        label: "Visualización del chat",
+        description: "Cuánto del trabajo del agente muestra el chat",
         options: {
-          overview: "Resumen",
-          detailed: "Detalle completo",
+          full: "Completo",
+          collapseToolCalls: "Contraer llamadas a herramientas",
+          collapseTurns: "Contraer turnos",
         },
       },
       language: {
@@ -2704,6 +2890,11 @@ export const es: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+        idleRuntimeCleanup: {
+          title: "Liberar agentes inactivos",
+          hint: "Libera memoria tras una hora de inactividad.",
+          info: "Detiene el proceso del agente y conserva la conversación. Envía un mensaje para reanudarla.\n\nEl trabajo activo, las notificaciones pendientes y las comprobaciones de seguridad del proveedor impiden la limpieza.",
+        },
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

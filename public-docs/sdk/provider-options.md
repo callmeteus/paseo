@@ -58,7 +58,7 @@ Confine writes to one directory, cut off network access, and stop approval promp
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -102,7 +102,7 @@ Turn on Claude's own sandbox, restrict writes to the project, deny reads of cred
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -154,7 +154,7 @@ Allow reads and edits, deny anything that reaches outside the project, and gate 
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

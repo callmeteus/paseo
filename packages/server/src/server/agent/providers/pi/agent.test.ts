@@ -3249,7 +3249,7 @@ describe("PiRpcAgentClient", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
           },
           localSecret: {
             type: "stdio",
@@ -3293,7 +3293,7 @@ describe("PiRpcAgentClient", () => {
           directTools: ["brave_llm_context"],
         },
         paseo: {
-          url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+          url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
           auth: false,
           oauth: false,
         },
@@ -3322,7 +3322,7 @@ describe("PiRpcAgentClient", () => {
       client.createSession(
         createConfig({
           mcpServers: {
-            paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+            paseo: { type: "http", url: "http://127.0.0.1:17000/mcp/agents" },
           },
         }),
         { env: { PI_CODING_AGENT_DIR: agentDir } },
@@ -3344,7 +3344,7 @@ describe("PiRpcAgentClient", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
             headers: { Authorization: "Bearer token" },
           },
           local: { type: "stdio", command: "node", args: ["server.js"], env: { KEY: "`${x}`" } },
@@ -3358,7 +3358,7 @@ describe("PiRpcAgentClient", () => {
     const extensionPath = actualLaunch.extensionPaths[0]!;
     expect(await readRegisteredMcpServers(extensionPath)).toEqual({
       paseo: {
-        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+        url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
         headers: { Authorization: "Bearer token" },
       },
       local: { command: "node", args: ["server.js"], env: { KEY: "`${x}`" } },
@@ -3402,7 +3402,7 @@ describe("PiRpcAgentClient", () => {
     ]);
     const session = await createClient(pi).createSession(
       createConfig({
-        mcpServers: { paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" } },
+        mcpServers: { paseo: { type: "http", url: "http://127.0.0.1:17000/mcp/agents" } },
       }),
       { env: { PI_CODING_AGENT_DIR: agentDir } },
     );
@@ -3436,7 +3436,7 @@ describe("PiRpcAgentClient", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=agent-1",
           },
         },
       }),
@@ -3487,4 +3487,24 @@ describe("transformPiModels", () => {
       },
     ]);
   });
+});
+
+test("pi runtime safety protects queued replies and runtime-owned activity", async () => {
+  const runtime = new FakePi();
+  const session = await createClient(runtime).createSession(createConfig());
+  onTestFinished(() => session.close());
+  const native = runtime.latestSession();
+  expect(await session.canStopRuntime!()).toBe(true);
+  native.state.pendingMessageCount = 1;
+  expect(await session.canStopRuntime!()).toBe(false);
+  native.state.pendingMessageCount = 0;
+  native.state.isStreaming = true;
+  expect(await session.canStopRuntime!()).toBe(false);
+  native.state.isStreaming = false;
+  native.state.isCompacting = true;
+  expect(await session.canStopRuntime!()).toBe(false);
+  native.state.isCompacting = false;
+  expect(await session.canStopRuntime!()).toBe(true);
+  native.getStateError = new Error("Unable to prove idle");
+  await expect(session.canStopRuntime!()).rejects.toThrow("Unable to prove idle");
 });

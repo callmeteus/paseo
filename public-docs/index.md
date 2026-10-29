@@ -37,14 +37,14 @@ For servers, dev boxes, NAS devices, or homelab hosts, run the official image:
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
   ghcr.io/getpaseo/paseo:latest
 ```
 
-Then open `http://localhost:6767`.
+Then open `http://localhost:17000`.
 
 The image runs the daemon and serves the bundled web UI. It does not bundle agent CLIs, so extend it with the agents you use. See [Docker](/docs/docker) for Compose, reverse proxy, agent install, and security examples.
 

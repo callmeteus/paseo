@@ -101,14 +101,14 @@ Docker에서 Paseo 데몬과 셀프 호스팅 웹 UI를 실행하세요:
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
   ghcr.io/getpaseo/paseo:latest
 ```
 
-컨테이너가 시작되면 `http://localhost:6767`을 여세요. 사용하는 에이전트 CLI를 기본 이미지에 추가한 뒤, 환경 변수나 영구 `/home/paseo` 볼륨으로 인증 정보를 설정하세요. 자세한 내용은 [Docker 문서](docs/docker.md)를 참고하세요.
+컨테이너가 시작되면 `http://localhost:17000`을 여세요. 사용하는 에이전트 CLI를 기본 이미지에 추가한 뒤, 환경 변수나 영구 `/home/paseo` 볼륨으로 인증 정보를 설정하세요. 자세한 내용은 [Docker 문서](docs/docker.md)를 참고하세요.
 
 ## CLI
 
@@ -123,7 +123,7 @@ paseo attach abc123                # 실시간 출력 스트리밍
 paseo send abc123 "also add tests" # 후속 작업 전송
 
 # 원격 데몬에서 실행
-paseo --host workstation.local:6767 run "run the full test suite"
+paseo --host workstation.local:17000 run "run the full test suite"
 ```
 
 자세한 내용은 [전체 CLI 레퍼런스](https://paseo.sh/docs/cli)를 참고하세요.

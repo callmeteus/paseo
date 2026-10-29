@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
   hashAccountKey,
@@ -40,9 +41,66 @@ function authPath(env: NodeJS.ProcessEnv = process.env): string {
 export async function readDefaultKey(path = authPath()): Promise<string | null> {
   try {
     const auth = authSchema.parse(JSON.parse(await readFile(path, "utf8")));
-    return auth["opencode-go"]?.key ?? null;
+    const key = auth["opencode-go"]?.key;
+    if (key) return key;
+  } catch {
+    // Older and newer OpenCode builds disagree about where credentials live.
+  }
+  return readKeyFromDatabase(join(dirname(path), "opencode.db"));
+}
+
+interface SqliteDatabase {
+  prepare(sql: string): {
+    get(...params: unknown[]): Record<string, unknown> | undefined;
+    all(...params: unknown[]): Record<string, unknown>[];
+  };
+  close(): void;
+}
+
+// Plugin bundles are evaluated with `eval`, so `import.meta.url` is undefined here.
+const nodeRequire = createRequire(join(process.execPath, "..", "paseo-plugin.cjs"));
+
+function openDatabase(path: string): SqliteDatabase | null {
+  try {
+    const { DatabaseSync } = nodeRequire("node:sqlite") as {
+      DatabaseSync: new (file: string, options: { readOnly: boolean }) => SqliteDatabase;
+    };
+    return new DatabaseSync(path, { readOnly: true });
   } catch {
     return null;
+  }
+}
+
+/**
+ * Newer OpenCode builds keep OAuth credentials in its SQLite store instead of
+ * auth.json. The `opencode` integration carries the console access token that
+ * the Go usage endpoint accepts.
+ */
+export function readKeyFromDatabase(path: string): string | null {
+  const db = openDatabase(path);
+  if (!db) return null;
+  try {
+    const rows = db
+      .prepare(
+        "select integration_id, value from credential where active = 1 and integration_id in ('opencode', 'opencode-go', 'opencode-console')",
+      )
+      .all();
+    for (const row of rows) {
+      const value = row.value;
+      if (typeof value !== "string") continue;
+      try {
+        const parsed = JSON.parse(value) as { access?: unknown; key?: unknown };
+        if (typeof parsed.access === "string" && parsed.access.length > 0) return parsed.access;
+        if (typeof parsed.key === "string" && parsed.key.length > 0) return parsed.key;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    db.close();
   }
 }
 

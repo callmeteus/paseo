@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.1 - 2026-10-26
+
+### Fixed
+
+- Fixed a startup crash with Show background enabled and eight or more workspaces in a project ([#7896](https://github.com/getpaseo/paseo/pull/7896) by [@budivoogt](https://github.com/budivoogt))
+
 ## 0.13.0 - 2026-10-24
 
 Foldable phone layouts, agents that delegate work to other machines, plugin file panels, and plugin translations.
@@ -7,7 +13,7 @@ Foldable phone layouts, agents that delegate work to other machines, plugin file
 Connect your daemon to another machine, then ask an agent to delegate work there:
 
 ```sh
-paseo host add 192.168.1.20:6767 --label studio
+paseo host add 192.168.1.20:17000 --label studio
 paseo host add 'ssh://me@build-box' --label build-box
 paseo host add 'relay://...' --label laptop
 ```
@@ -181,7 +187,7 @@ Background workspaces, a new Markdown renderer with selection across paragraphs 
 - Fixed Cursor agents showing no plan usage in their context details ([#6353](https://github.com/getpaseo/paseo/pull/6353) by [@gengjiawen](https://github.com/gengjiawen))
 - Fixed the Claude context meter counting only output tokens when a proxy reports input usage at the end of the response ([#6703](https://github.com/getpaseo/paseo/pull/6703) by [@kywoo26](https://github.com/kywoo26))
 - Fixed the Claude context meter showing a 1M maximum after switching back to a 200k model ([#6814](https://github.com/getpaseo/paseo/pull/6814))
-- Fixed the context meter staying empty during the first turn on custom Claude `[1m]` models ([#6767](https://github.com/getpaseo/paseo/pull/6767))
+- Fixed the context meter staying empty during the first turn on custom Claude `[1m]` models ([#17000](https://github.com/getpaseo/paseo/pull/17000))
 - Fixed a schedule never running again after one of its runs could not be recorded ([#6334](https://github.com/getpaseo/paseo/pull/6334))
 - Fixed schedules sharing a cron minute running a slot twice and skipping the next occurrence ([#6532](https://github.com/getpaseo/paseo/pull/6532) by [@keithpk](https://github.com/keithpk))
 - Fixed Committed showing no changes for worktrees created from an existing branch ([#6462](https://github.com/getpaseo/paseo/pull/6462) by [@cr-2takumax](https://github.com/cr-2takumax))
@@ -2438,7 +2444,7 @@ _This release only fixes an Android issue — desktop users don't need to update
 
 ### Added
 
-- Scripts and services per worktree — define named commands in `paseo.json`, and long-running services get supervised with their own ports and nice proxy URLs like `http://web.my-app.localhost:6767`. See the [worktrees guide](https://paseo.sh/docs/worktrees)
+- Scripts and services per worktree — define named commands in `paseo.json`, and long-running services get supervised with their own ports and nice proxy URLs like `http://web.my-app.localhost:17000`. See the [worktrees guide](https://paseo.sh/docs/worktrees)
 - Launch scripts and services for a worktree directly from the workspace header
 - New Setup tab in every workspace showing setup, teardown, and script progress live
 - GitHub checks and PR reviews in the explorer sidebar, with a hover card for the full breakdown

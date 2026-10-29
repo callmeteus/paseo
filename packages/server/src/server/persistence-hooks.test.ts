@@ -136,7 +136,7 @@ describe("persistence hooks", () => {
         mcpServers: {
           paseo: {
             type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=stale-agent",
+            url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=stale-agent",
           },
           custom: {
             type: "stdio",

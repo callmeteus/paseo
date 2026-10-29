@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "ゴールが設定されていません。使い方: /goal <目標> | /goal pause | /goal resume | /goal clear",
+    status: "ゴール ({{status}}): {{objective}}",
+    activeLabel: "進行中",
+    pausedLabel: "一時停止",
+    set: "ゴールを設定しました: {{objective}}",
+    paused: "ゴールを一時停止しました: {{objective}}",
+    resumed: "ゴールを再開しました: {{objective}}",
+    cleared: "ゴールを解除しました。",
+    complete: "ゴール達成: {{objective}}",
+    continuousLimit:
+      "{{max}} 回の継続後もゴールは達成されませんでした。監視を停止しました。もう一度メッセージを送るか、/goal resume で再開してください。",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",
@@ -134,6 +148,8 @@ export const ja: TranslationResources = {
       sendAndInterrupt: "送信して中断",
       sendAndSteer: "送信して指示を追加",
       sendMessage: "メッセージを送信",
+      longPressToQueue: "長押しでキューに追加",
+      longPressToSendNow: "長押しで今すぐ送信",
       queue: "キュー",
       send: "送信",
     },
@@ -191,6 +207,18 @@ export const ja: TranslationResources = {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",
     },
+    goal: {
+      active: "目標",
+      paused: "目標を一時停止中",
+      edit: "目標を編集",
+      info: "目標の詳細",
+      clear: "目標をクリア",
+      collapse: "目標を隠す",
+      show: "目標を表示",
+      pause: "目標を一時停止",
+      resume: "目標を再開",
+      stop: "目標を停止",
+    },
     github: {
       searching: "検索中...",
       noResults: "結果が見つかりません。",
@@ -204,6 +232,10 @@ export const ja: TranslationResources = {
     provider: {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",
+      portingUnsupported: "エージェントのプロバイダーを変更する前に、このホストを更新してください",
+      pendingOnNextMessage: "次回メッセージを送信するとプロバイダーの変更が適用されます",
+      crossHostUnsupported: "移行したエージェントを受け入れるには、対象ホストの更新が必要です",
+      targetHostDisconnected: "対象ホストに接続されていません",
     },
     thinking: {
       title: "思考",
@@ -401,6 +433,10 @@ export const ja: TranslationResources = {
       manual: "コンテキストが手動で圧縮されました",
       withTokens: "コンテキストを圧縮しました（{{tokens}}Kトークン）",
       completed: "コンテキストを圧縮しました",
+    },
+    porting: {
+      loading: "コンテキストを移植中...",
+      completed: "コンテキストを{{provider}}に移植しました",
     },
   },
   importSession: {
@@ -1670,6 +1706,7 @@ export const ja: TranslationResources = {
     error: "エラー",
     defaultModel: "デフォルト",
     profiles: "プロファイル",
+    routers: "ルーター",
     providers: "プロバイダー",
     model: "モデル",
     editProfiles: "編集",
@@ -1927,6 +1964,13 @@ export const ja: TranslationResources = {
     backdrop: "メニューの背景",
   },
   subagents: {
+    parent: {
+      backToParent: "親に戻る",
+      backTo: "{{label}} に戻る",
+      parent: "親",
+      parentAgent: "親エージェント",
+      openParent: "親を開く",
+    },
     title: "サブエージェント",
     pillLabelOne: "サブエージェント 1 件",
     pillLabelMany: "サブエージェント {{count}} 件",
@@ -2027,6 +2071,12 @@ export const ja: TranslationResources = {
     subAgentActivity: "サブエージェントアクティビティ",
     input: "入力",
     output: "出力",
+  },
+  turnSummary: {
+    messages: {
+      one: "{{count}}件のメッセージを送信",
+      other: "{{count}}件のメッセージを送信",
+    },
   },
   toolCallGroup: {
     editedFiles: {
@@ -2139,6 +2189,26 @@ export const ja: TranslationResources = {
       codeReview: "コードレビュー",
       credits: "クレジット",
       monthlyCredits: "月間クレジット",
+      rolling: "ローリング",
+      spent: "使用額",
+      tokens: "トークン",
+    },
+    details: {
+      sessions: "セッション",
+      input: "入力",
+      output: "出力",
+      prompts: "プロンプト",
+      steps: "ステップ",
+      cacheRead: "キャッシュ読み取り",
+      since: "開始",
+    },
+    plan: {
+      local: "ローカル",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (ローカル)",
+      kiloLocal: "Kilo (ローカル)",
+      clineLocal: "Cline (ローカル)",
     },
     duration: {
       days: "{{value}}日",
@@ -2230,6 +2300,7 @@ export const ja: TranslationResources = {
       connections: "接続",
       agents: "エージェント",
       metadata: "メタデータ",
+      voice: "音声",
       workspaces: "ワークスペース",
       providers: "プロバイダー",
       usage: "使用状況",
@@ -2251,6 +2322,118 @@ export const ja: TranslationResources = {
       modelHint: "このモデルのみを使用します。失敗しても、Paseo は別のモデルを試しません",
       docs: "ドキュメント",
       saveError: "メタデータ生成を更新できません",
+    },
+    modelRouters: {
+      title: "モデルルーター",
+      description:
+        "プロバイダーとモデルを1つの選択肢にまとめます。クレジットや割当が尽きるとフォールバックが次の対象へ移動し、分散は新しいチャットを割り振ります。",
+      empty: "ルーターがありません。作成するかプリセットから始めてください。",
+      modeFallback: "フォールバック",
+      modeDistribution: "分散",
+      defaultBadge: "既定",
+      setDefault: "新しいチャットで使う",
+      unsetDefault: "使用をやめる",
+      edit: "編集",
+      delete: "削除",
+      create: "新しいルーター",
+      addTarget: "対象を追加",
+      removeTarget: "削除",
+      cancel: "キャンセル",
+      save: "保存",
+      namePlaceholder: "ルーター名",
+      invalidTitle: "ルーターが不完全です",
+      invalidBody: "名前と1つ以上の対象を指定してください。",
+      saveError: "ルーターを保存できませんでした",
+      fallbackMoved:
+        "前のプロバイダーが上限に達したため、このチャットを {{provider}} に移動しました",
+      noMoreTargets: "このチャットに残りのフォールバック先はありません",
+      retryingProvider: "{{provider}} がクラッシュしました。同じプロバイダーで再試行しています…",
+      crashPersists:
+        "{{provider}} が繰り返しクラッシュします。プロバイダーの CLI を確認して再試行してください。",
+      sessionRepaired:
+        "上流でセッションが破損していました。履歴を含む新しい {{provider}} セッションを開始しました。",
+      targetCount: "{{count}} 個の対象",
+      usePreset: "プリセットを使用",
+      wizard: {
+        title: "新しいルーター",
+        choose: "プリセットから始めるか、独自のリストを作成します。",
+        manual: "手動で作成",
+        manualHint: "各対象のプロバイダーとモデルを順番に選びます。",
+        startManual: "作成",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "プレミアムラボの無料モデル。強いものから安価なものへ。",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "無料の open weight モデル。先端ファミリーから小型モデルへ。",
+        },
+      },
+    },
+    voice: {
+      offline: "音声を設定するには、このホストに接続してください。",
+      updateHost: "音声を設定するには、ホストを更新してください。",
+      saveError: "音声設定を更新できませんでした",
+      provider: "プロバイダー",
+      providers: {
+        local: "ローカル",
+        openai: "OpenAI",
+      },
+      voice: "ボイス",
+      save: "保存",
+      retry: "再試行",
+      cancel: "キャンセル",
+      model: "モデル",
+      language: "言語",
+      languagePlaceholder: "自動検出",
+      setBy: "{{name}} で設定",
+      unknownProvider: "{{provider}} を設定するにはアプリを更新してください",
+      sites: {
+        dictationStt: "音声入力",
+        voiceModeStt: "聞き取り",
+        voiceModeTts: "読み上げ",
+      },
+      dictation: {
+        title: "音声入力",
+        enabled: "音声入力",
+        enabledHint: "入力する代わりにメッセージ欄に話しかけます",
+      },
+      voiceMode: {
+        title: "ボイスモード",
+        info: "ボイスモードは話した内容を文字起こしし、エージェントの返答を読み上げます。",
+        enabled: "ボイスモード",
+        enabledHint: "ハンズフリーでエージェントと会話します",
+      },
+      openai: {
+        apiKey: "API キー",
+        apiKeyHint: "ホストに保存され、再表示されません。",
+        keyPlaceholder: "sk-...",
+        savedKeyPlaceholder: "保存済み",
+        missingKey: "API キーがありません",
+        baseUrl: "ベース URL",
+        baseUrlHint: "OpenAI 互換サーバー用です。OpenAI を使う場合は空欄のままにします。",
+      },
+      models: {
+        loading: "モデルを読み込み中...",
+        loadError: "ローカルモデルを読み込めませんでした",
+        none: "利用できるモデルがありません",
+        downloaded: "ダウンロード済み",
+        inUse: "使用中",
+        recommended: "おすすめ",
+        download: "ダウンロード",
+        downloadAction: "{{label}} をダウンロード",
+        downloading: "ダウンロード中...",
+        downloadingPercent: "ダウンロード中 {{percent}}%",
+        extracting: "展開中...",
+        delete: "削除",
+        deleteAction: "{{label}} を削除",
+        deleteTitle: "{{label}} を削除しますか？",
+        deleteMessage: "{{size}} が解放されます。後で再ダウンロードできます。",
+        languages: "{{label}} の対応言語",
+        moreLanguages: "{{languages}} ほか {{count}} 言語",
+      },
     },
     general: {
       title: "一般",
@@ -2296,12 +2479,13 @@ export const ja: TranslationResources = {
         label: "常に思考プロセスを展開",
         description: "デフォルトでAIのエージェント思考・推論ブロックを完全に展開して表示します",
       },
-      toolCallDetail: {
-        label: "ツール呼び出しの表示",
-        description: "タイムラインでのツール呼び出しの表示方法",
+      chatDisplay: {
+        label: "チャットの表示",
+        description: "チャットに表示するエージェントの作業量",
         options: {
-          overview: "要約",
-          detailed: "すべての詳細",
+          full: "すべて",
+          collapseToolCalls: "ツール呼び出しを折りたたむ",
+          collapseTurns: "ターンを折りたたむ",
         },
       },
       language: {
@@ -2673,6 +2857,11 @@ export const ja: TranslationResources = {
       },
       agents: {
         unavailable: "エージェントを管理するにはこのホストに接続してください",
+        idleRuntimeCleanup: {
+          title: "アイドル状態のエージェントを解放",
+          hint: "1 時間のアイドル状態の後にメモリを解放します。",
+          info: "会話を保持したままエージェントのプロセスを停止します。メッセージを送信すると再開します。\n\n実行中の作業、保留中の通知、プロバイダーの安全性チェックがある場合は解放しません。",
+        },
       },
       workspaces: {
         unavailable: "ワークスペースを管理するにはこのホストに接続してください",

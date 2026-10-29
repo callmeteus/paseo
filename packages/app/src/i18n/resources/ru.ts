@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "Цель не задана. Использование: /goal <цель> | /goal pause | /goal resume | /goal clear",
+    status: "Цель ({{status}}): {{objective}}",
+    activeLabel: "активна",
+    pausedLabel: "на паузе",
+    set: "Цель задана: {{objective}}",
+    paused: "Цель приостановлена: {{objective}}",
+    resumed: "Цель возобновлена: {{objective}}",
+    cleared: "Цель снята.",
+    complete: "Цель достигнута: {{objective}}",
+    continuousLimit:
+      "Цель не достигнута после {{max}} попыток. Наблюдатель остановлен; отправьте сообщение или /goal resume, чтобы продолжить.",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",
@@ -134,6 +148,8 @@ export const ru: TranslationResources = {
       sendAndInterrupt: "Отправить и прервать",
       sendAndSteer: "Отправить и направить",
       sendMessage: "Отправить сообщение",
+      longPressToQueue: "Удерживайте, чтобы поставить в очередь",
+      longPressToSendNow: "Удерживайте, чтобы отправить сейчас",
       queue: "Очередь",
       send: "Отправить",
     },
@@ -191,6 +207,18 @@ export const ru: TranslationResources = {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",
     },
+    goal: {
+      active: "Цель",
+      paused: "Цель приостановлена",
+      edit: "Изменить цель",
+      info: "О цели",
+      clear: "Убрать цель",
+      collapse: "Скрыть цель",
+      show: "Показать цель",
+      pause: "Приостановить цель",
+      resume: "Возобновить цель",
+      stop: "Остановить цель",
+    },
     github: {
       searching: "Идет поиск...",
       noResults: "Результаты не найдены.",
@@ -204,6 +232,10 @@ export const ru: TranslationResources = {
     provider: {
       fallback: "Провайдер",
       select: "Выбрать провайдера агента",
+      portingUnsupported: "Обновите этот хост, прежде чем менять провайдера агента",
+      pendingOnNextMessage: "Смена провайдера применится при отправке следующего сообщения",
+      crossHostUnsupported: "Целевому хосту нужно обновление, чтобы принимать перенесённых агентов",
+      targetHostDisconnected: "Целевой хост не подключён",
     },
     thinking: {
       title: "Рассуждения",
@@ -400,6 +432,10 @@ export const ru: TranslationResources = {
       manual: "Контекст сжат вручную",
       withTokens: "Контекст сжат ({{tokens}} тыс. токенов)",
       completed: "Контекст сжат",
+    },
+    porting: {
+      loading: "Перенос контекста...",
+      completed: "Контекст перенесён в {{provider}}",
     },
   },
   importSession: {
@@ -1682,6 +1718,7 @@ export const ru: TranslationResources = {
     error: "Ошибка",
     defaultModel: "По умолчанию",
     profiles: "Профили",
+    routers: "Роутеры",
     providers: "Провайдеры",
     model: "Модель",
     editProfiles: "Изменить",
@@ -1940,6 +1977,13 @@ export const ru: TranslationResources = {
     backdrop: "Фон меню",
   },
   subagents: {
+    parent: {
+      backToParent: "Назад к родителю",
+      backTo: "Назад к {{label}}",
+      parent: "Родитель",
+      parentAgent: "Родительский агент",
+      openParent: "Открыть родителя",
+    },
     title: "Субагенты",
     pillLabelOne: "1 субагент",
     pillLabelMany: "Субагентов: {{count}}",
@@ -2040,6 +2084,12 @@ export const ru: TranslationResources = {
     subAgentActivity: "Активность субагента",
     input: "Входные данные",
     output: "Выходные данные",
+  },
+  turnSummary: {
+    messages: {
+      one: "написано {{count}} сообщение",
+      other: "написаны сообщения ({{count}})",
+    },
   },
   toolCallGroup: {
     editedFiles: {
@@ -2151,6 +2201,26 @@ export const ru: TranslationResources = {
       codeReview: "Проверка кода",
       credits: "Кредиты",
       monthlyCredits: "Ежемесячные кредиты",
+      rolling: "Скользящее",
+      spent: "Потрачено",
+      tokens: "Токены",
+    },
+    details: {
+      sessions: "Сеансы",
+      input: "Ввод",
+      output: "Вывод",
+      prompts: "Запросы",
+      steps: "Шаги",
+      cacheRead: "Чтение кэша",
+      since: "С",
+    },
+    plan: {
+      local: "Локально",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (локально)",
+      kiloLocal: "Kilo (локально)",
+      clineLocal: "Cline (локально)",
     },
     duration: {
       days: "{{value}} дн.",
@@ -2242,6 +2312,7 @@ export const ru: TranslationResources = {
       connections: "Подключения",
       agents: "Агенты",
       metadata: "Метаданные",
+      voice: "Голос",
       workspaces: "Рабочие пространства",
       providers: "Провайдеры",
       usage: "Использование",
@@ -2264,6 +2335,118 @@ export const ru: TranslationResources = {
         "Используется только эта модель. Если она не сработает, Paseo не будет пробовать другую модель",
       docs: "Документация",
       saveError: "Не удалось обновить настройки генерации метаданных",
+    },
+    modelRouters: {
+      title: "Маршрутизаторы моделей",
+      description:
+        "Объединяйте провайдеров и модели в один выбор. Fallback переходит к следующей цели при исчерпании кредитов или квоты; распределение разводит новые чаты.",
+      empty: "Маршрутизаторов пока нет. Создайте или начните с пресета.",
+      modeFallback: "Fallback",
+      modeDistribution: "Распределение",
+      defaultBadge: "по умолчанию",
+      setDefault: "Использовать для новых чатов",
+      unsetDefault: "Не использовать",
+      edit: "Изменить",
+      delete: "Удалить",
+      create: "Новый маршрутизатор",
+      addTarget: "Добавить цель",
+      removeTarget: "Убрать",
+      cancel: "Отмена",
+      save: "Сохранить",
+      namePlaceholder: "Название маршрутизатора",
+      invalidTitle: "Неполный маршрутизатор",
+      invalidBody: "Укажите название и хотя бы одну цель.",
+      saveError: "Не удалось сохранить маршрутизаторы",
+      fallbackMoved: "Чат перенесён в {{provider}}: у предыдущего провайдера закончился лимит",
+      crashPersists: "{{provider}} продолжает падать. Проверьте CLI провайдера и повторите.",
+      sessionRepaired:
+        "Сессия повреждена на стороне провайдера. Запущена новая сессия {{provider}} с историей.",
+      noMoreTargets: "Для этого чата больше нет запасных целей",
+      retryingProvider:
+        "{{provider}} завершился с ошибкой. Повторная попытка у того же провайдера…",
+      targetCount: "целей: {{count}}",
+      usePreset: "Использовать пресет",
+      wizard: {
+        title: "Новый маршрутизатор",
+        choose: "Начните с пресета или создайте свой список.",
+        manual: "Создать вручную",
+        manualHint: "Выберите провайдера и модель для каждой цели по порядку.",
+        startManual: "Создать",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "Бесплатные модели премиальных лабораторий: от сильных к дешёвым.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "Бесплатные open weight модели: передовые семейства, затем небольшие.",
+        },
+      },
+    },
+    voice: {
+      offline: "Подключитесь к этому хосту, чтобы настроить голос.",
+      updateHost: "Обновите хост, чтобы настроить голос.",
+      saveError: "Не удалось обновить голосовые настройки",
+      provider: "Провайдер",
+      providers: {
+        local: "Локально",
+        openai: "OpenAI",
+      },
+      voice: "Голос",
+      save: "Сохранить",
+      retry: "Повторить",
+      cancel: "Отмена",
+      model: "Модель",
+      language: "Язык",
+      languagePlaceholder: "Автоопределение",
+      setBy: "Задано через {{name}}",
+      unknownProvider: "Обновите приложение, чтобы настроить {{provider}}",
+      sites: {
+        dictationStt: "Распознавание речи",
+        voiceModeStt: "Прослушивание",
+        voiceModeTts: "Озвучивание",
+      },
+      dictation: {
+        title: "Диктовка",
+        enabled: "Диктовка",
+        enabledHint: "Говорите в поле сообщения вместо набора текста",
+      },
+      voiceMode: {
+        title: "Голосовой режим",
+        info: "Голосовой режим расшифровывает вашу речь и зачитывает ответы агента вслух.",
+        enabled: "Голосовой режим",
+        enabledHint: "Общайтесь с агентами без рук",
+      },
+      openai: {
+        apiKey: "API-ключ",
+        apiKeyHint: "Хранится на хосте и больше не показывается.",
+        keyPlaceholder: "sk-...",
+        savedKeyPlaceholder: "Сохранён",
+        missingKey: "Нет API-ключа",
+        baseUrl: "Базовый URL",
+        baseUrlHint:
+          "Для серверов, совместимых с OpenAI. Оставьте пустым, чтобы использовать OpenAI.",
+      },
+      models: {
+        loading: "Загрузка моделей...",
+        loadError: "Не удалось загрузить локальные модели",
+        none: "Нет доступных моделей",
+        downloaded: "Скачана",
+        inUse: "Используется",
+        recommended: "Рекомендуется",
+        download: "Скачать",
+        downloadAction: "Скачать {{label}}",
+        downloading: "Скачивание...",
+        downloadingPercent: "Скачивание {{percent}}%",
+        extracting: "Распаковка...",
+        delete: "Удалить",
+        deleteAction: "Удалить {{label}}",
+        deleteTitle: "Удалить {{label}}?",
+        deleteMessage: "Освободится {{size}}. Позже её можно скачать снова.",
+        languages: "Языки {{label}}",
+        moreLanguages: "{{languages}} и ещё {{count}}",
+      },
     },
     general: {
       title: "Основные",
@@ -2313,12 +2496,13 @@ export const ru: TranslationResources = {
         description:
           "По умолчанию полностью разворачивать блоки размышлений и хода рассуждений агента",
       },
-      toolCallDetail: {
-        label: "Отображение вызовов инструментов",
-        description: "Как вызовы инструментов отображаются на временной шкале",
+      chatDisplay: {
+        label: "Отображение чата",
+        description: "Какую часть работы агента показывает чат",
         options: {
-          overview: "Сводка",
-          detailed: "Все подробности",
+          full: "Полностью",
+          collapseToolCalls: "Сворачивать вызовы инструментов",
+          collapseTurns: "Сворачивать ходы",
         },
       },
       language: {
@@ -2695,6 +2879,11 @@ export const ru: TranslationResources = {
       },
       agents: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять агентами",
+        idleRuntimeCleanup: {
+          title: "Освобождать неактивных агентов",
+          hint: "Освобождает память после часа бездействия.",
+          info: "Останавливает процесс агента, сохраняя разговор. Отправьте сообщение, чтобы продолжить.\n\nАктивная работа, ожидающие уведомления и проверки безопасности провайдера предотвращают очистку.",
+        },
       },
       workspaces: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять рабочими пространствами",

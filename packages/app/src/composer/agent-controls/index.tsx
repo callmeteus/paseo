@@ -36,6 +36,8 @@ import {
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { useSessionStore } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
+import { useHostFeature } from "@/runtime/host-features";
+import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -64,6 +66,15 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { readMeasuredWidth } from "@/hooks/use-container-width";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
+import {
+  clearProviderSwitch,
+  planProviderSwitch,
+  resolveDisplayModelId,
+  resolveDisplayProvider,
+  stageProviderSwitch,
+  updateStagedProviderModel,
+  usePendingProviderSwitch,
+} from "@/composer/agent-controls/pending-provider-switch";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import {
   useAgentControlCommandCenterActions,
@@ -82,6 +93,7 @@ import { ComposerControlLayoutProvider } from "@/composer/agent-controls/layout-
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
+import { portAgentToFallbackRouter } from "@/model-routers/port-to-fallback-target";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
@@ -110,7 +122,7 @@ interface ControlledAgentControlsProps {
   modelOptions?: AgentControlOption[];
   selectedModelId?: string;
   onSelectModel?: (modelId: string) => void;
-  onSelectProviderAndModel?: (provider: string, modelId: string) => void;
+  onSelectProviderAndModel?: (provider: string, modelId: string, serverId?: string | null) => void;
   thinkingOptions?: AgentControlOption[];
   selectedThinkingOptionId?: string;
   onSelectThinkingOption?: (thinkingOptionId: string) => void;
@@ -131,6 +143,8 @@ interface ControlledAgentControlsProps {
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  /** Called after the user picks (or clears) a router in the model selector. */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 export interface DraftAgentControlsProps {
@@ -145,7 +159,11 @@ export interface DraftAgentControlsProps {
   isModelLoading: boolean;
   modelSelectorProviders: ProviderSelectorProvider[];
   isAllModelsLoading: boolean;
-  onSelectProviderAndModel: (provider: AgentProvider, modelId: string) => void;
+  onSelectProviderAndModel: (
+    provider: AgentProvider,
+    modelId: string,
+    serverId?: string | null,
+  ) => void;
   thinkingOptions: NonNullable<AgentModelDefinition["thinkingOptions"]>;
   selectedThinkingOptionId: string;
   onSelectThinkingOption: (thinkingOptionId: string) => void;
@@ -159,6 +177,7 @@ export interface DraftAgentControlsProps {
   disabled?: boolean;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 interface AgentControlsProps {
@@ -352,7 +371,7 @@ function pickSheetModel({
   nextProviderId: string;
   modelId: string;
   currentProvider: string;
-  onSelectProviderAndModel?: (provider: string, modelId: string) => void;
+  onSelectProviderAndModel?: (provider: string, modelId: string, serverId?: string | null) => void;
   onSelectProvider?: (providerId: string) => void;
   onSelectModel?: (modelId: string) => void;
 }) {
@@ -377,7 +396,7 @@ function pickDesktopModel({
   modelId: string;
   currentProvider: string;
   onSelectModel?: (modelId: string) => void;
-  onSelectProviderAndModel?: (provider: string, modelId: string) => void;
+  onSelectProviderAndModel?: (provider: string, modelId: string, serverId?: string | null) => void;
 }) {
   if (onSelectProviderAndModel) {
     onSelectProviderAndModel(nextProviderId, modelId);
@@ -502,6 +521,7 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  onRouterPicked,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -672,13 +692,15 @@ function ControlledAgentControls({
   );
 
   const handleDesktopModelSelect = useCallback(
-    (nextProviderId: string, modelId: string) => {
+    (nextProviderId: string, modelId: string, serverId?: string | null) => {
       pickDesktopModel({
         nextProviderId,
         modelId,
         currentProvider: provider,
         onSelectModel,
-        onSelectProviderAndModel,
+        onSelectProviderAndModel: onSelectProviderAndModel
+          ? (p, m) => onSelectProviderAndModel(p, m, serverId)
+          : undefined,
       });
     },
     [onSelectModel, onSelectProviderAndModel, provider],
@@ -714,12 +736,14 @@ function ControlledAgentControls({
   );
 
   const handleSheetModelSelect = useCallback(
-    (nextProviderId: string, modelId: string) => {
+    (nextProviderId: string, modelId: string, serverId?: string | null) => {
       pickSheetModel({
         nextProviderId,
         modelId,
         currentProvider: provider,
-        onSelectProviderAndModel,
+        onSelectProviderAndModel: onSelectProviderAndModel
+          ? (p, m) => onSelectProviderAndModel(p, m, serverId)
+          : undefined,
         onSelectProvider,
         onSelectModel,
       });
@@ -786,6 +810,7 @@ function ControlledAgentControls({
             handleOpenSheet={handleOpenSheet}
             handleCloseSheet={handleCloseSheet}
             modelSelectorServerId={modelSelectorServerId}
+            onRouterPicked={onRouterPicked}
           />
         ) : (
           <SheetAgentControlsContent
@@ -823,6 +848,7 @@ function ControlledAgentControls({
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
+            onRouterPicked={onRouterPicked}
           />
         )}
       </View>
@@ -886,6 +912,7 @@ interface DesktopAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
@@ -943,6 +970,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleOpenSheet,
     handleCloseSheet,
     modelSelectorServerId,
+    onRouterPicked,
   } = props;
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
@@ -1006,6 +1034,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 desktopPlacement="top-start"
                 desktopMinWidth={360}
                 toolbar={modelToolbar}
+                onRouterPicked={onRouterPicked}
               />
             </View>
           </TooltipTrigger>
@@ -1146,6 +1175,7 @@ interface SheetAgentControlsContentProps {
   glyphSize: number;
   modelSelectorServerId: string | null;
   canSwitchProvider: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
@@ -1185,6 +1215,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     glyphSize,
     modelSelectorServerId,
     canSwitchProvider,
+    onRouterPicked,
   } = props;
 
   const thinkingAnchorRef = useRef<View | null>(null);
@@ -1272,6 +1303,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       serverId={modelSelectorServerId}
       glyphSize={glyphSize}
       canSwitchProvider={canSwitchProvider}
+      onRouterPicked={onRouterPicked}
     >
       {sheetControls}
     </CompactModelSheet>
@@ -1549,6 +1581,76 @@ function ThinkingComboboxOption({
   );
 }
 
+function anyTrue(...values: boolean[]): boolean {
+  return values.some(Boolean);
+}
+
+function optionalValue<T>(value: T | null | undefined): T | undefined {
+  return value ?? undefined;
+}
+
+function optionalNonEmpty<T>(value: T[]): T[] | undefined {
+  return value.length > 0 ? value : undefined;
+}
+
+/** Providers exposed by every other connected host, for cross-host porting. */ async function loadCrossHostProviders(input: {
+  hosts: Array<{ serverId?: string | null }>;
+  serverId: string;
+  cwd: string | null | undefined;
+}): Promise<ProviderSelectorProvider[]> {
+  const otherHosts = input.hosts.filter(
+    (host) => host.serverId && host.serverId !== input.serverId,
+  );
+  const results = await Promise.all(
+    otherHosts.map(async (host) => {
+      const hostClient = getHostRuntimeStore().getClient(host.serverId ?? "");
+      if (!hostClient) return [] as ProviderSelectorProvider[];
+      try {
+        const snapshot = await hostClient.getProvidersSnapshot({ cwd: input.cwd ?? undefined });
+        return buildSelectableProviderSelectorProviders(
+          snapshot.entries,
+          true,
+          host.serverId ?? null,
+        );
+      } catch {
+        return [] as ProviderSelectorProvider[];
+      }
+    }),
+  );
+  return results.flat();
+}
+
+function buildModelSelectorProviders(input: {
+  snapshotEntries: ReturnType<typeof useProvidersSnapshot>["entries"];
+  snapshotSelectedEntry: ReturnType<typeof resolveSnapshotSelectedEntry>;
+  serverId: string;
+  providerDefinitions: AgentProviderDefinition[];
+  modelsByProvider: Map<string, AgentModelDefinition[]>;
+  supportsSnapshotTransfer: boolean;
+  crossHostProviders: ProviderSelectorProvider[];
+}): ProviderSelectorProvider[] {
+  let base: ProviderSelectorProvider[];
+  if (input.snapshotEntries) {
+    base = buildSelectableProviderSelectorProviders(input.snapshotEntries, true, input.serverId);
+  } else if (input.snapshotSelectedEntry) {
+    base = buildSelectableProviderSelectorProviders(
+      [input.snapshotSelectedEntry],
+      true,
+      input.serverId,
+    );
+  } else {
+    base = buildProviderSelectorProviders({
+      providerDefinitions: input.providerDefinitions,
+      modelsByProvider: input.modelsByProvider,
+      serverId: input.serverId,
+    });
+  }
+  if (input.supportsSnapshotTransfer && input.crossHostProviders.length > 0) {
+    return [...base, ...input.crossHostProviders];
+  }
+  return base;
+}
+
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
@@ -1561,6 +1663,12 @@ export const AgentControls = memo(function AgentControls({
   );
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const toast = useToast();
+  const { t } = useTranslation();
+  const pendingProviderSwitch = usePendingProviderSwitch(serverId, agentId);
+  const supportsProviderSwap = useHostFeature(serverId, "agentProviderSwap");
+  const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
+  const hosts = useHosts();
+  const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
   const modeControl = useLiveAgentModeControl(serverId, agentId);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
@@ -1591,14 +1699,24 @@ export const AgentControls = memo(function AgentControls({
     [agent?.provider, models],
   );
   const agentModelSelectorProviders = useMemo(() => {
-    if (snapshotSelectedEntry) {
-      return buildSelectableProviderSelectorProviders([snapshotSelectedEntry]);
-    }
-    return buildProviderSelectorProviders({
+    return buildModelSelectorProviders({
+      snapshotEntries,
+      snapshotSelectedEntry,
+      serverId,
       providerDefinitions: agentProviderDefinitions,
       modelsByProvider: agentProviderModels,
+      supportsSnapshotTransfer,
+      crossHostProviders,
     });
-  }, [agentProviderDefinitions, agentProviderModels, snapshotSelectedEntry]);
+  }, [
+    agentProviderDefinitions,
+    agentProviderModels,
+    crossHostProviders,
+    serverId,
+    snapshotEntries,
+    snapshotSelectedEntry,
+    supportsSnapshotTransfer,
+  ]);
 
   const modelSelection = resolveAgentModelSelection({
     models,
@@ -1643,9 +1761,65 @@ export const AgentControls = memo(function AgentControls({
     },
     [agentId, agentProvider, client, toast, updatePreferences],
   );
+
+  const handleSelectProviderAndModel = useCallback(
+    async (provider: string, modelId: string, targetServerId?: string | null) => {
+      const plan = planProviderSwitch({
+        currentProvider: agentProvider,
+        currentServerId: serverId,
+        nextProvider: provider,
+        nextServerId: targetServerId,
+        supportsProviderSwap,
+        targetSupportsSnapshotTransfer:
+          useSessionStore.getState().sessions[(targetServerId ?? "").trim() || serverId]?.serverInfo
+            ?.features?.agentSnapshotTransfer === true,
+        targetClientConnected:
+          getHostRuntimeStore().getClient((targetServerId ?? "").trim() || serverId) !== null,
+      });
+      if (plan.kind === "reject") {
+        toast.error(t(plan.messageKey));
+        return;
+      }
+      if (plan.kind === "model") {
+        clearProviderSwitch(serverId, agentId);
+        await handleSelectModel(modelId);
+        return;
+      }
+      // Porting archives this agent and creates a new one, so the pick is staged
+      // and committed by the next message instead of yanking the chat away now.
+      stageProviderSwitch(serverId, agentId, {
+        targetServerId: plan.targetHost,
+        provider,
+        modelId,
+      });
+      toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
+    },
+    [agentId, agentProvider, handleSelectModel, serverId, supportsProviderSwap, t, toast],
+  );
+
+  /**
+   * While a switch is staged, the provider glyph and model label already show
+   * the destination, so picking another model must edit the staged pick instead
+   * of writing a model the current agent cannot run.
+   */
+  const handleSelectModelFromPicker = useCallback(
+    (modelId: string) => {
+      if (!updateStagedProviderModel(serverId, agentId, modelId)) {
+        void handleSelectModel(modelId);
+      }
+    },
+    [agentId, handleSelectModel, serverId],
+  );
+
+  useEffect(() => {
+    return () => clearProviderSwitch(serverId, agentId);
+  }, [agentId, serverId]);
+
   const handleSelectCommandCenterModel = useCallback(
-    (_provider: AgentProvider, modelId: string) => handleSelectModel(modelId),
-    [handleSelectModel],
+    (provider: AgentProvider, modelId: string) => {
+      void handleSelectProviderAndModel(provider, modelId);
+    },
+    [handleSelectProviderAndModel],
   );
 
   // A running agent is one provider's process, so only that provider's profiles
@@ -1776,13 +1950,43 @@ export const AgentControls = memo(function AgentControls({
 
   const handleModelSelectorOpen = useCallback(() => {
     refetchSnapshotIfStale(agentProvider);
-  }, [agentProvider, refetchSnapshotIfStale]);
+    if (!supportsSnapshotTransfer) return;
+    void loadCrossHostProviders({ hosts, serverId, cwd: agent?.cwd }).then(setCrossHostProviders);
+  }, [
+    agent?.cwd,
+    agentProvider,
+    hosts,
+    refetchSnapshotIfStale,
+    serverId,
+    supportsSnapshotTransfer,
+  ]);
 
   const handleRetryModelProvider = useCallback(
     (provider: AgentProvider) => {
       void refreshSnapshot([provider]);
     },
     [refreshSnapshot],
+  );
+
+  const handleRouterPicked = useCallback(
+    (routerId: string | null) => {
+      // Picking a fallback router on an existing chat ports it to the router's
+      // first target through the regular provider-switch port flow.
+      if (!routerId || !client || !agent) return;
+      void portAgentToFallbackRouter({ client, serverId, agentId, routerId }).then((result) => {
+        if (result.outcome === "ported") {
+          toast.show(t("settings.modelRouters.fallbackMoved", { provider: result.provider }), {
+            variant: "info",
+            durationMs: 4000,
+          });
+          return;
+        }
+        if (result.outcome === "no-target") toast.error(t("settings.modelRouters.noMoreTargets"));
+        if (result.outcome === "failed") toast.error(result.reason);
+        return undefined;
+      });
+    },
+    [agent, agentId, client, serverId, t, toast],
   );
 
   if (!agent) {
@@ -1794,30 +1998,32 @@ export const AgentControls = memo(function AgentControls({
       {commandCenterRegistration}
       {profileEditor.element}
       <ControlledAgentControls
-        provider={agent.provider}
+        provider={resolveDisplayProvider(pendingProviderSwitch, agent.provider)}
         modelSelectorProviders={agentModelSelectorProviders}
         modelOptions={modelOptions}
-        selectedModelId={modelSelection.activeModelId ?? undefined}
-        onSelectModel={handleSelectModel}
+        selectedModelId={resolveDisplayModelId(pendingProviderSwitch, modelSelection.activeModelId)}
+        onSelectModel={handleSelectModelFromPicker}
+        onSelectProviderAndModel={handleSelectProviderAndModel}
         agentProfiles={agentProfiles}
         onApplyAgentProfile={agentProfiles?.applyProfile}
         onEditAgentProfiles={handleEditAgentProfiles}
         onCreateAgentProfile={profileActions.create}
         onEditAgentProfile={profileActions.edit}
-        thinkingOptions={thinkingOptions.length > 0 ? thinkingOptions : undefined}
-        selectedThinkingOptionId={modelSelection.selectedThinkingId ?? undefined}
+        thinkingOptions={optionalNonEmpty(thinkingOptions)}
+        selectedThinkingOptionId={optionalValue(modelSelection.selectedThinkingId)}
         onSelectThinkingOption={handleSelectThinkingOption}
         features={agent.features}
         onSetFeature={handleSetFeature}
-        isModelLoading={snapshotIsLoading || selectedProviderIsLoading}
+        isModelLoading={anyTrue(snapshotIsLoading, selectedProviderIsLoading)}
         onModelSelectorOpen={handleModelSelectorOpen}
         onRetryModelProvider={handleRetryModelProvider}
         isRetryingModelProvider={snapshotIsRefreshing}
         onDropdownClose={onDropdownClose}
-        disabled={!client}
+        disabled={anyTrue(client === null)}
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
+        onRouterPicked={handleRouterPicked}
       />
     </>
   );

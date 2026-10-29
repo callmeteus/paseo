@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { discover, fetchUsage } from "./usage.js";
+import { discover, fetchUsage, readKeyFromDatabase } from "./usage.js";
 
 import { inputSchema } from "../shared/input.js";
 
@@ -101,4 +101,28 @@ test.each(["missing file", "unrelated file"])("discovers no accounts for %s", as
   const path = join(fixtureDirectory, "missing.json");
   if (scenario === "unrelated file") await writeFile(path, "{}");
   expect(await discover(path)).toEqual([]);
+});
+
+test("reads the OAuth access token from OpenCode's sqlite credential store", async () => {
+  const { createRequire } = await import("node:module");
+  const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
+    DatabaseSync: new (file: string) => {
+      exec(sql: string): void;
+      prepare(sql: string): { run(...params: unknown[]): void };
+      close(): void;
+    };
+  };
+  const directory = await mkdtemp(join(tmpdir(), "paseo-opencode-db-"));
+  const dbPath = join(directory, "opencode.db");
+  try {
+    const db = new DatabaseSync(dbPath);
+    db.exec("create table credential (integration_id text, value text, active integer)");
+    db.prepare("insert into credential values ('opencode', ?, 1)").run(
+      JSON.stringify({ access: "oauth-access-token", refresh: "refresh-token" }),
+    );
+    db.close();
+    expect(readKeyFromDatabase(dbPath)).toBe("oauth-access-token");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

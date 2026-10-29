@@ -65,6 +65,8 @@ import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { useProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
+import { IdleRuntimeCleanupCard } from "./idle-runtime-cleanup-card";
+import { ModelRoutersCard } from "./model-routers-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
 
 const ThemedRestart = withUnistyles(RotateCw);
@@ -291,6 +293,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
+          <IdleRuntimeCleanupCard serverId={serverId} />
         </SettingsSection>
       ) : (
         <View style={[settingsStyles.card, styles.emptyCard]}>
@@ -337,6 +340,7 @@ export function HostProvidersPage({ serverId }: { serverId: string }) {
   return (
     <View>
       <ProvidersSection serverId={serverId} />
+      <ModelRoutersCard serverId={serverId} />
     </View>
   );
 }

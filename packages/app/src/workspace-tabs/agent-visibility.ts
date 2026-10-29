@@ -37,7 +37,10 @@ export function deriveWorkspaceAgentVisibility(input: {
       const parentAgent = agent.parentAgentId
         ? (sessionAgents?.get(agent.parentAgentId) ?? agentDetails?.get(agent.parentAgentId))
         : undefined;
-      if (isWorkspaceRootAgent(agent, parentAgent)) {
+      // A freshly ported chat stays out of the tab bar until its first message
+      // lands; the caller navigates to it explicitly once porting finishes.
+      const isPendingPort = Boolean(agent.migratedFrom) && !agent.lastUserMessageAt;
+      if (isWorkspaceRootAgent(agent, parentAgent) && !isPendingPort) {
         autoOpenAgentIds.add(agent.id);
       }
     }

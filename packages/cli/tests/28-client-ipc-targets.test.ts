@@ -47,10 +47,10 @@ console.log("=== CLI IPC Target Helpers ===\n");
 
 {
   console.log("Test 3: tcp URI host targets honor ssl=true");
-  const target = resolveDaemonTarget("tcp://example.com:6767?ssl=true&password=query-secret");
+  const target = resolveDaemonTarget("tcp://example.com:17000?ssl=true&password=query-secret");
   assert.deepStrictEqual(target, {
     type: "tcp",
-    url: "wss://example.com:6767/ws",
+    url: "wss://example.com:17000/ws",
   });
   console.log("✓ tcp URI host targets honor ssl=true\n");
 }
@@ -58,8 +58,8 @@ console.log("=== CLI IPC Target Helpers ===\n");
 {
   console.log("Test 4: tcp URI hosts normalize into canonical direct TCP targets");
   assert.strictEqual(
-    normalizeDaemonHost("tcp://Example.com:6767?ssl=true&password=query-secret"),
-    "tcp://Example.com:6767?ssl=true&password=query-secret",
+    normalizeDaemonHost("tcp://Example.com:17000?ssl=true&password=query-secret"),
+    "tcp://Example.com:17000?ssl=true&password=query-secret",
   );
   console.log("✓ tcp URI hosts normalize into canonical direct TCP targets\n");
 }
@@ -99,33 +99,33 @@ console.log("=== CLI IPC Target Helpers ===\n");
   try {
     delete process.env.PASEO_PASSWORD;
     assert.strictEqual(
-      resolveDaemonPassword("tcp://example.com:6767?ssl=true&password=query-secret"),
+      resolveDaemonPassword("tcp://example.com:17000?ssl=true&password=query-secret"),
       "query-secret",
     );
-    assert.strictEqual(resolveDaemonPassword("tcp://missing.example:6767"), undefined);
-    assert.strictEqual(resolveDaemonPassword("example.com:6767"), undefined);
+    assert.strictEqual(resolveDaemonPassword("tcp://missing.example:17000"), undefined);
+    assert.strictEqual(resolveDaemonPassword("example.com:17000"), undefined);
 
     process.env.PASEO_PASSWORD = "env-secret";
     assert.strictEqual(
-      resolveDaemonPassword("tcp://example.com:6767?ssl=true&password=query-secret"),
+      resolveDaemonPassword("tcp://example.com:17000?ssl=true&password=query-secret"),
       "query-secret",
       "URI password should take precedence over env var",
     );
     assert.strictEqual(
-      resolveDaemonPassword("tcp://missing.example:6767"),
+      resolveDaemonPassword("tcp://missing.example:17000"),
       "env-secret",
       "TCP host without query password should fall back to env var",
     );
     assert.strictEqual(
-      resolveDaemonPassword("example.com:6767"),
+      resolveDaemonPassword("example.com:17000"),
       "env-secret",
       "Bare host should pick up env var password",
     );
-    assert.strictEqual(resolveDaemonPassword("localhost:6767"), "env-secret");
+    assert.strictEqual(resolveDaemonPassword("localhost:17000"), "env-secret");
 
     process.env.PASEO_PASSWORD = "";
     assert.strictEqual(
-      resolveDaemonPassword("localhost:6767"),
+      resolveDaemonPassword("localhost:17000"),
       undefined,
       "Empty env var should be treated as unset",
     );

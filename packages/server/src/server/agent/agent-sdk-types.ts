@@ -201,6 +201,11 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /**
+   * Daemon-internal: text to record in the timeline when the dispatched prompt
+   * carries injected context (the `/goal` preamble). Providers ignore it.
+   */
+  submittedPromptText?: string;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {
@@ -381,6 +386,14 @@ export interface CompactionTimelineItem {
   preTokens?: number;
 }
 
+export interface PortingTimelineItem {
+  [key: string]: unknown;
+  type: "porting";
+  status: "loading" | "completed";
+  fromProvider?: AgentProvider;
+  toProvider?: AgentProvider;
+}
+
 export interface PluginTimelineItem {
   type: "plugin";
   id: string;
@@ -403,6 +416,7 @@ export type AgentTimelineItem =
       message: string;
     }
   | CompactionTimelineItem
+  | PortingTimelineItem
   | PluginTimelineItem;
 
 export type AgentStreamEvent =
@@ -694,6 +708,10 @@ export interface AgentSession {
    * still uncertain.
    */
   interrupt(): Promise<void>;
+  /** True only when releasing this runtime loses no background work or pending replies.
+   * An optional additional veto: missing methods use daemon baseline eligibility;
+   * implemented checks that reject or return false keep the runtime resident. */
+  canStopRuntime?(): Promise<boolean>;
   /** Release live runtime resources without archiving or deleting the durable native session. */
   close(): Promise<void>;
   listCommands?(): Promise<AgentSlashCommand[]>;

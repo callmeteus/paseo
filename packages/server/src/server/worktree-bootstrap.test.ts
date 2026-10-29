@@ -380,13 +380,13 @@ describe("runWorktreeAutoTerminals", () => {
     expect(createTerminalCalls[0]?.env?.PASEO_PORT).toEqual(expect.any(String));
     expect(createTerminalCalls[0]?.env?.HOST).toBe("127.0.0.1");
     expect(createTerminalCalls[0]?.env?.PASEO_URL).toBe(
-      "http://api--feature-socket-service--repo.localhost:6767",
+      "http://api--feature-socket-service--repo.localhost:17000",
     );
     expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_API_PORT).toBe(
       createTerminalCalls[0]?.env?.PASEO_PORT,
     );
     expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_API_URL).toBe(
-      "http://api--feature-socket-service--repo.localhost:6767",
+      "http://api--feature-socket-service--repo.localhost:17000",
     );
   }
 
@@ -410,7 +410,7 @@ describe("runWorktreeAutoTerminals", () => {
       String(plannedAppServerPort),
     );
     expect(createTerminalCalls[0]?.env?.PASEO_SERVICE_APP_SERVER_URL).toBe(
-      "http://app-server--feature-socket-service--repo.localhost:6767",
+      "http://app-server--feature-socket-service--repo.localhost:17000",
     );
   }
 
@@ -745,7 +745,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-socket-service",
       scriptName: "api",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls, terminalRecords),
@@ -789,7 +789,7 @@ describe("runWorktreeAutoTerminals", () => {
       workspaceId: repoDir,
       projectSlug: "repo",
       branchName: "feature-added-service",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy,
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls, terminalRecords),
@@ -847,7 +847,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-public-service",
       scriptName: "api",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxyPublicBaseUrl: "https://services.example.com",
       serviceProxy: routeStore,
       runtimeStore,
@@ -913,7 +913,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-respawn-service",
       scriptName: "api",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager,
@@ -925,7 +925,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-respawn-service",
       scriptName: "worker",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager,
@@ -959,7 +959,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-respawn-service",
       scriptName: "api",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager,
@@ -1016,7 +1016,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-before-rename",
       scriptName: "api",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager,
@@ -1081,7 +1081,7 @@ describe("runWorktreeAutoTerminals", () => {
         projectSlug: "repo",
         branchName: "feature-collision-service",
         scriptName: "app-server",
-        daemonPort: 6767,
+        daemonPort: 17000,
         serviceProxy: routeStore,
         runtimeStore,
         terminalManager: createStubTerminalManager(createTerminalCalls),
@@ -1116,7 +1116,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-collision-service",
       scriptName: "app-server",
-      daemonPort: 6767,
+      daemonPort: 17000,
       serviceProxy: routeStore,
       runtimeStore,
       terminalManager: createStubTerminalManager(createTerminalCalls),
@@ -1168,7 +1168,7 @@ describe("runWorktreeAutoTerminals", () => {
       projectSlug: "repo",
       branchName: "feature-remote-service",
       scriptName: "web",
-      daemonPort: 6767,
+      daemonPort: 17000,
       daemonListenHost: "100.64.0.20",
       serviceProxy: routeStore,
       runtimeStore,
@@ -1178,7 +1178,7 @@ describe("runWorktreeAutoTerminals", () => {
     expect(createTerminalCalls).toHaveLength(1);
     expect(createTerminalCalls[0]?.env?.HOST).toBe("0.0.0.0");
     expect(createTerminalCalls[0]?.env?.PASEO_URL).toBe(
-      "http://web--feature-remote-service--repo.localhost:6767",
+      "http://web--feature-remote-service--repo.localhost:17000",
     );
   });
 });

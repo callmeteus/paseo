@@ -29,7 +29,7 @@ CLI 接受 SSH URI 作为主机：
 paseo --host ssh://user@host ls -a
 ```
 
-daemon 应位于远程主机的 `127.0.0.1:6767`。SSH URL 中的端口是 SSH 服务器的端口：
+daemon 应位于远程主机的 `127.0.0.1:17000`。SSH URL 中的端口是 SSH 服务器的端口：
 
 ```bash
 paseo --host ssh://user@host:2222 ls -a
@@ -92,7 +92,7 @@ tailscale ip -4
   "$schema": "https://paseo.sh/schemas/paseo.config.v1.json",
   "version": 1,
   "daemon": {
-    "listen": "100.101.102.103:6767"
+    "listen": "100.101.102.103:17000"
   }
 }
 ```
@@ -114,7 +114,7 @@ paseo daemon restart
 1. 在手机上连接 Tailscale。
 2. 打开 Paseo，进入 **设置 → 添加主机 → 直接连接**。
 3. 在 **Host** 中输入 Tailscale IP。
-4. 在 **端口** 中输入 `6767`。
+4. 在 **端口** 中输入 `17000`。
 5. 保持 **使用 SSL** 关闭，然后选择 **连接**。
 
 如果该主机已经通过中继配对过，Paseo 会把直连添加到同一个主机上。

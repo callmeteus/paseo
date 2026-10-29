@@ -9,6 +9,7 @@ import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
 import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./agent-owner.js";
+import { clampSystemPrompt, MAX_COMPOSED_SYSTEM_PROMPT_CHARS } from "./system-prompt.js";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
@@ -75,6 +76,45 @@ const STORED_AGENT_SCHEMA = z.object({
   internal: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
+  migratedFrom: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
+  /** Daemon-level `/goal` state. Kept here so goals survive restarts and reloads. */
+  goal: z
+    .object({
+      objective: z.string(),
+      status: z.enum(["active", "paused"]),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .optional(),
+  /**
+   * Timeline rows of the source conversation, written when an agent is ported.
+   * A ported provider session starts empty, so this is the only way to restore
+   * the pre-port chat after the in-memory timeline is discarded.
+   */
+  portedTimeline: z
+    .array(
+      z.object({
+        seq: z.number(),
+        timestamp: z.string(),
+        item: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .optional(),
 });
 
 export type SerializableAgentConfig = Pick<
@@ -91,7 +131,17 @@ export type SerializableAgentConfig = Pick<
 
 export type StoredAgentRecord = z.infer<typeof STORED_AGENT_SCHEMA>;
 export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
-  return STORED_AGENT_SCHEMA.parse(value);
+  const record = STORED_AGENT_SCHEMA.parse(value);
+  // Ported prompts used to grow without bound and broke provider startup
+  // (OpenCode answers 413). Heal old records as they load.
+  const prompt = record.config?.systemPrompt;
+  if (prompt && prompt.length > MAX_COMPOSED_SYSTEM_PROMPT_CHARS) {
+    return {
+      ...record,
+      config: { ...record.config, systemPrompt: clampSystemPrompt(prompt) },
+    };
+  }
+  return record;
 }
 
 export class AgentStorage {
@@ -258,6 +308,12 @@ export class AgentStorage {
       // stale pre-archive record after the archive mutation.
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
+      }
+      if (existing?.migratedFrom !== undefined) {
+        record.migratedFrom = existing.migratedFrom;
+      }
+      if (existing?.migratedTo !== undefined) {
+        record.migratedTo = existing.migratedTo;
       }
       return record;
     });

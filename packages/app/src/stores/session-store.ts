@@ -40,6 +40,7 @@ import type {
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@getpaseo/protocol/messages";
+import type { AgentGoalState } from "@/utils/agent-snapshots";
 import {
   normalizeWorkspaceOpaqueId,
   normalizeWorkspacePath,
@@ -69,6 +70,13 @@ export interface AgentRuntimeInfo {
   extra?: Record<string, unknown>;
 }
 
+export interface AgentMigrationLink {
+  provider: string;
+  agentId: string;
+  host?: string;
+  portedAt?: string;
+}
+
 export interface Agent {
   serverId: string;
   id: string;
@@ -93,10 +101,14 @@ export interface Agent {
   model: string | null;
   features?: AgentFeature[];
   thinkingOptionId?: string | null;
+  /** Daemon-level /goal state; only present while a goal is set. */
+  goal?: AgentGoalState | null;
   requiresAttention?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
+  migratedFrom?: AgentMigrationLink;
+  migratedTo?: AgentMigrationLink;
   parentAgentId: string | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
@@ -330,6 +342,26 @@ export function selectAgentTimelineState(
     };
   }
   return items.length > 0 ? { status: "painted", items } : { status: "cold" };
+}
+
+/** Text of the loaded user messages, newest first, with back-to-back repeats collapsed. */
+export function selectAgentSentMessages(
+  session: SessionState | undefined,
+  agentId: string,
+): string[] {
+  if (!session) return [];
+  const items = [
+    ...(session.agentStreamTail.get(agentId) ?? []),
+    ...(session.agentStreamHead.get(agentId) ?? []),
+  ];
+  const messages: string[] = [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.kind !== "user_message" || item.text.trim().length === 0) continue;
+    if (messages[messages.length - 1] === item.text) continue;
+    messages.push(item.text);
+  }
+  return messages;
 }
 
 export function selectAgentTurnPresentation(

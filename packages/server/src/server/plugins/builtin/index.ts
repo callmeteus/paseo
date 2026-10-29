@@ -11,6 +11,7 @@ export const builtinPlugins = [
   "grok-usage-source",
   "hoplite-provider",
   "kimi-usage-source",
+  "local-cli-usage-source",
   "minimax-usage-source",
   "muse-provider",
   "opencode-go-usage-source",

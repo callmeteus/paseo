@@ -9,7 +9,7 @@ npm install @getpaseo/client
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({
@@ -32,7 +32,7 @@ Read the [SDK documentation](https://paseo.sh/docs/sdk) for agents, workspaces, 
 
 The client needs a WebSocket implementation. Modern browsers and Node.js 22 provide one globally.
 
-Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:6767/ws`. Pass `password` when the daemon requires authentication.
+Use a WebSocket URL ending in `/ws`, such as `ws://127.0.0.1:17000/ws`. Pass `password` when the daemon requires authentication.
 
 The client advertises its supported protocol capabilities by default. Optional `capabilities`
 overrides extend or override that declaration; browser hosting must be supplied by the caller.

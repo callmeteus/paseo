@@ -7,14 +7,14 @@ HTTP origin. Start it, then open the daemon URL in a browser.
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
   ghcr.io/getpaseo/paseo:latest
 ```
 
-Then open `http://localhost:6767`.
+Then open `http://localhost:17000`.
 
 The base image intentionally does not bundle agent CLIs. Extend it with the
 agents you use:

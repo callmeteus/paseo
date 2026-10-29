@@ -113,7 +113,7 @@ paseo attach abc123                # ライブ出力をストリーミング
 paseo send abc123 "also add tests" # 追加タスクを送信
 
 # リモートデーモンで実行
-paseo --host workstation.local:6767 run "run the full test suite"
+paseo --host workstation.local:17000 run "run the full test suite"
 ```
 
 詳細は[完全な CLI リファレンス](https://paseo.sh/docs/cli)を参照してください。

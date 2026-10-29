@@ -12,6 +12,7 @@ import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
+import { useActiveRouterName } from "@/model-routers/use-router-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const EMPTY_COMBOBOX_OPTIONS: ComboboxOption[] = [];
@@ -27,7 +28,7 @@ interface CombinedModelSelectorProps {
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
   selectedModel: string;
-  onSelect: (provider: AgentProvider, modelId: string) => void;
+  onSelect: (provider: AgentProvider, modelId: string, serverId?: string | null) => void;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -63,6 +64,8 @@ interface CombinedModelSelectorProps {
     glyphSize: number;
     showCaret: boolean;
   };
+  /** Called after the user picks (or clears) a router in the browser. */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 export function CombinedModelSelector({
@@ -87,9 +90,11 @@ export function CombinedModelSelector({
   desktopMinWidth,
   triggerFill = false,
   toolbar,
+  onRouterPicked,
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
+  const activeRouterName = useActiveRouterName(serverId);
   const modelBrowserScrolling = resolveModelBrowserScrolling({ isNative, isCompact });
   const anchorRef = useRef<View>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -119,8 +124,8 @@ export function CombinedModelSelector({
   );
 
   const handleSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       handleOpenChange(false);
     },
     [handleOpenChange, onSelect],
@@ -203,6 +208,7 @@ export function CombinedModelSelector({
       onRetryProvider={onRetryProvider}
       isRetryingProvider={isRetryingProvider}
       scrolling={modelBrowserScrolling}
+      onRouterPicked={onRouterPicked}
     />
   ) : (
     <View style={styles.sheetLoadingState}>
@@ -260,9 +266,16 @@ export function CombinedModelSelector({
               />
             </View>
           ) : null}
-          <Text style={styles.triggerText} numberOfLines={1} ellipsizeMode="tail">
-            {browser.triggerLabel}
-          </Text>
+          <View style={styles.triggerTextColumn}>
+            <Text style={styles.triggerText} numberOfLines={1} ellipsizeMode="tail">
+              {browser.triggerLabel}
+            </Text>
+            {activeRouterName ? (
+              <Text style={styles.triggerRouter} numberOfLines={1} ellipsizeMode="tail">
+                {activeRouterName}
+              </Text>
+            ) : null}
+          </View>
         </ComboboxTrigger>
       )}
       <Combobox
@@ -292,7 +305,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 0,
   },
   trigger: {
-    height: 28,
+    minHeight: 28,
     minWidth: 0,
     flexShrink: 1,
     flexDirection: "row",
@@ -300,6 +313,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "transparent",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
+    paddingVertical: 2,
     borderRadius: theme.borderRadius["2xl"],
   },
   triggerHovered: {
@@ -326,6 +340,17 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.normal,
+  },
+  triggerTextColumn: {
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  triggerRouter: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: theme.colors.foregroundExtraMuted,
+    fontSize: theme.fontSize["2xs"],
     fontWeight: theme.fontWeight.normal,
   },
   customTriggerWrapper: {

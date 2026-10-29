@@ -55,6 +55,7 @@ import {
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { useCurrentOverlayLayer } from "@/lib/overlay-root";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { useRouterPicker, type RouterPickerRow } from "@/model-routers/use-router-picker";
 import {
   groupProfilesByProviderModel,
   resolveInitialModelBrowserView,
@@ -173,12 +174,12 @@ export interface ModelBrowserState {
   prepareToOpen: () => void;
   showAll: () => void;
   reset: () => void;
-  drillDown: (providerId: string, providerLabel: string) => void;
+  drillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
 }
 
 interface ModelBrowserProps {
   state: ModelBrowserState;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   /** Applying a profile resolves the pick and dismisses, exactly like a model row. */
   onApplyProfile?: (profileId: string) => void;
   onEditProfiles?: () => void;
@@ -193,6 +194,11 @@ interface ModelBrowserProps {
   rootBrowseContent?: React.ReactNode;
   /** Hide the pinned Profiles section while still using rows for model matching. */
   showProfilesSection?: boolean;
+  /**
+   * Called after the user picks (or clears) a router from the section below.
+   * Receives the picked router id, or null when the pick was cleared.
+   */
+  onRouterPicked?: (routerId: string | null) => void;
 }
 
 interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "scrolling"> {
@@ -204,7 +210,7 @@ interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "sc
   searchQuery: string;
   isSearchFocused: boolean;
   profiles: AgentProfilePicker | null;
-  onDrillDown: (providerId: string, providerLabel: string) => void;
+  onDrillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
   scrolling: "sheet" | "independent";
   searchAllOnFocus: boolean;
   rootBrowseContent?: React.ReactNode;
@@ -307,8 +313,8 @@ export function useModelBrowser({
   }, [reset]);
 
   const drillDown = useCallback(
-    (providerId: string, providerLabel: string) => {
-      setView({ kind: "provider", providerId, providerLabel });
+    (providerId: string, providerLabel: string, targetServerId?: string | null) => {
+      setView({ kind: "provider", providerId, providerLabel, serverId: targetServerId });
       reset();
     },
     [reset],
@@ -318,7 +324,6 @@ export function useModelBrowser({
     setSearchQuery(value);
   }, []);
 
-  const singleProviderView = providers.length === 1;
   const header = useMemo<SheetHeader>(() => {
     if (view.kind === "all") {
       return {
@@ -344,7 +349,10 @@ export function useModelBrowser({
           tone="foreground"
         />
       ),
-      back: singleProviderView ? undefined : { onPress: showAll },
+      // A running conversation can initially expose only its current provider
+      // while the broader catalog is refreshed. Keep the root navigation
+      // available so the user can return to the provider list at any time.
+      back: { onPress: showAll },
       actions: (
         <View style={styles.headerActionRow}>
           <ProviderSettingsAction
@@ -366,16 +374,7 @@ export function useModelBrowser({
         testID: "model-search-input",
       },
     };
-  }, [
-    autoFocusSearch,
-    handleSearchQueryChange,
-    searchResetKey,
-    serverId,
-    singleProviderView,
-    showAll,
-    t,
-    view,
-  ]);
+  }, [autoFocusSearch, handleSearchQueryChange, searchResetKey, serverId, showAll, t, view]);
 
   const selectedModelLabel = useMemo(
     () =>
@@ -680,8 +679,14 @@ function ModelRow({
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const leadingSlot = useMemo(
-    () => <ModelProviderGlyph provider={row.provider} serverId={serverId} size={ICON_SIZE.sm} />,
-    [row.provider, serverId],
+    () => (
+      <ModelProviderGlyph
+        provider={row.provider}
+        serverId={row.serverId ?? serverId}
+        size={ICON_SIZE.sm}
+      />
+    ),
+    [row.provider, row.serverId, serverId],
   );
 
   const description = showProviderLabel ? buildProviderQualifiedDescription(row) : row.description;
@@ -837,15 +842,15 @@ function SelectableModelRow({
   serverId: string | null;
   isSelected: boolean;
   showProviderLabel?: boolean;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   profiledRows: AgentProfilePickerRowModel[];
   onCreateProfile?: (seed: AgentProfileSeed) => void;
   onEditProfile?: (profileId: string) => void;
   onEditProfiles?: () => void;
 }) {
   const handlePress = useCallback(() => {
-    onSelect(row.provider, row.modelId);
-  }, [onSelect, row.modelId, row.provider]);
+    onSelect(row.provider, row.modelId, row.serverId ?? serverId);
+  }, [onSelect, row.modelId, row.provider, row.serverId, serverId]);
   return (
     <ModelRow
       row={row}
@@ -963,6 +968,60 @@ function AgentProfilesPickerContent({
   );
 }
 
+function RouterPickerRowView({
+  row,
+  selected,
+  onSelect,
+}: {
+  row: RouterPickerRow;
+  selected: boolean;
+  onSelect: (routerId: string | null) => void;
+}) {
+  const handlePress = useCallback(
+    () => onSelect(selected ? null : row.id),
+    [onSelect, row.id, selected],
+  );
+  return (
+    <ModelBrowserRow
+      label={row.name}
+      description={row.description}
+      tone="elevated"
+      selected={selected}
+      selectionIndicator
+      leadingSlot={null}
+      onPress={handlePress}
+      testID={`model-router-row-${row.id}`}
+    />
+  );
+}
+
+function RoutersPickerSection({
+  rows,
+  selectedRouterId,
+  onSelect,
+}: {
+  rows: RouterPickerRow[];
+  selectedRouterId: string | null;
+  onSelect: (routerId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.routersContainer}>
+      <View style={styles.sectionHeading}>
+        <Text style={styles.sectionHeadingText}>{t("modelSelector.routers")}</Text>
+      </View>
+      {rows.map((row) => (
+        <RouterPickerRowView
+          key={row.id}
+          row={row}
+          selected={row.id === selectedRouterId}
+          onSelect={onSelect}
+        />
+      ))}
+    </View>
+  );
+}
+
 function GroupProviderButton({
   provider,
   serverId,
@@ -970,13 +1029,13 @@ function GroupProviderButton({
 }: {
   provider: ProviderSelectorProvider;
   serverId: string | null;
-  onDrillDown: (providerId: string, providerLabel: string) => void;
+  onDrillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
 }) {
   const { t } = useTranslation();
   const selection = provider.modelSelection;
   const handlePress = useCallback(() => {
-    onDrillDown(provider.id, provider.label);
-  }, [onDrillDown, provider.id, provider.label]);
+    onDrillDown(provider.id, provider.label, provider.serverId ?? serverId ?? null);
+  }, [onDrillDown, provider.id, provider.label, provider.serverId, serverId]);
 
   const stateNode = useMemo(() => {
     if (selection.kind === "models") {
@@ -1040,7 +1099,7 @@ function GroupedProviderRows({
 }: {
   providers: ProviderSelectorProvider[];
   serverId: string | null;
-  onDrillDown: (providerId: string, providerLabel: string) => void;
+  onDrillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
 }) {
   return (
     <View>
@@ -1148,7 +1207,7 @@ function ModelRowList({
   serverId: string | null;
   selectedProvider: string;
   selectedModel: string;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   showProviderLabel?: boolean;
   header?: React.ReactElement;
   scrolling: "sheet" | "independent";
@@ -1163,7 +1222,11 @@ function ModelRowList({
       <SelectableModelRow
         row={item}
         serverId={serverId}
-        isSelected={item.provider === selectedProvider && item.modelId === selectedModel}
+        isSelected={
+          item.provider === selectedProvider &&
+          item.modelId === selectedModel &&
+          (item.serverId ?? null) === (serverId ?? null)
+        }
         showProviderLabel={showProviderLabel}
         onSelect={onSelect}
         profiledRows={profiledLookup.get(`${item.provider}:${item.modelId}`) ?? []}
@@ -1279,7 +1342,7 @@ function ProviderModelBrowserContent({
   selectedProvider: string;
   selectedModel: string;
   normalizedQuery: string;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   onApplyProfile?: (profileId: string) => void;
   onEditProfiles?: () => void;
   onCreateProfile?: (seed: AgentProfileSeed) => void;
@@ -1381,20 +1444,32 @@ function ModelBrowserContent({
   searchAllOnFocus,
   rootBrowseContent,
   showProfilesSection = true,
+  onRouterPicked,
 }: ModelBrowserContentProps) {
   const { t } = useTranslation();
+  const routerPicker = useRouterPicker(serverId);
+  const handleRouterSelect = useCallback(
+    (routerId: string | null) => {
+      void routerPicker.select(routerId);
+      onRouterPicked?.(routerId);
+    },
+    [onRouterPicked, routerPicker],
+  );
   const normalizedQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery]);
   const profiledLookup = useMemo(
     () => groupProfilesByProviderModel(profiles?.rows ?? []),
     [profiles],
   );
-  const selectedViewProvider = useMemo(
-    () =>
-      view.kind === "provider"
-        ? (providers.find((provider) => provider.id === view.providerId) ?? null)
-        : null,
-    [providers, view],
-  );
+  const selectedViewProvider = useMemo(() => {
+    if (view.kind !== "provider") return null;
+    const exact = providers.find(
+      (provider) =>
+        provider.id === view.providerId &&
+        (view.serverId == null || (provider.serverId ?? null) === (view.serverId ?? null)),
+    );
+    if (exact) return exact;
+    return providers.find((provider) => provider.id === view.providerId) ?? null;
+  }, [providers, view]);
   const allView = useMemo(
     () =>
       resolveModelBrowserAllView({
@@ -1468,6 +1543,13 @@ function ModelBrowserContent({
           onEditProfiles={onEditProfiles}
         />
       ) : null}
+      {routerPicker.rows.length > 0 ? (
+        <RoutersPickerSection
+          rows={routerPicker.rows}
+          selectedRouterId={routerPicker.selectedRouterId}
+          onSelect={handleRouterSelect}
+        />
+      ) : null}
       {rootBrowseContent ??
         (providers.length > 0 ? (
           <View>
@@ -1519,6 +1601,7 @@ export function ModelBrowser({
   searchAllOnFocus = false,
   rootBrowseContent,
   showProfilesSection,
+  onRouterPicked,
 }: ModelBrowserProps) {
   return (
     <ModelBrowserContent
@@ -1542,6 +1625,7 @@ export function ModelBrowser({
       searchAllOnFocus={searchAllOnFocus}
       rootBrowseContent={rootBrowseContent}
       showProfilesSection={showProfilesSection}
+      onRouterPicked={onRouterPicked}
     />
   );
 }
@@ -1556,6 +1640,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  routersContainer: {
+    backgroundColor: theme.colors.surface1,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: theme.spacing[1],
   },
   separator: {
     height: 1,

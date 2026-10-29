@@ -12,6 +12,7 @@ import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { resolveModelSheetOpening } from "@/composer/agent-controls/model-sheet-flow";
+import { useActiveRouterName } from "@/model-routers/use-router-picker";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
@@ -28,7 +29,7 @@ interface CompactModelSheetProps {
   selectedProvider: string;
   selectedModel: string;
   thinkingLabel: string | null;
-  onSelect: (provider: string, modelId: string) => void;
+  onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -43,6 +44,7 @@ interface CompactModelSheetProps {
   serverId?: string | null;
   glyphSize: number;
   canSwitchProvider: boolean;
+  onRouterPicked?: (routerId: string | null) => void;
   children: ReactNode;
 }
 
@@ -95,6 +97,7 @@ export function CompactModelSheet({
   serverId = null,
   glyphSize,
   canSwitchProvider,
+  onRouterPicked,
   children,
 }: CompactModelSheetProps) {
   const { t } = useTranslation();
@@ -130,6 +133,7 @@ export function CompactModelSheet({
     serverId,
   });
   const ModelIcon = useProviderIcon(selectedProvider, serverId);
+  const activeRouterName = useActiveRouterName(serverId);
   const hasSelectedProvider = selectedProvider.trim().length > 0;
   const rootHeader = useMemo(
     () => ({
@@ -162,8 +166,8 @@ export function CompactModelSheet({
   }, [modelBrowser, onClose, rootBrowser]);
 
   const handleSearchSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       Keyboard.dismiss();
       rootBrowser.showAll();
     },
@@ -191,16 +195,16 @@ export function CompactModelSheet({
   }, [modelBrowser]);
 
   const handleBrowserSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       closeModelBrowser();
     },
     [closeModelBrowser, onSelect],
   );
 
   const handleDesktopSelect = useCallback(
-    (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
+    (provider: string, modelId: string, targetServerId?: string | null) => {
+      onSelect(provider, modelId, targetServerId);
       close();
     },
     [close, onSelect],
@@ -281,9 +285,16 @@ export function CompactModelSheet({
           </ComposerToolbarGlyph>
         ) : null}
         <View style={styles.triggerLabels}>
-          <Text style={styles.triggerText} numberOfLines={1}>
-            {shortModelLabel(rootBrowser.triggerLabel)}
-          </Text>
+          <View style={styles.triggerTextColumn}>
+            <Text style={styles.triggerText} numberOfLines={1}>
+              {shortModelLabel(rootBrowser.triggerLabel)}
+            </Text>
+            {activeRouterName ? (
+              <Text style={styles.triggerRouter} numberOfLines={1}>
+                {activeRouterName}
+              </Text>
+            ) : null}
+          </View>
           {thinkingLabel ? (
             <Text style={styles.triggerThinking} numberOfLines={1}>
               {thinkingLabel}
@@ -320,6 +331,7 @@ export function CompactModelSheet({
             scrolling={modelBrowserScrolling}
             searchAllOnFocus={usesBottomSheet}
             rootBrowseContent={usesBottomSheet ? mobileRootContent : undefined}
+            onRouterPicked={onRouterPicked}
           />
         </View>
         {!usesBottomSheet ? (
@@ -374,13 +386,14 @@ export function CompactModelSheet({
 
 const styles = StyleSheet.create((theme) => ({
   trigger: {
-    height: 28,
+    minHeight: 28,
     minWidth: 0,
     flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
+    paddingVertical: 2,
     borderRadius: theme.borderRadius["2xl"],
     backgroundColor: "transparent",
   },
@@ -398,6 +411,17 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.normal,
+  },
+  triggerTextColumn: {
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  triggerRouter: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: theme.colors.foregroundExtraMuted,
+    fontSize: theme.fontSize["2xs"],
     fontWeight: theme.fontWeight.normal,
   },
   triggerLabels: {

@@ -7,6 +7,8 @@ dist/
 .next/
 out/
 result
+# Gradle caches generated inside Expo module android projects
+**/android/.gradle/
 
 # Environment variables
 .env

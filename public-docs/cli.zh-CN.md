@@ -67,14 +67,14 @@ paseo usage ls --quiet
 `--host` 选择要管理其已保存连接的 daemon。请用注册项的 `registrationId`，不要用标签。
 
 ```sh
-paseo --host localhost:6767 host add 'ssh://deploy@build-box' --label build-box --meta team=infra
-paseo --host localhost:6767 host ls --json
-paseo --host localhost:6767 host inspect hst_123
-paseo --host localhost:6767 host update hst_123 --meta team=tools --remove-meta obsolete
-paseo --host localhost:6767 host update hst_123 --connection 'ssh://deploy@new-address'
-paseo --host localhost:6767 host disable hst_123
-paseo --host localhost:6767 host enable hst_123
-paseo --host localhost:6767 host rm hst_123
+paseo --host localhost:17000 host add 'ssh://deploy@build-box' --label build-box --meta team=infra
+paseo --host localhost:17000 host ls --json
+paseo --host localhost:17000 host inspect hst_123
+paseo --host localhost:17000 host update hst_123 --meta team=tools --remove-meta obsolete
+paseo --host localhost:17000 host update hst_123 --connection 'ssh://deploy@new-address'
+paseo --host localhost:17000 host disable hst_123
+paseo --host localhost:17000 host enable hst_123
+paseo --host localhost:17000 host rm hst_123
 ```
 
 `add` 接受 TCP/主机和端口、`ws://`/`wss://`、本地 socket/管道、SSH，以及 relay/配对 URL。
@@ -93,7 +93,7 @@ JSON 输出不会包含连接凭据。
 ```bash
 paseo provider diagnostic claude
 paseo provider diagnostic codex --json
-paseo --host devbox:6767 provider diagnostic opencode
+paseo --host devbox:17000 provider diagnostic opencode
 ```
 
 诊断信息包括配置的命令、daemon 的 `PATH` 和 shell、匹配到的二进制文件、解析出的路径、版本、模型数量和 Provider 状态。对于远程 daemon，请使用全局的 `--host` 选项。这与 **设置 → 你的主机 → Providers → 对应 Provider → 诊断** 下显示的诊断相同。
@@ -148,7 +148,7 @@ paseo project delete <project-id>
 对于本地 daemon，`paseo project create [path]` 默认使用当前目录，并在 CLI 所在机器上解析相对路径。当你使用全局的 `--host` 选项或 `PASEO_HOST` 时，请提供目标 daemon 能访问的路径：
 
 ```bash
-paseo --host devbox:6767 project create /srv/repos/api
+paseo --host devbox:17000 project create /srv/repos/api
 ```
 
 远程 daemon 会在它自己的机器上解释这个路径。项目如何对工作目录和会话分组，见[工作区](/docs/workspaces)。

@@ -16,7 +16,13 @@ import { isNative } from "@/constants/platform";
 import type { TFunction } from "i18next";
 import { UsageBalanceBar } from "./balance-bar";
 import type { UsageDisplay } from "./display";
-import { formatAgo, formatProviderUsageLabel } from "./format";
+import {
+  formatAgo,
+  formatProviderUsageLabel,
+  formatUsageDetailLabel,
+  formatUsagePlanLabel,
+  formatUsageSourceLabel,
+} from "./format";
 import { resolveUsageReport, type UsageRefresh } from "./model";
 import { useReportRefresh } from "./queries";
 import { UsageSourceIcon } from "./source-icon";
@@ -61,6 +67,7 @@ export function UsageCard({
   const usage = entry.report;
   const status = statusText(usage, t);
   const footer = entry.account.label ?? null;
+  const sourceLabel = formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t);
   const { windows, balances, details, planLabel, successfulAt, retained, messages } =
     resolveUsageReport(entry, t);
 
@@ -82,9 +89,11 @@ export function UsageCard({
       <View style={styles.header}>
         <UsageSourceIcon svg={entry.icon ?? null} size={14} />
         <Text style={styles.name} numberOfLines={1}>
-          {entry.sourceLabel}
+          {sourceLabel}
         </Text>
-        {planLabel ? <StatusBadge label={planLabel} variant="muted" size="xs" /> : null}
+        {planLabel ? (
+          <StatusBadge label={formatUsagePlanLabel(planLabel, t)} variant="muted" size="xs" />
+        ) : null}
         <View style={styles.headerSpacer} />
         {status ? (
           <View style={styles.statusRow}>
@@ -94,7 +103,7 @@ export function UsageCard({
         ) : null}
         {refreshable ? (
           <UsageRefreshButton
-            sourceLabel={entry.sourceLabel}
+            sourceLabel={sourceLabel}
             successfulAt={successfulAt}
             retained={retained}
             refreshState={refreshState}
@@ -133,7 +142,7 @@ export function UsageCard({
           {details.map((detail) => (
             <View key={detail.id} style={styles.detailRow}>
               <Text style={styles.detailLabel} numberOfLines={1}>
-                {detail.label}
+                {formatUsageDetailLabel(detail.id, detail.label, t)}
               </Text>
               <Text style={styles.detailValue} numberOfLines={1}>
                 {detail.value}
@@ -196,7 +205,7 @@ function CardWindowBar({
       pinnable={pinnable}
       pinned={display.isPinned(pin)}
       onTogglePin={toggle}
-      pinLabel={`${t("providerUsage.pin")} ${entry.sourceLabel} ${formatProviderUsageLabel(window.id, window.label, t)}`}
+      pinLabel={`${t("providerUsage.pin")} ${formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t)} ${formatProviderUsageLabel(window.id, window.label, t)}`}
       pinTestID={`usage-pin-${entry.sourceId}-${window.id}`}
     />
   );

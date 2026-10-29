@@ -86,6 +86,7 @@ export type StreamItem =
   | TodoListItem
   | NotificationItem
   | CompactionItem
+  | PortingItem
   | PluginTimelineStreamItem;
 
 export type UserMessageImageAttachment = AttachmentMetadata;
@@ -771,6 +772,12 @@ export type AgentToolCallItem = ToolCallItem & {
   payload: { source: "agent"; data: AgentToolCallData };
 };
 
+/** Find and scrolling address a plugin row by the source it replaces. */
+export function getStreamItemMessageId(item: StreamItem): string {
+  if (item.kind === "plugin") return item.sourceId ?? item.id;
+  return item.id;
+}
+
 export function isAgentToolCallItem(item: StreamItem): item is AgentToolCallItem {
   return item.kind === "tool_call" && item.payload.source === "agent";
 }
@@ -797,6 +804,17 @@ export interface CompactionItem {
   status: "loading" | "completed";
   trigger?: "auto" | "manual";
   preTokens?: number;
+}
+
+export interface PortingItem {
+  kind: "porting";
+  id: string;
+  timelineCursor?: TimelinePosition;
+  turnId?: string;
+  timestamp: Date;
+  status: "loading" | "completed";
+  fromProvider?: AgentProvider;
+  toProvider?: AgentProvider;
 }
 
 export interface PluginTimelineStreamItem {
@@ -1494,6 +1512,44 @@ function reduceTimelineCompaction(
   return [...state, compaction];
 }
 
+function reduceTimelinePorting(
+  state: StreamItem[],
+  item: Extract<
+    Extract<AgentStreamEventPayload, { type: "timeline" }>["item"],
+    { type: "porting" }
+  >,
+  timestamp: Date,
+  timelineCursor?: TimelinePosition,
+): StreamItem[] {
+  if (item.status === "completed") {
+    const loadingIdx = state.findIndex((s) => s.kind === "porting" && s.status === "loading");
+    const existing = loadingIdx >= 0 ? state[loadingIdx] : undefined;
+    if (loadingIdx >= 0 && existing && existing.kind === "porting") {
+      const updated: PortingItem = {
+        ...existing,
+        ...(timelineCursor ? { timelineCursor } : {}),
+        status: "completed",
+        fromProvider: item.fromProvider ?? existing.fromProvider,
+        toProvider: item.toProvider ?? existing.toProvider,
+      };
+      return [...state.slice(0, loadingIdx), updated, ...state.slice(loadingIdx + 1)];
+    }
+    if (loadingIdx >= 0) {
+      return state;
+    }
+  }
+  const porting: PortingItem = {
+    kind: "porting",
+    id: createUniqueTimelineId(state, "porting", item.status, timestamp),
+    ...(timelineCursor ? { timelineCursor } : {}),
+    timestamp,
+    status: item.status,
+    fromProvider: item.fromProvider,
+    toProvider: item.toProvider,
+  };
+  return [...state, porting];
+}
+
 function reduceTimelineEvent(
   state: StreamItem[],
   event: Extract<AgentStreamEventPayload, { type: "timeline" }>,
@@ -1575,6 +1631,8 @@ function reduceTimelineEvent(
       return finalizeActiveThoughts(
         reduceTimelineCompaction(state, item, timestamp, timelineCursor),
       );
+    case "porting":
+      return finalizeActiveThoughts(reduceTimelinePorting(state, item, timestamp, timelineCursor));
     case "plugin":
       return finalizeActiveThoughts(
         appendPluginTimelineItem(state, item, timestamp, timelineCursor),

@@ -1,4 +1,5 @@
 import { AgentMessageSchema } from "./agent-message.js";
+import { AgentSnapshotSchema } from "./agent-snapshot.js";
 import {
   HostsListRequestSchema,
   HostsAddRequestSchema,
@@ -37,6 +38,23 @@ export {
 } from "./plugin-config.js";
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
+import { ModelRouterSettingsSchema } from "./model-router.js";
+export {
+  MODEL_ROUTER_MODES,
+  ModelRouterModeSchema,
+  ModelRouterSchema,
+  ModelRouterSettingsSchema,
+  ModelRouterTargetSchema,
+  DEFAULT_MODEL_ROUTER_SETTINGS,
+  isRetryableRouterFailure,
+  normalizeRouterTargets,
+  selectDistributionTarget,
+  selectFallbackTarget,
+  type ModelRouter,
+  type ModelRouterMode,
+  type ModelRouterSettings,
+  type ModelRouterTarget,
+} from "./model-router.js";
 import { z } from "zod";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
@@ -82,6 +100,16 @@ import {
   ScheduleRunOnceResponseSchema,
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
+import {
+  SpeechLocalModelsDeleteRequestSchema,
+  SpeechLocalModelsDeleteResponseSchema,
+  SpeechLocalModelsDownloadRequestSchema,
+  SpeechLocalModelsDownloadResponseSchema,
+  SpeechLocalModelsListRequestSchema,
+  SpeechLocalModelsListResponseSchema,
+  SpeechSettingsPatchSchema,
+  SpeechSettingsSchema,
+} from "./speech/rpc-schemas.js";
 import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
@@ -222,14 +250,21 @@ export const MutableDaemonConfigSchema = z
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
+    modelRouters: ModelRouterSettingsSchema.optional(),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
+    // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, keep optional while old daemons are supported.
+    // Persisted host-wide value, applied live by the daemon.
+    idleRuntimeCleanup: z.boolean().optional(),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    // COMPAT(speechSettings): added in v0.12.0, optional because older daemons omit it.
+    features: SpeechSettingsSchema.optional(),
+    envOverrides: z.record(z.string(), z.string()).optional(),
   })
   .passthrough();
 
@@ -243,13 +278,16 @@ export const MutableDaemonConfigPatchSchema = z
       .optional(),
     removeProviders: z.array(z.string().min(1)).optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
+    modelRouters: ModelRouterSettingsSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
+    idleRuntimeCleanup: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
+    features: SpeechSettingsPatchSchema.optional(),
   })
   .partial()
   .passthrough();
@@ -731,6 +769,12 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     preTokens: z.number().optional(),
   }),
   z.object({
+    type: z.literal("porting"),
+    status: z.enum(["loading", "completed"]),
+    fromProvider: AgentProviderSchema.optional(),
+    toProvider: AgentProviderSchema.optional(),
+  }),
+  z.object({
     type: z.literal("plugin"),
     id: z.string(),
     pluginId: PluginIdSchema,
@@ -861,8 +905,33 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  migratedFrom: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
   // Private helper marker, retained for exact-ID snapshots and older wire messages.
   internal: z.boolean().optional(),
+  /** Daemon-level `/goal` state, shared by every provider. */
+  goal: z
+    .object({
+      objective: z.string(),
+      status: z.enum(["active", "paused"]),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })
+    .optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -948,6 +1017,15 @@ export const DeleteAgentRequestMessageSchema = z.object({
 export const ArchiveAgentRequestMessageSchema = z.object({
   type: z.literal("archive_agent_request"),
   agentId: z.string(),
+  // Set when the archived agent was ported elsewhere, so its record keeps the pointer.
+  migratedTo: z
+    .object({
+      provider: z.string(),
+      agentId: z.string(),
+      host: z.string().optional(),
+      portedAt: z.string().optional(),
+    })
+    .optional(),
   requestId: z.string(),
 });
 
@@ -1765,6 +1843,40 @@ export const AgentCreateRequestSchema = CreateAgentRequestMessageSchema.extend({
   agentId: z.uuid().optional(),
   attachments: z.array(AgentAttachmentSchema).optional(),
   subscribe: z.boolean().optional(),
+});
+
+export const AgentSwapProviderRequestSchema = z.object({
+  type: z.literal("agent.swap_provider.request"),
+  agentId: z.string(),
+  targetProvider: z.string(),
+  targetModel: z.string().nullable().optional(),
+  /**
+   * When false the source agent stays unarchived; the client archives it after
+   * it has switched to the new agent, so the old chat does not vanish mid-port.
+   */
+  archivePrevious: z.boolean().optional(),
+  /**
+   * Port even when the target provider and model match the source. Used to
+   * repair a provider session whose stored history the upstream rejects.
+   */
+  force: z.boolean().optional(),
+  requestId: z.string(),
+});
+
+export const AgentExportSnapshotRequestSchema = z.object({
+  type: z.literal("agent.export_snapshot.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentImportSnapshotRequestSchema = z.object({
+  type: z.literal("agent.import_snapshot.request"),
+  snapshot: AgentSnapshotSchema,
+  targetProvider: z.string(),
+  targetModel: z.string().nullable().optional(),
+  workspaceId: z.string().optional(),
+  sourceHost: z.string().optional(),
+  requestId: z.string(),
 });
 
 export const WorkspaceInitialAgentSchema = AgentCreateRequestSchema.omit({
@@ -3392,6 +3504,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ArchiveWorkspaceRequestSchema,
   WorkspaceCreateRequestSchema,
   AgentCreateRequestSchema,
+  AgentSwapProviderRequestSchema,
+  AgentExportSnapshotRequestSchema,
+  AgentImportSnapshotRequestSchema,
   CreationSubscribeRequestSchema,
   WorkspaceClearAttentionRequestSchema,
   WorkspaceMarkUnreadRequestSchema,
@@ -3436,6 +3551,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ChatWaitRequestSchema,
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
+  SpeechLocalModelsListRequestSchema,
+  SpeechLocalModelsDownloadRequestSchema,
+  SpeechLocalModelsDeleteRequestSchema,
   ScheduleInspectRequestSchema,
   ScheduleLogsRequestSchema,
   SchedulePauseRequestSchema,
@@ -3670,6 +3788,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonStatusRpc: z.boolean().optional(),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: z.boolean().optional(),
+        // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
+        speechSettings: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         relayConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
@@ -3694,6 +3814,8 @@ export const ServerInfoStatusPayloadSchema = z
         pluginTimelineItems: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
+        // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
+        idleRuntimeCleanupSetting: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -3734,6 +3856,10 @@ export const ServerInfoStatusPayloadSchema = z
         daemonSelfUpdate: z.boolean().optional(),
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: z.boolean().optional(),
+        // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
+        agentProviderSwap: z.boolean().optional(),
+        // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.
+        agentSnapshotTransfer: z.boolean().optional(),
         // COMPAT(agentForkContextCursor): added in v0.1.108, remove gate after 2027-01-14.
         agentForkContextCursor: z.boolean().optional(),
         // COMPAT(providerSubagents): added in v0.1.107, remove gate after 2027-01-12.
@@ -4986,6 +5112,34 @@ export const AgentCreateResponseSchema = z.object({
     agent: AgentSnapshotPayloadSchema.nullable(),
     error: z.string().nullable(),
     creation: CreationSnapshotSchema.optional(),
+  }),
+});
+
+export const AgentSwapProviderResponseSchema = z.object({
+  type: z.literal("agent.swap_provider.response"),
+  payload: z.object({
+    requestId: z.string(),
+    newAgentId: z.string().nullable(),
+    previousAgentId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentExportSnapshotResponseSchema = z.object({
+  type: z.literal("agent.export_snapshot.response"),
+  payload: z.object({
+    requestId: z.string(),
+    snapshot: AgentSnapshotSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentImportSnapshotResponseSchema = z.object({
+  type: z.literal("agent.import_snapshot.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string().nullable(),
+    error: z.string().nullable(),
   }),
 });
 
@@ -7028,6 +7182,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ClearAgentAttentionResponseMessageSchema,
   WorkspaceCreateResponseSchema,
   AgentCreateResponseSchema,
+  AgentSwapProviderResponseSchema,
+  AgentExportSnapshotResponseSchema,
+  AgentImportSnapshotResponseSchema,
   WorkspaceCreationUpdateSchema,
   AgentCreationUpdateSchema,
   CreationSubscribeResponseSchema,
@@ -7146,6 +7303,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ChatWaitResponseSchema,
   ScheduleCreateResponseSchema,
   ScheduleListResponseSchema,
+  SpeechLocalModelsListResponseSchema,
+  SpeechLocalModelsDownloadResponseSchema,
+  SpeechLocalModelsDeleteResponseSchema,
   ScheduleInspectResponseSchema,
   ScheduleLogsResponseSchema,
   SchedulePauseResponseSchema,

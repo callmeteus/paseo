@@ -5,6 +5,7 @@ import type { WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
 
 import {
   normalizeWorkspaceDescriptor,
+  selectAgentSentMessages,
   selectAgentTurnPresentation,
   selectAgentTimelineState,
   useSessionStore,
@@ -235,6 +236,25 @@ describe("agent timeline state", () => {
     ).toEqual({ status: "synced", items: [], range: null, older: "none", newer: "none" });
   });
 
+  it("lists sent messages newest first, including the live head", () => {
+    initializeTestSession();
+    const sent = (id: string, text: string) => ({ ...submittedMessage(id), text });
+    useSessionStore.getState().applyAgentTimelineResponseState("test-server", "agent-1", {
+      items: [sent("m1", "fix the auth bug"), sent("m2", "add tests"), sent("m3", "add tests")],
+      head: [sent("m4", "  "), sent("m5", "refactor the wrong module")],
+      range: { epoch: "epoch-1", startSeq: 1, endSeq: 5 },
+      older: "none",
+      newer: false,
+      synchronized: true,
+      acknowledgedClientMessageIds: [],
+    });
+
+    expect(
+      selectAgentSentMessages(useSessionStore.getState().sessions["test-server"], "agent-1"),
+    ).toEqual(["refactor the wrong module", "add tests", "fix the auth bug"]);
+    expect(selectAgentSentMessages(undefined, "agent-1")).toEqual([]);
+  });
+
   it("preserves older availability when an applied response leaves it unchanged", () => {
     initializeTestSession();
     const store = useSessionStore.getState();
@@ -459,7 +479,7 @@ describe("normalizeWorkspaceDescriptor", () => {
         type: "service" as const,
         hostname: "web.paseo.localhost",
         port: 3000,
-        proxyUrl: "http://web.paseo.localhost:6767",
+        proxyUrl: "http://web.paseo.localhost:17000",
         lifecycle: "running" as const,
         health: "healthy" as const,
         exitCode: null,
@@ -489,7 +509,7 @@ describe("normalizeWorkspaceDescriptor", () => {
         type: "service",
         hostname: "web.paseo.localhost",
         port: 3000,
-        proxyUrl: "http://web.paseo.localhost:6767",
+        proxyUrl: "http://web.paseo.localhost:17000",
         lifecycle: "running",
         health: "healthy",
         exitCode: null,
@@ -682,7 +702,7 @@ describe("mergeWorkspaces", () => {
             type: "service",
             hostname: "web.paseo.localhost",
             port: 3000,
-            proxyUrl: "http://web.paseo.localhost:6767",
+            proxyUrl: "http://web.paseo.localhost:17000",
             lifecycle: "running",
             health: "healthy",
             exitCode: null,
@@ -698,7 +718,7 @@ describe("mergeWorkspaces", () => {
         type: "service",
         hostname: "web.paseo.localhost",
         port: 3000,
-        proxyUrl: "http://web.paseo.localhost:6767",
+        proxyUrl: "http://web.paseo.localhost:17000",
         lifecycle: "running",
         health: "healthy",
         exitCode: null,

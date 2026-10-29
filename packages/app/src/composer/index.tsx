@@ -45,6 +45,11 @@ import {
   Image as ImageIcon,
   ClipboardPaste,
   Paperclip,
+  Target,
+  Info,
+  Minus,
+  Pause,
+  Play,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { FOOTER_HEIGHT } from "@/constants/layout";
@@ -55,7 +60,11 @@ import {
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
-import { selectAgentTurnPresentation, useSessionStore } from "@/stores/session-store";
+import {
+  selectAgentSentMessages,
+  selectAgentTurnPresentation,
+  useSessionStore,
+} from "@/stores/session-store";
 import { useFilePicker } from "@/hooks/use-file-picker";
 import { useFileDrop } from "@/components/file-drop/use-file-drop";
 import type { DroppedItem } from "@/components/file-drop/types";
@@ -67,6 +76,7 @@ import {
 } from "./input/input";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import type { AgentGoalState } from "@/utils/agent-snapshots";
 import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
 import { focusWithRetries } from "@/utils/web-focus";
@@ -118,9 +128,22 @@ import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { submitAgentInput } from "@/composer/submit";
+import { ComposerRecall } from "@/composer/recall";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useAppSettings } from "@/hooks/use-settings";
+import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
+import { applyProviderSwitch } from "@/composer/agent-controls/apply-provider-switch";
+import {
+  stageProviderSwitch,
+  takeProviderSwitch,
+} from "@/composer/agent-controls/pending-provider-switch";
+import {
+  finishPortingActivity,
+  startPortingActivity,
+} from "@/composer/agent-controls/porting-activity";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb, isNative } from "@/constants/platform";
@@ -280,6 +303,7 @@ function buildAgentStateSelector(serverId: string, agentId: string) {
       contextWindowUsedTokens: agent?.lastUsage?.contextWindowUsedTokens ?? null,
       totalCostUsd: agent?.lastUsage?.totalCostUsd ?? null,
       model: agent?.model ?? null,
+      goal: agent?.goal ?? null,
     };
   };
 }
@@ -705,6 +729,145 @@ function QueuedMessageRow({
   );
 }
 
+interface GoalBannerRowProps {
+  goal: AgentGoalState;
+  onEdit: (objective: string) => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}
+
+function formatGoalElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m ${totalSeconds % 60}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  return `${hours}h ${totalMinutes % 60}m`;
+}
+
+/**
+ * Goal strip above the composer (Cursor-style): a card with the objective,
+ * status badge, elapsed time, and per-goal actions (edit is delegated to the
+ * composer input, clear re-sends `/goal clear`). Collapsible to a small pill.
+ */
+function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRowProps) {
+  const { t } = useTranslation();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const isPaused = goal.status === "paused";
+
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
+  const handleExpand = useCallback(() => {
+    setIsCollapsed(false);
+    setNow(Date.now());
+  }, []);
+  const handleToggleDetails = useCallback(() => {
+    setIsDetailsExpanded((prev) => !prev);
+  }, []);
+  const handleCollapse = useCallback(() => setIsCollapsed(true), []);
+  const handleEditGoal = useCallback(() => onEdit(goal.objective), [onEdit, goal.objective]);
+
+  if (isCollapsed) {
+    return (
+      <View style={styles.goalCollapsedRow}>
+        <Pressable
+          style={styles.goalCollapsedPill}
+          onPress={handleExpand}
+          accessibilityRole="button"
+          accessibilityLabel={t("composer.goal.show")}
+          testID="composer-goal-restore"
+        >
+          <Text style={styles.goalBadge}>{t("composer.goal.active")}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const reference = isPaused ? goal.updatedAt : goal.createdAt;
+  const elapsed = formatGoalElapsed(Math.max(0, now - new Date(reference).getTime()));
+  return (
+    <View style={styles.goalRow} testID="composer-goal-banner">
+      <View style={styles.goalHeaderRow}>
+        <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+        <Text style={isPaused ? styles.goalBadgePaused : styles.goalBadge} accessibilityRole="text">
+          {isPaused ? t("composer.goal.paused") : t("composer.goal.active")}
+        </Text>
+        <Text style={styles.goalElapsed}>{elapsed}</Text>
+        <View style={styles.goalActions}>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={handleEditGoal}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.edit")}
+          >
+            <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={handleToggleDetails}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.info")}
+          >
+            <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          {goal.status === "paused" ? (
+            <Pressable
+              style={styles.goalActionButton}
+              onPress={onResume}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.goal.resume")}
+              testID="composer-goal-resume"
+            >
+              <ThemedPlay size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.goalActionButton}
+              onPress={onPause}
+              accessibilityRole="button"
+              accessibilityLabel={t("composer.goal.pause")}
+              testID="composer-goal-pause"
+            >
+              <ThemedPause size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          )}
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={onStop}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.stop")}
+            testID="composer-goal-stop"
+          >
+            <ThemedSquare size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+          <Pressable
+            style={styles.goalActionButton}
+            onPress={handleCollapse}
+            accessibilityRole="button"
+            accessibilityLabel={t("composer.goal.collapse")}
+          >
+            <ThemedMinus size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+          </Pressable>
+        </View>
+      </View>
+      <Text
+        style={styles.goalText}
+        numberOfLines={isDetailsExpanded ? undefined : 2}
+        ellipsizeMode="tail"
+      >
+        {goal.objective}
+      </Text>
+    </View>
+  );
+}
+
 interface ImageAttachmentPillProps {
   attachment: Extract<ComposerAttachment, { kind: "image" }>;
   index: number;
@@ -995,6 +1158,7 @@ interface ComposerAutocompleteHandle {
 function ComposerAutocompleteBinding({
   text,
   cursor,
+  recall,
   configuration,
   inputRef,
   anchorRef,
@@ -1003,6 +1167,7 @@ function ComposerAutocompleteBinding({
 }: {
   text: ComposerTextSource;
   cursor: StoreApi<number>;
+  recall: ComposerRecall;
   configuration: Omit<
     Parameters<typeof useAgentAutocomplete>[0],
     "userInput" | "cursorIndex" | "onAutocompleteApplied"
@@ -1020,9 +1185,11 @@ function ComposerAutocompleteBinding({
     cursorIndex: Math.min(cursorIndex, userInput.length),
     onAutocompleteApplied: () => inputRef.current?.focus(),
   });
+  // A recalled message is sent as is; its leading `/command` must not open the picker.
+  const isShown = show && !recall.isShowing(userInput);
   const handleKeyPress = autocomplete.onKeyPress;
-  useImperativeHandle(ref, () => ({ onKeyPress: (event) => show && handleKeyPress(event) }), [
-    show,
+  useImperativeHandle(ref, () => ({ onKeyPress: (event) => isShown && handleKeyPress(event) }), [
+    isShown,
     handleKeyPress,
   ]);
   const selectOption = autocomplete.onSelectOption;
@@ -1032,7 +1199,7 @@ function ComposerAutocompleteBinding({
   );
   return (
     <ComposerAutocomplete
-      visible={autocomplete.isVisible && show}
+      visible={autocomplete.isVisible && isShown}
       anchorRef={anchorRef}
       options={autocomplete.options}
       selectedIndex={autocomplete.selectedIndex}
@@ -1273,6 +1440,7 @@ function ComposerContentImpl({
   const isConnected = useHostRuntimeIsConnected(serverId);
   const agentDirectoryStatus = useHostRuntimeAgentDirectoryStatus(serverId);
   const toast = useToast();
+  const { updatePreferences } = useFormPreferences();
   const toastErrorRef = useRef(toast.error);
   toastErrorRef.current = toast.error;
   const voice = useVoiceOptional();
@@ -1362,6 +1530,7 @@ function ComposerContentImpl({
   );
   useEffect(() => () => cursorPublication.cancel(), [cursorPublication]);
   const autocompleteRef = useRef<ComposerAutocompleteHandle>(null);
+  const recall = useMemo(() => new ComposerRecall(), []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFileAttachment[]>([]);
   const nextPendingFileId = useRef(0);
@@ -1556,28 +1725,101 @@ function ComposerContentImpl({
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
-      await dispatchComposerAgentMessage({
-        client,
-        agentId: targetAgentId,
-        text,
-        attachments: sendAttachments,
-        attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
-          supportsForgeAttachments: supportsForgeSearch,
-        }),
-        encodeImages,
-        submission: createMessageSubmissionWriter(serverId),
-        activeTurnBehavior,
-        activeTurnId:
-          activeTurnBehavior === "steer"
-            ? (selectAgentTurnPresentation(
-                useSessionStore.getState().sessions[serverId],
-                targetAgentId,
-              ).turnId ?? undefined)
-            : undefined,
-      });
-      onAttentionPromptSend?.();
+
+      // A staged provider switch is committed here, by the first message after
+      // the pick: porting archives this agent, so doing it on pick would replace
+      // the conversation before the user sent anything.
+      let targetClient = client;
+      let targetServerId = serverId;
+      let resolvedAgentId = targetAgentId;
+      let switched = false;
+      let finishSwitch: (() => Promise<void>) | null = null;
+      const pendingSwitch = takeProviderSwitch(serverId, targetAgentId);
+      if (pendingSwitch) {
+        startPortingActivity(serverId, targetAgentId, { toProvider: pendingSwitch.provider });
+      }
+      try {
+        if (pendingSwitch) {
+          try {
+            const applied = await applyProviderSwitch({
+              sourceClient: client,
+              sourceServerId: serverId,
+              agentId: targetAgentId,
+              workspaceId: workspaceId ?? null,
+              pending: pendingSwitch,
+              persistPreference: (nextProvider, nextModelId) =>
+                updatePreferences((current) =>
+                  mergeProviderPreferences({
+                    preferences: current,
+                    provider: nextProvider as AgentProvider,
+                    updates: { model: nextModelId || undefined },
+                  }),
+                ),
+              onPreferencePersistError: (error) => {
+                console.warn("[Composer] persist ported provider preference failed", error);
+              },
+            });
+            targetClient = applied.client;
+            targetServerId = applied.serverId;
+            resolvedAgentId = applied.agentId;
+            finishSwitch = applied.finalize;
+            switched = true;
+          } catch (error) {
+            stageProviderSwitch(serverId, targetAgentId, pendingSwitch);
+            throw error;
+          }
+        }
+
+        await dispatchComposerAgentMessage({
+          client: targetClient,
+          agentId: resolvedAgentId,
+          text,
+          attachments: sendAttachments,
+          attachmentSubmitFormat: resolveComposerAttachmentSubmitFormat({
+            supportsForgeAttachments: supportsForgeSearch,
+          }),
+          encodeImages,
+          submission: createMessageSubmissionWriter(targetServerId),
+          activeTurnBehavior,
+          activeTurnId:
+            activeTurnBehavior === "steer"
+              ? (selectAgentTurnPresentation(
+                  useSessionStore.getState().sessions[targetServerId],
+                  resolvedAgentId,
+                ).turnId ?? undefined)
+              : undefined,
+        });
+        onAttentionPromptSend?.();
+        // Navigate only after the triggering message landed: the destination agent
+        // is loaded and its timeline seeded by then, so the new chat does not open
+        // empty while the port is still running. Until this point the previous chat
+        // stays on screen with a loading porting marker.
+        if (switched) {
+          navigateToAgent({
+            serverId: targetServerId,
+            agentId: resolvedAgentId,
+            workspaceId: workspaceId ?? undefined,
+          });
+          void finishSwitch?.().catch((error: unknown) => {
+            console.warn("[Composer] failed to archive the ported source agent", error);
+          });
+        }
+      } finally {
+        if (pendingSwitch) {
+          finishPortingActivity(serverId, targetAgentId);
+        }
+      }
     };
-  }, [appSettings.sendBehavior, client, onAttentionPromptSend, serverId, supportsForgeSearch, t]);
+  }, [
+    appSettings.sendBehavior,
+    client,
+    onAttentionPromptSend,
+    serverId,
+    supportsForgeSearch,
+    t,
+    updatePreferences,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     onSubmitMessageRef.current = onSubmitMessage;
@@ -1981,10 +2223,19 @@ function ComposerContentImpl({
 
   const hasSendableContent = hasText || selectedAttachments.length > 0;
 
-  // Handle keyboard navigation for command autocomplete.
+  // An open autocomplete owns the arrows; otherwise they may recall sent messages.
   const handleCommandKeyPress = useCallback(
-    (event: ComposerKeyPressEvent) => autocompleteRef.current?.onKeyPress(event) ?? false,
-    [],
+    (event: ComposerKeyPressEvent) => {
+      if (autocompleteRef.current?.onKeyPress(event)) return true;
+      const recalledText = recall.handleKeyPress(event, () =>
+        selectAgentSentMessages(useSessionStore.getState().sessions[serverId], agentId),
+      );
+      if (recalledText === null) return false;
+      event.preventDefault();
+      replaceUserInput(recalledText);
+      return true;
+    },
+    [agentId, recall, replaceUserInput, serverId],
   );
 
   const cancelButtonStyle = useMemo(
@@ -2339,6 +2590,40 @@ function ComposerContentImpl({
     [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
+  const handleGoalEdit = useCallback(
+    (objective: string) => {
+      replaceUserInput(`/goal ${objective}`);
+      messageInputRef.current?.focus();
+    },
+    [replaceUserInput],
+  );
+
+  const handleGoalPause = useCallback(() => {
+    void sendMessageWithContent("/goal pause", [], true);
+  }, [sendMessageWithContent]);
+
+  const handleGoalResume = useCallback(() => {
+    void sendMessageWithContent("/goal resume", [], true);
+  }, [sendMessageWithContent]);
+
+  const handleGoalStop = useCallback(() => {
+    void sendMessageWithContent("/goal clear", [], true);
+  }, [sendMessageWithContent]);
+
+  const goalStrip = useMemo(
+    () =>
+      agentState.goal ? (
+        <GoalBannerRow
+          goal={agentState.goal}
+          onEdit={handleGoalEdit}
+          onPause={handleGoalPause}
+          onResume={handleGoalResume}
+          onStop={handleGoalStop}
+        />
+      ) : null,
+    [agentState.goal, handleGoalEdit, handleGoalPause, handleGoalResume, handleGoalStop],
+  );
+
   const autocompleteConfiguration = useMemo(
     () => ({
       setUserInput: replaceUserInput,
@@ -2417,12 +2702,14 @@ function ComposerContentImpl({
         <View style={inputAreaContainerStyle}>
           <View style={inputAreaContentStyle}>
             {isFullscreen ? null : queueList}
+            {!isFullscreen && goalStrip}
             {!isFullscreen && sendErrorNode}
 
             <View ref={messageInputContainerRef} style={messageInputContainerStyle}>
               <ComposerAutocompleteBinding
                 text={textSource}
                 cursor={cursor}
+                recall={recall}
                 inputRef={messageInputRef}
                 anchorRef={messageInputContainerRef}
                 show={mode.showAutocomplete && !isFullscreen}
@@ -2633,6 +2920,62 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexDirection: "column",
     gap: theme.spacing[2],
   },
+  goalRow: {
+    flexDirection: "column",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    backgroundColor: theme.colors.surface1,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  goalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  goalElapsed: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  goalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    marginLeft: "auto",
+  },
+  goalActionButton: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalCollapsedRow: {
+    flexDirection: "row",
+  },
+  goalCollapsedPill: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  goalText: {
+    flex: 1,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+  },
+  goalBadge: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSize.sm,
+  },
+  goalBadgePaused: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   queueItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -2685,6 +3028,12 @@ const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
+const ThemedTarget = withUnistyles(Target);
+const ThemedInfo = withUnistyles(Info);
+const ThemedMinus = withUnistyles(Minus);
+const ThemedPause = withUnistyles(Pause);
+const ThemedPlay = withUnistyles(Play);
+const ThemedSquare = withUnistyles(Square);
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

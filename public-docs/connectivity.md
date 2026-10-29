@@ -31,7 +31,7 @@ The CLI accepts an SSH URI as its host:
 paseo --host ssh://user@host ls -a
 ```
 
-The daemon is expected at `127.0.0.1:6767` on the remote host. The port in the SSH URL is the SSH server port:
+The daemon is expected at `127.0.0.1:17000` on the remote host. The port in the SSH URL is the SSH server port:
 
 ```bash
 paseo --host ssh://user@host:2222 ls -a
@@ -94,7 +94,7 @@ Open `~/.paseo/config.json` and set `daemon.listen` to the Tailscale IP:
   "$schema": "https://paseo.sh/schemas/paseo.config.v1.json",
   "version": 1,
   "daemon": {
-    "listen": "100.101.102.103:6767"
+    "listen": "100.101.102.103:17000"
   }
 }
 ```
@@ -116,7 +116,7 @@ If Paseo Desktop manages the daemon, use **Settings → your host → Overview �
 1. Connect Tailscale on your phone.
 2. Open Paseo and go to **Settings → Add host → Direct connection**.
 3. Enter the Tailscale IP in **Host**.
-4. Enter `6767` in **Port**.
+4. Enter `17000` in **Port**.
 5. Leave **Use SSL** off and select **Connect**.
 
 If the host was already paired through the relay, Paseo adds the direct connection to the same host.

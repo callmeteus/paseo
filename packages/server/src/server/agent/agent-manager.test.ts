@@ -1,3 +1,4 @@
+import { createIdleRuntimeCleanup } from "./idle-runtime-cleanup/index.js";
 import {
   prepareAgentMessage,
   formatAgentMessage,
@@ -25,6 +26,7 @@ import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
+import { GOAL_COMPLETE_MARKER } from "./agent-goal.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type {
@@ -2964,7 +2966,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     idFactory: () => "00000000-0000-4000-8000-000000000103",
   });
 
@@ -2992,7 +2994,7 @@ test("createAgent injects paseo MCP server only into provider launch config", as
   expect(client.lastConfig?.mcpServers).toEqual({
     paseo: {
       type: "http",
-      url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
+      url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${snapshot.id}`,
     },
     custom: {
       type: "stdio",
@@ -3212,7 +3214,7 @@ test("createAgent passes native Paseo tools through launch context without inter
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     paseoToolCatalogFactory: () => paseoTools,
     idFactory: () => "00000000-0000-4000-8000-000000000106",
   });
@@ -3276,7 +3278,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     mcpAuthToken: "cap-token",
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
@@ -3293,7 +3295,7 @@ test("createAgent allows best-effort internal MCP when the provider session repo
   expect(manager.getMcpAuthToken()).toBe("cap-token");
   expect(client.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
-    url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${snapshot.id}`,
+    url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${snapshot.id}`,
     headers: { Authorization: "Bearer cap-token" },
   });
 
@@ -3341,7 +3343,7 @@ test("uses each provider's current policy for new sessions and snapshots it by a
     clients: { codex, claude },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     resolvePaseoToolPolicy: (provider) => policies.get(provider),
     paseoToolCatalogFactory: async (context) => {
       policyInputs.push(context);
@@ -3421,7 +3423,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     clients: { codex: enabledClient },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     resolvePaseoToolPolicy: () => ({ disabledTools: ["list_agents"] }),
   });
   const enabledAgent = await enabledManager.createAgent(
@@ -3432,7 +3434,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
 
   expect(enabledClient.lastConfig?.mcpServers?.paseo).toEqual({
     type: "http",
-    url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${enabledAgent.id}`,
+    url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${enabledAgent.id}`,
   });
 
   const disabledClient = new McpClient();
@@ -3441,7 +3443,7 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     clients: { codex: disabledClient },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     paseoToolsEnabled: false,
     resolvePaseoToolPolicy: () => ({ enabled: true }),
     paseoToolCatalogFactory: () => {
@@ -3489,7 +3491,7 @@ test("resumeAgentFromPersistence replaces stored internal paseo MCP with current
     mcpServers: {
       paseo: {
         type: "http",
-        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=stale-agent",
+        url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=stale-agent",
       },
       custom: {
         type: "stdio",
@@ -3541,7 +3543,7 @@ test("resumeAgentFromPersistence drops stored internal paseo MCP when runtime in
     mcpServers: {
       paseo: {
         type: "http",
-        url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=stale-agent",
+        url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=stale-agent",
       },
     },
   });
@@ -3571,7 +3573,7 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
     },
     registry: storage,
     logger,
-    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    mcpBaseUrl: "http://127.0.0.1:17000/mcp/agents",
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
 
@@ -10007,6 +10009,47 @@ test("closeAgent persists one final closed snapshot", async () => {
   }
 });
 
+test("idle runtime cleanup honors a provider veto and resumes the saved conversation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-idle-cleanup-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let safe = false;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      const session = await super.createSession(config);
+      session.canStopRuntime = async () => safe;
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  const collect = runtimeCleanup(manager);
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const now = new Date(Date.now() + 61 * 60_000);
+    expect(await collect({ now })).toEqual({ collected: [], failures: [] });
+    safe = true;
+    expect(await collect({ now })).toEqual({ collected: [], failures: [] });
+    const later = new Date(now.getTime() + 61 * 60_000);
+    expect((await collect({ now: later })).collected).toEqual([
+      { agentId: agent.id, provider: "codex", sessionId: agent.persistence?.sessionId },
+    ]);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    const resumed = await ensureAgentLoaded(agent.id, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+    });
+    expect(resumed.id).toBe(agent.id);
+    expect(resumed.persistence).toEqual(agent.persistence);
+    await manager.runAgent(agent.id, "Continue the saved conversation");
+  } finally {
+    await manager.closeAgent(manager.listAgents()[0]?.id ?? "missing").catch(() => undefined);
+    await storage.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("idle agents remain resident until an explicit lifecycle action closes them", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-idle-residency-"));
   let closeCount = 0;
@@ -10951,12 +10994,12 @@ test("tryRunOutOfBand gives providers the command another agent sent, not its en
 
   try {
     const fromAgent = prepareAgentMessage("/handled", { kind: "agent-message", agentId: "sender" });
-    expect(manager.tryRunOutOfBand(agent.id, fromAgent.prompt)).toBe(true);
+    expect(await manager.tryRunOutOfBand(agent.id, fromAgent.prompt)).toBe(true);
     expect(seenPrompts).toEqual(["/handled"]);
 
     // A human who pastes an envelope gets it quoted, and it stays a plain prompt.
     const pasted = prepareAgentMessage(String(fromAgent.prompt));
-    expect(manager.tryRunOutOfBand(agent.id, pasted.prompt)).toBe(false);
+    expect(await manager.tryRunOutOfBand(agent.id, pasted.prompt)).toBe(false);
     expect(seenPrompts.at(-1)).toBe(pasted.prompt);
   } finally {
     await manager.closeAgent(agent.id);
@@ -12082,4 +12125,509 @@ test("reads the last durable assistant response without loading a stored-only ch
     "Partial work saved before restart",
   );
   expect(manager.getAgent("stored-child")).toBeNull();
+});
+
+function runtimeCleanup(manager: AgentManager) {
+  let now = Date.now();
+  let protectedCaller = (_agentId: string) => false;
+  const cleanup = createIdleRuntimeCleanup({
+    enabled: true,
+    runtimes: () => manager.getRuntimeCleanupCandidates(),
+    logger,
+    now: () => now,
+    isProtected: (agentId) => protectedCaller(agentId),
+    schedule: () => () => {},
+  });
+  onTestFinished(() => cleanup.close());
+  return (options: { now: Date; isProtected?: (agentId: string) => boolean }) => {
+    now = options.now.getTime();
+    protectedCaller = options.isProtected ?? (() => false);
+    return cleanup.sweep();
+  };
+}
+
+function idleCleanupHarness() {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-idle-protection-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const commands: AgentPromptInput[] = [];
+  const prompts: AgentPromptInput[] = [];
+  const recordPrompts = (session: AgentSession) => {
+    session.tryHandleOutOfBand = (prompt) =>
+      prompt === "/maintenance"
+        ? {
+            run: async () => {
+              commands.push(prompt);
+            },
+          }
+        : null;
+    const start = session.startTurn.bind(session);
+    session.startTurn = (prompt, options) => {
+      prompts.push(prompt);
+      return start(prompt, options);
+    };
+    return session;
+  };
+  const sessions: AgentSession[] = [];
+  const probes: Array<(() => Promise<boolean>) | undefined> = [];
+  const closeEntered = deferred<void>();
+  let closeGate: Promise<void> | undefined;
+  let closes = 0;
+  const client = new (class extends TestAgentClient {
+    override async resumeSession(
+      handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+    ): Promise<AgentSession> {
+      const session = await super.resumeSession(handle, config);
+      session.describePersistence = () => handle;
+      return recordPrompts(session);
+    }
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      const index = sessions.length;
+      const session: AgentSession = await super.createSession(config);
+      session.canStopRuntime = async () => probes[index]?.() ?? false;
+      session.close = async () => {
+        closes++;
+        closeEntered.resolve();
+        await closeGate;
+      };
+      sessions.push(session);
+      return recordPrompts(session);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  onTestFinished(async () => {
+    closeGate = undefined;
+    await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
+    await storage.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  });
+  return {
+    commands,
+    sweep: runtimeCleanup(manager),
+    manager,
+    storage,
+    sessions,
+    probes,
+    prompts,
+    closeEntered,
+    get closes() {
+      return closes;
+    },
+    holdClose: (gate: Promise<void>) => {
+      closeGate = gate;
+    },
+    create: (labels?: Record<string, string>) =>
+      manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+        workspaceId: undefined,
+        labels,
+      }),
+    later: (minutes: number) => new Date(Date.now() + minutes * 60_000),
+  };
+}
+
+test("idle cleanup rechecks new prompt activity after an asynchronous safety probe", async () => {
+  const h = idleCleanupHarness();
+  const agent = await h.create();
+  const entered = deferred<void>();
+  const probe = deferred<boolean>();
+  h.probes[0] = () => {
+    entered.resolve();
+    return probe.promise;
+  };
+  const sweep = h.sweep({ now: h.later(61) });
+  await entered.promise;
+  await h.manager.runAgent(agent.id, "arrived during safety query");
+  probe.resolve(true);
+  expect((await sweep).collected).toEqual([]);
+  expect(h.closes).toBe(0);
+});
+
+test("idle cleanup retains a parent whose idle managed child owns background work", async () => {
+  const h = idleCleanupHarness();
+  const parent = await h.create();
+  await h.create({ [PARENT_AGENT_ID_LABEL]: parent.id });
+  h.probes[0] = async () => true;
+  h.probes[1] = async () => false;
+  expect((await h.sweep({ now: h.later(61) })).collected).toEqual([]);
+  expect(h.closes).toBe(0);
+});
+
+test("idle cleanup rechecks queued deliveries admitted during the safety probe", async () => {
+  const h = idleCleanupHarness();
+  await h.create();
+  let queued = false;
+  h.probes[0] = async () => {
+    queued = true;
+    return true;
+  };
+  expect((await h.sweep({ now: h.later(61), isProtected: () => queued })).collected).toEqual([]);
+  expect(h.closes).toBe(0);
+});
+
+test("a prompt racing idle cleanup waits for close and resumes exactly once", async () => {
+  const h = idleCleanupHarness();
+  const agent = await h.create();
+  h.probes[0] = async () => true;
+  const gate = deferred<void>();
+  h.holdClose(gate.promise);
+  const sweep = h.sweep({ now: h.later(61) });
+  await h.closeEntered.promise;
+  const run = h.manager.runAgent(agent.id, "arrived while closing");
+  gate.resolve();
+  expect((await sweep).collected).toHaveLength(1);
+  const result = await run;
+  expect(result.sessionId).toBe(agent.persistence?.sessionId);
+  expect(h.closes).toBe(1);
+  expect(h.prompts).toEqual(["arrived while closing"]);
+});
+
+test("an out-of-band command racing idle cleanup waits for the resumed runtime", async () => {
+  const h = idleCleanupHarness();
+  const agent = await h.create();
+  h.probes[0] = async () => true;
+  const gate = deferred<void>();
+  h.holdClose(gate.promise);
+  const sweep = h.sweep({ now: h.later(61) });
+  await h.closeEntered.promise;
+  const command = startAgentRun(h.manager, agent.id, "/maintenance", logger);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const deliveredWhileClosing = [...h.commands];
+  gate.resolve();
+  await sweep;
+  expect(deliveredWhileClosing).toEqual([]);
+  expect(await command).toEqual({ disposition: "out_of_band" });
+  expect(h.commands).toEqual(["/maintenance"]);
+  expect(h.prompts).toEqual([]);
+});
+
+function waitForAgentStream(
+  manager: AgentManager,
+  agentId: string,
+  predicate: (event: AgentStreamEvent) => boolean,
+): Promise<AgentStreamEvent> {
+  return new Promise<AgentStreamEvent>((resolve) => {
+    const unsubscribe = manager.subscribe(
+      (event) => {
+        if (event.type !== "agent_stream" || event.agentId !== agentId) return;
+        if (!predicate(event.event)) return;
+        unsubscribe();
+        resolve(event.event);
+      },
+      { agentId, replayState: false },
+    );
+  });
+}
+
+class GoalPromptSession extends TestAgentSession {
+  readonly prompts: AgentPromptInput[] = [];
+
+  override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+    this.prompts.push(prompt);
+    return super.startTurn();
+  }
+}
+
+/**
+ * Fake session for goal auto-continuation: the first turn reports partial
+ * work, later turns append the goal-complete marker so the daemon watcher
+ * stops on the second turn.
+ */
+class GoalWatchSession extends TestAgentSession {
+  readonly prompts: AgentPromptInput[] = [];
+
+  override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+    this.prompts.push(prompt);
+    const turnNumber = this.prompts.length;
+    const turnId = `watch-turn-${turnNumber}`;
+    setTimeout(() => {
+      const text =
+        turnNumber >= 2
+          ? `All checks passed. ${GOAL_COMPLETE_MARKER}`
+          : "Partial work. I'll continue on the next turn.";
+      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      this.pushEvent({
+        type: "timeline",
+        provider: this.provider,
+        item: { type: "assistant_message", text },
+      });
+      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+    }, 0);
+    return { turnId };
+  }
+}
+
+test("daemon-level /goal starts a turn and the timeline shows the typed text", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-start-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let session: GoalPromptSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalPromptSession(config);
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const completed = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+
+    const result = await startAgentRun(manager, agent.id, "/goal make the build pass", logger);
+    await completed;
+
+    expect(result).toEqual({ disposition: "turn_started" });
+    expect(session!.prompts).toHaveLength(1);
+    const providerPrompt = session!.prompts[0];
+    expect(String(providerPrompt)).toContain("<paseo-goal>");
+    expect(String(providerPrompt)).toContain("Goal: make the build pass");
+    expect(String(providerPrompt)).not.toContain("/goal make the build pass");
+
+    expect(manager.getAgent(agent.id)?.goal).toMatchObject({
+      objective: "make the build pass",
+      status: "active",
+    });
+
+    // The preamble is injected into the provider prompt; the user still reads
+    // exactly what they typed.
+    const items = manager
+      .fetchTimeline(agent.id, { direction: "tail", limit: 20 })
+      .rows.map((row) => row.item);
+    expect(items).toEqual([
+      {
+        type: "user_message",
+        text: "/goal make the build pass",
+        clientMessageId: expect.any(String),
+        messageId: expect.any(String),
+      },
+    ]);
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level goal auto-continues after a completed turn and stops on the completion marker", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-autocontinue-"));
+  let session: GoalWatchSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalWatchSession(config);
+      return session;
+    }
+  })();
+  const workdirStorage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: workdirStorage,
+    logger,
+  });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    await startAgentRun(manager, agent.id, "/goal probe the network", logger);
+
+    // First turn completed without the marker: the daemon continues on its own.
+    await vi.waitFor(
+      () => {
+        expect(session!.prompts).toHaveLength(2);
+        expect(String(session!.prompts[1])).toContain("No new user message is pending");
+        expect(String(session!.prompts[1])).toContain("Goal: probe the network");
+        expect(String(session!.prompts[1])).toContain(GOAL_COMPLETE_MARKER);
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+
+    // Second turn reports completion; the goal is cleared and the watch stops.
+    await vi.waitFor(
+      () => {
+        expect(manager.getAgent(agent.id)?.goal).toBeUndefined();
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+    const items = manager.fetchTimeline(agent.id, { direction: "tail", limit: 10 }).rows;
+    const lastNotice = items
+      .map((row) => row.item)
+      .findLast((item) => item.type === "notification");
+    expect(lastNotice && "message" in lastNotice ? lastNotice.message : "").toContain(
+      "Goal complete: probe the network",
+    );
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await workdirStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level /goal pause, resume, and clear answer without a provider turn", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-control-"));
+  let session: GoalPromptSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalPromptSession(config);
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const started = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/goal make the build pass", logger);
+    await started;
+    expect(session!.prompts).toHaveLength(1);
+
+    const statusAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "notification",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    expect(await statusAnswer).toEqual({
+      type: "timeline",
+      provider: "codex",
+      item: { type: "notification", level: "info", message: "Goal (active): make the build pass" },
+    });
+    // A control subcommand must not reach the provider as a turn.
+    expect(session!.prompts).toHaveLength(1);
+
+    const pausedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "notification",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal pause", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await pausedAnswer;
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("paused");
+
+    // While paused, a normal message reaches the provider untouched.
+    const pausedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "first task", logger);
+    await pausedTurn;
+    expect(session!.prompts.at(-1)).toBe("first task");
+
+    const resumedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "notification",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal resume", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await resumedAnswer;
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("active");
+
+    // An active goal is prepended to the next real message.
+    const resumedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "second task", logger);
+    await resumedTurn;
+    const resumedPrompt = String(session!.prompts.at(-1));
+    expect(resumedPrompt).toContain("Goal: make the build pass");
+    expect(resumedPrompt.endsWith("second task")).toBe(true);
+
+    // Provider slash commands stay verbatim so provider features keep working.
+    const slashTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/compact", logger);
+    await slashTurn;
+    expect(session!.prompts.at(-1)).toBe("/compact");
+
+    const clearedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "notification",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal clear", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await clearedAnswer;
+    expect(manager.getAgent(agent.id)?.goal).toBeUndefined();
+
+    // After clearing, nothing is injected any more.
+    const unmanagedTurn = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "third task", logger);
+    await unmanagedTurn;
+    expect(session!.prompts.at(-1)).toBe("third task");
+  } finally {
+    await manager.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-level /goal persists on the agent record and in the wire snapshot", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-persist-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new GoalPromptSession(config);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const completed = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/goal ship the release", logger);
+    await completed;
+    await manager.flush();
+
+    const stored = await storage.get(agent.id);
+    expect(stored?.goal).toMatchObject({
+      objective: "ship the release",
+      status: "active",
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
+
+    const snapshot = manager.getAgent(agent.id);
+    expect(snapshot).not.toBeNull();
+    expect(toAgentPayload(snapshot!).goal).toMatchObject({
+      objective: "ship the release",
+      status: "active",
+    });
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });

@@ -27,7 +27,24 @@ The web and desktop dev launchers pass the current Git branch to Metro as
 `EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL`. The expanded desktop sidebar shows it in
 the titlebar row. Production builds leave the variable unset and show no label.
 
-`npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:6767` for the packaged app and production-style `~/.paseo` state.
+`npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
+
+### Reaching the dev daemon over Tailscale
+
+`PASEO_LISTEN` overrides `daemon.listen` for a foreground/dev daemon. Bind all interfaces so loopback stays usable and the tailnet can reach it:
+
+```bash
+PASEO_LISTEN=0.0.0.0:6767 npm run dev:server
+```
+
+Connect clients to the machine's tailnet address (`tailscale ip -4`) on port `6767`. For the web UI served by Metro, add that origin to `daemon.cors.allowedOrigins`; otherwise the WebSocket upgrade is rejected with `Origin not allowed`:
+
+```bash
+paseo daemon config set daemon.cors.allowedOrigins '["http://100.101.102.103:8081"]'
+paseo daemon reload
+```
+
+Binding `0.0.0.0` exposes the daemon to every interface, not just Tailscale. With no daemon password, any reachable device can control agents. Set `PASEO_PASSWORD` (or bind the tailnet IP alone) when the machine shares a LAN you do not trust. `daemon.listen` is not reloadable, so changing it requires a worker restart.
 
 ## Nix desktop package
 
@@ -62,11 +79,11 @@ PASEO_DEV_RESET_HOME=1 npm run dev            # clear and reseed the derived wor
 
 ### Daemon endpoints
 
-- Stable daemon launched by the desktop app: `localhost:6767`.
+- Stable daemon launched by the desktop app: `localhost:17000`.
 - Root checkout dev daemon: `localhost:6768`.
 - Root checkout Expo: `http://localhost:8081`.
 - Root checkout desktop dev Expo: first free port from `8082` through `8089`.
-- `npm run dev` (Windows): `localhost:6767` for the daemon.
+- `npm run dev` (Windows): `localhost:17000` for the daemon.
 
 In Paseo-managed worktree services, use the injected service environment rather than hardcoded root checkout ports.
 
@@ -106,7 +123,7 @@ npm run ios        # → expo run:ios (packages/app): builds and launches the ap
 
 `expo run:ios` starts its own Metro and gives you the normal Simulator.app window (full speed, native touch, no stream).
 
-**Pointing the app at a daemon.** The client resolves its local daemon from `EXPO_PUBLIC_LOCAL_DAEMON` (`packages/app/src/runtime/host-runtime.ts`); when unset it falls back to `localhost:6767`, the production `~/.paseo` daemon. To target a worktree's dev daemon instead, set it on the build command:
+**Pointing the app at a daemon.** The client resolves its local daemon from `EXPO_PUBLIC_LOCAL_DAEMON` (`packages/app/src/runtime/host-runtime.ts`); when unset it falls back to `localhost:17000`, the production `~/.paseo` daemon. To target a worktree's dev daemon instead, set it on the build command:
 
 ```bash
 EXPO_PUBLIC_LOCAL_DAEMON=localhost:${PASEO_SERVICE_DAEMON_PORT} npm run ios   # worktree daemon running as a Paseo service
@@ -485,9 +502,9 @@ Or persist it in `config.json`:
 }
 ```
 
-When enabled, opening the daemon HTTP origin (for example `http://localhost:6767/`) serves the web app. The same HTTP server continues to serve `/api/*`, `/mcp/*`, `/public/*`, the WebSocket upgrade, and service-proxy routes. Static files load without daemon bearer auth; API and WebSocket calls still enforce auth.
+When enabled, opening the daemon HTTP origin (for example `http://localhost:17000/`) serves the web app. The same HTTP server continues to serve `/api/*`, `/mcp/*`, `/public/*`, the WebSocket upgrade, and service-proxy routes. Static files load without daemon bearer auth; API and WebSocket calls still enforce auth.
 
-The served app auto-bootstraps a connection to the same origin, so opening `http://localhost:6767/` directly usually skips the Add Host step.
+The served app auto-bootstraps a connection to the same origin, so opening `http://localhost:17000/` directly usually skips the Add Host step.
 
 Build the artifact for packaging or measurement with:
 
@@ -585,7 +602,7 @@ npm run cli -- --host ssh://user@host ls -a
 Set `PASEO_HOST` to use the same target across invocations. An explicit
 selector overrides both environment selectors. With both `PASEO_HOME` and `PASEO_HOST` set, pass an explicit selector. See [CLI target selection](../public-docs/cli.md#select-one-daemon).
 
-In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:6767`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
+In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:17000`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
 
 Desktop integrations can focus an existing agent without creating one or
 sending a message. Use `paseo://h/<server-id>/agent/<agent-id>`, or run

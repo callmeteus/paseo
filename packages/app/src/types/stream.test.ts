@@ -436,6 +436,23 @@ function compactionTimeline(
   };
 }
 
+function portingTimeline(
+  status: "loading" | "completed",
+  fromProvider?: AgentProvider,
+  toProvider?: AgentProvider,
+): AgentStreamEventPayload {
+  return {
+    type: "timeline",
+    provider: "pi",
+    item: {
+      type: "porting",
+      status,
+      ...(fromProvider ? { fromProvider } : {}),
+      ...(toProvider ? { toProvider } : {}),
+    },
+  };
+}
+
 function findToolByCallId(state: StreamItem[], callId: string): AgentToolCallItem | undefined {
   return state.find(
     (item): item is AgentToolCallItem =>
@@ -1409,6 +1426,45 @@ describe("stream reducer canonical tool calls", () => {
       state.some((item) => item.kind === "compaction" && item.status === "loading"),
       false,
     );
+  });
+
+  it("merges porting loading into a completed porting marker", () => {
+    const state = hydrateStreamState([
+      {
+        event: portingTimeline("loading", "opencode", "claude"),
+        timestamp: new Date("2025-01-01T10:50:00Z"),
+      },
+      {
+        event: portingTimeline("completed", "opencode", "claude"),
+        timestamp: new Date("2025-01-01T10:50:01Z"),
+      },
+    ]);
+
+    const markers = state.filter(
+      (item): item is Extract<StreamItem, { kind: "porting" }> => item.kind === "porting",
+    );
+
+    assert.strictEqual(markers.length, 1);
+    assert.strictEqual(markers[0].status, "completed");
+    assert.strictEqual(markers[0].fromProvider, "opencode");
+    assert.strictEqual(markers[0].toProvider, "claude");
+  });
+
+  it("keeps completed porting markers when no loading marker exists", () => {
+    const state = hydrateStreamState([
+      {
+        event: portingTimeline("completed", "opencode", "claude"),
+        timestamp: new Date("2025-01-01T10:50:00Z"),
+      },
+    ]);
+
+    const markers = state.filter(
+      (item): item is Extract<StreamItem, { kind: "porting" }> => item.kind === "porting",
+    );
+
+    assert.strictEqual(markers.length, 1);
+    assert.strictEqual(markers[0].status, "completed");
+    assert.strictEqual(markers[0].toProvider, "claude");
   });
 
   it("renders Claude TodoWrite as todo_list and suppresses tool call badge", () => {

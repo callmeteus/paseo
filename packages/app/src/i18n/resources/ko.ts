@@ -2,6 +2,20 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  goalNotice: {
+    noGoal:
+      "설정된 목표가 없습니다. 사용법: /goal <목표> | /goal pause | /goal resume | /goal clear",
+    status: "목표 ({{status}}): {{objective}}",
+    activeLabel: "진행 중",
+    pausedLabel: "일시중지",
+    set: "목표 설정됨: {{objective}}",
+    paused: "목표 일시중지됨: {{objective}}",
+    resumed: "목표 재개됨: {{objective}}",
+    cleared: "목표가 해제되었습니다.",
+    complete: "목표 완료: {{objective}}",
+    continuousLimit:
+      "{{max}}번 계속 시도했지만 목표를 완료하지 못했습니다. 감시가 중지되었습니다. 메시지를 다시 보내거나 /goal resume으로 재시작하세요.",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",
@@ -133,6 +147,8 @@ export const ko: TranslationResources = {
       sendAndInterrupt: "보내고 중단",
       sendAndSteer: "보내고 지시 추가",
       sendMessage: "메시지 보내기",
+      longPressToQueue: "길게 눌러 대기열에 추가",
+      longPressToSendNow: "길게 눌러 지금 보내기",
       queue: "대기열",
       send: "보내기",
     },
@@ -189,6 +205,18 @@ export const ko: TranslationResources = {
       archiveAgent: "현재 에이전트 보관",
       freshDraft: "이 에이전트를 보관하고 새 초안을 시작합니다",
     },
+    goal: {
+      active: "목표",
+      paused: "목표 일시 중지",
+      edit: "목표 편집",
+      info: "목표 세부정보",
+      clear: "목표 지우기",
+      collapse: "목표 숨기기",
+      show: "목표 표시",
+      pause: "목표 일시 중지",
+      resume: "목표 재개",
+      stop: "목표 중지",
+    },
     github: {
       searching: "검색 중...",
       noResults: "결과가 없습니다.",
@@ -202,6 +230,10 @@ export const ko: TranslationResources = {
     provider: {
       fallback: "프로바이더",
       select: "에이전트 프로바이더 선택",
+      portingUnsupported: "에이전트 프로바이더를 변경하려면 이 호스트를 업데이트하세요",
+      pendingOnNextMessage: "다음 메시지를 보낼 때 프로바이더 변경이 적용됩니다",
+      crossHostUnsupported: "이동된 에이전트를 받으려면 대상 호스트를 업데이트해야 합니다",
+      targetHostDisconnected: "대상 호스트에 연결되어 있지 않습니다",
     },
     thinking: {
       title: "사고",
@@ -397,6 +429,10 @@ export const ko: TranslationResources = {
       manual: "컨텍스트가 수동으로 압축되었습니다",
       withTokens: "컨텍스트가 압축되었습니다 ({{tokens}}K 토큰)",
       completed: "컨텍스트가 압축되었습니다",
+    },
+    porting: {
+      loading: "컨텍스트 포팅 중...",
+      completed: "컨텍스트가 {{provider}}(으)로 포팅되었습니다",
     },
   },
   importSession: {
@@ -1663,6 +1699,7 @@ export const ko: TranslationResources = {
     error: "오류",
     defaultModel: "기본값",
     profiles: "프로필",
+    routers: "라우터",
     providers: "제공자",
     model: "모델",
     editProfiles: "편집",
@@ -1918,6 +1955,13 @@ export const ko: TranslationResources = {
     backdrop: "메뉴 배경",
   },
   subagents: {
+    parent: {
+      backToParent: "상위 에이전트로 돌아가기",
+      backTo: "{{label}}(으)로 돌아가기",
+      parent: "상위",
+      parentAgent: "상위 에이전트",
+      openParent: "상위 에이전트 열기",
+    },
     title: "하위 에이전트",
     pillLabelOne: "하위 에이전트 1개",
     pillLabelMany: "하위 에이전트 {{count}}개",
@@ -2017,6 +2061,12 @@ export const ko: TranslationResources = {
     subAgentActivity: "서브에이전트 활동",
     input: "입력",
     output: "출력",
+  },
+  turnSummary: {
+    messages: {
+      one: "{{count}} 메시지를 작성했습니다.",
+      other: "{{count}} 메시지를 작성했습니다.",
+    },
   },
   toolCallGroup: {
     editedFiles: {
@@ -2128,6 +2178,26 @@ export const ko: TranslationResources = {
       codeReview: "코드 검토",
       credits: "크레딧",
       monthlyCredits: "월간 크레딧",
+      rolling: "롤링",
+      spent: "사용액",
+      tokens: "토큰",
+    },
+    details: {
+      sessions: "세션",
+      input: "입력",
+      output: "출력",
+      prompts: "프롬프트",
+      steps: "단계",
+      cacheRead: "캐시 읽기",
+      since: "시작",
+    },
+    plan: {
+      local: "로컬",
+    },
+    sources: {
+      opencodeLocal: "OpenCode (로컬)",
+      kiloLocal: "Kilo (로컬)",
+      clineLocal: "Cline (로컬)",
     },
     duration: {
       days: "{{value}}일",
@@ -2219,6 +2289,7 @@ export const ko: TranslationResources = {
       connections: "연결",
       agents: "에이전트",
       metadata: "메타데이터",
+      voice: "음성",
       workspaces: "워크스페이스",
       providers: "프로바이더",
       usage: "사용량",
@@ -2240,6 +2311,116 @@ export const ko: TranslationResources = {
       modelHint: "이 모델만 사용합니다. 실패해도 Paseo는 다른 모델을 시도하지 않습니다",
       docs: "문서",
       saveError: "메타데이터 생성을 업데이트할 수 없습니다",
+    },
+    modelRouters: {
+      title: "모델 라우터",
+      description:
+        "여러 공급자와 모델을 하나의 선택으로 묶습니다. 크레딧이나 할당량이 떨어지면 폴백이 다음 대상으로 이동하고, 분배는 새 채팅을 나눕니다.",
+      empty: "라우터가 없습니다. 만들거나 프리셋으로 시작하세요.",
+      modeFallback: "폴백",
+      modeDistribution: "분배",
+      defaultBadge: "기본",
+      setDefault: "새 채팅에 사용",
+      unsetDefault: "사용 중지",
+      edit: "편집",
+      delete: "삭제",
+      create: "새 라우터",
+      addTarget: "대상 추가",
+      removeTarget: "제거",
+      cancel: "취소",
+      save: "저장",
+      namePlaceholder: "라우터 이름",
+      invalidTitle: "라우터가 불완전합니다",
+      invalidBody: "이름과 대상이 하나 이상 필요합니다.",
+      saveError: "라우터를 저장할 수 없습니다",
+      fallbackMoved: "이전 공급자의 한도가 소진되어 채팅을 {{provider}}(으)로 이동했습니다",
+      noMoreTargets: "이 채팅에 남은 폴백 대상이 없습니다",
+      retryingProvider: "{{provider}}이(가) 충돌했습니다. 같은 공급자에서 다시 시도하는 중…",
+      crashPersists: "{{provider}}이(가) 계속 충돌합니다. 공급자 CLI를 확인하고 다시 시도하세요.",
+      sessionRepaired:
+        "업스트림 세션이 손상되었습니다. 기록을 포함한 새 {{provider}} 세션을 시작했습니다.",
+      targetCount: "대상 {{count}}개",
+      usePreset: "프리셋 사용",
+      wizard: {
+        title: "새 라우터",
+        choose: "프리셋으로 시작하거나 직접 목록을 만드세요.",
+        manual: "직접 만들기",
+        manualHint: "각 대상의 공급자와 모델을 순서대로 선택하세요.",
+        startManual: "만들기",
+      },
+      presets: {
+        "premium-free": {
+          name: "Premium Free",
+          summary: "프리미엄 연구소의 무료 모델, 강한 것부터 저렴한 것까지.",
+        },
+        "open-weight-free": {
+          name: "Open Weight Free",
+          summary: "무료 open weight 모델, 최전선 제품군부터 소형 모델까지.",
+        },
+      },
+    },
+    voice: {
+      offline: "음성을 설정하려면 이 호스트에 연결하세요.",
+      updateHost: "음성을 설정하려면 호스트를 업데이트하세요.",
+      saveError: "음성 설정을 업데이트할 수 없습니다",
+      provider: "제공자",
+      providers: {
+        local: "로컬",
+        openai: "OpenAI",
+      },
+      voice: "목소리",
+      save: "저장",
+      retry: "다시 시도",
+      cancel: "취소",
+      model: "모델",
+      language: "언어",
+      languagePlaceholder: "자동 감지",
+      setBy: "{{name}}에서 설정됨",
+      unknownProvider: "{{provider}}을(를) 설정하려면 앱을 업데이트하세요",
+      sites: {
+        dictationStt: "음성 텍스트 변환",
+        voiceModeStt: "듣기",
+        voiceModeTts: "말하기",
+      },
+      dictation: {
+        title: "받아쓰기",
+        enabled: "받아쓰기",
+        enabledHint: "입력하는 대신 메시지 상자에 말하세요",
+      },
+      voiceMode: {
+        title: "음성 모드",
+        info: "음성 모드는 말한 내용을 텍스트로 옮기고 에이전트의 답변을 소리 내어 읽어 줍니다.",
+        enabled: "음성 모드",
+        enabledHint: "손을 쓰지 않고 에이전트와 대화하세요",
+      },
+      openai: {
+        apiKey: "API 키",
+        apiKeyHint: "호스트에 저장되며 다시 표시되지 않습니다.",
+        keyPlaceholder: "sk-...",
+        savedKeyPlaceholder: "저장됨",
+        missingKey: "API 키 없음",
+        baseUrl: "기본 URL",
+        baseUrlHint: "OpenAI 호환 서버용입니다. OpenAI를 사용하려면 비워 두세요.",
+      },
+      models: {
+        loading: "모델을 불러오는 중...",
+        loadError: "로컬 모델을 불러올 수 없습니다",
+        none: "사용 가능한 모델 없음",
+        downloaded: "다운로드됨",
+        inUse: "사용 중",
+        recommended: "추천",
+        download: "다운로드",
+        downloadAction: "{{label}} 다운로드",
+        downloading: "다운로드 중...",
+        downloadingPercent: "다운로드 중 {{percent}}%",
+        extracting: "압축 해제 중...",
+        delete: "삭제",
+        deleteAction: "{{label}} 삭제",
+        deleteTitle: "{{label}}을(를) 삭제할까요?",
+        deleteMessage: "{{size}}가 확보됩니다. 나중에 다시 다운로드할 수 있습니다.",
+        languages: "{{label}} 지원 언어",
+        moreLanguages: "{{languages}} 외 {{count}}개",
+      },
     },
     general: {
       title: "일반",
@@ -2287,12 +2468,13 @@ export const ko: TranslationResources = {
         label: "추론 항상 펼치기",
         description: "에이전트의 사고 및 추론 블록을 기본적으로 모두 펼쳐 표시합니다.",
       },
-      toolCallDetail: {
-        label: "도구 호출 표시",
-        description: "타임라인에 도구 호출이 표시되는 방식",
+      chatDisplay: {
+        label: "채팅 표시",
+        description: "채팅에 표시할 에이전트 작업의 양",
         options: {
-          overview: "요약",
-          detailed: "전체 세부정보",
+          full: "전체",
+          collapseToolCalls: "도구 호출 접기",
+          collapseTurns: "턴 접기",
         },
       },
       language: {
@@ -2659,6 +2841,11 @@ export const ko: TranslationResources = {
       },
       agents: {
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
+        idleRuntimeCleanup: {
+          title: "유휴 에이전트 해제",
+          hint: "1시간 동안 활동이 없으면 메모리를 확보합니다.",
+          info: "대화를 유지하면서 에이전트 프로세스를 중지합니다. 메시지를 보내면 다시 이어집니다.\n\n진행 중인 작업, 대기 중인 알림, 프로바이더 안전 검사가 있으면 정리하지 않습니다.",
+        },
       },
       workspaces: {
         unavailable: "워크스페이스를 관리하려면 이 호스트에 연결하세요",

@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act, renderHook } from "@testing-library/react";
+import { createWorkspaceVisibilityPolicy } from "@/components/sidebar/sidebar-group-visibility";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { WorkspaceScriptPayload } from "@getpaseo/protocol/messages";
@@ -68,7 +69,7 @@ const runningScript: WorkspaceScriptPayload = {
   type: "service",
   hostname: "web.paseo.localhost",
   port: 3000,
-  proxyUrl: "http://web.paseo.localhost:6767",
+  proxyUrl: "http://web.paseo.localhost:17000",
   lifecycle: "running",
   health: "healthy",
   exitCode: null,
@@ -485,6 +486,20 @@ describe("sidebar group visibility", () => {
       expect(result.current.canToggle).toBe(true);
     },
   );
+
+  it("treats placements without a hydrated entry as Done", () => {
+    const items = entries([...Array(8).fill("done"), "running", "done"]);
+    const hydrated = new Map(items.slice(0, 9).map((item) => [item.workspaceKey, item]));
+    for (const entriesByKey of [new Map(), hydrated]) {
+      const { result } = renderHook(() =>
+        useLimitedSidebarGroup(items, createWorkspaceVisibilityPolicy(entriesByKey)),
+      );
+      expect(result.current.canToggle).toBe(true);
+      expect(names(result.current.visibleItems)).toEqual(
+        entriesByKey.size === 0 ? names(items.slice(0, 7)) : [...names(items.slice(0, 7)), "row-9"],
+      );
+    }
+  });
 
   it("shows eight active rows once with no redundant toggle", () => {
     const items = entries([

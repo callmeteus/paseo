@@ -1,0 +1,192 @@
+import { z } from "zod";
+
+/**
+ * Model routers group several provider+model targets behind one choice.
+ *
+ * - `distribution`: each new chat is created on the next target in the list
+ *   (weighted round-robin), so work spreads across providers.
+ * - `fallback`: a chat starts on the first target and moves to the next one
+ *   when the provider reports a retryable failure (credits, quota, rate limit).
+ */
+export const MODEL_ROUTER_MODES = ["distribution", "fallback"] as const;
+export const ModelRouterModeSchema = z.enum(MODEL_ROUTER_MODES);
+export type ModelRouterMode = z.infer<typeof ModelRouterModeSchema>;
+
+export const ModelRouterTargetSchema = z
+  .object({
+    provider: z.string().min(1),
+    /** Null/omitted lets the provider choose its default model. */
+    model: z.string().min(1).nullable().optional(),
+    /** Relative weight for distribution. Defaults to 1. */
+    weight: z.number().int().positive().max(1000).optional(),
+  })
+  .strict();
+
+export type ModelRouterTarget = z.infer<typeof ModelRouterTargetSchema>;
+
+export const ModelRouterSchema = z
+  .object({
+    id: z.string().min(1).max(128),
+    name: z.string().min(1).max(80),
+    /** One-line description shown in settings instead of the full target list. */
+    summary: z.string().min(1).max(200).optional(),
+    mode: ModelRouterModeSchema,
+    targets: z.array(ModelRouterTargetSchema).min(1).max(32),
+  })
+  .strict();
+
+export type ModelRouter = z.infer<typeof ModelRouterSchema>;
+
+export const ModelRouterSettingsSchema = z
+  .object({
+    routers: z.array(ModelRouterSchema).default([]),
+    /** Router applied to new chats when the user has not picked one explicitly. */
+    defaultRouterId: z.string().min(1).nullable().optional(),
+  })
+  .strict();
+
+export type ModelRouterSettings = z.infer<typeof ModelRouterSettingsSchema>;
+
+export const DEFAULT_MODEL_ROUTER_SETTINGS: ModelRouterSettings = { routers: [] };
+
+/** Ordered stored targets, skipping a target that is no longer valid. */
+export function normalizeRouterTargets(targets: readonly ModelRouterTarget[]): ModelRouterTarget[] {
+  const seen = new Set<string>();
+  const normalized: ModelRouterTarget[] = [];
+  for (const target of targets) {
+    const model = target.model ?? null;
+    const key = `${target.provider}::${model ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({
+      provider: target.provider,
+      model,
+      ...(target.weight ? { weight: target.weight } : {}),
+    });
+  }
+  return normalized;
+}
+
+function isValidTarget(target: ModelRouterTarget, installed: ReadonlySet<string>): boolean {
+  return installed.has(target.provider);
+}
+
+/**
+ * Pick the next distribution target using weighted round-robin.
+ *
+ * `cursor` is a monotonically increasing per-router counter kept by the
+ * daemon. Weights expand into slots: [(a,2),(b,1)] yields a,a,b,a,a,b,...
+ */
+export function selectDistributionTarget(input: {
+  router: ModelRouter;
+  cursor: number;
+  installedProviders: ReadonlySet<string>;
+}): { target: ModelRouterTarget; cursor: number } | null {
+  const targets = normalizeRouterTargets(
+    input.router.targets.filter((target) => isValidTarget(target, input.installedProviders)),
+  );
+  if (targets.length === 0) return null;
+  const slots: ModelRouterTarget[] = [];
+  for (const target of targets) {
+    const weight = target.weight ?? 1;
+    for (let index = 0; index < weight; index += 1) slots.push(target);
+  }
+  const slot = ((input.cursor % slots.length) + slots.length) % slots.length;
+  return { target: slots[slot], cursor: input.cursor + 1 };
+}
+
+/**
+ * Next target after `current` in a fallback router. Returns null when the
+ * current target is last (or unknown), so the caller stops instead of looping.
+ *
+ * `skipProviders` marks providers whose failure is account-wide (a quota that
+ * hits every model of the provider). Those targets are skipped while a later
+ * target from another provider is still available.
+ */
+export function selectFallbackTarget(input: {
+  router: ModelRouter;
+  current: { provider: string; model: string | null } | null;
+  installedProviders: ReadonlySet<string>;
+  skipProviders?: ReadonlySet<string>;
+}): ModelRouterTarget | null {
+  const targets = normalizeRouterTargets(
+    input.router.targets.filter((target) => isValidTarget(target, input.installedProviders)),
+  );
+  if (targets.length === 0) return null;
+  if (!input.current) {
+    return firstAllowedTarget(targets, input.skipProviders);
+  }
+  const currentKey = `${input.current.provider}::${input.current.model ?? ""}`;
+  const index = targets.findIndex(
+    (target) => `${target.provider}::${target.model ?? ""}` === currentKey,
+  );
+  if (index < 0) {
+    // The chat is on a provider outside the router: start from the top.
+    return firstAllowedTarget(targets, input.skipProviders);
+  }
+  const remaining = targets.slice(index + 1);
+  if (remaining.length === 0) return null;
+  return firstAllowedTarget(remaining, input.skipProviders);
+}
+
+/** Keeps the stored order; only skips a provider when another one remains. */
+function firstAllowedTarget(
+  targets: readonly ModelRouterTarget[],
+  skipProviders: ReadonlySet<string> | undefined,
+): ModelRouterTarget | null {
+  if (!skipProviders || skipProviders.size === 0) return targets[0] ?? null;
+  return targets.find((target) => !skipProviders.has(target.provider)) ?? targets[0] ?? null;
+}
+
+const RETRYABLE_FAILURE_PATTERN =
+  /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|limit (?:reached|exceeded)|daily limit|hourly limit|free tier|out of (?:tokens|credits)|(?:^|[^\d])(?:402|429)(?:[^\d]|$))/i;
+
+/**
+ * A provider process that died mid-turn (helper crashed, transport dropped) is
+ * a transient local failure: retry the same provider instead of porting away.
+ */
+const PROVIDER_CRASH_PATTERN =
+  /(helper server exited|process exited|exited \(\d+\)|transport|econnreset|epipe|socket hang up|connection reset|terminated unexpectedly)/i;
+
+export function isProviderCrashFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  return text.length > 0 && PROVIDER_CRASH_PATTERN.test(text);
+}
+
+/**
+ * The provider's stored session holds a malformed tool call, so every request
+ * from it fails validation upstream. A fresh session (same provider and model)
+ * seeded with the transcript is the only way out.
+ */
+const SESSION_CORRUPTION_PATTERN =
+  /(tool_calls.*function\.arguments|must be a valid JSON object string|invalid_value)/i;
+
+export function isSessionCorruptionFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  return text.length > 0 && SESSION_CORRUPTION_PATTERN.test(text);
+}
+
+/**
+ * Classifies a provider failure as retryable on another target.
+ *
+ * Provider adapters surface free-form errors plus an optional numeric code, so
+ * this is a text classifier. It intentionally stays conservative: unknown
+ * failures (auth errors, bad model ids, crashes) do not trigger a fallback.
+ */
+export function isRetryableRouterFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  if (!text) return false;
+  return RETRYABLE_FAILURE_PATTERN.test(text);
+}

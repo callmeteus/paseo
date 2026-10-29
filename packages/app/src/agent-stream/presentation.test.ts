@@ -4,6 +4,7 @@ import { transformTimelineItem, type TimelineItemTransform } from "@/plugins/tim
 import type { InstalledPlugin } from "@/plugins/types";
 import {
   applyStreamEvent,
+  getStreamItemMessageId,
   hydrateStreamState,
   type StreamItem,
   type ToolCallItem,
@@ -13,7 +14,7 @@ import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { buildAgentStreamRenderModel } from "./model";
-import { createStreamPresentation, getStreamItemMessageId } from "./presentation";
+import { createStreamPresentation } from "./presentation";
 
 const runtime = {
   paseo: {},
@@ -97,7 +98,11 @@ function pluginData(items: StreamItem[]): unknown[] {
   return items.flatMap((item) => (item.kind === "plugin" ? [item.data] : []));
 }
 
-const presentationOptions = { level: "overview" as const, isTurnActive: true };
+const presentationOptions = {
+  display: "collapseToolCalls" as const,
+  expandedTurnHostIds: new Set<string>(),
+  isTurnActive: true,
+};
 
 function streamHarness(transform?: TimelineItemTransform) {
   let state: { tail: StreamItem[]; head: StreamItem[] } = { tail: [], head: [] };
@@ -581,5 +586,36 @@ describe("timeline presentation", () => {
       { ...source, text: "Please fix the voice chat." },
     ]);
     expect(projectTimelineItems([source], () => [])).toEqual([]);
+  });
+});
+
+describe("daemon goal context", () => {
+  it("hides the injected goal preamble from the transcript", () => {
+    const harness = streamHarness();
+    harness.send({
+      type: "timeline",
+      provider: "claude",
+      item: {
+        type: "user_message",
+        messageId: "message-goal",
+        text: "<paseo-goal>\nThe user set a persistent goal for this session.\n</paseo-goal>",
+      },
+    });
+    harness.send(assistant("Working on it."));
+
+    const texts = rows(harness.render()).flatMap((item) =>
+      item.kind === "user_message" || item.kind === "assistant_message" ? [item.text] : [],
+    );
+    expect(texts).toEqual(["Working on it."]);
+  });
+
+  it("strips the completion marker from the assistant message", () => {
+    const harness = streamHarness();
+    harness.send(assistant("All checks passed. <paseo-goal-complete>"));
+
+    const texts = rows(harness.render()).flatMap((item) =>
+      item.kind === "assistant_message" ? [item.text] : [],
+    );
+    expect(texts).toEqual(["All checks passed."]);
   });
 });

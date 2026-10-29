@@ -772,7 +772,7 @@ function CliAutomationExample() {
           <ShellPrompt>
             <span className="text-white">paseo ls</span>{" "}
             <span className="text-sky-300/75">--host</span>{" "}
-            <span className="text-white/75">devbox:6767</span>
+            <span className="text-white/75">devbox:17000</span>
           </ShellPrompt>
         </div>
       </div>
@@ -812,7 +812,7 @@ function SdkAutomationExample() {
       <span className="text-emerald-300/80">{'"@getpaseo/client"'}</span>;{"\n\n"}
       <span className="text-purple-300">const</span> client ={" "}
       <span className="text-sky-300">createPaseoClient</span>({"{"}
-      {"\n"} url: <span className="text-emerald-300/80">{'"ws://127.0.0.1:6767/ws"'}</span>,{"\n"}
+      {"\n"} url: <span className="text-emerald-300/80">{'"ws://127.0.0.1:17000/ws"'}</span>,{"\n"}
       {"}"});
       {"\n"}
       <span className="text-purple-300">await</span> client.

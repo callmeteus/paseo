@@ -106,6 +106,12 @@ export function toStoredAgentRecord(
       : null,
     internal: options?.internal,
     owner: agent.owner,
+    ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
+    ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
+    ...(agent.goal ? { goal: agent.goal } : {}),
+    ...(agent.portedTimeline
+      ? { portedTimeline: agent.portedTimeline as StoredAgentRecord["portedTimeline"] }
+      : {}),
   } satisfies StoredAgentRecord;
 }
 
@@ -149,6 +155,9 @@ export function toAgentPayload(
     labels: agent.labels,
     archivedAt: options?.archivedAt ?? null,
     ...(agent.internal ? { internal: true } : {}),
+    ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
+    ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
+    ...(agent.goal ? { goal: agent.goal } : {}),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -205,6 +214,20 @@ function buildStoredPersistenceHandle(
   return toAgentPersistenceHandle(validProviders, record.persistence);
 }
 
+function buildMigrationFields(record: StoredAgentRecord) {
+  return {
+    ...(record.migratedFrom ? { migratedFrom: record.migratedFrom } : {}),
+    ...(record.migratedTo ? { migratedTo: record.migratedTo } : {}),
+  };
+}
+
+function buildRecordFlags(record: StoredAgentRecord) {
+  return {
+    ...(record.internal ? { internal: true as const } : {}),
+    ...(typeof record.lastError === "string" ? { lastError: record.lastError } : {}),
+  };
+}
+
 export function buildStoredAgentPayload(
   record: StoredAgentRecord,
   validProviders: Iterable<AgentProvider>,
@@ -257,9 +280,9 @@ export function buildStoredAgentPayload(
     attentionReason: record.attentionReason ?? null,
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
-    ...(record.internal ? { internal: true } : {}),
+    ...buildMigrationFields(record),
+    ...buildRecordFlags(record),
     labels: normalizeLabels(record.labels),
-    ...(typeof record.lastError === "string" ? { lastError: record.lastError } : {}),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

@@ -1,3 +1,6 @@
+import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
+import { ensureAgentLoaded } from "./agent-loading.js";
+import { startAgentRun } from "./agent-prompt.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -55,8 +58,24 @@ import {
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
+import {
+  buildGoalStartPrompt,
+  buildGoalAutoContinuationPrompt,
+  formatGoalCleared,
+  formatGoalComplete,
+  formatGoalContinuationLimit,
+  formatGoalPaused,
+  formatGoalResumed,
+  formatGoalStatus,
+  isGoalCompleteText,
+  parseGoalCommand,
+  planGoalPrompt,
+  withDaemonSlashCommands,
+  type AgentGoal,
+} from "./agent-goal.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import { buildPortedTimelineRows, swapAgentProvider } from "./agent-provider-swap.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -191,7 +210,7 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
     provider: record.provider,
     cwd: record.cwd,
   };
-  // lastModeId is the last live mode — it also covers provider-side switches
+  // lastModeId is the last live mode â€” it also covers provider-side switches
   // that never reach record.config.modeId.
   const modeId = record.lastModeId ?? record.config?.modeId;
   if (modeId != null) config.modeId = modeId;
@@ -312,9 +331,30 @@ export interface CreateAgentOptions {
   env?: Record<string, string>;
   persistSession?: boolean;
   initialTitle?: string | null;
+  timeline?: AgentTimelineItem[];
+  timelineRows?: AgentTimelineRow[];
+  timelineNextSeq?: number;
   // undefined is an explicit decision: the agent never appears in the sidebar.
   workspaceId: string | undefined;
   owner?: AgentOwner;
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  /**
+   * Recreating an existing agent from its stored config must keep the timeline
+   * already primed for it (ported conversations have no provider history to
+   * re-stream). Brand-new agents leave this unset so stale state is discarded.
+   */
+  preserveTimeline?: boolean;
+  /** Rows written when the agent was ported; seeds the timeline after a reload. */
+  portedTimeline?: AgentTimelineRow[];
+  /** Daemon-level goal restored with a recreated agent. */
+  goal?: AgentGoal;
+}
+
+export interface GoalTurnPlan {
+  prompt: AgentPromptInput;
+  /** Shown in the timeline in place of the provider-facing prompt. */
+  submittedPromptText: string;
 }
 
 export interface AgentManagerOptions {
@@ -444,6 +484,13 @@ interface ManagedAgentBase {
    * User-defined labels for categorizing agents (e.g., { surface: "workspace" }).
    */
   labels: Record<string, string>;
+  /** Porting links carried from the stored record so live payloads keep them. */
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  /** Ported timeline rows, kept so snapshot persists don't drop them. */
+  portedTimeline?: AgentTimelineRow[];
+  /** Daemon-level goal shared by every provider (`/goal`). */
+  goal?: AgentGoal;
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -655,6 +702,52 @@ function buildExplicitTimelineSeedForRegister(
   };
 }
 
+function buildPortedAgentState(options?: {
+  migratedFrom?: StoredAgentRecord["migratedFrom"];
+  migratedTo?: StoredAgentRecord["migratedTo"];
+  portedTimeline?: AgentTimelineRow[];
+  goal?: AgentGoal;
+}): Pick<ManagedAgentBase, "migratedFrom" | "migratedTo" | "portedTimeline" | "goal"> {
+  return {
+    ...(options?.migratedFrom ? { migratedFrom: options.migratedFrom } : {}),
+    ...(options?.migratedTo ? { migratedTo: options.migratedTo } : {}),
+    ...(options?.portedTimeline ? { portedTimeline: options.portedTimeline } : {}),
+    ...(options?.goal ? { goal: options.goal } : {}),
+  };
+}
+
+function resolveRegistrationTimelineSeed(input: {
+  now: Date;
+  explicit: SeedAgentTimelineOptions | null;
+  durable: SeedAgentTimelineOptions | null;
+  portedTimeline: readonly AgentTimelineRow[] | undefined;
+  timelineAlreadyPrimed: boolean;
+}): {
+  seed: SeedAgentTimelineOptions | null;
+  hasRows: boolean;
+  portedRows: readonly AgentTimelineRow[] | null;
+} {
+  const portedRows =
+    !input.explicit && !input.timelineAlreadyPrimed && input.portedTimeline?.length
+      ? input.portedTimeline
+      : null;
+  const portedSeed = portedRows
+    ? {
+        rows: portedRows,
+        nextSeq: (portedRows.at(-1)?.seq ?? 0) + 1,
+        timestamp: input.now.toISOString(),
+      }
+    : null;
+  return {
+    seed: input.explicit ?? input.durable ?? portedSeed,
+    hasRows:
+      input.timelineAlreadyPrimed ||
+      portedSeed !== null ||
+      (input.durable != null && (input.durable.nextSeq ?? 1) > 1),
+    portedRows,
+  };
+}
+
 function buildImportedTimelineRows(entries: readonly ImportedTimelineEntry[]): AgentTimelineRow[] {
   const rows: AgentTimelineRow[] = [];
   for (const entry of entries) {
@@ -754,10 +847,17 @@ export class AgentManager {
   private readonly registry?: AgentStorage;
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
+  /** Daemon-off `/goal` auto-continuation state, keyed by agent id. */
+  private readonly goalContinuationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly goalAutoContinueCounts = new Map<string, number>();
+  private readonly goalContinuationInFlight = new Set<string>();
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
+  private readonly portedTimelineRepairs = new Set<string>();
   private readonly reloadedSessionCloses = new WeakMap<AgentSession, Promise<void>>();
+  private readonly runtimeCleanupIdentities = new WeakMap<AgentSession, object>();
+  private readonly collectingRuntimes = new Set<string>();
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
@@ -890,7 +990,7 @@ export class AgentManager {
   /**
    * Capability token the daemon's own MCP clients must present to the Agent MCP
    * endpoint when a daemon password is configured. Read by the per-client
-   * session to authenticate its own MCP connection. Stays in the daemon — never
+   * session to authenticate its own MCP connection. Stays in the daemon â€” never
    * sent to remote clients.
    */
   getMcpAuthToken(): string | null {
@@ -1130,6 +1230,12 @@ export class AgentManager {
   }
 
   async listDraftCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
+    return withDaemonSlashCommands(await this.listProviderDraftCommands(config));
+  }
+
+  private async listProviderDraftCommands(
+    config: AgentSessionConfig,
+  ): Promise<AgentSlashCommand[]> {
     const normalizedConfig = await this.normalizeConfig(config, { resolveDefaultModel: false });
     const client = this.requireClient(normalizedConfig.provider);
     if (!normalizedConfig.model) {
@@ -1222,12 +1328,44 @@ export class AgentManager {
   async getTimelineRows(id: string): Promise<AgentTimelineRow[]> {
     this.requireAgent(id);
     if (this.durableTimelineStore) {
+      const committed = await this.durableTimelineStore.getCommittedRows(id);
+      const repaired = committed.length === 0 ? await this.repairPortedTimelineIfEmpty(id) : null;
       return projectTimelineRows({
-        rows: await this.durableTimelineStore.getCommittedRows(id),
+        rows: repaired ?? committed,
         mode: "projected",
       }).map((entry) => Object.assign({ seq: entry.seqEnd }, entry));
     }
     return this.timelineStore.getRows(id);
+  }
+
+  /**
+   * Ports created before the durable seed fix have migration metadata but no
+   * committed rows, so the app shows an empty chat. Copy the source agent's
+   * committed rows (it is archived, not deleted) and append the porting marker
+   * once, then serve them from there on.
+   */
+  private async repairPortedTimelineIfEmpty(id: string): Promise<AgentTimelineRow[] | null> {
+    if (!this.durableTimelineStore || !this.registry) return null;
+    if (this.portedTimelineRepairs.has(id)) return null;
+    this.portedTimelineRepairs.add(id);
+    try {
+      const record = await this.registry.get(id);
+      const migratedFrom = record?.migratedFrom;
+      if (!record || !migratedFrom) return null;
+      const sourceRows = await this.durableTimelineStore.getCommittedRows(migratedFrom.agentId);
+      if (sourceRows.length === 0) return null;
+      const rows = buildPortedTimelineRows({
+        previousRows: sourceRows,
+        fromProvider: migratedFrom.provider,
+        toProvider: record.provider,
+        portedAt: migratedFrom.portedAt ?? new Date().toISOString(),
+      });
+      await this.durableTimelineStore.bulkInsert(id, rows);
+      return rows;
+    } catch (error) {
+      this.logger.warn({ err: error, agentId: id }, "Failed to repair ported agent timeline");
+      return null;
+    }
   }
 
   fetchTimeline(id: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
@@ -1291,7 +1429,9 @@ export class AgentManager {
       config = { ...request.config, internal: config.internal };
       options = { ...options, env: request.env };
     }
-    await this.deleteAgentState(resolvedAgentId);
+    if (!options.preserveTimeline) {
+      await this.deleteAgentState(resolvedAgentId);
+    }
     const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
       config,
       resolvedAgentId,
@@ -1317,8 +1457,14 @@ export class AgentManager {
     const agent = await this.registerSession(session, storedConfig, resolvedAgentId, {
       labels: options.labels,
       initialTitle: options.initialTitle,
+      timeline: options.timeline,
+      timelineRows: options.timelineRows,
+      timelineNextSeq: options.timelineNextSeq,
       workspaceId: options.workspaceId,
       owner: options.owner,
+      migratedFrom: options.migratedFrom,
+      migratedTo: options.migratedTo,
+      goal: options.goal,
       historyPrimed: true,
     });
     if (!agent.internal) {
@@ -1351,6 +1497,10 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       attention?: AttentionState;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1383,6 +1533,10 @@ export class AgentManager {
       workspaceId?: string;
       owner?: AgentOwner;
       attention?: AttentionState;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
     resumeOptions?: AgentResumeSessionOptions,
   ): Promise<ManagedAgent> {
@@ -1531,7 +1685,7 @@ export class AgentManager {
   // Hot-reload an active agent session with config overrides. By default the
   // in-memory timeline is preserved (used for voice-mode toggles and similar
   // config swaps). When `rehydrateFromDisk` is set, the timeline is wiped so a
-  // new epoch is minted and provider history is re-streamed — this is what the
+  // new epoch is minted and provider history is re-streamed â€” this is what the
   // user-facing "Reload agent" action wants when the on-disk session was
   // mutated outside Paseo.
   reloadAgentSession(
@@ -1633,6 +1787,9 @@ export class AgentManager {
         lastUsage: preservedLastUsage,
         lastError: preservedLastError,
         attention: preservedAttention,
+        migratedFrom: existing.migratedFrom,
+        migratedTo: existing.migratedTo,
+        goal: existing.goal,
         restoring: true,
       });
     } catch (error) {
@@ -1747,6 +1904,64 @@ export class AgentManager {
     });
   }
 
+  /** Capture runtime capabilities without handing lifecycle ownership to the collector. */
+  getRuntimeCleanupCandidates(): RuntimeCleanupCandidate[] {
+    if (!this.registry) return [];
+    const candidates: RuntimeCleanupCandidate[] = [];
+    for (const agent of this.agents.values()) {
+      const updatedAt = agent.updatedAt;
+      let identity = this.runtimeCleanupIdentities.get(agent.session);
+      if (!identity) {
+        identity = Object.freeze({});
+        this.runtimeCleanupIdentities.set(agent.session, identity);
+      }
+      const isEligible = () =>
+        this.agents.get(agent.id) === agent &&
+        agent.updatedAt === updatedAt &&
+        this.runtimeHasNoPendingWork(agent);
+      candidates.push({
+        identity,
+        agentId: agent.id,
+        parentAgentId: getParentAgentIdFromLabels(agent.labels) ?? undefined,
+        provider: agent.provider,
+        sessionId: agent.persistence?.sessionId ?? null,
+        lastActivityAt: updatedAt.getTime(),
+        isEligible,
+        canStopRuntime: agent.session.canStopRuntime?.bind(agent.session),
+        closeIfEligible: async (revalidate) => {
+          if (!agent.persistence?.sessionId) return false;
+          // Block prompt admission before entering the close lane. A skipped close also
+          // releases this barrier, so the waiting prompt keeps the existing runtime.
+          this.collectingRuntimes.add(agent.id);
+          try {
+            return await this.runLifecycleMutation(agent.id, () =>
+              this.closeAgentRuntime(agent.id, () => isEligible() && revalidate()),
+            );
+          } finally {
+            this.collectingRuntimes.delete(agent.id);
+          }
+        },
+      });
+    }
+    return candidates;
+  }
+
+  private runtimeHasNoPendingWork(agent: LiveManagedAgent): boolean {
+    return (
+      agent.lifecycle === "idle" &&
+      !agent.internal &&
+      agent.activeForegroundTurnId === null &&
+      !this.runs.hasRun(agent.id) &&
+      !agent.pendingReplacement &&
+      agent.pendingPermissions.size === 0 &&
+      agent.inFlightPermissionResponses.size === 0 &&
+      (this.collectingRuntimes.has(agent.id) || !this.lifecycleMutationTails.has(agent.id)) &&
+      !this.foregroundMutationTails.has(agent.id) &&
+      !this.sessionEventTails.has(agent.id) &&
+      !this.providerSubagents.list(agent.id).some((child) => child.status === "running")
+    );
+  }
+
   closeAgent(agentId: string): Promise<void> {
     const existing = this.inFlightAgentCloses.get(agentId);
     if (existing) {
@@ -1767,7 +1982,7 @@ export class AgentManager {
     return close;
   }
 
-  private async closeAgentRuntime(agentId: string): Promise<void> {
+  private async closeAgentRuntime(agentId: string, canClose?: () => boolean): Promise<boolean> {
     const agent = this.requireAgent(agentId);
     this.logger.trace(
       {
@@ -1782,6 +1997,7 @@ export class AgentManager {
       "agent.manager.close.start",
     );
     await this.drainSessionEvents(agentId);
+    if (canClose && !canClose()) return false;
     // Retain ownership until shutdown succeeds. A failed close may still own a
     // native writer, so publishing a resumable closed snapshot would orphan it.
     await agent.session.close();
@@ -1807,6 +2023,7 @@ export class AgentManager {
     if (persistError !== undefined) {
       throw persistError;
     }
+    return true;
   }
 
   private cancelRunningProviderSubagents(parentAgentId: string): void {
@@ -2453,23 +2670,222 @@ export class AgentManager {
   }
 
   /**
-   * Try to run a prompt out-of-band — i.e. without allocating a foreground turn
+   * Daemon-level `/goal`, provider-agnostic by design: the objective lives on
+   * the agent record and is re-sent as a context preamble with each turn.
+   *
+   * `/goal <objective>` returns a rewritten prompt so the turn starts
+   * immediately; control subcommands return null and are claimed by
+   * `tryRunOutOfBand` without interrupting a running turn.
+   */
+  async planGoalTurn(agentId: string, prompt: AgentPromptInput): Promise<GoalTurnPlan | null> {
+    if (typeof prompt !== "string") return null;
+    const command = parseGoalCommand(prompt);
+    if (command?.kind === "set") {
+      const agent = this.requireSessionAgent(agentId);
+      const goal = this.writeAgentGoal(agent, { objective: command.objective, status: "active" });
+      this.goalAutoContinueCounts.set(agentId, 0);
+      this.cancelGoalContinuationTimer(agentId);
+      return { prompt: buildGoalStartPrompt(goal), submittedPromptText: prompt };
+    }
+    if (command) return null;
+    const agent = this.agents.get(agentId);
+    if (!agent?.goal) return null;
+    // Agent-to-agent envelopes must reach the provider untouched.
+    if (parseAgentMessage(prompt)) return null;
+    const plan = planGoalPrompt({ prompt, goal: agent.goal, startedGoal: null });
+    // A real user message arrived: the auto-continuation count starts over.
+    if (plan) this.goalAutoContinueCounts.delete(agentId);
+    return plan;
+  }
+
+  private writeAgentGoal(
+    agent: ActiveManagedAgent,
+    input: { objective: string; status: AgentGoal["status"] },
+  ): AgentGoal {
+    const now = new Date().toISOString();
+    const goal: AgentGoal = {
+      objective: input.objective,
+      status: input.status,
+      createdAt: agent.goal?.createdAt ?? now,
+      updatedAt: now,
+    };
+    agent.goal = goal;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    return goal;
+  }
+
+  private clearAgentGoal(agent: ActiveManagedAgent): void {
+    if (!agent.goal) return;
+    agent.goal = undefined;
+    this.goalAutoContinueCounts.delete(agent.id);
+    this.cancelGoalContinuationTimer(agent.id);
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+  }
+
+  /**
+   * Goal auto-continuation: when a foreground turn completes while the goal is
+   * still active, start another continuation turn so the agent keeps working
+   * toward the objective (the provider would otherwise stop at "next turn").
+   * The model is asked to end its final message with the goal-complete
+   * marker, which clears the goal and stops the loop. Interrupted, failed, and
+   * replaced turns never auto-continue, and the count is capped to bound a
+   * goal that never terminates.
+   */
+  private static readonly MAX_GOAL_AUTO_CONTINUATIONS = 50;
+  private static readonly GOAL_CONTINUATION_DELAY_MS = 1_500;
+
+  private scheduleGoalContinuation(agent: ActiveManagedAgent): void {
+    const goal = agent.goal;
+    if (!goal || goal.status !== "active") return;
+    const agentId = agent.id;
+    if (this.goalContinuationTimers.has(agentId) || this.goalContinuationInFlight.has(agentId)) {
+      return;
+    }
+    if (this.hasInFlightRun(agentId) || agent.pendingReplacement) return;
+    const previousCount = this.goalAutoContinueCounts.get(agentId) ?? 0;
+    if (previousCount >= AgentManager.MAX_GOAL_AUTO_CONTINUATIONS) {
+      this.goalAutoContinueCounts.delete(agentId);
+      void this.appendTimelineItem(agentId, {
+        type: "notification",
+        level: "warning",
+        message: formatGoalContinuationLimit(AgentManager.MAX_GOAL_AUTO_CONTINUATIONS),
+      });
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.goalContinuationTimers.delete(agentId);
+      void this.fireGoalContinuation(agentId, goal);
+    }, AgentManager.GOAL_CONTINUATION_DELAY_MS);
+    timer.unref?.();
+    this.goalContinuationTimers.set(agentId, timer);
+  }
+
+  private cancelGoalContinuationTimer(agentId: string): void {
+    const timer = this.goalContinuationTimers.get(agentId);
+    if (timer) {
+      clearTimeout(timer);
+      this.goalContinuationTimers.delete(agentId);
+    }
+  }
+
+  private async fireGoalContinuation(agentId: string, scheduledGoal: AgentGoal): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+    // The goal may have been set, paused, or cleared between scheduling and firing.
+    const goal = agent.goal ?? scheduledGoal;
+    if (goal.status !== "active") return;
+    if (agent.lifecycle !== "idle") return;
+    if (this.goalContinuationInFlight.has(agentId)) return;
+    if (this.hasInFlightRun(agentId) || agent.pendingReplacement) return;
+    const lastAssistantText = await this.getLastAssistantMessage(agentId);
+    if (lastAssistantText && isGoalCompleteText(lastAssistantText)) {
+      this.clearAgentGoal(agent);
+      this.goalAutoContinueCounts.delete(agentId);
+      await this.appendTimelineItem(agentId, {
+        type: "notification",
+        level: "info",
+        message: formatGoalComplete(goal),
+      });
+      return;
+    }
+    this.goalContinuationInFlight.add(agentId);
+    this.goalAutoContinueCounts.set(agentId, (this.goalAutoContinueCounts.get(agentId) ?? 0) + 1);
+    try {
+      await startAgentRun(this, agentId, buildGoalAutoContinuationPrompt(goal), this.logger);
+    } catch (error) {
+      this.logger.warn(
+        {
+          agentId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "agent.manager.goal.continuation_failed",
+      );
+    } finally {
+      this.goalContinuationInFlight.delete(agentId);
+    }
+  }
+
+  private buildGoalOutOfBandHandler(
+    agent: ActiveManagedAgent,
+    prompt: AgentPromptInput,
+  ): { run(context: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+    if (typeof prompt !== "string") return null;
+    const command = parseGoalCommand(prompt);
+    if (!command || command.kind === "set") return null;
+    return {
+      run: async ({ emit }) => {
+        let text: string;
+        switch (command.kind) {
+          case "status":
+            text = formatGoalStatus(agent.goal);
+            break;
+          case "pause": {
+            const goal = agent.goal;
+            text = goal
+              ? formatGoalPaused(
+                  this.writeAgentGoal(agent, { objective: goal.objective, status: "paused" }),
+                )
+              : formatGoalStatus(undefined);
+            break;
+          }
+          case "resume": {
+            const goal = agent.goal;
+            text = goal
+              ? formatGoalResumed(
+                  this.writeAgentGoal(agent, { objective: goal.objective, status: "active" }),
+                )
+              : formatGoalStatus(undefined);
+            break;
+          }
+          case "clear":
+            text = agent.goal ? formatGoalCleared() : formatGoalStatus(undefined);
+            this.clearAgentGoal(agent);
+            break;
+        }
+        emit({
+          type: "timeline",
+          provider: agent.provider,
+          item: { type: "notification", level: "info", message: text },
+        });
+      },
+    };
+  }
+
+  /**
+   * Try to run a prompt out-of-band â€” i.e. without allocating a foreground turn
    * and without canceling any active turn. Returns true when the session
    * accepted the prompt as a side-effect command (e.g. /goal pause). Events
    * emitted by the handler flow through dispatchStream so they persist and
    * broadcast like normal timeline events.
    */
-  tryRunOutOfBand(agentId: string, prompt: AgentPromptInput, options?: AgentRunOptions): boolean {
+  async tryRunOutOfBand(
+    agentId: string,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<boolean> {
+    if (this.collectingRuntimes.has(agentId) || !this.agents.has(agentId)) {
+      await this.waitForAgentClose(agentId);
+      await ensureAgentLoaded(agentId, {
+        agentManager: this,
+        agentStorage: this.requireRegistry(),
+        logger: this.logger,
+      });
+    }
     const agent = this.requireSessionAgent(agentId);
     // Providers parse slash commands from the raw text, so a command another agent sent
     // must reach them without its sender envelope.
     const agentMessage = typeof prompt === "string" ? parseAgentMessage(prompt) : null;
-    const handler = agent.session.tryHandleOutOfBand?.(
-      agentMessage?.source ? agentMessage.text : prompt,
-    );
+    const commandText = agentMessage?.source ? agentMessage.text : prompt;
+    // `/goal` is daemon-level so it behaves identically on every harness.
+    const handler =
+      this.buildGoalOutOfBandHandler(agent, commandText) ??
+      agent.session.tryHandleOutOfBand?.(commandText);
     if (!handler) {
       return false;
     }
+    this.touchUpdatedAt(agent);
     if (options?.clientMessageId) {
       this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted");
       this.emitState(agent);
@@ -2489,7 +2905,7 @@ export class AgentManager {
       }
       this.dispatchStream(agent.id, event, { timestamp: new Date().toISOString() });
     };
-    void (async () => {
+    void this.runForegroundMutation(agentId, async () => {
       try {
         await handler.run({ emit: dispatch });
       } catch (error) {
@@ -2500,7 +2916,7 @@ export class AgentManager {
           item: { type: "assistant_message", text: `[Error] ${text}` },
         });
       }
-    })();
+    });
     return true;
   }
 
@@ -2571,6 +2987,7 @@ export class AgentManager {
       if (options?.clientMessageId) {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "rejected", {
           messageId: options.clientMessageId,
+          text: options.submittedPromptText,
         });
       }
       await this.handleStreamEvent(agent, {
@@ -2584,11 +3001,27 @@ export class AgentManager {
     }
   }
 
+  private async *streamAfterRuntimeCollection(
+    agentId: string,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): AsyncGenerator<AgentStreamEvent> {
+    await this.waitForAgentClose(agentId);
+    await ensureAgentLoaded(agentId, {
+      agentManager: this,
+      agentStorage: this.requireRegistry(),
+      logger: this.logger,
+    });
+    yield* this.streamAgent(agentId, prompt, options);
+  }
+
   streamAgent(
     agentId: string,
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): AsyncGenerator<AgentStreamEvent> {
+    if (this.collectingRuntimes.has(agentId) || (!this.agents.has(agentId) && this.registry))
+      return this.streamAfterRuntimeCollection(agentId, prompt, options);
     const existingAgent = this.requireSessionAgent(agentId);
     this.logger.trace(
       {
@@ -2664,6 +3097,7 @@ export class AgentManager {
       if (options?.clientMessageId) {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, "accepted", {
           messageId: options.clientMessageId,
+          text: options.submittedPromptText,
           turnId,
           providerMessageId:
             stagedSubmittedPromptEcho?.item.type === "user_message"
@@ -3133,6 +3567,8 @@ export class AgentManager {
 
   private async cancelAgentRunNow(agentId: string): Promise<AgentRunCancellationResult> {
     const agent = this.requireSessionAgent(agentId);
+    // A user interrupt wins over any scheduled goal auto-continuation.
+    this.cancelGoalContinuationTimer(agentId);
     const run =
       this.runs.getRun(agentId) ??
       (agent.lifecycle === "running" ? this.runs.trackAutonomousRun(agentId, null) : null);
@@ -3575,6 +4011,10 @@ export class AgentManager {
       publishWhenReady?: boolean;
       workspaceId?: string;
       owner?: AgentOwner;
+      migratedFrom?: StoredAgentRecord["migratedFrom"];
+      migratedTo?: StoredAgentRecord["migratedTo"];
+      portedTimeline?: AgentTimelineRow[];
+      goal?: AgentGoal;
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -3710,6 +4150,7 @@ export class AgentManager {
           persistence?: AgentPersistenceHandle;
           createdAt?: Date;
           updatedAt?: Date;
+          portedTimeline?: AgentTimelineRow[];
         }
       | undefined;
   }): Promise<{ durableTimelineHasRows: boolean }> {
@@ -3721,12 +4162,22 @@ export class AgentManager {
     const durableTimelineSeed = shouldSeedFromDurable
       ? await this.loadCommittedTimelineSeed(agentId, now)
       : null;
-    const durableTimelineHasRows =
-      timelineAlreadyPrimed ||
-      (durableTimelineSeed != null && (durableTimelineSeed.nextSeq ?? 1) > 1);
-    const timelineSeed = explicitTimelineSeed ?? durableTimelineSeed;
+    const {
+      seed: timelineSeed,
+      hasRows: durableTimelineHasRows,
+      portedRows,
+    } = resolveRegistrationTimelineSeed({
+      now,
+      explicit: explicitTimelineSeed,
+      durable: durableTimelineSeed,
+      portedTimeline: options?.portedTimeline,
+      timelineAlreadyPrimed,
+    });
     if (timelineSeed || !this.timelineStore.has(agentId)) {
       this.timelineStore.initialize(agentId, timelineSeed ?? { timestamp: now.toISOString() });
+    }
+    if (portedRows) {
+      this.enqueueDurableTimelineBulkInsert(agentId, portedRows);
     }
     if (options?.timelineRows?.length) {
       this.enqueueDurableTimelineBulkInsert(agentId, options.timelineRows);
@@ -3753,6 +4204,10 @@ export class AgentManager {
           persistence?: AgentPersistenceHandle;
           workspaceId?: string;
           owner?: AgentOwner;
+          migratedFrom?: StoredAgentRecord["migratedFrom"];
+          migratedTo?: StoredAgentRecord["migratedTo"];
+          portedTimeline?: AgentTimelineRow[];
+          goal?: AgentGoal;
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -3793,6 +4248,7 @@ export class AgentManager {
       attention: resolveInitialAttention(options?.attention),
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
+      ...buildPortedAgentState(options),
     } as ActiveManagedAgent;
   }
 
@@ -4033,9 +4489,71 @@ export class AgentManager {
     return this.registry;
   }
 
+  async swapProvider(
+    agentId: string,
+    targetProvider: string,
+    targetModel: string | null,
+    options?: { archivePrevious?: boolean; force?: boolean },
+  ): Promise<{ newAgentId: string; previousAgentId: string }> {
+    const registry = this.requireRegistry();
+    let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    if (previousRows.length === 0) {
+      // A chat that was never opened in this daemon has no live rows. Without
+      // the provider history the port would silently drop the transcript.
+      try {
+        await this.hydrateTimelineFromProvider(agentId, {
+          force: true,
+          broadcast: false,
+          broadcastTimeline: false,
+        });
+      } catch (error) {
+        this.logger.warn({ err: error, agentId }, "Failed to hydrate timeline before porting");
+      }
+      previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    }
+    const previousItems = previousRows.map((row) => row.item);
+    const existing = await registry.get(agentId);
+    const portedAt = new Date().toISOString();
+    const portedRows = buildPortedTimelineRows({
+      previousRows,
+      fromProvider: existing?.provider,
+      toProvider: targetProvider,
+      portedAt,
+    });
+    const result = await swapAgentProvider({
+      storage: registry,
+      agentId,
+      targetProvider,
+      targetModel,
+      previousItems,
+      portedTimeline: portedRows,
+      archivePrevious: options?.archivePrevious,
+      force: options?.force,
+      logger: this.logger,
+    });
+    this.timelineStore.initialize(result.newAgentId, {
+      rows: portedRows,
+      nextSeq: portedRows.length + 1,
+      timestamp: portedAt,
+    });
+    // The durable store is what the client reads for history, so seeding only
+    // the in-memory store leaves the ported agent looking empty in the UI.
+    if (this.durableTimelineStore && portedRows.length > 0) {
+      try {
+        await this.durableTimelineStore.bulkInsert(result.newAgentId, portedRows);
+      } catch (error) {
+        this.logger.error(
+          { err: error, agentId: result.newAgentId, rowCount: portedRows.length },
+          "Failed to seed durable timeline for ported agent",
+        );
+      }
+    }
+    return result;
+  }
+
   /**
    * Provider-side mode switches (ACP current_mode_update, in-session
-   * commands, permission-driven transitions) must land in config.modeId too —
+   * commands, permission-driven transitions) must land in config.modeId too â€”
    * reloadAgentSession and the persisted record derive the resumed session's
    * mode from it, so leaving it stale silently downgrades the mode on resume.
    */
@@ -4343,6 +4861,9 @@ export class AgentManager {
         this.runs.settleTerminalRun(agent.id, eventTurnId);
         if (isForegroundEvent) {
           this.finalizeForegroundTurn(agent, eventTurnId);
+          if (event.type === "turn_completed") {
+            this.scheduleGoalContinuation(agent);
+          }
         }
       }
 
@@ -4804,11 +5325,16 @@ export class AgentManager {
     prompt: AgentPromptInput,
     clientMessageId: string,
     outcome: "accepted" | "rejected",
-    options?: { messageId?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      messageId?: string;
+      providerMessageId?: string;
+      turnId?: string;
+      text?: string;
+    },
   ): void {
     const items = projectAgentMessages({
       type: "user_message",
-      text: submittedPromptText(prompt),
+      text: options?.text ?? submittedPromptText(prompt),
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
     });
@@ -5279,7 +5805,7 @@ export class AgentManager {
       });
       return (catalog.models.find((model) => model.isDefault) ?? catalog.models[0])?.id;
     } catch {
-      // Provider may not support model listing — leave model undefined.
+      // Provider may not support model listing â€” leave model undefined.
       return undefined;
     }
   }
@@ -5496,7 +6022,7 @@ export function commandMayHaveChangedExternalState(command: string): boolean {
   return (
     // GitHub PR operations (merge, close, create, edit, comment, review)
     /\bgh\s+pr\s+(merge|close|create|edit|comment|review)\b/.test(normalized) ||
-    // Pushes to remote — local refs unchanged, but remote state (PR checks,
+    // Pushes to remote â€” local refs unchanged, but remote state (PR checks,
     // mergeable status) may shift immediately after.
     /\bgit\s+push\b/.test(normalized) ||
     // Fetches update refs/remotes/ which our watchers do not watch, so

@@ -16,15 +16,15 @@ import {
 
 describe("connection URI parsing", () => {
   test("round-trips a tcp host and port", () => {
-    const parsed = parseConnectionUri("tcp://localhost:6767");
+    const parsed = parseConnectionUri("tcp://localhost:17000");
 
     expect(parsed).toEqual({
       host: "localhost",
-      port: 6767,
+      port: 17000,
       isIpv6: false,
       useTls: false,
     });
-    expect(serializeConnectionUri(parsed)).toBe("tcp://localhost:6767");
+    expect(serializeConnectionUri(parsed)).toBe("tcp://localhost:17000");
   });
 
   test("round-trips an SSL-enabled tcp host and port", () => {
@@ -40,15 +40,15 @@ describe("connection URI parsing", () => {
   });
 
   test("round-trips an IPv6 host", () => {
-    const parsed = parseConnectionUri("tcp://[::1]:6767?ssl=true");
+    const parsed = parseConnectionUri("tcp://[::1]:17000?ssl=true");
 
     expect(parsed).toEqual({
       host: "::1",
-      port: 6767,
+      port: 17000,
       isIpv6: true,
       useTls: true,
     });
-    expect(serializeConnectionUri(parsed)).toBe("tcp://[::1]:6767?ssl=true");
+    expect(serializeConnectionUri(parsed)).toBe("tcp://[::1]:17000?ssl=true");
   });
 
   test("rejects a missing port", () => {
@@ -56,29 +56,29 @@ describe("connection URI parsing", () => {
   });
 
   test("rejects an invalid scheme", () => {
-    expect(() => parseConnectionUri("http://localhost:6767")).toThrow(
+    expect(() => parseConnectionUri("http://localhost:17000")).toThrow(
       "Connection URI protocol must be tcp:",
     );
   });
 
   test("parses password without including it in the public serializer", () => {
-    const parsed = parseConnectionUri("tcp://localhost:6767?ssl=true&password=secret");
+    const parsed = parseConnectionUri("tcp://localhost:17000?ssl=true&password=secret");
 
     expect(parsed).toEqual({
       host: "localhost",
-      port: 6767,
+      port: 17000,
       isIpv6: false,
       useTls: true,
       password: "secret",
     });
-    expect(serializeConnectionUri(parsed)).toBe("tcp://localhost:6767?ssl=true");
+    expect(serializeConnectionUri(parsed)).toBe("tcp://localhost:17000?ssl=true");
     expect(serializeConnectionUriForStorage(parsed)).toBe(
-      "tcp://localhost:6767?ssl=true&password=secret",
+      "tcp://localhost:17000?ssl=true&password=secret",
     );
   });
 
   test("rejects userinfo passwords", () => {
-    expect(() => parseConnectionUri("tcp://:secret@localhost:6767?ssl=true")).toThrow(
+    expect(() => parseConnectionUri("tcp://:secret@localhost:17000?ssl=true")).toThrow(
       "Connection URI userinfo is not supported",
     );
   });
@@ -92,8 +92,8 @@ describe("daemon websocket URLs", () => {
   });
 
   test("uses wss for non-443 ports when TLS is enabled", () => {
-    expect(buildDaemonWebSocketUrl("example.com:6767", { useTls: true })).toBe(
-      "wss://example.com:6767/ws",
+    expect(buildDaemonWebSocketUrl("example.com:17000", { useTls: true })).toBe(
+      "wss://example.com:17000/ws",
     );
   });
 });
@@ -168,7 +168,7 @@ describe("relay websocket URLs", () => {
   test("uses wss for non-443 ports when TLS is enabled", () => {
     const url = new URL(
       buildRelayWebSocketUrl({
-        endpoint: "relay.paseo.sh:6767",
+        endpoint: "relay.paseo.sh:17000",
         useTls: true,
         serverId: "srv_test",
         role: "client",

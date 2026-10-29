@@ -7,10 +7,47 @@ const providerUsageLabels = {
   session: { label: "Session", key: "providerUsage.labels.session" },
   weekly: { label: "Weekly", key: "providerUsage.labels.weekly" },
   monthly: { label: "Monthly", key: "providerUsage.labels.monthly" },
+  rolling: { label: "Rolling", key: "providerUsage.labels.rolling" },
   code_review: { label: "Code review", key: "providerUsage.labels.codeReview" },
   credits: { label: "Credits", key: "providerUsage.labels.credits" },
   monthly_credits: { label: "Monthly credits", key: "providerUsage.labels.monthlyCredits" },
+  spent: { label: "Spent", key: "providerUsage.labels.spent" },
+  tokens: { label: "Tokens", key: "providerUsage.labels.tokens" },
 } as const;
+
+const usageDetailLabels: Record<string, string> = {
+  sessions: "providerUsage.details.sessions",
+  input: "providerUsage.details.input",
+  output: "providerUsage.details.output",
+  prompts: "providerUsage.details.prompts",
+  steps: "providerUsage.details.steps",
+  cacheRead: "providerUsage.details.cacheRead",
+  from: "providerUsage.details.since",
+};
+
+export function formatUsageDetailLabel(id: string, label: string, t: TFunction = i18n.t): string {
+  const key = usageDetailLabels[id];
+  return key ? t(key) : label;
+}
+
+export function formatUsagePlanLabel(label: string, t: TFunction = i18n.t): string {
+  return label === "Local" ? t("providerUsage.plan.local") : label;
+}
+
+const usageSourceLabels: Record<string, string> = {
+  "opencode-local": "providerUsage.sources.opencodeLocal",
+  "kilo-local": "providerUsage.sources.kiloLocal",
+  "cline-local": "providerUsage.sources.clineLocal",
+};
+
+export function formatUsageSourceLabel(
+  sourceId: string,
+  label: string,
+  t: TFunction = i18n.t,
+): string {
+  const key = usageSourceLabels[sourceId];
+  return key ? t(key) : label;
+}
 
 export function formatProviderUsageLabel(id: string, label: string, t: TFunction = i18n.t): string {
   const reviewPrefix = "Code review · ";

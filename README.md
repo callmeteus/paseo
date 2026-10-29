@@ -123,14 +123,14 @@ Run the Paseo daemon and self-hosted web UI in Docker:
 
 ```bash
 docker run -d --name paseo \
-  -p 6767:6767 \
+  -p 17000:17000 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
   ghcr.io/getpaseo/paseo:latest
 ```
 
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+Open `http://localhost:17000` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
 
 ## CLI
 
@@ -145,7 +145,7 @@ paseo attach abc123                # stream live output
 paseo send abc123 "also add tests" # follow-up task
 
 # run on a remote daemon; --cwd is a path on that host
-paseo run --host workstation.local:6767 --cwd /workspace "run the full test suite"
+paseo run --host workstation.local:17000 --cwd /workspace "run the full test suite"
 ```
 
 See the [full CLI reference](https://paseo.sh/docs/cli) for more.
@@ -157,7 +157,7 @@ Build issue integrations, dashboards, and orchestration services with `@getpaseo
 ```ts
 import { createPaseoClient } from "@getpaseo/client";
 
-const client = createPaseoClient({ url: "ws://127.0.0.1:6767/ws" });
+const client = createPaseoClient({ url: "ws://127.0.0.1:17000/ws" });
 await client.connect();
 
 const agent = await client.agents.create({

@@ -6,7 +6,7 @@ import { runHooksCommand } from "./hooks.js";
 const hookEnv = {
   PASEO_TERMINAL_ID: "terminal-1",
   PASEO_ACTIVITY_TOKEN: "token-1",
-  PASEO_TERMINAL_ACTIVITY_URL: "http://127.0.0.1:6767/api/terminal-activity",
+  PASEO_TERMINAL_ACTIVITY_URL: "http://127.0.0.1:17000/api/terminal-activity",
 };
 
 function inputFrom(value: string) {

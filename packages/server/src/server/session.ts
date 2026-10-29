@@ -72,6 +72,7 @@ import {
   resolveFirstAgentPromptTitle,
 } from "./agent/create-agent-title.js";
 import { respondToAgentPermission } from "./agent/permission-response.js";
+import { exportAgentSnapshot, importAgentSnapshot } from "./agent/agent-snapshot-transfer.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import { spawnWorkspaceScript } from "./worktree-bootstrap.js";
@@ -105,6 +106,7 @@ import {
 } from "./workspace-labels/index.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { withDaemonSlashCommands } from "./agent/agent-goal.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -182,6 +184,10 @@ import {
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { UsageSession } from "./session/usage/usage-session.js";
+import {
+  SpeechModelsSession,
+  type SpeechModelsSessionOptions,
+} from "./session/speech/speech-models-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
@@ -528,6 +534,7 @@ export interface SessionOptions {
   stt: Resolvable<SpeechToTextProvider | null>;
   sttLanguage?: string;
   tts: Resolvable<TextToSpeechProvider | null>;
+  speechModels?: SpeechModelsSessionOptions["runtime"];
   terminalManager: TerminalManager | null;
   providerSnapshotManager: ProviderSnapshotManager;
   hubExecutionAgents?: HubExecutionAgents;
@@ -811,6 +818,7 @@ export class Session {
   private readonly scheduleSession: ScheduleSession;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly usageSession: UsageSession;
+  private readonly speechModelsSession: SpeechModelsSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
@@ -861,6 +869,7 @@ export class Session {
       stt,
       sttLanguage,
       tts,
+      speechModels,
       terminalManager,
       providerSnapshotManager,
       serviceProxy,
@@ -1036,6 +1045,10 @@ export class Session {
       emit: (msg) => this.emit(msg),
       runtime: pluginRuntime,
       logger: this.sessionLogger,
+    });
+    this.speechModelsSession = new SpeechModelsSession({
+      emit: (msg) => this.emit(msg),
+      runtime: speechModels,
     });
     this.agentConfigSession = new AgentConfigSession({
       host: {
@@ -2421,8 +2434,7 @@ export class Session {
       this.dispatchOrchestrationSkillsMessage(msg) ??
       this.dispatchPluginDirectoryMessage(msg) ??
       this.dispatchPluginMessage(msg) ??
-      this.dispatchTerminalMessage(msg) ??
-      this.dispatchScheduleMessage(msg) ??
+      this.dispatchHostServiceMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -2435,6 +2447,14 @@ export class Session {
       this.dispatchAgentRewindMessage(msg, source) ??
       this.dispatchAgentRelationshipMessage(msg) ??
       this.dispatchAgentTimelineMessage(msg, source)
+    );
+  }
+
+  private dispatchHostServiceMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return (
+      this.dispatchTerminalMessage(msg) ??
+      this.dispatchScheduleMessage(msg) ??
+      this.speechModelsSession.dispatch(msg)
     );
   }
 
@@ -2854,7 +2874,7 @@ export class Session {
       case "delete_agent_request":
         return this.handleDeleteAgentRequest(msg.agentId, msg.requestId);
       case "archive_agent_request":
-        return this.handleArchiveAgentRequest(msg.agentId, msg.requestId);
+        return this.handleArchiveAgentRequest(msg.agentId, msg.requestId, msg.migratedTo);
       case "close_items_request":
         return this.handleCloseItemsRequest(msg);
       case "update_agent_request":
@@ -3140,6 +3160,19 @@ export class Session {
         return this.providerCatalogSession.handleRefreshProvidersSnapshotRequest(msg);
       case "provider_diagnostic_request":
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
+      case "agent.swap_provider.request":
+        return this.handleSwapProviderRequest(
+          msg.agentId,
+          msg.targetProvider,
+          msg.targetModel ?? null,
+          msg.requestId,
+          msg.archivePrevious ?? true,
+          msg.force ?? false,
+        );
+      case "agent.export_snapshot.request":
+        return this.handleExportSnapshotRequest(msg.agentId, msg.requestId);
+      case "agent.import_snapshot.request":
+        return this.handleImportSnapshotRequest(msg);
       case "provider.usage.list.request":
         return this.usageSession.handleLegacyList(msg);
       case "usage.list_reports.request":
@@ -3335,8 +3368,166 @@ export class Session {
     }
   }
 
-  private async handleArchiveAgentRequest(agentId: string, requestId: string): Promise<void> {
+  private async handleSwapProviderRequest(
+    agentId: string,
+    targetProvider: string,
+    targetModel: string | null,
+    requestId: string,
+    archivePrevious = true,
+    force = false,
+  ): Promise<void> {
+    this.sessionLogger.info({ agentId, targetProvider }, "Swapping agent provider");
+
+    try {
+      const result = await this.agentManager.swapProvider(agentId, targetProvider, targetModel, {
+        archivePrevious,
+        force,
+      });
+
+      if (archivePrevious && this.agentManager.getAgent(agentId)) {
+        await archiveAgentCommand(
+          {
+            agentManager: this.agentManager,
+            agentStorage: this.agentStorage,
+            logger: this.sessionLogger,
+          },
+          agentId,
+        );
+      }
+
+      const previousRecord = await this.agentStorage.get(result.previousAgentId);
+      const newRecord = await this.agentStorage.get(result.newAgentId);
+      const affectedWorkspaceIds = new Set<string>();
+
+      if (this.agentUpdates.hasSubscription()) {
+        if (previousRecord) {
+          const payload = await this.agentUpdates.emitStoredRecord(previousRecord);
+          if (payload.workspaceId) affectedWorkspaceIds.add(payload.workspaceId);
+        }
+        if (newRecord) {
+          const payload = await this.agentUpdates.emitStoredRecord(newRecord);
+          if (payload.workspaceId) affectedWorkspaceIds.add(payload.workspaceId);
+        }
+      }
+
+      await this.emitWorkspaceUpdatesForWorkspaceIds(affectedWorkspaceIds);
+
+      this.emit({
+        type: "agent.swap_provider.response",
+        payload: {
+          requestId,
+          newAgentId: result.newAgentId,
+          previousAgentId: result.previousAgentId,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.emit({
+        type: "agent.swap_provider.response",
+        payload: {
+          requestId,
+          newAgentId: null,
+          previousAgentId: agentId,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleExportSnapshotRequest(agentId: string, requestId: string): Promise<void> {
+    try {
+      // Make a non-live unarchived agent's timeline available before exporting.
+      // Archived agents are rejected explicitly.
+      await ensureUnarchivedAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      const snapshot = await exportAgentSnapshot({
+        storage: this.agentStorage,
+        agentManager: this.agentManager,
+        agentId,
+      });
+      this.emit({
+        type: "agent.export_snapshot.response",
+        payload: { requestId, snapshot, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.export_snapshot.response",
+        payload: { requestId, snapshot: null, error: getErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleImportSnapshotRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.import_snapshot.request" }>,
+  ): Promise<void> {
+    const { requestId, snapshot, targetProvider, targetModel, sourceHost } = msg;
+    this.sessionLogger.info(
+      { sourceHost, targetProvider, targetModel },
+      "Importing agent snapshot",
+    );
+
+    try {
+      const placement = await this.workspaceProvisioning.runInImportWorkspace(
+        { cwd: snapshot.cwd, requestedWorkspaceId: msg.workspaceId },
+        (workspace) =>
+          importAgentSnapshot({
+            storage: this.agentStorage,
+            agentManager: this.agentManager,
+            snapshot,
+            targetProvider,
+            targetModel: targetModel ?? null,
+            workspaceId: workspace.workspaceId,
+            ...(sourceHost ? { sourceHost } : {}),
+          }),
+      );
+      if (placement.createdWorkspace) {
+        await this.registerWorkspaceForImportedAgent(placement.createdWorkspace);
+      }
+
+      const record = await this.agentStorage.get(placement.value.agentId);
+      const affectedWorkspaceIds = new Set<string>();
+      if (this.agentUpdates.hasSubscription() && record) {
+        const payload = await this.agentUpdates.emitStoredRecord(record);
+        if (payload.workspaceId) affectedWorkspaceIds.add(payload.workspaceId);
+      }
+      await this.emitWorkspaceUpdatesForWorkspaceIds(affectedWorkspaceIds);
+
+      this.emit({
+        type: "agent.import_snapshot.response",
+        payload: { requestId, agentId: placement.value.agentId, error: null },
+      });
+    } catch (error) {
+      const message = getErrorMessage(error);
+      this.sessionLogger.error({ err: error }, "Failed to import agent snapshot");
+      this.emit({
+        type: "agent.import_snapshot.response",
+        payload: { requestId, agentId: null, error: message },
+      });
+    }
+  }
+
+  private async handleArchiveAgentRequest(
+    agentId: string,
+    requestId: string,
+    migratedTo?: {
+      provider: string;
+      agentId: string;
+      host?: string;
+      portedAt?: string;
+    },
+  ): Promise<void> {
     this.sessionLogger.info({ agentId }, `Archiving agent ${agentId}`);
+
+    if (migratedTo) {
+      const record = await this.agentStorage.get(agentId);
+      if (record) {
+        await this.agentStorage.upsert({ ...record, migratedTo });
+      }
+    }
 
     const { archivedAt } = await this.archiveAgentForClose(agentId);
 
@@ -5051,7 +5242,7 @@ export class Session {
           : null;
 
       if (agent?.session?.listCommands) {
-        const commands = await agent.session.listCommands();
+        const commands = withDaemonSlashCommands(await agent.session.listCommands());
         this.emit({
           type: "list_commands_response",
           payload: {

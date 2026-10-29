@@ -125,10 +125,10 @@ const test = daemonTest.extend<{
       }
 
       // Hard guardrail: never allow tests to hit the developer's default daemon.
-      // This blocks both HTTP and WS attempts to :6767 (before any navigation).
-      await page.route(/:(6767)\b/, (route) => route.abort());
-      await page.routeWebSocket(/:(6767)\b/, async (ws) => {
-        await ws.close({ code: 1008, reason: "Blocked connection to localhost:6767 during e2e." });
+      // This blocks both HTTP and WS attempts to :17000 (before any navigation).
+      await page.route(/:(17000)\b/, (route) => route.abort());
+      await page.routeWebSocket(/:(17000)\b/, async (ws) => {
+        await ws.close({ code: 1008, reason: "Blocked connection to localhost:17000 during e2e." });
       });
 
       await hideDeveloperToasts(page);
@@ -180,6 +180,11 @@ const test = daemonTest.extend<{
           localStorage.setItem("@paseo:daemon-registry", JSON.stringify([daemon, ...extraHosts]));
           localStorage.removeItem("@paseo:settings");
           localStorage.setItem("@paseo:create-agent-preferences", JSON.stringify(preferences));
+          // New installs collapse finished turns; specs assert on the rows inside them, so they
+          // start from the full chat unless they seed their own settings.
+          if (!localStorage.getItem("@paseo:app-settings")) {
+            localStorage.setItem("@paseo:app-settings", JSON.stringify({ chatDisplay: "full" }));
+          }
         },
         {
           daemon: testDaemon,

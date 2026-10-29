@@ -1,6 +1,6 @@
 # Minimal Paseo daemon + web UI deployment.
 #
-# Open http://localhost:6767 after `docker compose up -d`.
+# Open http://localhost:17000 after `docker compose up -d`.
 # For any network-reachable deployment, change PASEO_PASSWORD first.
 services:
   paseo:
@@ -8,7 +8,7 @@ services:
     container_name: paseo
     restart: unless-stopped
     ports:
-      - "6767:6767"
+      - "17000:17000"
     environment:
       PASEO_PASSWORD: "change-me"
       # Add DNS names you use to reach this container. IPs and localhost are
