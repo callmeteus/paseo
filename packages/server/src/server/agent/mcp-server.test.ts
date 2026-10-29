@@ -268,6 +268,7 @@ function buildAgentManagerSpies() {
     getTimeline: vi.fn().mockReturnValue([]),
     resumeAgentFromPersistence: vi.fn(),
     hydrateTimelineFromProvider: vi.fn().mockResolvedValue(undefined),
+    reconcileTimelineFromProvider: vi.fn().mockResolvedValue({ appended: 0, diverged: false }),
     appendTimelineItem: vi.fn().mockResolvedValue(undefined),
     emitLiveTimelineItem: vi.fn().mockResolvedValue(undefined),
     hasInFlightRun: vi.fn().mockReturnValue(false),

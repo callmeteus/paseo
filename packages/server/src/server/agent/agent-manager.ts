@@ -274,6 +274,32 @@ interface HydrateTimelineOptions {
   broadcastTimeline?: boolean;
 }
 
+interface ReconcileTimelineOptions {
+  /** Re-send every appended row to subscribed clients. */
+  broadcast?: boolean;
+  /** Mark the chat unread when the merge ends on agent output. */
+  markUnread?: boolean;
+}
+
+interface ReconcileTimelineResult {
+  appended: number;
+  diverged: boolean;
+  skipped?: "running" | "diverged";
+}
+
+interface ProviderTimelineEntry {
+  item: AgentTimelineItem;
+  timestamp?: string;
+  turnId?: string;
+}
+
+/**
+ * Minimum gap between provider history reads triggered by opening a chat.
+ * Streaming keeps the timeline current in the normal case; this only catches
+ * a stream that went silent without the daemon noticing.
+ */
+const PROVIDER_TIMELINE_SYNC_INTERVAL_MS = 30_000;
+
 export type ImportablePersistedAgentQueryOptions = ListImportableSessionsOptions & {
   /**
    * When set, only providers in this set are scanned, in addition to the
@@ -487,6 +513,10 @@ interface ManagedAgentBase {
   pendingReplacement: boolean;
   persistence: AgentPersistenceHandle | null;
   historyPrimed: boolean;
+  /** Last time provider history was read to reconcile the durable timeline. */
+  lastProviderSyncAt?: number;
+  /** Last stream event the provider delivered, used to detect a silent stream. */
+  lastProviderEventAt?: number;
   lastUserMessageAt: Date | null;
   activeTurnId: string | null;
   activeTurnStartedAt: Date | null;
@@ -620,6 +650,180 @@ interface AgentMetadataPatch {
 }
 
 const SYSTEM_ERROR_PREFIX = "[System Error]";
+
+/** Provider item types that exist in both the history replay and the durable rows. */
+type ReconcilableProviderItem = Extract<
+  AgentTimelineItem,
+  { type: "user_message" | "assistant_message" | "reasoning" | "tool_call" }
+>;
+
+function isReconcilableProviderItem(item: AgentTimelineItem): item is ReconcilableProviderItem {
+  return (
+    item.type === "user_message" ||
+    item.type === "assistant_message" ||
+    item.type === "reasoning" ||
+    item.type === "tool_call"
+  );
+}
+
+/** Rows the provider never produces, so the merge must never match or drop them. */
+function isPassthroughTimelineItem(item: AgentTimelineItem): boolean {
+  if (!isReconcilableProviderItem(item)) return true;
+  return item.type === "assistant_message" && item.text.startsWith(SYSTEM_ERROR_PREFIX);
+}
+
+function isAgentOutputItem(item: AgentTimelineItem): boolean {
+  return (
+    item.type === "assistant_message" || item.type === "reasoning" || item.type === "tool_call"
+  );
+}
+
+type ProviderItemMatch = "next" | "same-row" | "none";
+
+interface TextualTimelineItem {
+  text: string;
+  messageId?: string;
+}
+
+function matchTextualTimelineItem(
+  rowItem: TextualTimelineItem,
+  item: TextualTimelineItem,
+): ProviderItemMatch {
+  if (rowItem.messageId && item.messageId && rowItem.messageId !== item.messageId) {
+    return "none";
+  }
+  if (rowItem.text === item.text) return "next";
+  if (rowItem.text.length > 0 && rowItem.text.startsWith(item.text)) return "same-row";
+  if (item.text.length > 0 && item.text.startsWith(rowItem.text)) return "same-row";
+  return "none";
+}
+
+function matchUserMessageRow(
+  row: AgentTimelineRow,
+  item: Extract<AgentTimelineItem, { type: "user_message" }>,
+): ProviderItemMatch {
+  // Submitted prompts keep the provider id separately from the client id.
+  if (row.providerMessageId && item.messageId) {
+    return row.providerMessageId === item.messageId ? "next" : "none";
+  }
+  const rowItem = row.item;
+  if (rowItem.type !== "user_message") return "none";
+  // Legacy rows and prompts the provider never acknowledged have no shared id.
+  return rowItem.text === item.text ? "next" : "none";
+}
+
+/**
+ * Compares a durable row with a provider item.
+ *
+ * - `next`: they are the same entry, move past the row.
+ * - `same-row`: the provider item is one part of a row the projection already
+ *   merged (several text parts share a message id), keep the row in play.
+ */
+function matchProviderTimelineRow(
+  row: AgentTimelineRow,
+  entry: ProviderTimelineEntry,
+): ProviderItemMatch {
+  const rowItem = row.item;
+  const item = entry.item;
+  if (item.type === "user_message") return matchUserMessageRow(row, item);
+  if (item.type === "assistant_message") {
+    return rowItem.type === "assistant_message" ? matchTextualTimelineItem(rowItem, item) : "none";
+  }
+  if (item.type === "reasoning") {
+    return rowItem.type === "reasoning" ? matchTextualTimelineItem(rowItem, item) : "none";
+  }
+  if (item.type === "tool_call") {
+    return rowItem.type === "tool_call" && rowItem.callId === item.callId ? "next" : "none";
+  }
+  return "none";
+}
+
+interface TimelineReconciliationPlan {
+  appended: ProviderTimelineEntry[];
+  diverged: boolean;
+  matched: number;
+}
+
+/**
+ * Walks durable rows and provider items in order and returns the trailing
+ * provider items the timeline is missing.
+ *
+ * Ordering is the identity: the same text sent twice stays two messages, and a
+ * provider history that no longer lines up with the durable rows is reported as
+ * divergence instead of being appended on top.
+ */
+function planTimelineReconciliation(
+  rows: readonly AgentTimelineRow[],
+  providerEntries: readonly ProviderTimelineEntry[],
+): TimelineReconciliationPlan {
+  const appended: ProviderTimelineEntry[] = [];
+  let cursor = 0;
+  let matched = 0;
+  let diverged = false;
+  let beyondTail = false;
+
+  for (const entry of providerEntries) {
+    if (beyondTail) {
+      appended.push(entry);
+      continue;
+    }
+
+    let resolved = false;
+    while (cursor < rows.length) {
+      const row = rows[cursor];
+      if (!row) break;
+      if (isPassthroughTimelineItem(row.item)) {
+        cursor += 1;
+        continue;
+      }
+
+      const match = matchProviderTimelineRow(row, entry);
+      if (match === "next") {
+        cursor += 1;
+        resolved = true;
+        break;
+      }
+      if (match === "same-row") {
+        resolved = true;
+        break;
+      }
+
+      // The durable row for this item may sit one provider-derived row deeper
+      // (a row the provider no longer reports). That is divergence, not a gap.
+      let ahead = -1;
+      for (let next = cursor + 1; next < rows.length; next += 1) {
+        const candidate = rows[next];
+        if (!candidate) break;
+        if (isPassthroughTimelineItem(candidate.item)) continue;
+        if (matchProviderTimelineRow(candidate, entry) !== "none") ahead = next;
+        break;
+      }
+      if (ahead >= 0) {
+        diverged = true;
+        cursor = ahead + 1;
+        resolved = true;
+      }
+      break;
+    }
+
+    if (resolved) {
+      matched += 1;
+      continue;
+    }
+    if (cursor >= rows.length) {
+      beyondTail = true;
+      appended.push(entry);
+      continue;
+    }
+    diverged = true;
+  }
+
+  return {
+    appended: diverged ? [] : appended,
+    diverged,
+    matched,
+  };
+}
 
 function attachPersistenceCwd(
   handle: AgentPersistenceHandle | null,
@@ -3807,6 +4011,174 @@ export class AgentManager {
     await this.hydrateTimelineFromLegacyProviderHistory(agent, options);
   }
 
+  /**
+   * Appends provider messages the durable timeline is missing, without
+   * deleting anything.
+   *
+   * A resumed chat keeps its persisted timeline, so `historyPrimed` skips the
+   * destructive prime path. Anything the provider gained while the daemon was
+   * down — another client talking to the same session — only shows up here.
+   * The merge walks durable rows and provider items in order, so repeated
+   * identical messages stay separate and Paseo-only rows (goal notices, system
+   * errors, the porting marker) survive.
+   */
+  async reconcileTimelineFromProvider(
+    agentId: string,
+    options?: ReconcileTimelineOptions,
+  ): Promise<ReconcileTimelineResult> {
+    const agent = this.requireSessionAgent(agentId);
+
+    // A live turn owns the tail: its deltas are already landing as rows, so
+    // merging a snapshot of it here would duplicate the assistant message.
+    // Checked before stamping the throttle: a skipped attempt must not delay
+    // the catch-up that runs when the user opens the chat after the turn.
+    if (this.hasInFlightRun(agentId)) {
+      return { appended: 0, diverged: false, skipped: "running" };
+    }
+
+    agent.lastProviderSyncAt = Date.now();
+
+    const providerEntries = await this.collectProviderTimelineEntries(agent);
+
+    const rows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    const plan = planTimelineReconciliation(rows, providerEntries);
+
+    if (plan.diverged) {
+      this.logger.warn(
+        {
+          agentId,
+          providerItems: providerEntries.length,
+          durableRows: rows.length,
+          matched: plan.matched,
+        },
+        "Provider history diverges from the durable timeline; skipping timeline reconciliation",
+      );
+      return { appended: 0, diverged: true, skipped: "diverged" };
+    }
+
+    if (plan.appended.length === 0) {
+      agent.historyPrimed = true;
+      return { appended: 0, diverged: false };
+    }
+
+    const appendedRows = this.appendReconciledTimelineRows(
+      agent,
+      plan.appended,
+      options?.broadcast ?? false,
+    );
+    this.markReconciledTimeline(agent, appendedRows, options?.markUnread === true);
+
+    this.logger.info(
+      { agentId, appended: appendedRows.length },
+      "Reconciled durable timeline from provider history",
+    );
+    return { appended: appendedRows.length, diverged: false };
+  }
+
+  private async collectProviderTimelineEntries(
+    agent: ActiveManagedAgent,
+  ): Promise<ProviderTimelineEntry[]> {
+    const entries: ProviderTimelineEntry[] = [];
+    for await (const rawEvent of agent.session.streamHistory()) {
+      const event = limitAgentStreamEventContent(rawEvent);
+      if (event.type !== "timeline") continue;
+      for (const item of projectAgentMessages(event.item)) {
+        if (!isReconcilableProviderItem(item)) continue;
+        entries.push({
+          item,
+          ...(event.timestamp ? { timestamp: event.timestamp } : {}),
+          ...(event.turnId ? { turnId: event.turnId } : {}),
+        });
+      }
+    }
+    return entries;
+  }
+
+  private appendReconciledTimelineRows(
+    agent: ActiveManagedAgent,
+    entries: readonly ProviderTimelineEntry[],
+    broadcast: boolean,
+  ): AgentTimelineRow[] {
+    const appendedRows: AgentTimelineRow[] = [];
+    for (const entry of entries) {
+      const row = this.recordTimeline(agent.id, entry.item, {
+        ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+        ...(entry.turnId ? { turnId: entry.turnId } : {}),
+      });
+      appendedRows.push(row);
+      if (!broadcast) continue;
+      this.dispatchStream(
+        agent.id,
+        {
+          type: "timeline",
+          item: row.item,
+          provider: agent.provider,
+          ...(entry.turnId ? { turnId: entry.turnId } : {}),
+        },
+        {
+          seq: row.seq,
+          epoch: this.timelineStore.getEpoch(agent.id),
+          timestamp: row.timestamp,
+        },
+      );
+    }
+    return appendedRows;
+  }
+
+  private markReconciledTimeline(
+    agent: ActiveManagedAgent,
+    appendedRows: readonly AgentTimelineRow[],
+    markUnread: boolean,
+  ): void {
+    agent.historyPrimed = true;
+    if (appendedRows.some((row) => row.item.type === "user_message")) {
+      agent.lastUserMessageAt = new Date();
+    }
+    this.touchUpdatedAt(agent);
+
+    const lastAppended = appendedRows.at(-1);
+    if (markUnread && lastAppended && isAgentOutputItem(lastAppended.item)) {
+      this.markExternalActivityAttention(agent);
+      return;
+    }
+    this.emitState(agent);
+  }
+
+  /**
+   * Best-effort catch-up for a chat opened long after the provider stream went
+   * quiet. Throttled so timeline fetches do not re-read provider history every
+   * time the user switches chats, and skipped entirely while the stream is still
+   * delivering events: then the live path already owns the tail.
+   */
+  async syncTimelineFromProvider(agentId: string): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent || agent.session === null || agent.internal) return;
+    const now = Date.now();
+    if (now - (agent.lastProviderSyncAt ?? 0) < PROVIDER_TIMELINE_SYNC_INTERVAL_MS) return;
+    if (now - (agent.lastProviderEventAt ?? 0) < PROVIDER_TIMELINE_SYNC_INTERVAL_MS) return;
+    try {
+      await this.reconcileTimelineFromProvider(agentId);
+    } catch (error) {
+      this.logger.warn({ err: error, agentId }, "Provider timeline sync failed");
+    }
+  }
+
+  /**
+   * Marks the chat unread after external provider activity. Reuses the
+   * `finished` reason so clients keep one unread concept.
+   */
+  private markExternalActivityAttention(agent: ActiveManagedAgent): void {
+    if (agent.internal) return;
+    agent.attention = {
+      requiresAttention: true,
+      attentionReason: "finished",
+      attentionTimestamp: new Date(),
+    };
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
+    this.broadcastAgentAttention(agent, "finished");
+  }
+
   async rewind(agentId: string, messageId: string, mode: RewindMode): Promise<void> {
     const agent = this.requireSessionAgent(agentId);
     const submittedRow = this.timelineStore
@@ -5107,6 +5479,7 @@ export class AgentManager {
   }): Promise<void> | undefined {
     const { agent, event, options, isForegroundEvent, eventTurnId, terminalDisposition, flags } =
       params;
+    agent.lastProviderEventAt = Date.now();
     switch (event.type) {
       case "thread_started":
         this.onStreamThreadStarted(agent);

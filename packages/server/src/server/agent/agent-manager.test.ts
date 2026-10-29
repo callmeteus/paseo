@@ -12631,3 +12631,221 @@ test("daemon-level /goal persists on the agent record and in the wire snapshot",
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+class MutableHistorySession extends TestAgentSession {
+  history: AgentStreamEvent[] = [];
+  historyReads = 0;
+
+  override async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
+    this.historyReads += 1;
+    for (const event of this.history) yield event;
+  }
+}
+
+class MutableHistoryClient extends TestAgentClient {
+  session: MutableHistorySession | null = null;
+
+  override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+    const session = new MutableHistorySession(config);
+    this.session = session;
+    return session;
+  }
+}
+
+function providerTimelineEvent(
+  item: AgentTimelineItem,
+  timestamp = "2026-01-01T00:00:00.000Z",
+): AgentStreamEvent {
+  return { type: "timeline", provider: "codex", item, timestamp };
+}
+
+async function startMutableHistoryAgent(): Promise<{
+  manager: AgentManager;
+  client: MutableHistoryClient;
+  agentId: string;
+  session: MutableHistorySession;
+  workdir: string;
+}> {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-reconcile-"));
+  const client = new MutableHistoryClient();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const session = client.session;
+  if (!session) throw new Error("client did not create a session");
+  return { manager, client, agentId: agent.id, session, workdir };
+}
+
+test("reconciliation appends provider messages the durable timeline missed", async () => {
+  const { manager, agentId, session, workdir } = await startMutableHistoryAgent();
+  try {
+    await manager.appendTimelineItem(agentId, { type: "user_message", text: "hello" });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "hi" });
+    session.history = [
+      providerTimelineEvent({ type: "user_message", text: "hello", messageId: "m1" }),
+      providerTimelineEvent({ type: "assistant_message", text: "hi", messageId: "m2" }),
+    ];
+
+    // Everything the durable rows already cover matches; nothing is duplicated.
+    await expect(manager.reconcileTimelineFromProvider(agentId)).resolves.toEqual({
+      appended: 0,
+      diverged: false,
+    });
+
+    // Another client kept talking to the same provider session.
+    session.history.push(
+      providerTimelineEvent({ type: "user_message", text: "external", messageId: "m3" }),
+      providerTimelineEvent({
+        type: "assistant_message",
+        text: "external answer",
+        messageId: "m4",
+      }),
+    );
+
+    await expect(manager.reconcileTimelineFromProvider(agentId)).resolves.toEqual({
+      appended: 2,
+      diverged: false,
+    });
+    const rows = await manager.getTimelineRows(agentId);
+    expect(rows.map((row) => row.item)).toEqual([
+      { type: "user_message", text: "hello" },
+      { type: "assistant_message", text: "hi" },
+      { type: "user_message", text: "external", messageId: "m3" },
+      { type: "assistant_message", text: "external answer", messageId: "m4" },
+    ]);
+
+    // Re-running the merge is a no-op.
+    await expect(manager.reconcileTimelineFromProvider(agentId)).resolves.toEqual({
+      appended: 0,
+      diverged: false,
+    });
+    await expect(manager.getTimelineRows(agentId)).resolves.toHaveLength(4);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation keeps Paseo-only rows and marks external output unread", async () => {
+  const { manager, agentId, session, workdir } = await startMutableHistoryAgent();
+  try {
+    await manager.appendTimelineItem(agentId, { type: "user_message", text: "hello" });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "hi" });
+    await manager.appendTimelineItem(agentId, {
+      type: "notification",
+      level: "info",
+      message: "Goal paused",
+    });
+    session.history = [
+      providerTimelineEvent({ type: "user_message", text: "hello", messageId: "m1" }),
+      providerTimelineEvent({ type: "assistant_message", text: "hi", messageId: "m2" }),
+      providerTimelineEvent({ type: "user_message", text: "external", messageId: "m3" }),
+      providerTimelineEvent({
+        type: "assistant_message",
+        text: "done externally",
+        messageId: "m4",
+      }),
+    ];
+
+    const result = await manager.reconcileTimelineFromProvider(agentId, { markUnread: true });
+
+    expect(result.appended).toBe(2);
+    const items = (await manager.getTimelineRows(agentId)).map((row) => row.item);
+    expect(items).toContainEqual({ type: "notification", level: "info", message: "Goal paused" });
+    expect(items.filter((item) => item.type === "user_message")).toHaveLength(2);
+    expect(manager.getAgent(agentId)?.attention).toMatchObject({
+      requiresAttention: true,
+      attentionReason: "finished",
+    });
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation refuses to append when provider history no longer matches", async () => {
+  const { manager, agentId, session, workdir } = await startMutableHistoryAgent();
+  try {
+    await manager.appendTimelineItem(agentId, { type: "user_message", text: "hello" });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "hi" });
+    session.history = [
+      providerTimelineEvent({ type: "user_message", text: "hello", messageId: "m1" }),
+      providerTimelineEvent({ type: "assistant_message", text: "rewritten", messageId: "m2" }),
+      providerTimelineEvent({ type: "user_message", text: "after rewrite", messageId: "m3" }),
+    ];
+
+    await expect(manager.reconcileTimelineFromProvider(agentId)).resolves.toEqual({
+      appended: 0,
+      diverged: true,
+      skipped: "diverged",
+    });
+    await expect(manager.getTimelineRows(agentId)).resolves.toHaveLength(2);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("opening a chat syncs provider history at most once per throttle window", async () => {
+  const { manager, agentId, session, workdir } = await startMutableHistoryAgent();
+  try {
+    await manager.appendTimelineItem(agentId, { type: "user_message", text: "hello" });
+    session.history = [
+      providerTimelineEvent({ type: "user_message", text: "hello", messageId: "m1" }),
+    ];
+
+    await manager.syncTimelineFromProvider(agentId);
+    session.history.push(
+      providerTimelineEvent({ type: "assistant_message", text: "late answer", messageId: "m2" }),
+    );
+    await manager.syncTimelineFromProvider(agentId);
+
+    expect(session.historyReads).toBe(1);
+    await expect(manager.getTimelineRows(agentId)).resolves.toHaveLength(1);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation waits for an in-flight turn instead of duplicating its output", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-reconcile-running-"));
+  class PendingTurnSession extends MutableHistorySession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = "turn-pending";
+      queueMicrotask(() => this.pushEvent({ type: "turn_started", provider: "codex", turnId }));
+      return { turnId };
+    }
+  }
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new PendingTurnSession(config);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  try {
+    await manager.appendTimelineItem(agent.id, { type: "user_message", text: "hello" });
+    const run = manager.streamAgent(agent.id, "in flight");
+    void (async () => {
+      for await (const _event of run) {
+        // drain
+      }
+    })();
+    await manager.waitForAgentRunStart(agent.id);
+
+    await expect(manager.reconcileTimelineFromProvider(agent.id)).resolves.toEqual({
+      appended: 0,
+      diverged: false,
+      skipped: "running",
+    });
+    await expect(manager.getTimelineRows(agent.id)).resolves.toHaveLength(1);
+  } finally {
+    await manager.closeAgent(agent.id).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

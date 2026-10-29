@@ -33,6 +33,7 @@ export type AgentLoaderManager = Pick<
   | "getAgent"
   | "getRegisteredProviderIds"
   | "hydrateTimelineFromProvider"
+  | "reconcileTimelineFromProvider"
   | "resumeAgentFromPersistence"
 > &
   Partial<Pick<AgentManager, "waitForAgentClose">>;
@@ -113,6 +114,7 @@ export async function ensureAgentLoaded(
     const handle = toAgentPersistenceHandle(validProviders, record.persistence);
 
     let snapshot: ManagedAgent;
+    let resumedFromPersistence = false;
     if (handle) {
       snapshot = await deps.agentManager.resumeAgentFromPersistence(
         handle,
@@ -129,6 +131,7 @@ export async function ensureAgentLoaded(
         },
         record.archivedAt ? { purpose: "history" } : undefined,
       );
+      resumedFromPersistence = true;
       deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
     } else {
       // No provider handle to resume: this starts the agent's first session rather than
@@ -157,6 +160,24 @@ export async function ensureAgentLoaded(
     await deps.agentManager.hydrateTimelineFromProvider(agentId, {
       broadcast: () => pendingOptions.broadcastTimeline,
     });
+    if (resumedFromPersistence) {
+      // The prime path is a no-op on resume: the durable timeline survives, so
+      // anything the provider gained while the daemon was down is appended here.
+      try {
+        const result = await deps.agentManager.reconcileTimelineFromProvider(agentId, {
+          broadcast: pendingOptions.broadcastTimeline,
+          markUnread: !record.archivedAt,
+        });
+        if (result.appended > 0) {
+          deps.logger.info(
+            { agentId, appended: result.appended },
+            "Appended provider messages missed while the daemon was down",
+          );
+        }
+      } catch (error) {
+        deps.logger.warn({ err: error, agentId }, "Failed to reconcile timeline on resume");
+      }
+    }
     return deps.agentManager.getAgent(agentId) ?? snapshot;
   })();
 

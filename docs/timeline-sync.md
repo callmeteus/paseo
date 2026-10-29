@@ -114,6 +114,27 @@ history replay. The pending approval UI can hide that tool from presentation, bu
 must retain its position. Creating a new history card on rejection places it after the prompt that
 rejected it; changing steer-event ordering would also put new assistant output before that prompt.
 
+## Provider history catch-up
+
+A resumed agent keeps its durable timeline. `historyPrimed` makes the hydration path a no-op, so
+the daemon appends what the provider gained instead of replacing the timeline: another client may
+have kept talking to the same provider session while the daemon was down.
+
+`reconcileTimelineFromProvider` reads `streamHistory` and walks durable rows and provider items in
+order. Order is the identity, so the same text sent twice stays two messages. Rows the provider
+never produces — goal notices, system errors, the porting marker — are skipped and never rewritten.
+A provider history that no longer lines up with the durable rows is reported as divergence: the
+daemon logs it and appends nothing.
+
+The merge runs on resume and, at most once every 30 seconds, when a chat is opened
+(`fetch_agent_timeline_request`) after the provider stream has been quiet. It never runs while a
+turn is in flight: the live deltas own the tail, and merging a snapshot of them would duplicate the
+assistant message. Opening after a restart marks the chat unread when the merge ends on agent
+output.
+
+Append-only cannot repair a rewind or an external edit that shortened provider history. That needs
+a replacement with confirmation, which is out of scope here.
+
 ## Provider child history
 
 Child transcripts use the same projected-page reconciliation as the main conversation. The client

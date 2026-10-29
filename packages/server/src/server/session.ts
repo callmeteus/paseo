@@ -4883,6 +4883,14 @@ export class Session {
       }
       await unarchiveAgentState(this.agentStorage, this.agentManager, snapshot.id);
       await this.agentManager.hydrateTimelineFromProvider(snapshot.id);
+      try {
+        await this.agentManager.reconcileTimelineFromProvider(snapshot.id, { markUnread: true });
+      } catch (error) {
+        this.sessionLogger.warn(
+          { err: error, agentId: snapshot.id },
+          "Failed to reconcile timeline after resume",
+        );
+      }
       await this.agentUpdates.forwardLiveAgent(snapshot);
       const timelineSize = this.agentManager.getTimeline(snapshot.id).length;
       if (requestId) {
@@ -8148,11 +8156,15 @@ export class Session {
       : undefined;
 
     try {
-      const snapshot = await ensureAgentLoaded(msg.agentId, {
+      let snapshot = await ensureAgentLoaded(msg.agentId, {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
       });
+      // Opening a chat long after its provider stream went quiet is the other
+      // chance to catch up. Throttled, so switching chats stays cheap.
+      await this.agentManager.syncTimelineFromProvider(msg.agentId);
+      snapshot = this.agentManager.getAgent(msg.agentId) ?? snapshot;
       const agentPayload = await this.buildAgentPayload(snapshot);
 
       const fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, {
