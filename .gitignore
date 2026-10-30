@@ -104,3 +104,6 @@ app.json
 # Local scratch files (logs, build output, one-off install scripts)
 .tmp/
 
+
+# Stillmark
+.stillmark/plans/

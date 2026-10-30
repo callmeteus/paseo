@@ -1,0 +1,31 @@
+{
+  "git": {
+    "autoCommit": false,
+    "autoPush": true,
+    "stripAgentAttribution": true
+  },
+  "roadmap": {
+    "dates": true
+  },
+  "sharing": {
+    "firstRunPrompted": true,
+    "shareDesignSystem": true
+  },
+  "learned": {
+    "designDir": ".stillmark/learnings/design",
+    "codeStyleDir": ".stillmark/learnings/code-style"
+  },
+  "detail": {
+    "roadmap": "extended"
+  },
+  "language": {
+    "global": "en"
+  },
+  "caveman": {
+    "level": "off"
+  },
+  "update": {
+    "auto": true,
+    "intervalHours": 24
+  }
+}
