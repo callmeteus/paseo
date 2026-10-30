@@ -271,6 +271,7 @@ export const es: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Añadir al chat",
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",

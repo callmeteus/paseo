@@ -267,6 +267,7 @@ export const ar: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "أضف إلى المحادثة",
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",

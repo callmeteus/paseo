@@ -284,6 +284,8 @@ export interface AgentStreamViewProps {
   bottomOverlayControlClearance?: number;
   toast?: ToastApi | null;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  /** Adds text selected in the chat to the composer as a quote. */
+  onAddSelectionToChat?: (text: string) => void;
   readOnly?: boolean;
   historyPagination?: {
     hasOlder: boolean;
@@ -338,6 +340,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       bottomOverlayControlClearance,
       toast,
       onOpenWorkspaceFile,
+      onAddSelectionToChat,
       readOnly = false,
       historyPagination,
     },
@@ -1188,7 +1191,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         visibleMessageIds={mountedMessageIds}
       >
         <ToolCallSheetProvider>
-          <AssistantSelectionCopySurface style={stylesheet.container}>
+          <AssistantSelectionCopySurface
+            style={stylesheet.container}
+            onAddSelectionToChat={onAddSelectionToChat}
+          >
             <MessageOuterSpacingProvider disableOuterSpacing>
               {streamRenderStrategy.render({
                 agentId,
@@ -1359,6 +1365,9 @@ function agentStreamViewPropsEqual(
   }
   if (left.toast !== right.toast) reasons.push("toast");
   if (left.onOpenWorkspaceFile !== right.onOpenWorkspaceFile) reasons.push("onOpenWorkspaceFile");
+  if (left.onAddSelectionToChat !== right.onAddSelectionToChat) {
+    reasons.push("onAddSelectionToChat");
+  }
   if (left.readOnly !== right.readOnly) reasons.push("readOnly");
   if (!historyPaginationPropsEqual(left.historyPagination, right.historyPagination)) {
     reasons.push("historyPagination");

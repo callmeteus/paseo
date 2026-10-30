@@ -2,6 +2,8 @@
 
 Keep completed assistant prose in one native text view so selection crosses paragraphs, headings and lists. The shared [Markdown renderer](markdown-renderer.md) owns that view.
 
+Selecting assistant text on web shows a floating "Add to chat" action that appends the selection to the composer as a Markdown quote. Native selection keeps the platform menu; a custom action there needs a native library change.
+
 ## Android inverted chat
 
 Keep selection visibility handling in `modules/paseo-scroll`. Android's visibility

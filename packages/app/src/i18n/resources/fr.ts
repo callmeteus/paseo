@@ -272,6 +272,7 @@ export const fr: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Ajouter au chat",
     empty: "Commencez à discuter avec cet agent…",
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",

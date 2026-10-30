@@ -267,6 +267,7 @@ export const zhCN: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "添加到对话",
     empty: "开始和这个 Agent 对话...",
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",
