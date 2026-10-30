@@ -1548,6 +1548,26 @@ export const HubManagementDaemonPermissionsUpdateRequestSchema = z.object({
   revoke: z.array(DaemonPermissionSchema).default([]),
 });
 
+export const HubLocalInstallPhaseSchema = z.enum([
+  "preparing",
+  "downloading",
+  "installing",
+  "starting",
+  "ready",
+]);
+
+export type HubLocalInstallPhase = z.infer<typeof HubLocalInstallPhaseSchema>;
+
+export const HubLocalStatusRequestSchema = z.object({
+  type: z.literal("hub.local.status.request"),
+  requestId: z.string(),
+});
+
+export const HubLocalInstallRequestSchema = z.object({
+  type: z.literal("hub.local.install.request"),
+  requestId: z.string(),
+});
+
 export const DiagnosticsRequestSchema = z.object({
   type: z.literal("diagnostics.request"),
   requestId: z.string(),
@@ -3494,6 +3514,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HubManagementDaemonGetStatusRequestSchema,
   HubManagementDaemonDisconnectRequestSchema,
   HubManagementDaemonPermissionsUpdateRequestSchema,
+  HubLocalStatusRequestSchema,
+  HubLocalInstallRequestSchema,
   DiagnosticsRequestSchema,
   PluginCatalogGetRequestSchema,
   PluginListRequestSchema,
@@ -5394,6 +5416,39 @@ export const HubManagementDaemonDisconnectResponseSchema = z.object({
 export const HubManagementDaemonPermissionsUpdateResponseSchema = z.object({
   type: z.literal("hub.management.daemon.permissions.update.response"),
   payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
+});
+
+export const HubLocalInstallStateSchema = z.object({
+  installed: z.boolean(),
+  running: z.boolean(),
+  origin: z.string().nullable(),
+});
+
+export const HubLocalStatusResponseSchema = z.object({
+  type: z.literal("hub.local.status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    status: HubLocalInstallStateSchema,
+  }),
+});
+
+export const HubLocalInstallProgressMessageSchema = z.object({
+  type: z.literal("hub.local.install.progress"),
+  payload: z.object({
+    requestId: z.string(),
+    phase: HubLocalInstallPhaseSchema,
+    percent: z.number().int().min(0).max(100),
+  }),
+});
+
+export const HubLocalInstallResponseSchema = z.object({
+  type: z.literal("hub.local.install.response"),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean(),
+    origin: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const DaemonGetPairingOfferResponseSchema = z.object({
@@ -7309,6 +7364,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HubManagementDaemonGetStatusResponseSchema,
   HubManagementDaemonDisconnectResponseSchema,
   HubManagementDaemonPermissionsUpdateResponseSchema,
+  HubLocalStatusResponseSchema,
+  HubLocalInstallProgressMessageSchema,
+  HubLocalInstallResponseSchema,
   DiagnosticsResponseSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,

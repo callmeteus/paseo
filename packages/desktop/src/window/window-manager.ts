@@ -395,6 +395,26 @@ export function setupDefaultContextMenu(win: BrowserWindow): void {
   });
 }
 
+export interface SystemContextMenuWindow {
+  on(event: "system-context-menu", listener: (event: Electron.Event) => void): void;
+}
+
+/**
+ * Keeps the OS window menu off the custom title bar.
+ *
+ * On Linux and Windows, a right click on a frameless drag region opens the
+ * system window menu (move, resize, always on top, close). That region is the
+ * Paseo handle bar. The app already owns that bar, so the menu is cancelled.
+ *
+ * @param win - Window that uses a custom drag region
+ * @returns Nothing.
+ */
+export function preventSystemWindowContextMenu(win: SystemContextMenuWindow): void {
+  win.on("system-context-menu", (event) => {
+    event.preventDefault();
+  });
+}
+
 /**
  * Prevent Electron from navigating to files dragged onto the window.
  * The renderer handles drag-drop via standard HTML5 APIs instead.

@@ -1,4 +1,6 @@
 export const PASEO_BROWSER_PROFILE_PARTITION = "persist:paseo-browser";
+/** Guest partition for the embedded Hub. The app frame must use this same name. */
+export const PASEO_HUB_PARTITION = "persist:paseo-hub";
 const LEGACY_BROWSER_ID_PATTERN =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|\d{13,}-[0-9a-f]+)$/i;
 const MAX_LEGACY_BROWSER_PROFILES = 1000;

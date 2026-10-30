@@ -42,6 +42,7 @@ import {
   setupWindowResizeEvents,
   setupWindowStatePersistence,
   setupDefaultContextMenu,
+  preventSystemWindowContextMenu,
   setupDragDropPrevention,
   buildStandardContextMenuItems,
 } from "./window/window-manager.js";
@@ -67,6 +68,7 @@ import {
   getPaseoBrowserWebviewRegistry,
   listRegisteredPaseoBrowserIds,
   isPaseoBrowserWebviewAttach,
+  isPaseoHubWebviewAttach,
   preparePaseoBrowserWebContents,
   PendingBrowserWindowOpenRequests,
   registerBrowserWebviewNavigationGuards,
@@ -79,6 +81,7 @@ import {
   clearPaseoBrowserProfile,
   getLegacyPaseoBrowserProfileSession,
   PASEO_BROWSER_PROFILE_PARTITION,
+  PASEO_HUB_PARTITION,
   getPaseoBrowserProfileSession,
   getPaseoBrowserProfileSessions,
   listPaseoBrowserProfileGuests,
@@ -252,6 +255,7 @@ function installBrowserWindowOpenHandler(input: {
   mainWindow: BrowserWindow;
 }): void {
   const { contents, sourceContents, mainWindow } = input;
+  const openHubExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
 
   contents.setWindowOpenHandler(({ url, disposition, frameName, features, postBody }) => {
     const decision = decideBrowserWindowOpenRequest({
@@ -260,9 +264,16 @@ function installBrowserWindowOpenHandler(input: {
       frameName,
       features,
       hasPostBody: postBody !== undefined && postBody !== null,
+      embed: contents.session === session.fromPartition(PASEO_HUB_PARTITION) ? "hub" : "browser",
     });
 
     if (decision.kind === "deny") {
+      return { action: "deny" };
+    }
+    if (decision.kind === "system-browser") {
+      void openHubExternalUrl(decision.url).catch((error: unknown) => {
+        log.error("failed to open Hub link: %O", error);
+      });
       return { action: "deny" };
     }
     if (decision.kind === "popup") {
@@ -740,9 +751,11 @@ async function createWindow(
     setupWindowStatePersistence(mainWindow, windowStateStore);
   }
   setupDefaultContextMenu(mainWindow);
+  preventSystemWindowContextMenu(mainWindow);
   setupDragDropPrevention(mainWindow);
   mainWindow.webContents.on("will-attach-webview", (event, webPreferences, params) => {
-    if (!isPaseoBrowserWebviewAttach(params)) {
+    // Hub uses its own partition so its session cookie is first-party in the guest.
+    if (!isPaseoBrowserWebviewAttach(params) && !isPaseoHubWebviewAttach(params)) {
       event.preventDefault();
       return;
     }

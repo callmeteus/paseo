@@ -10,7 +10,8 @@ export type BrowserWindowOpenDisposition =
 export type BrowserWindowOpenDecision =
   | { kind: "deny" }
   | { kind: "popup" }
-  | { kind: "workspace-tab"; url: string };
+  | { kind: "workspace-tab"; url: string }
+  | { kind: "system-browser"; url: string };
 
 const MAX_PENDING_WINDOW_OPEN_REQUESTS_PER_GUEST = 20;
 const POPUP_WINDOW_GEOMETRY_FEATURE_NAMES = new Set([
@@ -88,6 +89,8 @@ export function decideBrowserWindowOpenRequest(input: {
   frameName: string;
   features: string;
   hasPostBody: boolean;
+  /** Hub has no tab strip, so an ordinary new link leaves the app. */
+  embed?: "browser" | "hub";
 }): BrowserWindowOpenDecision {
   if (!isAllowedBrowserWebviewUrl(input.url)) {
     return { kind: "deny" };
@@ -105,6 +108,12 @@ export function decideBrowserWindowOpenRequest(input: {
   // only carry the URL and would silently turn the request into a GET.
   if (isScriptPopup || input.hasPostBody) {
     return { kind: "popup" };
+  }
+
+  // The embedded Hub cannot host a workspace tab. target=_blank links, such as
+  // the Slack app manifest, open in the system browser instead of being dropped.
+  if (input.embed === "hub") {
+    return { kind: "system-browser", url: input.url };
   }
 
   return { kind: "workspace-tab", url: input.url };

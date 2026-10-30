@@ -5741,6 +5741,23 @@ export class DaemonClient {
     });
   }
 
+  async getLocalHubStatus(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "hub.local.status.request" },
+      responseType: "hub.local.status.response",
+    });
+  }
+
+  async installLocalHub(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "hub.local.install.request" },
+      responseType: "hub.local.install.response",
+      timeout: 15 * 60 * 1000,
+    });
+  }
+
   async disconnectHub(force = false, requestId?: string) {
     this.requireHubRelationshipSupport();
     return this.sendCorrelatedSessionRequest({

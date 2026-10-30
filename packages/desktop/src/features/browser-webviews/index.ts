@@ -1,5 +1,5 @@
 import { webContents as allWebContents, type WebContents } from "electron";
-import { PASEO_BROWSER_PROFILE_PARTITION } from "../browser-profile.js";
+import { PASEO_BROWSER_PROFILE_PARTITION, PASEO_HUB_PARTITION } from "../browser-profile.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
   decideBrowserWindowOpenRequest,
@@ -43,6 +43,16 @@ export function isPaseoBrowserWebviewAttach(input: { src?: string; partition?: s
   return (
     isAllowedBrowserWebviewUrl(input.src) && input.partition === PASEO_BROWSER_PROFILE_PARTITION
   );
+}
+
+/**
+ * Hub guest. Same URL rules as the in-app browser, on the Hub partition.
+ *
+ * @param input - Attach params from `will-attach-webview`
+ * @returns Whether this guest is the embedded Hub
+ */
+export function isPaseoHubWebviewAttach(input: { src?: string; partition?: string }): boolean {
+  return isAllowedBrowserWebviewUrl(input.src) && input.partition === PASEO_HUB_PARTITION;
 }
 
 export function listRegisteredPaseoBrowserIds(): string[] {

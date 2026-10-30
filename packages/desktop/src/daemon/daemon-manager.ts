@@ -10,6 +10,7 @@ import {
   readDaemonInstance,
   isSameDaemonInstance,
   readLocalCredentialForTarget,
+  waitForDaemonReady,
   type DaemonInstance,
 } from "@getpaseo/server/daemon-control";
 import {
@@ -55,6 +56,7 @@ import {
 import { tailFile } from "../diagnostics/tail-file.js";
 
 const DAEMON_LOG_FILENAME = "daemon.log";
+const DESKTOP_DAEMON_START_TIMEOUT_MS = 30_000;
 let ownedLaunch: { home: string; instance: DaemonInstance } | null = null;
 
 type DesktopDaemonState = "starting" | "running" | "stopped" | "errored";
@@ -90,6 +92,8 @@ interface DesktopDaemonLogs {
   logPath: string;
   contents: string;
 }
+
+let desktopDaemonStartInFlight: Promise<DesktopDaemonStatus> | null = null;
 
 function parseReleaseChannel(
   args: Record<string, unknown> | undefined,
@@ -295,10 +299,44 @@ export async function ensureDesktopDaemonStarted(): Promise<void> {
   }
 }
 
-async function startDaemon(): Promise<DesktopDaemonStatus> {
+function startDaemon(): Promise<DesktopDaemonStatus> {
+  // The window and the main-process auto-start both request this during launch.
+  // The later request has to stay on the same start. Otherwise it reads the lock
+  // before the server id is published and startup shows a false failure.
+  if (desktopDaemonStartInFlight) {
+    return desktopDaemonStartInFlight;
+  }
+  const pending = runDesktopDaemonStart().finally(() => {
+    if (desktopDaemonStartInFlight === pending) {
+      desktopDaemonStartInFlight = null;
+    }
+  });
+  desktopDaemonStartInFlight = pending;
+  return pending;
+}
+
+async function adoptPublishedServerId(status: DesktopDaemonStatus): Promise<DesktopDaemonStatus> {
+  if (status.serverId.trim().length > 0) {
+    return status;
+  }
+  const instance = await readDaemonInstance(status.home);
+  const serverId = instance?.serverId?.trim() ?? "";
+  if (serverId.length === 0) {
+    return status;
+  }
+  const listen = status.listen ?? instance?.listen ?? null;
+  return {
+    ...status,
+    serverId,
+    listen,
+    status: listen ? "running" : status.status,
+  };
+}
+
+async function runDesktopDaemonStart(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 
-  const current = await resolveDesktopDaemonStatus();
+  let current = await resolveDesktopDaemonStatus();
   logDesktopDaemonLifecycle("initial status check before start", {
     status: current.status,
     pid: current.pid,
@@ -307,6 +345,24 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     error: current.error,
     desktopManaged: current.desktopManaged,
   });
+  if (current.status === "starting") {
+    try {
+      await waitForDaemonReady(current.home, { timeoutMs: DESKTOP_DAEMON_START_TIMEOUT_MS });
+    } catch (error) {
+      if (!(error instanceof DaemonInstanceError)) {
+        throw error;
+      }
+      // The supervisor is still up but never published. Surface that snapshot
+      // instead of launching a second daemon on the same lock.
+      if (error.code === "DAEMON_NOT_READY") {
+        return adoptPublishedServerId(await resolveDesktopDaemonStatus());
+      }
+      if (error.code !== "DAEMON_NOT_RUNNING") {
+        throw error;
+      }
+    }
+    current = await resolveDesktopDaemonStatus();
+  }
   if (current.status === "running" || current.status === "starting") {
     if (shouldRestartForVersion(current)) {
       logDesktopDaemonLifecycle("daemon version mismatch, restarting", {
@@ -315,7 +371,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       });
       await stopDesktopDaemon("version_mismatch");
     } else {
-      return current;
+      return adoptPublishedServerId(current);
     }
   }
 
@@ -329,7 +385,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
   try {
     await startDaemonInstance({
       home,
-      timeoutMs: 30_000,
+      timeoutMs: DESKTOP_DAEMON_START_TIMEOUT_MS,
       ...invocation,
       env: { ...invocation.env, PASEO_CLI: getBundledCliShimPath() },
       mode: "managed",
@@ -341,7 +397,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
   } catch (error) {
     if (!(error instanceof DaemonInstanceError && error.code === "DAEMON_NOT_READY")) throw error;
   }
-  return resolveDesktopDaemonStatus();
+  return adoptPublishedServerId(await resolveDesktopDaemonStatus());
 }
 
 export async function stopDesktopDaemon(

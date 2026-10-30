@@ -8,6 +8,7 @@ import {
   readBadgeCount,
   readWindowChromeUpdate,
   readWindowTheme,
+  preventSystemWindowContextMenu,
   resolveWindowBounds,
 } from "./window-manager";
 
@@ -143,6 +144,33 @@ describe("window-manager", () => {
         width: 1024,
         height: 720,
       });
+    });
+  });
+
+  describe("preventSystemWindowContextMenu", () => {
+    it("does not cancel anything until the system menu is requested", () => {
+      const preventDefault = vi.fn();
+      const on = vi.fn();
+
+      preventSystemWindowContextMenu({ on });
+
+      expect(on).toHaveBeenCalledOnce();
+      expect(preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("cancels the OS window menu on the title bar drag region", () => {
+      let listener: ((event: { preventDefault: () => void }) => void) | undefined;
+      const preventDefault = vi.fn();
+
+      preventSystemWindowContextMenu({
+        on: (_event, next) => {
+          listener = next;
+        },
+      });
+      listener?.({ preventDefault });
+
+      expect(listener).toBeTypeOf("function");
+      expect(preventDefault).toHaveBeenCalledOnce();
     });
   });
 });

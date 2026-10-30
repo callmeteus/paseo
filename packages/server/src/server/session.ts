@@ -2935,11 +2935,6 @@ export class Session {
       case "daemon.config.reload.request":
         this.daemonSession.handleConfigReloadRequest(msg);
         return undefined;
-      case "hub.management.daemon.connect.request":
-      case "hub.management.daemon.get_status.request":
-      case "hub.management.daemon.disconnect.request":
-      case "hub.management.daemon.permissions.update.request":
-        return this.daemonSession.handleHubRelationshipRequest(msg);
       case "diagnostics.request":
         return this.daemonSession.handleDiagnosticsRequest(msg);
       case "daemon.update.request":
@@ -2957,6 +2952,27 @@ export class Session {
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
         return this.projectConfigSession.handleWriteProjectConfigRequest(msg);
+      default:
+        return this.dispatchHubDaemonMessage(msg);
+    }
+  }
+
+  /**
+   * Routes messages that connect, inspect, or install the local Hub.
+   *
+   * @param msg - Inbound session message
+   * @returns The handler promise, or undefined when the message belongs to another dispatcher
+   */
+  private dispatchHubDaemonMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "hub.management.daemon.connect.request":
+      case "hub.management.daemon.get_status.request":
+      case "hub.management.daemon.disconnect.request":
+      case "hub.management.daemon.permissions.update.request":
+        return this.daemonSession.handleHubRelationshipRequest(msg);
+      case "hub.local.status.request":
+      case "hub.local.install.request":
+        return this.daemonSession.handleLocalHubRequest(msg);
       default:
         return undefined;
     }

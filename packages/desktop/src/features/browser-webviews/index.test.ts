@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { PASEO_BROWSER_PROFILE_PARTITION } from "../browser-profile.js";
+import { PASEO_BROWSER_PROFILE_PARTITION, PASEO_HUB_PARTITION } from "../browser-profile.js";
 import {
   getPaseoBrowserIdForWebContents,
   getPaseoBrowserWorkspaceId,
   isPaseoBrowserWebviewAttach,
+  isPaseoHubWebviewAttach,
   preparePaseoBrowserWebContents,
   registerAttachedPaseoBrowser,
   unregisterPaseoBrowser,
@@ -59,6 +60,39 @@ describe("browser webview attachment", () => {
     ).toBe(false);
     expect(
       isPaseoBrowserWebviewAttach({ src: "https://example.com", partition: "persist:foreign" }),
+    ).toBe(false);
+    expect(
+      isPaseoBrowserWebviewAttach({
+        src: "http://127.0.0.1:3000/triggers",
+        partition: PASEO_HUB_PARTITION,
+      }),
+    ).toBe(false);
+  });
+
+  test("accepts the embedded Hub on its own partition", () => {
+    expect(
+      isPaseoHubWebviewAttach({
+        src: "http://127.0.0.1:3000/triggers",
+        partition: PASEO_HUB_PARTITION,
+      }),
+    ).toBe(true);
+    expect(
+      isPaseoHubWebviewAttach({
+        src: "https://hub.example.com/triggers",
+        partition: PASEO_HUB_PARTITION,
+      }),
+    ).toBe(true);
+    expect(
+      isPaseoHubWebviewAttach({
+        src: "http://127.0.0.1:3000/triggers",
+        partition: PASEO_BROWSER_PROFILE_PARTITION,
+      }),
+    ).toBe(false);
+    expect(
+      isPaseoHubWebviewAttach({
+        src: "file:///tmp/hub.html",
+        partition: PASEO_HUB_PARTITION,
+      }),
     ).toBe(false);
   });
 

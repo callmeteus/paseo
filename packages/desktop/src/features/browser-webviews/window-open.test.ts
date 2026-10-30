@@ -142,6 +142,35 @@ describe("browser webview window-open requests", () => {
     expect(result).toEqual({ kind: "popup" });
   });
 
+  it("opens a Hub target=_blank link in the system browser", () => {
+    const result = decideBrowserWindowOpenRequest({
+      url: "https://api.slack.com/apps?new_app=1",
+      disposition: "foreground-tab",
+      frameName: "_blank",
+      features: "noreferrer",
+      hasPostBody: false,
+      embed: "hub",
+    });
+
+    expect(result).toEqual({
+      kind: "system-browser",
+      url: "https://api.slack.com/apps?new_app=1",
+    });
+  });
+
+  it("keeps a Hub OAuth popup inside the app", () => {
+    const result = decideBrowserWindowOpenRequest({
+      url: "https://slack.com/oauth",
+      disposition: "new-window",
+      frameName: "oauth",
+      features: "width=500,height=600",
+      hasPostBody: false,
+      embed: "hub",
+    });
+
+    expect(result).toEqual({ kind: "popup" });
+  });
+
   it("denies unsupported window-open requests", () => {
     const result = decideBrowserWindowOpenRequest({
       url: "file:///etc/passwd",

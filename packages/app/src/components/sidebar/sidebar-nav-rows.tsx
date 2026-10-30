@@ -1,5 +1,5 @@
 import { router, usePathname } from "expo-router";
-import { CalendarClock, History, Plus, Search } from "lucide-react-native";
+import { CalendarClock, History, Plus, Search, Workflow } from "lucide-react-native";
 import { memo, useCallback, useMemo, useRef, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { View, type StyleProp, type ViewStyle } from "react-native";
@@ -19,6 +19,7 @@ import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import {
+  buildAutomationsRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
@@ -185,11 +186,32 @@ function SidebarSchedulesRow({ onBeforeNavigate }: SidebarNavRowProps) {
   );
 }
 
+function SidebarAutomationsRow({ onBeforeNavigate }: SidebarNavRowProps) {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const handlePress = useCallback(() => {
+    onBeforeNavigate?.();
+    router.push(buildAutomationsRoute());
+  }, [onBeforeNavigate]);
+
+  return (
+    <SidebarHeaderRow
+      icon={Workflow}
+      label={t(builtinSidebarNavLabelKey("automations"))}
+      onPress={handlePress}
+      isActive={pathname.includes("/automations")}
+      testID="sidebar-automations"
+      variant="compact"
+    />
+  );
+}
+
 const BUILTIN_ROWS: Record<BuiltinSidebarNavId, ComponentType<SidebarNavRowProps>> = {
   "new-workspace": SidebarNewWorkspaceRow,
   history: SidebarHistoryRow,
   search: SidebarSearchRow,
   schedules: SidebarSchedulesRow,
+  automations: SidebarAutomationsRow,
 };
 
 const styles = StyleSheet.create({

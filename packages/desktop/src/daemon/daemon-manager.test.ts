@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   runExternalCliJsonCommand: vi.fn(),
   runExternalCliTextCommand: vi.fn(),
+  startDaemonInstance: vi.fn(),
   createNodeEntrypointInvocation: vi.fn(() => ({
     command: "node",
     args: [],
@@ -55,6 +56,7 @@ vi.mock("@getpaseo/server/daemon-control", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   resolvePaseoHome: () => mocks.paseoHome,
   spawnProcess: mocks.spawnProcess,
+  startDaemonInstance: mocks.startDaemonInstance,
 }));
 
 vi.mock("../settings/desktop-settings-electron.js", () => ({
@@ -88,6 +90,7 @@ describe("daemon-manager commands", () => {
     mocks.settings = DEFAULT_DESKTOP_SETTINGS;
     mocks.runExternalCliJsonCommand.mockReset();
     mocks.runExternalCliTextCommand.mockReset();
+    mocks.startDaemonInstance.mockReset();
     mocks.createNodeEntrypointInvocation.mockReset();
     mocks.createNodeEntrypointInvocation.mockReturnValue({ command: "node", args: [], env: {} });
     mocks.spawnProcess.mockReset();
@@ -175,4 +178,128 @@ describe("daemon-manager commands", () => {
     writeFileSync(lockPath, JSON.stringify({ ...lock, desktopManaged: false }));
     expect(await handler({ listen: "localhost:6799" })).toBeNull();
   });
+
+  it("waits for a daemon that is already starting instead of failing with an empty server id", async () => {
+    mkdirSync(mocks.paseoHome);
+    writeDaemonLock(mocks.paseoHome, { listen: null, serverId: null });
+    mocks.runExternalCliJsonCommand.mockImplementation(async () =>
+      daemonStatusFromLock(mocks.paseoHome),
+    );
+
+    const pending = createDaemonCommandHandlers().start_desktop_daemon();
+    await vi.waitFor(() => {
+      expect(mocks.runExternalCliJsonCommand).toHaveBeenCalledTimes(1);
+    });
+    writeDaemonLock(mocks.paseoHome, { listen: "127.0.0.1:6767", serverId: "srv_ready" });
+
+    await expect(pending).resolves.toMatchObject({
+      serverId: "srv_ready",
+      status: "running",
+      listen: "127.0.0.1:6767",
+    });
+    expect(mocks.startDaemonInstance).not.toHaveBeenCalled();
+  });
+
+  it("shares one start while the daemon is still publishing its server id", async () => {
+    mkdirSync(mocks.paseoHome);
+    let releaseStart: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    mocks.runExternalCliJsonCommand.mockImplementation(async () =>
+      daemonStatusFromLock(mocks.paseoHome),
+    );
+    mocks.startDaemonInstance.mockImplementation(async (input: { home: string }) => {
+      writeDaemonLock(input.home, { listen: null, serverId: null });
+      await gate;
+      const instance = writeDaemonLock(input.home, {
+        listen: "127.0.0.1:6767",
+        serverId: "srv_ready",
+      });
+      return { instance, spawned: true };
+    });
+
+    const start = createDaemonCommandHandlers().start_desktop_daemon;
+    const first = start();
+    const second = start();
+    releaseStart();
+
+    await expect(first).resolves.toMatchObject({ serverId: "srv_ready", status: "running" });
+    await expect(second).resolves.toMatchObject({ serverId: "srv_ready", status: "running" });
+    expect(mocks.startDaemonInstance).toHaveBeenCalledTimes(1);
+  });
 });
+
+function readBootId(): string | undefined {
+  try {
+    const bootId = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    return bootId.length > 0 ? bootId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeDaemonLock(
+  home: string,
+  patch: { listen: string | null; serverId: string | null },
+): {
+  pid: number;
+  startedAt: string;
+  hostname: string;
+  uid: number;
+  listen: string | null;
+  serverId: string | null;
+  desktopManaged: boolean;
+  bootId?: string;
+} {
+  const lockPath = path.join(home, "paseo.pid");
+  const bootId = readBootId();
+  let startedAt = new Date().toISOString();
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(lockPath, "utf8"));
+    if (isRecord(parsed) && typeof parsed.startedAt === "string") {
+      startedAt = parsed.startedAt;
+    }
+  } catch {
+    startedAt = new Date().toISOString();
+  }
+  const lock = {
+    pid: process.pid,
+    startedAt,
+    hostname: hostname(),
+    uid: process.getuid?.() ?? 0,
+    desktopManaged: true,
+    ...(bootId ? { bootId } : {}),
+    ...patch,
+  };
+  writeFileSync(lockPath, JSON.stringify(lock));
+  return lock;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readLockString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
+function daemonStatusFromLock(home: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(readFileSync(path.join(home, "paseo.pid"), "utf8"));
+  const raw = isRecord(parsed) ? parsed : {};
+  const listen = readLockString(raw, "listen");
+  const pid = raw.pid;
+  return {
+    home,
+    pid: typeof pid === "number" ? pid : null,
+    startedAt: readLockString(raw, "startedAt"),
+    listen,
+    serverId: readLockString(raw, "serverId"),
+    hostname: readLockString(raw, "hostname"),
+    localDaemon: listen ? "running" : "not_ready",
+    desktopManaged: raw.desktopManaged === true,
+    connectedDaemon: listen ? "reachable" : "not_probed",
+    daemonVersion: "1.2.3",
+  };
+}

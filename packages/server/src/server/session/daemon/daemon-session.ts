@@ -11,6 +11,7 @@ import { DaemonSelfUpdateSessionController } from "./daemon-self-update-session-
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
+import { daemonHubLocalInstaller, type HubLocalInstaller } from "../../hub/local-install.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
 
 export interface DaemonRuntimeConfig {
@@ -53,6 +54,7 @@ export interface DaemonSessionOptions {
   getObservationMetrics?: () => Record<string, number>;
   logger: pino.Logger;
   hubRelationships?: HubRelationshipManagement;
+  hubLocalInstaller?: HubLocalInstaller;
   reloadConfig: () => DaemonConfigReloadResult;
 }
 
@@ -79,6 +81,7 @@ export class DaemonSession {
   private readonly logger: pino.Logger;
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
+  private readonly hubLocalInstaller: HubLocalInstaller;
   private readonly reloadConfig: () => DaemonConfigReloadResult;
 
   constructor(options: DaemonSessionOptions) {
@@ -96,6 +99,8 @@ export class DaemonSession {
     this.getObservationMetrics = options.getObservationMetrics;
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
+    this.hubLocalInstaller =
+      options.hubLocalInstaller ?? daemonHubLocalInstaller(options.paseoHome);
     this.reloadConfig = options.reloadConfig;
     this.selfUpdate = new DaemonSelfUpdateSessionController({
       clientId: this.clientId,
@@ -158,6 +163,57 @@ export class DaemonSession {
       });
     } catch (error) {
       this.logger.error({ err: error }, "Failed to handle Hub relationship request");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: error instanceof Error ? error.message : String(error),
+          code: "handler_error",
+        },
+      });
+    }
+  }
+
+  async handleLocalHubRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "hub.local.status.request" | "hub.local.install.request" }
+    >,
+  ): Promise<void> {
+    try {
+      if (msg.type === "hub.local.status.request") {
+        const status = await this.hubLocalInstaller.status();
+        this.host.emit({
+          type: "hub.local.status.response",
+          payload: { requestId: msg.requestId, status },
+        });
+        return;
+      }
+      const status = await this.hubLocalInstaller.install((progress) => {
+        this.host.emit({
+          type: "hub.local.install.progress",
+          payload: { requestId: msg.requestId, ...progress },
+        });
+      });
+      this.host.emit({
+        type: "hub.local.install.response",
+        payload: { requestId: msg.requestId, success: true, origin: status.origin, error: null },
+      });
+    } catch (error) {
+      this.logger.error({ err: error }, "Failed to handle local Hub request");
+      if (msg.type === "hub.local.install.request") {
+        this.host.emit({
+          type: "hub.local.install.response",
+          payload: {
+            requestId: msg.requestId,
+            success: false,
+            origin: null,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return;
+      }
       this.host.emit({
         type: "rpc_error",
         payload: {
