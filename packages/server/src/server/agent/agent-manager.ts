@@ -106,7 +106,7 @@ import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtim
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
-import { composeWorkflowPrompt } from "./workflow-modes.js";
+import { composeWorkflowPrompt, isWorkflowModeId } from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -2531,6 +2531,41 @@ export class AgentManager {
     this.touchUpdatedAt(agent);
     this.emitState(agent);
     return notice;
+  }
+
+  /**
+   * Switches the daemon-level workflow mode. The prompt fragment is recomposed
+   * on the next launch; a live runtime keeps its current prompt until then.
+   * Passing null restores the default `agent` mode.
+   */
+  async setAgentWorkflowMode(
+    agentId: string,
+    workflowModeId: string | null,
+  ): Promise<string | null> {
+    const normalized =
+      workflowModeId === null || workflowModeId.trim() === "" ? null : workflowModeId.trim();
+    if (normalized !== null && !isWorkflowModeId(normalized)) {
+      throw new Error(`Unknown workflow mode: ${normalized}`);
+    }
+
+    const liveAgent = this.getAgent(agentId);
+    if (liveAgent) {
+      liveAgent.config.workflowModeId = normalized ?? undefined;
+      this.touchUpdatedAt(liveAgent);
+      this.emitState(liveAgent);
+      return normalized;
+    }
+
+    const storedRecord = this.registry ? await this.registry.get(agentId) : null;
+    if (!storedRecord) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+    await this.registry!.upsert({
+      ...storedRecord,
+      config: { ...storedRecord.config, workflowModeId: normalized },
+      updatedAt: new Date().toISOString(),
+    });
+    return normalized;
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {

@@ -14,6 +14,7 @@ import { findModelByReference } from "./model-catalog";
 export interface FormInitialValues {
   provider?: AgentProvider;
   modeId?: string | null;
+  workflowModeId?: string | null;
   model?: string | null;
   thinkingOptionId?: string | null;
 }
@@ -21,6 +22,7 @@ export interface FormInitialValues {
 export interface FormState {
   provider: AgentProvider | null;
   modeId: string;
+  workflowModeId: string;
   model: string;
   thinkingOptionId: string;
 }
@@ -28,6 +30,7 @@ export interface FormState {
 export interface UserModifiedFields {
   provider: boolean;
   modeId: boolean;
+  workflowModeId: boolean;
   model: boolean;
   thinkingOptionId: boolean;
 }
@@ -50,6 +53,7 @@ export interface AgentFormReducerState {
 export const INITIAL_USER_MODIFIED: UserModifiedFields = {
   provider: false,
   modeId: false,
+  workflowModeId: false,
   model: false,
   thinkingOptionId: false,
 };
@@ -107,6 +111,7 @@ export type AgentFormAction =
       providerPrefs?: ProviderPrefs | undefined;
     }
   | { type: "SET_MODE_FROM_USER"; modeId: string }
+  | { type: "SET_WORKFLOW_MODE_FROM_USER"; workflowModeId: string }
   | {
       type: "SET_MODEL_FROM_USER";
       modelId: string;
@@ -358,6 +363,23 @@ function resolveThinkingOption(input: {
   return "";
 }
 
+const DEFAULT_WORKFLOW_MODE_ID = "agent";
+
+function resolveWorkflowModeField(input: {
+  userModified: boolean;
+  currentWorkflowModeId: string;
+  initialValues: FormInitialValues | undefined;
+}): string {
+  if (input.userModified) {
+    return input.currentWorkflowModeId || DEFAULT_WORKFLOW_MODE_ID;
+  }
+  const requested = input.initialValues?.workflowModeId;
+  if (typeof requested === "string" && requested.trim().length > 0) {
+    return requested.trim();
+  }
+  return input.currentWorkflowModeId || DEFAULT_WORKFLOW_MODE_ID;
+}
+
 export function resolveFormState(
   initialValues: FormInitialValues | undefined,
   preferences: FormPreferences | null,
@@ -387,6 +409,12 @@ export function resolveFormState(
     initialValues,
     providerDef,
     providerPrefs,
+  });
+
+  result.workflowModeId = resolveWorkflowModeField({
+    userModified: userModified.workflowModeId,
+    currentWorkflowModeId: result.workflowModeId,
+    initialValues,
   });
 
   result.model = resolveModelField({
@@ -581,6 +609,7 @@ function sameInitialValues(left: FormInitialValues = {}, right: FormInitialValue
     left.provider === right.provider &&
     left.model === right.model &&
     left.modeId === right.modeId &&
+    left.workflowModeId === right.workflowModeId &&
     left.thinkingOptionId === right.thinkingOptionId
   );
 }
@@ -665,6 +694,13 @@ export function resolveAgentForm(
         ...state,
         form: { ...state.form, modeId: action.modeId },
         userModified: { ...state.userModified, modeId: true },
+      };
+
+    case "SET_WORKFLOW_MODE_FROM_USER":
+      return {
+        ...state,
+        form: { ...state.form, workflowModeId: action.workflowModeId },
+        userModified: { ...state.userModified, workflowModeId: true },
       };
 
     case "SET_MODEL_FROM_USER": {

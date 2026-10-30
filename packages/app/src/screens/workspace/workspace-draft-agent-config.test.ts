@@ -19,4 +19,24 @@ describe("workspace-draft-agent-config", () => {
       thinkingOptionId: "high",
     });
   });
+
+  it("carries a non-default workflow mode into the create config", () => {
+    expect(
+      buildWorkspaceDraftAgentConfig({
+        provider: "codex",
+        cwd: "/tmp/project",
+        workflowModeId: "debug",
+      }).workflowModeId,
+    ).toBe("debug");
+  });
+
+  it("omits the default workflow mode so older daemons see an unchanged config", () => {
+    expect(
+      buildWorkspaceDraftAgentConfig({
+        provider: "codex",
+        cwd: "/tmp/project",
+        workflowModeId: "agent",
+      }),
+    ).not.toHaveProperty("workflowModeId");
+  });
 });

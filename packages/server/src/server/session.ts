@@ -2921,6 +2921,12 @@ export class Session {
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
       case "agent.model_router.set.request":
         return this.handleAgentModelRouterSetRequest(msg.agentId, msg.routerId, msg.requestId);
+      case "agent.workflow_mode.set.request":
+        return this.handleAgentWorkflowModeSetRequest(
+          msg.agentId,
+          msg.workflowModeId,
+          msg.requestId,
+        );
       case "agent.workspace.set.request":
         return this.handleAgentWorkspaceSetRequest(msg.agentId, msg.workspaceId, msg.requestId);
       default:
@@ -3771,6 +3777,42 @@ export class Session {
           requestId,
           agentId,
           routerId: routerId ?? null,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleAgentWorkflowModeSetRequest(
+    agentId: string,
+    workflowModeId: string | null,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const applied = await this.agentManager.setAgentWorkflowMode(agentId, workflowModeId);
+      this.emit({
+        type: "agent.workflow_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workflowModeId: applied,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to update the workflow mode");
+      this.sessionLogger.error(
+        { err: error, agentId, workflowModeId, requestId },
+        "Failed to update the workflow mode",
+      );
+      this.emit({
+        type: "agent.workflow_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workflowModeId: workflowModeId ?? null,
           accepted: false,
           error: message,
         },

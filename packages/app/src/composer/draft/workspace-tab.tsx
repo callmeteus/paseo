@@ -201,6 +201,7 @@ async function submitDraftCreateRequest(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     selectedProvider: string | null;
+    selectedWorkflowMode: string;
     effectiveModeId: string;
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -248,6 +249,7 @@ async function submitDraftCreateRequest(input: {
     provider: route.provider,
     cwd,
     ...modeIdOverride,
+    workflowModeId: composerState.selectedWorkflowMode,
     model: autoSubmitConfig?.model ?? route.model,
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),

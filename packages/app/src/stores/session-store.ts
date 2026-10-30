@@ -89,6 +89,8 @@ export interface Agent {
   lastActivityAt: Date;
   capabilities: AgentCapabilityFlags;
   currentModeId: string | null;
+  /** Daemon-level workflow mode (agent, ask, debug, multitask). */
+  workflowModeId?: string | null;
   availableModes: AgentMode[];
   pendingPermissions: AgentPermissionRequest[];
   persistence: AgentPersistenceHandle | null;

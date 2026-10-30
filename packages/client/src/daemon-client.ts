@@ -4190,6 +4190,38 @@ export class DaemonClient {
     }
   }
 
+  /** Switches the daemon-level workflow mode (agent, ask, debug, multitask). */
+  async setAgentWorkflowMode(
+    agentId: string,
+    workflowModeId: string | null,
+  ): Promise<string | null> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.workflow_mode.set.request",
+      agentId,
+      workflowModeId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.workflow_mode.set.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentWorkflowMode rejected");
+    }
+    return payload.workflowModeId;
+  }
+
   /** Moves a chat's ownership to another workspace, keeping its cwd. */
   async setAgentWorkspace(agentId: string, workspaceId: string): Promise<void> {
     const requestId = this.createRequestId();

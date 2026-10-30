@@ -907,6 +907,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   activeTurn: AgentActiveTurnPayloadSchema.nullable().optional(),
   capabilities: AgentCapabilityFlagsSchema,
   currentModeId: z.string().nullable(),
+  // COMPAT(workflowModes): added with daemon-level workflow modes.
+  workflowModeId: z.string().nullable().optional(),
   availableModes: z.array(AgentModeSchema),
   pendingPermissions: z.array(AgentPermissionRequestPayloadSchema),
   persistence: AgentPersistenceHandleSchema.nullable(),
@@ -2272,6 +2274,14 @@ export const AgentModelRouterSetRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+/** Switches the daemon-level workflow mode (agent, ask, debug, multitask). */
+export const AgentWorkflowModeSetRequestMessageSchema = z.object({
+  type: z.literal("agent.workflow_mode.set.request"),
+  agentId: z.string(),
+  workflowModeId: z.string().nullable(),
+  requestId: z.string(),
+});
+
 /** Moves a chat's ownership to another workspace without changing its cwd. */
 export const AgentWorkspaceSetRequestMessageSchema = z.object({
   type: z.literal("agent.workspace.set.request"),
@@ -2297,6 +2307,17 @@ export const AgentModelRouterSetResponseMessageSchema = z.object({
     requestId: z.string(),
     agentId: z.string(),
     routerId: z.string().nullable(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentWorkflowModeSetResponseMessageSchema = z.object({
+  type: z.literal("agent.workflow_mode.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    workflowModeId: z.string().nullable(),
     accepted: z.boolean(),
     error: z.string().nullable(),
   }),
@@ -3624,6 +3645,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
   AgentModelRouterSetRequestMessageSchema,
+  AgentWorkflowModeSetRequestMessageSchema,
   AgentWorkspaceSetRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
@@ -7452,6 +7474,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
   AgentModelRouterSetResponseMessageSchema,
+  AgentWorkflowModeSetResponseMessageSchema,
   AgentWorkspaceSetResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
@@ -7660,6 +7683,9 @@ export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessa
 export type AgentModelRouterSetResponseMessage = z.infer<
   typeof AgentModelRouterSetResponseMessageSchema
 >;
+export type AgentWorkflowModeSetResponseMessage = z.infer<
+  typeof AgentWorkflowModeSetResponseMessageSchema
+>;
 export type AgentWorkspaceSetResponseMessage = z.infer<
   typeof AgentWorkspaceSetResponseMessageSchema
 >;
@@ -7834,6 +7860,9 @@ export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequ
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentModelRouterSetRequestMessage = z.infer<
   typeof AgentModelRouterSetRequestMessageSchema
+>;
+export type AgentWorkflowModeSetRequestMessage = z.infer<
+  typeof AgentWorkflowModeSetRequestMessageSchema
 >;
 export type AgentWorkspaceSetRequestMessage = z.infer<typeof AgentWorkspaceSetRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;

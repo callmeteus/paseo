@@ -38,6 +38,8 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     setProviderFromUser: () => undefined,
     selectedMode: "auto",
     setModeFromUser: () => undefined,
+    selectedWorkflowMode: "agent",
+    setWorkflowModeFromUser: () => undefined,
     selectedModel: "",
     setModelFromUser: () => undefined,
     selectedThinkingOptionId: "",

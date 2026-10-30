@@ -7,6 +7,7 @@ import {
   AgentSnapshotPayloadSchema,
   AgentTimelineItemPayloadSchema,
   ServerInfoStatusPayloadSchema,
+  SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
   WSHelloMessageSchema,
   WorkspaceSetupSnapshotSchema,
@@ -573,4 +574,55 @@ test("speech config reads remain compatible with clients before features and fut
       features: { voiceMode: { stt: { provider: "future", region: "eu" } } },
     }).features?.voiceMode?.stt,
   ).toEqual({ provider: "future", region: "eu" });
+});
+
+test("workflow mode RPC round-trips and older snapshots omit the mode", () => {
+  const request = {
+    type: "agent.workflow_mode.set.request",
+    agentId: "agent-1",
+    workflowModeId: "debug",
+    requestId: "req-1",
+  };
+  expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+
+  const response = {
+    type: "agent.workflow_mode.set.response",
+    payload: {
+      requestId: "req-1",
+      agentId: "agent-1",
+      workflowModeId: "debug",
+      accepted: true,
+      error: null,
+    },
+  };
+  expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+
+  const snapshot = {
+    id: "agent-1",
+    provider: "codex",
+    cwd: "/workspace",
+    model: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastUserMessageAt: null,
+    status: "idle",
+    capabilities: {
+      supportsStreaming: true,
+      supportsSessionPersistence: true,
+      supportsDynamicModes: true,
+      supportsMcpServers: true,
+      supportsReasoningStream: true,
+      supportsToolInvocations: true,
+    },
+    currentModeId: null,
+    availableModes: [],
+    pendingPermissions: [],
+    persistence: null,
+    title: null,
+    labels: {},
+  };
+  expect(AgentSnapshotPayloadSchema.parse(snapshot).workflowModeId).toBeUndefined();
+  expect(
+    AgentSnapshotPayloadSchema.parse({ ...snapshot, workflowModeId: "ask" }).workflowModeId,
+  ).toBe("ask");
 });
