@@ -5820,6 +5820,11 @@ export class AgentManager {
       this.openActiveTurn(agent, eventTurnId, new Date());
     }
     agent.lifecycle = "running";
+    // External turns (started in the provider's own client) are real activity.
+    // Workspace `statusEnteredAt`, sidebar times and cached directory snapshots
+    // all key off `updatedAt`, so leaving it untouched here keeps an actively
+    // running chat ranked and dated as if it were still idle.
+    this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
 

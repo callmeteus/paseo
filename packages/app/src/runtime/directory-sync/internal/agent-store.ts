@@ -46,7 +46,14 @@ export class AgentStoreProjection {
 
   commitCached(agents: Map<string, Agent>): Map<string, Agent> {
     const merged = new Map(agents);
-    for (const [agentId, agent] of this.snapshot()) merged.set(agentId, agent);
+    // The live store can hold newer stream-derived state than the directory
+    // fetch, and the directory fetch can hold newer persisted state than the
+    // cache. Resolve both with the same policy instead of letting the cached
+    // entry win unconditionally.
+    for (const [agentId, agent] of this.snapshot()) {
+      const fetched = merged.get(agentId);
+      merged.set(agentId, fetched ? acceptAgentDirectoryUpdate(agent, fetched) : agent);
+    }
     for (const agent of merged.values()) this.publishActivity(agent);
     useSessionStore.getState().setAgents(this.serverId, merged);
     return merged;
