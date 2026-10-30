@@ -5,7 +5,11 @@ import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/contexts/toast-context";
-import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
+import {
+  normalizeWorkspaceDescriptor,
+  useSessionStore,
+  type WorkspaceDescriptor,
+} from "@/stores/session-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import {
   closePromoteAgentToWorkspace,
@@ -78,8 +82,9 @@ export function PromoteAgentToWorkspaceSheet() {
         if (!created.workspace) {
           throw new Error(t("workspace.tabs.menu.promoteChat.failed"));
         }
-        workspaceId = created.workspace.id;
-        workspaceName = workspaceDisplayName(created.workspace);
+        const workspace = normalizeWorkspaceDescriptor(created.workspace);
+        workspaceId = workspace.id;
+        workspaceName = workspaceDisplayName(workspace);
       }
 
       await client.setAgentWorkspace(agent.id, workspaceId);
