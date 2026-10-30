@@ -587,6 +587,7 @@ describe("workspace-layout-store version 2 migration", () => {
       expect(Object.keys(persisted.state).sort()).toEqual([
         "explorerPaneIdByWorkspace",
         "explorerSidebarWidthByWorkspace",
+        "hiddenAgentIdsByWorkspace",
         "layoutByWorkspace",
         "pinnedAgentIdsByWorkspace",
         "pullRequestTabAutoOpenedByWorkspace",
@@ -3180,6 +3181,7 @@ describe("workspace-layout-store actions", () => {
     expect(persisted).toEqual({
       layoutByWorkspace: { [workspaceKey]: layout },
       pinnedAgentIdsByWorkspace: {},
+      hiddenAgentIdsByWorkspace: {},
       splitSizesByWorkspace: currentState.splitSizesByWorkspace,
       explorerSidebarWidthByWorkspace: currentState.explorerSidebarWidthByWorkspace,
       explorerPaneIdByWorkspace: {},
@@ -3381,7 +3383,7 @@ describe("workspace-layout-store actions", () => {
     });
   });
 
-  it("keeps hidden agent intents in memory per workspace without persisting them", () => {
+  it("persists hidden agent intents per workspace so closed tabs stay closed", () => {
     const workspaceKey = createWorkspaceKey();
     const otherWorkspaceKey = buildWorkspaceTabPersistenceKey({
       serverId: SERVER_ID,
@@ -3400,6 +3402,14 @@ describe("workspace-layout-store actions", () => {
     expect(Array.from(state.hiddenAgentIdsByWorkspace[otherWorkspaceKey as string] ?? [])).toEqual([
       "agent-2",
     ]);
+    const partialize = workspaceLayoutStore.persist.getOptions().partialize;
+    expect(partialize).toBeTypeOf("function");
+    expect(partialize?.(state)).toMatchObject({
+      hiddenAgentIdsByWorkspace: {
+        [workspaceKey]: ["agent-1"],
+        [otherWorkspaceKey as string]: ["agent-2"],
+      },
+    });
 
     store.unhideAgent(workspaceKey, "agent-1");
 
@@ -3409,12 +3419,11 @@ describe("workspace-layout-store actions", () => {
       "agent-2",
     ]);
 
-    const partialize = workspaceLayoutStore.persist.getOptions().partialize;
-    expect(partialize).toBeTypeOf("function");
     expect(partialize?.(state)).toEqual({
       pullRequestTabAutoOpenedByWorkspace: {},
       layoutByWorkspace: {},
       pinnedAgentIdsByWorkspace: {},
+      hiddenAgentIdsByWorkspace: { [otherWorkspaceKey as string]: ["agent-2"] },
       splitSizesByWorkspace: {},
       explorerSidebarWidthByWorkspace: {},
       explorerPaneIdByWorkspace: {},
