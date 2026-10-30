@@ -3820,6 +3820,78 @@ export class DaemonClient {
     return payload;
   }
 
+  async listCursorImportChats(
+    options: {
+      query?: string;
+      cwd?: string;
+      since?: string;
+      includeSubagents?: boolean;
+      includeArchived?: boolean;
+      limit?: number;
+      requestId?: string;
+      timeout?: number;
+    } = {},
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "agent.imports.cursor.list.response" }>["payload"]
+  > {
+    const requestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.imports.cursor.list.request",
+      requestId,
+      ...(options.query ? { query: options.query } : {}),
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(options.since ? { since: options.since } : {}),
+      ...(options.includeSubagents !== undefined
+        ? { includeSubagents: options.includeSubagents }
+        : {}),
+      ...(options.includeArchived !== undefined
+        ? { includeArchived: options.includeArchived }
+        : {}),
+      ...(options.limit ? { limit: options.limit } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: options.timeout,
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.imports.cursor.list.response" &&
+        response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+    return payload;
+  }
+
+  async importCursorChats(input: {
+    composerIds: string[];
+    includeSubagents?: boolean;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<
+    Extract<SessionOutboundMessage, { type: "agent.imports.cursor.run.response" }>["payload"]
+  > {
+    const requestId = this.createRequestId(input.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.imports.cursor.run.request",
+      requestId,
+      composerIds: input.composerIds,
+      ...(input.includeSubagents !== undefined ? { includeSubagents: input.includeSubagents } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: input.timeout,
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.imports.cursor.run.response" &&
+        response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+    return payload;
+  }
+
   async listProviderSubagents(
     parentAgentId: string,
     options: { requestId?: string; timeout?: number } = {},

@@ -2089,6 +2089,50 @@ export const AgentTimelineListPromptsRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const CursorImportListRequestMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.list.request"),
+  requestId: z.string(),
+  query: z.string().optional(),
+  /** Only chats recorded for this workspace folder. */
+  cwd: z.string().optional(),
+  since: z.string().optional(),
+  includeSubagents: z.boolean().optional(),
+  includeArchived: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const CursorImportRunRequestMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.run.request"),
+  requestId: z.string(),
+  composerIds: z.array(z.string()).min(1),
+  includeSubagents: z.boolean().optional(),
+});
+
+export const CursorImportableChatSchema = z.object({
+  composerId: z.string(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  subtitle: z.string().nullable(),
+  createdAt: z.string(),
+  lastUpdatedAt: z.string(),
+  model: z.string().nullable(),
+  isSubagent: z.boolean(),
+  subagentTypeName: z.string().nullable(),
+  importedAgentId: z.string().nullable(),
+  suggestedProviders: z.array(z.string()),
+});
+
+export const CursorImportedChatSchema = z.object({
+  composerId: z.string(),
+  agentId: z.string().nullable(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  messageCount: z.number().int().nonnegative(),
+  suggestedProviders: z.array(z.string()),
+  status: z.enum(["imported", "already_imported", "skipped"]),
+  error: z.string().nullable(),
+});
+
 export const ProviderSubagentListRequestMessageSchema = z.object({
   type: z.literal("agent.provider_subagents.list.request"),
   parentAgentId: z.string(),
@@ -3566,6 +3610,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentTimelineRequestMessageSchema,
   AgentTimelineSearchRequestMessageSchema,
   AgentTimelineListPromptsRequestMessageSchema,
+  CursorImportListRequestMessageSchema,
+  CursorImportRunRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
   ProviderSubagentTimelineRequestMessageSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
@@ -5016,6 +5062,28 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
         preview: z.string(),
       }),
     ),
+    error: z.string().nullable(),
+  }),
+});
+
+export const CursorImportListResponseMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    chats: z.array(CursorImportableChatSchema),
+    sourceAvailable: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const CursorImportRunResponseMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.run.response"),
+  payload: z.object({
+    requestId: z.string(),
+    chats: z.array(CursorImportedChatSchema),
+    importedCount: z.number().int().nonnegative(),
+    alreadyImportedCount: z.number().int().nonnegative(),
+    skippedCount: z.number().int().nonnegative(),
     error: z.string().nullable(),
   }),
 });
@@ -7336,6 +7404,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineReplacementMessageSchema,
   AgentTimelineSearchResponseMessageSchema,
   AgentTimelineListPromptsResponseMessageSchema,
+  CursorImportListResponseMessageSchema,
+  CursorImportRunResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
   ProviderSubagentTimelineResponseMessageSchema,
   ProviderSubagentUpdateMessageSchema,

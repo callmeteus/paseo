@@ -1,6 +1,7 @@
 import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { startAgentRun } from "./agent-prompt.js";
+import { isCursorImportedRecord } from "../imports/cursor/import.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -1608,6 +1609,26 @@ export class AgentManager {
 
   fetchTimeline(id: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
     this.requireAgent(id);
+    return this.timelineStore.fetch(id, options);
+  }
+
+  /**
+   * Serve a durable transcript for an agent that has no runtime and must not
+   * be loaded just to read it (imported chats). Seeds the in-memory store from
+   * the record so later pagination and porting see the same rows.
+   */
+  fetchImportedTimeline(
+    id: string,
+    rows: readonly AgentTimelineRow[],
+    options?: AgentTimelineFetchOptions,
+  ): AgentTimelineFetchResult {
+    if (!this.timelineStore.has(id)) {
+      this.timelineStore.initialize(id, {
+        rows: rows.map((row) => ({ ...row })),
+        nextSeq: rows.reduce((next, row) => Math.max(next, row.seq + 1), 1),
+        timestamp: new Date().toISOString(),
+      });
+    }
     return this.timelineStore.fetch(id, options);
   }
 
@@ -5037,6 +5058,18 @@ export class AgentManager {
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
     let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+    if (previousRows.length === 0) {
+      const imported = await registry.get(agentId);
+      // An imported transcript has no provider to hydrate from; its durable
+      // rows are the transcript the port must carry.
+      if (imported && isCursorImportedRecord(imported)) {
+        previousRows = this.fetchImportedTimeline(
+          agentId,
+          (imported.portedTimeline ?? []) as AgentTimelineRow[],
+          { limit: 0 },
+        ).rows;
+      }
+    }
     if (previousRows.length === 0) {
       // A chat that was never opened in this daemon has no live rows. Without
       // the provider history the port would silently drop the transcript.
