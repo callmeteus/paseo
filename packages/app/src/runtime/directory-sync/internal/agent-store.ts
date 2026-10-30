@@ -5,6 +5,7 @@ import { acceptAgentDirectoryUpdate } from "@/utils/agent-directory-update-polic
 import { buildAgentDirectoryState, type AgentDirectoryDelta } from "@/utils/agent-directory-sync";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { resolveProjectPlacement } from "@/utils/project-placement";
+import { settleInterruptedStreamItems } from "@/types/stream";
 import { clearArchiveAgentPending } from "@/hooks/use-archive-agent";
 import { queryClient } from "@/data/query-client";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
@@ -57,14 +58,17 @@ export class AgentStoreProjection {
 
   accept(agent: Agent): Agent {
     let accepted = agent;
+    let stoppedRunning = false;
     useSessionStore.getState().setAgents(this.serverId, (current) => {
       const previous = current.get(agent.id);
       accepted = acceptAgentDirectoryUpdate(previous, mergeSnapshotTurn(previous, agent));
+      stoppedRunning = previous?.turn.phase === "open" && accepted.turn.phase === "idle";
       if (accepted === previous) return current;
       const next = new Map(current);
       next.set(agent.id, accepted);
       return next;
     });
+    if (stoppedRunning) this.settleStream(accepted.id);
     return accepted;
   }
 
@@ -99,11 +103,31 @@ export class AgentStoreProjection {
     }
     this.replacePendingPermissions(accepted);
     useSessionStore.getState().setAgentLastActivity(accepted.id, accepted.lastActivityAt);
+    const stoppedRunning = previous?.turn.phase === "open" && accepted.turn.phase === "idle";
     return {
       agentId: accepted.id,
-      stoppedRunning: previous?.turn.phase === "open" && accepted.turn.phase === "idle",
+      stoppedRunning,
       agent: accepted,
     };
+  }
+
+  /**
+   * Close live rows left behind by a turn that is no longer running. The server
+   * settles them on a clean stop; an interrupted daemon leaves them open.
+   */
+  private settleStream(agentId: string): void {
+    const store = useSessionStore.getState();
+    const session = store.sessions[this.serverId];
+    if (!session) return;
+    const tail = session.agentStreamTail.get(agentId);
+    const head = session.agentStreamHead.get(agentId);
+    const nextTail = tail ? settleInterruptedStreamItems(tail) : undefined;
+    const nextHead = head ? settleInterruptedStreamItems(head) : undefined;
+    if ((!nextTail || nextTail === tail) && (!nextHead || nextHead === head)) return;
+    store.setAgentStreamState(this.serverId, agentId, {
+      ...(nextTail && nextTail !== tail ? { tail: nextTail } : {}),
+      ...(nextHead && nextHead !== head ? { head: nextHead } : {}),
+    });
   }
 
   replaceFetched(entries: FetchAgentsEntry[]): Map<string, Agent> {
@@ -118,6 +142,9 @@ export class AgentStoreProjection {
       const existing = current.get(agentId);
       const merged = mergeSnapshotTurn(existing, fetchedAgent);
       agents.set(agentId, existing && equal(existing, merged) ? existing : merged);
+      if (existing?.turn.phase === "open" && merged.turn.phase === "idle") {
+        this.settleStream(agentId);
+      }
       if (fetchedAgent.archivedAt) {
         clearArchiveAgentPending({ queryClient, serverId: this.serverId, agentId });
       }

@@ -9,6 +9,7 @@ import {
   hydrateStreamState,
   mergeToolCallDetail,
   reduceStreamUpdate,
+  settleInterruptedStreamItems,
   streamTimelineItemIdentity,
   type AgentToolCallItem,
   type StreamItem,
@@ -2428,4 +2429,98 @@ it("retains agent-message provenance through live delivery and repeated history"
   const replay = reduceStreamUpdate(live, event, new Date(2));
   expect(replay).toHaveLength(1);
   expect(replay[0]).toMatchObject({ payload: { data: { agentMessage } } });
+});
+
+describe("settleInterruptedStreamItems", () => {
+  function toolCall(id: string, status: "running" | "executing", turnId?: string): StreamItem {
+    return {
+      kind: "tool_call",
+      id,
+      timestamp: new Date(1),
+      ...(turnId ? { turnId } : {}),
+      payload:
+        status === "running"
+          ? {
+              source: "agent",
+              data: {
+                provider: "codex",
+                callId: id,
+                name: "shell",
+                status: "running",
+                error: null,
+                detail: { type: "plain_text", text: "npm test" },
+              },
+            }
+          : {
+              source: "orchestrator",
+              data: {
+                toolCallId: id,
+                toolName: "spawn",
+                arguments: {},
+                status: "executing",
+              },
+            },
+    };
+  }
+
+  it("closes every live row when no turn is active", () => {
+    const thought: StreamItem = {
+      kind: "thought",
+      id: "thought",
+      text: "Working",
+      timestamp: new Date(1),
+      status: "loading",
+    };
+    const compaction: StreamItem = {
+      kind: "compaction",
+      id: "compaction",
+      timestamp: new Date(1),
+      status: "loading",
+    };
+    const porting: StreamItem = {
+      kind: "porting",
+      id: "porting",
+      timestamp: new Date(1),
+      status: "loading",
+    };
+
+    const settled = settleInterruptedStreamItems([
+      thought,
+      toolCall("agent-tool", "running"),
+      toolCall("orchestrator-tool", "executing"),
+      compaction,
+      porting,
+    ]);
+
+    expect(settled).toMatchObject([
+      { kind: "thought", status: "ready" },
+      { kind: "tool_call", payload: { data: { status: "canceled", error: null } } },
+      { kind: "tool_call", payload: { data: { status: "failed", error: "Interrupted" } } },
+      { kind: "compaction", status: "completed" },
+      { kind: "porting", status: "completed" },
+    ]);
+  });
+
+  it("leaves rows from the running turn untouched", () => {
+    const rows = [
+      { ...toolCall("current", "running", "turn-2") },
+      { ...toolCall("untagged", "running") },
+    ];
+    expect(settleInterruptedStreamItems(rows, { activeTurnId: "turn-2" })).toBe(rows);
+  });
+
+  it("closes rows left over from an earlier turn", () => {
+    const old = toolCall("old", "running", "turn-1");
+    const current = toolCall("current", "running", "turn-2");
+    const settled = settleInterruptedStreamItems([old, current], { activeTurnId: "turn-2" });
+    expect(settled).toMatchObject([
+      { payload: { data: { status: "canceled" } } },
+      { payload: { data: { status: "running" } } },
+    ]);
+  });
+
+  it("returns the same array when there is nothing to settle", () => {
+    const rows = [toolCall("current", "running", "turn-1")];
+    expect(settleInterruptedStreamItems(rows, { activeTurnId: "turn-1" })).toBe(rows);
+  });
 });
