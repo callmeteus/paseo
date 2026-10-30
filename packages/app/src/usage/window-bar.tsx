@@ -1,9 +1,7 @@
-import { Pin } from "lucide-react-native";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { StyleSheet } from "react-native-unistyles";
 import {
   formatDisplayPct,
   formatProviderUsageLabel,
@@ -13,6 +11,7 @@ import {
 import { UsageMeter } from "./meter";
 import { displayPercent, usageWindowRowLabel } from "./model";
 import type { UsageDisplayAs } from "./preferences";
+import { UsagePinGlyph } from "./pin-glyph";
 import { windowTone } from "./tone";
 import type { UsageTone, UsageWindow } from "./types";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
@@ -142,47 +141,20 @@ function WindowRowContent({
           </View>
           <UsageMeter percent={percent} tone={tone} />
         </View>
-        {pinnable ? <UsagePinGlyph pinned={pinned} /> : null}
+        {pinnable ? (
+          <UsagePinGlyph
+            pinned={pinned}
+            testID={pinned ? "usage-pin-glyph-pinned" : "usage-pin-glyph-unpinned"}
+          />
+        ) : null}
       </View>
     </>
-  );
-}
-
-const ThemedPin = withUnistyles(Pin);
-
-function UsagePinGlyph({ pinned }: { pinned: boolean }) {
-  const { t } = useTranslation();
-  const iconMapping = useMemo(
-    () => (theme: { colors: { foregroundMuted: string } }) => ({
-      color: theme.colors.foregroundMuted,
-      fill: pinned ? theme.colors.foregroundMuted : "none",
-    }),
-    [pinned],
-  );
-  return (
-    <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
-      <TooltipTrigger asChild>
-        <View
-          style={styles.pin}
-          testID={pinned ? "usage-pin-glyph-pinned" : "usage-pin-glyph-unpinned"}
-        >
-          <ThemedPin size={12} uniProps={iconMapping} />
-        </View>
-      </TooltipTrigger>
-      <TooltipContent side="top">
-        <Text style={styles.tooltipText}>
-          {pinned ? t("providerUsage.unpin") : t("providerUsage.pin")}
-        </Text>
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
   contentRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   windowContent: { flex: 1, gap: 3 },
-  pin: { width: 12, alignItems: "center" },
-  tooltipText: { color: theme.colors.popoverForeground, fontSize: theme.fontSize.sm },
   row: {
     gap: 3,
     // The highlight bleeds into the card padding so the label and bar stay on the card's rail.

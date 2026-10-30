@@ -1,10 +1,13 @@
 import { Activity } from "lucide-react-native";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { formatDisplayPct, formatResetLabel } from "./format";
 import { UsageMeter } from "./meter";
+import { UsagePinGlyph } from "./pin-glyph";
 import type { UsageDisplayAs } from "./preferences";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
 import type { UnifiedUsage } from "./unified";
@@ -16,14 +19,25 @@ export function UnifiedUsageSummary({
   unified,
   displayAs,
   retained = false,
+  pinnable = false,
+  pinned = false,
+  onTogglePin,
+  pinLabel,
+  pinTestID,
 }: {
   unified: UnifiedUsage;
   displayAs: UsageDisplayAs;
   retained?: boolean;
+  pinnable?: boolean;
+  pinned?: boolean;
+  onTogglePin?: () => void;
+  pinLabel?: string;
+  pinTestID?: string;
 }) {
   const { t, i18n } = useTranslation();
   const now = useRelativeTimeTick({ enabled: unified.driver.resetsAt != null });
   const reset = formatResetLabel(unified.driver.resetsAt, retained, now, t);
+  const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
   return (
     <View style={styles.container} testID="usage-unified-summary">
       <View style={styles.header}>
@@ -33,6 +47,21 @@ export function UnifiedUsageSummary({
         <Text style={styles.percent}>
           {formatDisplayPct(unified.percent, displayAs, i18n.resolvedLanguage, t)}
         </Text>
+        {pinnable && onTogglePin ? (
+          <PressHighlight
+            onPress={onTogglePin}
+            hitSlop={8}
+            accessibilityRole="checkbox"
+            accessibilityLabel={pinLabel}
+            accessibilityState={accessibilityState}
+            aria-checked={pinned}
+            testID={pinTestID}
+            style={styles.pinButton}
+            highlightStyle={styles.pinButtonPressed}
+          >
+            <UsagePinGlyph pinned={pinned} testID={`${pinTestID ?? "usage-unified-pin"}-glyph`} />
+          </PressHighlight>
+        ) : null}
       </View>
       <UsageMeter percent={unified.percent} tone={unified.tone} style={styles.meter} />
       <View style={styles.driverRow}>
@@ -77,6 +106,13 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     fontVariant: ["tabular-nums"],
+  },
+  pinButton: {
+    padding: 2,
+    borderRadius: theme.borderRadius.sm,
+  },
+  pinButtonPressed: {
+    backgroundColor: theme.colors.surface3,
   },
   meter: {
     height: 6,

@@ -5,10 +5,17 @@ import type { UsageReportEntry } from "./types";
 /** Whether percentages read as the share used or the share left. */
 export type UsageDisplayAs = "used" | "remaining";
 
-/** A window the user pinned to the sidebar Usage item. It matches every account of the source. */
+/** A sidebar Usage item. `windowId` is a window id, or the provider's unified summary. */
 export interface UsagePin {
   sourceId: string;
   windowId: string;
+}
+
+/** Pin target for a provider account's unified summary, not a real window. */
+export const UNIFIED_USAGE_PIN_ID = "__unified__";
+
+export function unifiedUsagePin(sourceId: string): UsagePin {
+  return { sourceId, windowId: UNIFIED_USAGE_PIN_ID };
 }
 
 /** Device-local. `pins` is in selection order. */
@@ -59,6 +66,10 @@ export function effectiveUsagePins(
     const withPercent = entry.report.windows.filter(
       (window) => displayPercent(window, preferences.displayAs) !== null,
     );
+    if (withPercent.length > 0) {
+      const unified = unifiedUsagePin(entry.sourceId);
+      if (!pins.some((existing) => samePin(existing, unified))) pins.push(unified);
+    }
     const marked = withPercent.filter((window) => window.summary);
     for (const window of marked.length > 0 ? marked : withPercent.slice(0, 1)) {
       const pin = { sourceId: entry.sourceId, windowId: window.id };

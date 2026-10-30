@@ -26,42 +26,41 @@ import {
   choosePinnedUsageLayout,
   METER_GAP,
   MIN_METER_WIDTH,
-  resolvePinnedProviderSources,
+  resolvePinnedUsageItems,
+  type PinnedUsageItem,
   type PinnedUsageLayout,
 } from "./pinned";
-import { resolveUnifiedUsageBySource, type SourceUnifiedUsage } from "./unified";
 import { UsageModal } from "./usage-modal";
 
-/** Each provider account's unified summary over its pinned windows. */
+/** Each pinned sidebar item: a provider's unified summary or one of its windows. */
 function useUsageSummary(): {
-  sources: readonly SourceUnifiedUsage[];
+  items: readonly PinnedUsageItem[];
 } {
   const { t } = useTranslation();
   const { preferences } = useUsagePreferences();
   const reports = useUsageHostReports(useUsageHostId());
-  return useMemo(() => {
-    const pinned = resolvePinnedProviderSources(reports, preferences, t);
-    return { sources: resolveUnifiedUsageBySource(pinned) };
-  }, [preferences, reports, t]);
+  return useMemo(
+    () => ({ items: resolvePinnedUsageItems(reports, preferences, t) }),
+    [preferences, reports, t],
+  );
 }
 
 /** Whether the sidebar Usage item has anything to show. */
 export function useHasUsageSummary(): boolean {
-  return useUsageSummary().sources.length > 0;
+  return useUsageSummary().items.length > 0;
 }
 
 /**
- * The sidebar footer's usage entry: one unified meter per provider account, and nothing
- * while no pinned window has data, since the footer's Usage icon already opens Usage.
- * Pressing it opens the Usage modal.
+ * The sidebar footer's usage entry: the pinned unified summaries and windows, and nothing
+ * while no item is pinned. Pressing it opens the Usage modal.
  */
 export function UsageSidebarItem() {
   const { t } = useTranslation();
   const label = t(builtinSidebarNavLabelKey("usage"));
   const openUsage = useOpenSidebarUsage();
-  const { sources } = useUsageSummary();
-  if (sources.length === 0) return null;
-  return <PinnedUsageTrigger label={label} sources={sources} onPress={openUsage} />;
+  const { items } = useUsageSummary();
+  if (items.length === 0) return null;
+  return <PinnedUsageTrigger label={label} items={items} onPress={openUsage} />;
 }
 
 const OpenSidebarUsageContext = createContext<(() => void) | null>(null);
@@ -96,9 +95,15 @@ export function useOpenSidebarUsage(): () => void {
   return openUsage;
 }
 
-function pinnedUsageLabel(label: string, sources: readonly SourceUnifiedUsage[]): string {
-  const windows = sources.map((source) => source.unified.driver.label);
-  return `${label}: ${windows.join(", ")}`;
+function pinnedUsageLabel(
+  label: string,
+  items: readonly PinnedUsageItem[],
+  unifiedLabel: string,
+): string {
+  const parts = items.map((item) =>
+    item.kind === "unified" ? `${item.unified.driver.label} (${unifiedLabel})` : item.window.label,
+  );
+  return `${label}: ${parts.join(", ")}`;
 }
 
 function triggerStyle({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {
@@ -110,19 +115,20 @@ function layoutWidth(event: LayoutChangeEvent): number {
 }
 
 /**
- * One line: each provider account's icon, then its unified meter and "69% wk". Off-screen
- * copies measure the line with labels and with percents alone; the richest layout that fits
- * is shown, and what it leaves out takes no space at all.
+ * One line: each pinned provider's icon, then its unified meter and "69% Overall" or a
+ * pinned window's meter and "31% 5h". Off-screen copies measure the line with labels and
+ * with percents alone; the richest layout that fits is shown.
  */
 function PinnedUsageTrigger({
   label,
-  sources,
+  items,
   onPress,
 }: {
   label: string;
-  sources: readonly SourceUnifiedUsage[];
+  items: readonly PinnedUsageItem[];
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const [available, setAvailable] = useState<number | null>(null);
   const [labelsWidth, setLabelsWidth] = useState<number | null>(null);
   const [percentsWidth, setPercentsWidth] = useState<number | null>(null);
@@ -139,18 +145,18 @@ function PinnedUsageTrigger({
     available,
     labelsWidth,
     percentsWidth,
-    windowCount: sources.length,
+    windowCount: items.length,
   });
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={pinnedUsageLabel(label, sources)}
+      accessibilityLabel={pinnedUsageLabel(label, items, t("providerUsage.unified.short"))}
       style={triggerStyle}
       testID="sidebar-usage"
     >
       <View style={styles.line} onLayout={handleAvailableLayout}>
-        <PinnedUsageLine sources={sources} layout={layout} />
+        <PinnedUsageLine items={items} layout={layout} />
       </View>
       <View
         style={styles.measure}
@@ -160,10 +166,10 @@ function PinnedUsageTrigger({
         aria-hidden
       >
         <View style={styles.measured} onLayout={handleLabelsLayout}>
-          <PinnedUsageLine sources={sources} layout="labels" measuring />
+          <PinnedUsageLine items={items} layout="labels" measuring />
         </View>
         <View style={styles.measured} onLayout={handlePercentsLayout}>
-          <PinnedUsageLine sources={sources} layout="percents" measuring />
+          <PinnedUsageLine items={items} layout="percents" measuring />
         </View>
       </View>
     </Pressable>
@@ -172,41 +178,55 @@ function PinnedUsageTrigger({
 
 /**
  * The line's items as direct children of one row, so every meter shares the leftover width
- * equally.
+ * equally. The source icon appears once per provider group.
  */
 function PinnedUsageLine({
-  sources,
+  items,
   layout,
   measuring = false,
 }: {
-  sources: readonly SourceUnifiedUsage[];
+  items: readonly PinnedUsageItem[];
   layout: PinnedUsageLayout;
   measuring?: boolean;
 }) {
-  return sources.map((source, sourceIndex) => {
-    const leadStyle = sourceIndex === 0 ? null : styles.sourceGap;
+  const { t } = useTranslation();
+  return items.map((item, index) => {
+    const previousSourceKey = index === 0 ? null : items[index - 1]!.sourceKey;
+    const startsSource = previousSourceKey !== item.sourceKey;
+    const iconStyle = startsSource && index > 0 ? styles.sourceGap : null;
+    const leadStyle = startsSource ? styles.iconGap : styles.windowGap;
+    const icon = item.kind === "unified" ? item.source.icon : item.window.icon;
+    const percent = item.kind === "unified" ? item.unified.percent : item.window.percent;
+    const percentText =
+      item.kind === "unified" ? item.unified.percentText : item.window.percentText;
+    const tone = item.kind === "unified" ? item.unified.tone : item.window.tone;
+    const shortLabel =
+      item.kind === "unified" ? t("providerUsage.unified.short") : item.window.shortLabel;
+    let testID: string | undefined;
+    if (!measuring) {
+      testID = item.kind === "unified" ? "sidebar-usage-unified" : "sidebar-usage-pinned-window";
+    }
+
     return (
-      <Fragment key={source.source.key}>
-        <View style={leadStyle} testID={measuring ? undefined : "sidebar-usage-source"}>
-          <UsageSourceIcon svg={source.source.icon} size={14} />
-        </View>
+      <Fragment key={item.key}>
+        {startsSource ? (
+          <View style={iconStyle} testID={measuring ? undefined : "sidebar-usage-source"}>
+            <UsageSourceIcon svg={icon} size={14} />
+          </View>
+        ) : null}
         {layout === "meters" ? (
-          <View style={[styles.meterSlot, styles.iconGap]}>
-            <UsageMeter
-              percent={source.unified.percent}
-              tone={source.unified.tone}
-              style={styles.meter}
-            />
+          <View style={[styles.meterSlot, leadStyle]}>
+            <UsageMeter percent={percent} tone={tone} style={styles.meter} />
           </View>
         ) : null}
         <Text
-          style={[styles.percent, layout === "meters" ? null : styles.iconGap]}
+          style={[styles.percent, layout === "meters" ? null : leadStyle]}
           numberOfLines={1}
-          testID={measuring ? undefined : "sidebar-usage-pinned-window"}
+          testID={testID}
         >
-          {source.unified.percentText}
-          {layout === "percents" || source.unified.driver.shortLabel === "" ? null : (
-            <Text style={styles.windowLabel}>{` ${source.unified.driver.shortLabel}`}</Text>
+          {percentText}
+          {layout === "percents" || shortLabel === "" ? null : (
+            <Text style={styles.windowLabel}>{` ${shortLabel}`}</Text>
           )}
         </Text>
       </Fragment>
@@ -254,6 +274,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   iconGap: {
     marginLeft: theme.spacing[1.5],
+  },
+  windowGap: {
+    marginLeft: theme.spacing[2],
   },
   // Every slot takes an equal share of the leftover width, so the line fills the row.
   meterSlot: {

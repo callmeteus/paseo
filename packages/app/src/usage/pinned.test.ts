@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { UsagePreferences } from "./preferences";
+import { unifiedUsagePin, type UsagePreferences } from "./preferences";
 import {
   choosePinnedUsageLayout,
-  resolvePinnedProviderSources,
   resolvePinnedUsage,
+  resolvePinnedUsageItems,
   type PinnedUsageSource,
   type PinnedUsageWindow,
 } from "./pinned";
@@ -179,17 +179,18 @@ describe("resolvePinnedUsage", () => {
     });
   });
 
-  it("keeps every window of a pinned provider so its unified summary sees the real worst", () => {
-    const sources = resolvePinnedProviderSources(
-      [claude, codex],
-      preferences([{ sourceId: "claude", windowId: "five-hour" }]),
+  it("renders a pinned unified item over all windows and a pinned window separately", () => {
+    const items = resolvePinnedUsageItems(
+      [claude],
+      preferences([unifiedUsagePin("claude"), { sourceId: "claude", windowId: "five-hour" }]),
     );
 
-    expect(sources.map((source) => source.key)).toEqual(["claude:default"]);
-    expect(sources[0]?.windows.map((window) => window.key)).toEqual([
-      "claude:default/five-hour",
+    expect(items.map((item) => item.kind)).toEqual(["unified", "window"]);
+    const [unified, window] = items;
+    expect(unified?.kind === "unified" ? unified.unified.driver.key : null).toBe(
       "claude:default/weekly",
-    ]);
+    );
+    expect(window?.kind === "window" ? window.window.key : null).toBe("claude:default/five-hour");
   });
 
   it("names a window by its label when the source gives no short label", () => {

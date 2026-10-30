@@ -5,6 +5,7 @@ import {
   setUsageDisplayAs,
   setUsageHost,
   toggleUsagePin,
+  unifiedUsagePin,
   UsagePreferencesSchema,
 } from "./preferences";
 
@@ -113,6 +114,32 @@ it("default sidebar windows are pinned on cards and the first toggle removes onl
   });
   const restored = UsagePreferencesSchema.parse(JSON.parse(JSON.stringify(empty)));
   for (const pin of pins) expect(isUsagePinned(restored, pin, reports)).toBe(false);
+});
+
+it("pins the unified summary by default and removes only it on the first toggle", () => {
+  const reports = [
+    {
+      id: "claude:default",
+      sourceId: "claude",
+      sourceLabel: "Claude",
+      account: {},
+      fetchedAt: "2026-10-02T00:00:00Z",
+      report: {
+        status: "available" as const,
+        windows: [{ id: "five_hour", label: "5-hour", summary: true, usedPct: 31 }],
+      },
+    },
+  ];
+  const unified = unifiedUsagePin("claude");
+  const windowPin = { sourceId: "claude", windowId: "five_hour" };
+  expect(isUsagePinned(DEFAULT_USAGE_PREFERENCES, unified, reports)).toBe(true);
+  const changed = toggleUsagePin({
+    preferences: DEFAULT_USAGE_PREFERENCES,
+    pin: unified,
+    reports,
+  });
+  expect(isUsagePinned(changed, unified, reports)).toBe(false);
+  expect(isUsagePinned(changed, windowPin, reports)).toBe(true);
 });
 
 it("reads old selections without losing display or host and preserves an explicit empty selection", () => {

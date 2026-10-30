@@ -7,10 +7,10 @@ import {
   formatUsageSourceLabel,
 } from "./format";
 import { displayPercent, usedPercent } from "./model";
-import { effectiveUsagePins, type UsagePreferences } from "./preferences";
+import { effectiveUsagePins, UNIFIED_USAGE_PIN_ID, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
 import type { UsageReportEntry, UsageWindow } from "./types";
-import type { UnifiedWindow } from "./unified";
+import { resolveUnifiedUsage, type UnifiedUsage, type UnifiedWindow } from "./unified";
 
 /** One summary window of one account, as the sidebar Usage item shows it. */
 export interface PinnedUsageWindow extends UnifiedWindow {
@@ -117,23 +117,69 @@ export function resolvePinnedUsage(
   });
 }
 
+/** One entry in the sidebar Usage line: a pinned window or a provider's unified summary. */
+export type PinnedUsageItem =
+  | {
+      kind: "unified";
+      key: string;
+      sourceKey: string;
+      source: PinnedUsageSource;
+      unified: UnifiedUsage<PinnedUsageWindow>;
+    }
+  | { kind: "window"; key: string; sourceKey: string; window: PinnedUsageWindow };
+
 /**
- * The sidebar's provider groups: an account stays when any of its windows is pinned, but the
- * group carries every window of that account so its unified summary sees the real worst window.
+ * The sidebar Usage line, in source/report order: the unified summary when its pin is on,
+ * then each pinned window. A window pin no longer pulls in the provider's other windows.
  */
-export function resolvePinnedProviderSources(
+export function resolvePinnedUsageItems(
   reports: readonly UsageReportEntry[],
   preferences: UsagePreferences,
   t: TFunction = i18n.t,
-): PinnedUsageSource[] {
+): PinnedUsageItem[] {
   const pins = effectiveUsagePins(preferences, reports);
   return groupBySource(reports).flatMap((entry) => {
     if (entry.report.status !== "available") return [];
-    if (!pins.some((pin) => pin.sourceId === entry.sourceId)) return [];
-    const windows = entry.report.windows
+    const sourcePins = pins.filter((pin) => pin.sourceId === entry.sourceId);
+    if (sourcePins.length === 0) return [];
+
+    const allWindows = entry.report.windows
       .filter((window) => displayPercent(window, preferences.displayAs) !== null)
       .map((window) => pinnedWindow(entry, window, preferences, t));
-    if (windows.length === 0) return [];
-    return [{ key: entry.id, icon: entry.icon ?? null, windows }];
+    const source: PinnedUsageSource = {
+      key: entry.id,
+      icon: entry.icon ?? null,
+      windows: allWindows,
+    };
+    const items: PinnedUsageItem[] = [];
+
+    if (allWindows.length > 0 && sourcePins.some((pin) => pin.windowId === UNIFIED_USAGE_PIN_ID)) {
+      const unified = resolveUnifiedUsage([source]);
+      if (unified) {
+        items.push({
+          kind: "unified",
+          key: `${entry.id}/${UNIFIED_USAGE_PIN_ID}`,
+          sourceKey: entry.id,
+          source,
+          unified,
+        });
+      }
+    }
+
+    const pinnedWindowIds = new Set(
+      sourcePins.filter((pin) => pin.windowId !== UNIFIED_USAGE_PIN_ID).map((pin) => pin.windowId),
+    );
+    for (const raw of entry.report.windows) {
+      if (!pinnedWindowIds.has(raw.id)) continue;
+      if (displayPercent(raw, preferences.displayAs) === null) continue;
+      items.push({
+        kind: "window",
+        key: `${entry.id}/${raw.id}`,
+        sourceKey: entry.id,
+        window: pinnedWindow(entry, raw, preferences, t),
+      });
+    }
+
+    return items;
   });
 }

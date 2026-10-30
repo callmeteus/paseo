@@ -24,6 +24,7 @@ import {
   formatUsageSourceLabel,
 } from "./format";
 import { resolveUsageReport, type UsageRefresh } from "./model";
+import { unifiedUsagePin } from "./preferences";
 import { useReportRefresh } from "./queries";
 import { UsageSourceIcon } from "./source-icon";
 import type { UsageReport, UsageReportEntry, UsageWindow } from "./types";
@@ -76,6 +77,9 @@ export function UsageCard({
     windows.length > 1
       ? resolveReportUnifiedUsage({ windows, displayAs: display.displayAs, t })
       : null;
+  const unifiedPin = useMemo(() => unifiedUsagePin(entry.sourceId), [entry.sourceId]);
+  const unifiedPinned = display.isPinned(unifiedPin);
+  const toggleUnifiedPin = useCallback(() => display.togglePin(unifiedPin), [display, unifiedPin]);
 
   const containerStyle = useMemo(
     () => [styles.container, compact ? styles.containerCompact : styles.containerPadded],
@@ -126,7 +130,16 @@ export function UsageCard({
       ) : null}
 
       {unified && unified.windows.length > 1 ? (
-        <UnifiedUsageSummary unified={unified} displayAs={display.displayAs} retained={retained} />
+        <UnifiedUsageSummary
+          unified={unified}
+          displayAs={display.displayAs}
+          retained={retained}
+          pinnable={pinnable}
+          pinned={unifiedPinned}
+          onTogglePin={toggleUnifiedPin}
+          pinLabel={`${t("providerUsage.pin")} ${sourceLabel} ${t("providerUsage.unified.title")}`}
+          pinTestID={`usage-unified-pin-${entry.sourceId}`}
+        />
       ) : null}
 
       {windows.length > 0 || balances.length > 0 ? (
