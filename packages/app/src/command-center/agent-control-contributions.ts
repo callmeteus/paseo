@@ -92,7 +92,11 @@ export interface AgentControlContributionSource {
     providers: readonly ProviderSelectorProvider[];
     selectedProvider: string | null;
     selectedModelId: string | null;
-    select(provider: AgentProvider, modelId: string): void | Promise<void>;
+    select(
+      provider: AgentProvider,
+      modelId: string,
+      serverId?: string | null,
+    ): void | Promise<void>;
   };
   thinking: {
     options: readonly AgentSelectOption[];
@@ -142,6 +146,7 @@ function buildContributions(
 
 function buildModelGroup(source: AgentControlContributionSource): CommandCenterChoiceGroup {
   const choices: CommandCenterChoice[] = [];
+  const seen = new Set<string>();
   for (const provider of source.models.providers) {
     if (provider.modelSelection.kind !== "models") continue;
     const agentProvider = provider.id;
@@ -149,16 +154,25 @@ function buildModelGroup(source: AgentControlContributionSource): CommandCenterC
     for (const model of provider.modelSelection.rows) {
       if (!model.modelId) continue;
       const modelId = model.modelId;
+      // Two connected hosts can expose the same provider and model. The host is part
+      // of the contribution identity; without it the Command Center registry throws.
+      const serverId = (model.serverId ?? provider.serverId ?? "").trim() || null;
+      const choiceId = serverId
+        ? `${serverId}:${provider.id}:${modelId}`
+        : `${provider.id}:${modelId}`;
+      if (seen.has(choiceId)) continue;
+      seen.add(choiceId);
       choices.push({
-        id: `${provider.id}:${modelId}`,
+        id: choiceId,
         path: [provider.label, model.modelLabel],
         keywords: [modelId],
         icon,
         selected:
+          (serverId ?? source.serverId) === source.serverId &&
           source.models.selectedProvider === provider.id &&
           source.models.selectedModelId === modelId,
-        testId: `command-center-model-${source.serverId}:${provider.id}:${modelId}`,
-        select: () => source.models.select(agentProvider, modelId),
+        testId: `command-center-model-${source.serverId}:${choiceId}`,
+        select: () => source.models.select(agentProvider, modelId, serverId),
       });
     }
   }

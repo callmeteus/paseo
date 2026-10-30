@@ -200,6 +200,35 @@ describe("Command Center agent-control contributions", () => {
     expect(selections).toEqual(["claude:shared"]);
   });
 
+  it("keeps the same provider and model distinct across connected hosts", () => {
+    const selections: string[] = [];
+    const local = provider({ id: "claude", label: "Claude" });
+    const remote: ProviderSelectorProvider = {
+      ...provider({ id: "claude", label: "Claude" }),
+      serverId: "other-host",
+    };
+    const contributions = buildAgentControlContributions(
+      makeSource({
+        provider: null,
+        models: {
+          providers: [local, remote],
+          selectedProvider: "claude",
+          selectedModelId: "shared",
+          select: (selectedProvider, modelId, serverId) => {
+            selections.push(`${serverId ?? "local"}:${selectedProvider}:${modelId}`);
+          },
+        },
+      }),
+    ).filter((contribution) => contribution.group === "models");
+
+    expect(contributions.map((contribution) => contribution.id)).toEqual([
+      "models:claude:shared",
+      "models:other-host:claude:shared",
+    ]);
+    contributions[1]!.run();
+    expect(selections).toEqual(["other-host:claude:shared"]);
+  });
+
   it("publishes thinking choices only when selection is meaningful", () => {
     const selections: string[] = [];
     const contributions = buildAgentControlContributions(

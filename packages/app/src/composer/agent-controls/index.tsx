@@ -1817,8 +1817,8 @@ export const AgentControls = memo(function AgentControls({
   }, [agentId, serverId]);
 
   const handleSelectCommandCenterModel = useCallback(
-    (provider: AgentProvider, modelId: string) => {
-      void handleSelectProviderAndModel(provider, modelId);
+    (provider: AgentProvider, modelId: string, targetServerId?: string | null) => {
+      void handleSelectProviderAndModel(provider, modelId, targetServerId);
     },
     [handleSelectProviderAndModel],
   );
@@ -1901,6 +1901,17 @@ export const AgentControls = memo(function AgentControls({
     [agentId, agentProvider, client, toast, updatePreferences],
   );
 
+  // The Command Center lists this agent's host only. Cross-host providers power the
+  // full model browser's porting flow; their duplicate provider/model ids would
+  // otherwise collide in the Command Center registry.
+  const commandCenterModelSelectorProviders = useMemo(
+    () =>
+      agentModelSelectorProviders.filter(
+        (provider) => !provider.serverId || provider.serverId === serverId,
+      ),
+    [agentModelSelectorProviders, serverId],
+  );
+
   const commandCenterControls = useMemo<AgentControlCommandCenterSource>(
     () => ({
       serverId,
@@ -1908,7 +1919,7 @@ export const AgentControls = memo(function AgentControls({
       provider: agentProvider,
       providerDefinitions: modeProviderDefinitions,
       models: {
-        providers: agentModelSelectorProviders,
+        providers: commandCenterModelSelectorProviders,
         selectedProvider: agentProvider,
         selectedModelId: activeModelId,
         select: handleSelectCommandCenterModel,
@@ -1928,8 +1939,8 @@ export const AgentControls = memo(function AgentControls({
       activeModelId,
       agent?.features,
       agentId,
-      agentModelSelectorProviders,
       agentProvider,
+      commandCenterModelSelectorProviders,
       commandCenterModes,
       handleSelectCommandCenterModel,
       handleSelectThinkingOption,

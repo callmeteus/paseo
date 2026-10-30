@@ -32,7 +32,11 @@ export interface AgentControlCommandCenterSource {
     providers: readonly ProviderSelectorProvider[];
     selectedProvider: string | null | undefined;
     selectedModelId: string | null | undefined;
-    select(provider: AgentProvider, modelId: string): void | Promise<void>;
+    select(
+      provider: AgentProvider,
+      modelId: string,
+      serverId?: string | null,
+    ): void | Promise<void>;
   };
   thinking: {
     options: readonly AgentSelectOption[] | null | undefined;
