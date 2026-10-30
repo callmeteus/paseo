@@ -26,7 +26,7 @@ import {
   choosePinnedUsageLayout,
   METER_GAP,
   MIN_METER_WIDTH,
-  resolvePinnedUsage,
+  resolvePinnedProviderSources,
   type PinnedUsageLayout,
 } from "./pinned";
 import { resolveUnifiedUsageBySource, type SourceUnifiedUsage } from "./unified";
@@ -40,7 +40,7 @@ function useUsageSummary(): {
   const { preferences } = useUsagePreferences();
   const reports = useUsageHostReports(useUsageHostId());
   return useMemo(() => {
-    const pinned = resolvePinnedUsage(reports, preferences, t);
+    const pinned = resolvePinnedProviderSources(reports, preferences, t);
     return { sources: resolveUnifiedUsageBySource(pinned) };
   }, [preferences, reports, t]);
 }

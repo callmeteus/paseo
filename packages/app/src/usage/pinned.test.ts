@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { UsagePreferences } from "./preferences";
 import {
   choosePinnedUsageLayout,
+  resolvePinnedProviderSources,
   resolvePinnedUsage,
   type PinnedUsageSource,
   type PinnedUsageWindow,
@@ -176,6 +177,19 @@ describe("resolvePinnedUsage", () => {
         },
       ],
     });
+  });
+
+  it("keeps every window of a pinned provider so its unified summary sees the real worst", () => {
+    const sources = resolvePinnedProviderSources(
+      [claude, codex],
+      preferences([{ sourceId: "claude", windowId: "five-hour" }]),
+    );
+
+    expect(sources.map((source) => source.key)).toEqual(["claude:default"]);
+    expect(sources[0]?.windows.map((window) => window.key)).toEqual([
+      "claude:default/five-hour",
+      "claude:default/weekly",
+    ]);
   });
 
   it("names a window by its label when the source gives no short label", () => {

@@ -9,7 +9,7 @@ import {
 import { displayPercent, usedPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
-import type { UsageReportEntry } from "./types";
+import type { UsageReportEntry, UsageWindow } from "./types";
 import type { UnifiedWindow } from "./unified";
 
 /** One summary window of one account, as the sidebar Usage item shows it. */
@@ -65,6 +65,34 @@ function groupBySource(reports: readonly UsageReportEntry[]): UsageReportEntry[]
   return sourceIds.flatMap((sourceId) => reports.filter((entry) => entry.sourceId === sourceId));
 }
 
+function pinnedWindow(
+  entry: UsageReportEntry,
+  window: UsageWindow,
+  preferences: UsagePreferences,
+  t: TFunction,
+): PinnedUsageWindow {
+  const percent = displayPercent(window, preferences.displayAs) ?? 0;
+  const percentText = formatPct(percent);
+  const windowLabel = formatProviderUsageLabel(window.id, window.label, t);
+  return {
+    key: `${entry.id}/${window.id}`,
+    label: `${describe(entry, windowLabel)} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
+    shortLabel: window.shortLabel ?? windowLabel,
+    percent,
+    percentText,
+    tone: windowTone(window),
+    sourceId: entry.sourceId,
+    sourceLabel: formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t),
+    accountLabel: entry.account.label ?? null,
+    icon: entry.icon ?? null,
+    windowLabel,
+    usedPercent: usedPercent(window) ?? 0,
+    resetsAt: window.resetsAt ?? null,
+    runsOutAt: window.runsOutAt ?? null,
+    shortfallPct: window.shortfallPct ?? null,
+  };
+}
+
 /**
  * The sidebar Usage item's summary: one group per account, grouped by source, each with its
  * windows in its report's order. Accounts with nothing to show are left out.
@@ -83,28 +111,28 @@ export function resolvePinnedUsage(
           displayPercent(window, preferences.displayAs) !== null &&
           pins.some((pin) => pin.sourceId === entry.sourceId && pin.windowId === window.id),
       )
-      .map((window) => {
-        const percent = displayPercent(window, preferences.displayAs) ?? 0;
-        const percentText = formatPct(percent);
-        const windowLabel = formatProviderUsageLabel(window.id, window.label, t);
-        return {
-          key: `${entry.id}/${window.id}`,
-          label: `${describe(entry, windowLabel)} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
-          shortLabel: window.shortLabel ?? windowLabel,
-          percent,
-          percentText,
-          tone: windowTone(window),
-          sourceId: entry.sourceId,
-          sourceLabel: formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t),
-          accountLabel: entry.account.label ?? null,
-          icon: entry.icon ?? null,
-          windowLabel,
-          usedPercent: usedPercent(window) ?? 0,
-          resetsAt: window.resetsAt ?? null,
-          runsOutAt: window.runsOutAt ?? null,
-          shortfallPct: window.shortfallPct ?? null,
-        };
-      });
+      .map((window) => pinnedWindow(entry, window, preferences, t));
+    if (windows.length === 0) return [];
+    return [{ key: entry.id, icon: entry.icon ?? null, windows }];
+  });
+}
+
+/**
+ * The sidebar's provider groups: an account stays when any of its windows is pinned, but the
+ * group carries every window of that account so its unified summary sees the real worst window.
+ */
+export function resolvePinnedProviderSources(
+  reports: readonly UsageReportEntry[],
+  preferences: UsagePreferences,
+  t: TFunction = i18n.t,
+): PinnedUsageSource[] {
+  const pins = effectiveUsagePins(preferences, reports);
+  return groupBySource(reports).flatMap((entry) => {
+    if (entry.report.status !== "available") return [];
+    if (!pins.some((pin) => pin.sourceId === entry.sourceId)) return [];
+    const windows = entry.report.windows
+      .filter((window) => displayPercent(window, preferences.displayAs) !== null)
+      .map((window) => pinnedWindow(entry, window, preferences, t));
     if (windows.length === 0) return [];
     return [{ key: entry.id, icon: entry.icon ?? null, windows }];
   });
