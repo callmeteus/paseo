@@ -20,6 +20,7 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
+import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
@@ -2253,7 +2254,9 @@ test("createAgent injects daemon append system prompt at runtime only", async ()
   const record = await storage.get(snapshot.id);
 
   expect(client.createdConfigs[0]?.systemPrompt).toBe("Agent instructions.");
-  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe("Daemon instructions.");
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(
+    `Daemon instructions.\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}`,
+  );
   expect(snapshot.config).not.toHaveProperty("daemonAppendSystemPrompt");
   expect(record?.config?.systemPrompt).toBe("Agent instructions.");
   expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");
@@ -2290,7 +2293,7 @@ test("createAgent appends project instructions to the runtime prompt only", asyn
   expect(resolveProjectInstructions).toHaveBeenCalledWith(workdir);
   expect(client.createdConfigs[0]?.systemPrompt).toBe("Agent instructions.");
   expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(
-    "Daemon instructions.\n\nProject instructions.",
+    `Daemon instructions.\n\nProject instructions.\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}`,
   );
   expect(record?.config).not.toHaveProperty("daemonAppendSystemPrompt");
 });
@@ -2322,7 +2325,7 @@ test("createAgent still creates the chat when project instructions fail to resol
   );
 
   expect(snapshot.id).toBe("00000000-0000-4000-8000-000000000106");
-  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBeUndefined();
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(HUB_AUTOMATION_CHAT_INSTRUCTION);
 });
 
 test("daemon append system prompt is injected into Pi configs", async () => {
@@ -2353,7 +2356,9 @@ test("daemon append system prompt is injected into Pi configs", async () => {
     { workspaceId: undefined },
   );
 
-  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe("Daemon instructions.");
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toBe(
+    `Daemon instructions.\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}`,
+  );
 });
 
 test("setAgentMode persists the selected mode across session reload", async () => {
@@ -3434,7 +3439,10 @@ test("uses each provider's current policy for new sessions and snapshots it by a
   expect(codex.launchContexts[0]?.paseoTools).toBe(paseoTools);
   expect(claude.launchContexts[0]?.paseoTools).toBeUndefined();
   expect(codex.configs[0]?.mcpServers?.paseo).toBeUndefined();
-  expect(claude.configs[0]?.mcpServers).toBeUndefined();
+  expect(claude.configs[0]?.mcpServers?.paseo).toEqual({
+    type: "http",
+    url: "http://127.0.0.1:17000/mcp/agents?callerAgentId=00000000-0000-4000-8000-000000000108",
+  });
   expect(manager.getPaseoToolPolicy(codexAgent.id)).toEqual({
     disabledTools: ["list_agents"],
   });
@@ -3523,7 +3531,10 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
     { workspaceId: undefined },
   );
 
-  expect(disabledClient.lastConfig?.mcpServers).toBeUndefined();
+  expect(disabledClient.lastConfig?.mcpServers?.paseo).toEqual({
+    type: "http",
+    url: `http://127.0.0.1:17000/mcp/agents?callerAgentId=${disabledAgent.id}`,
+  });
   expect(catalogFactoryCalls).toBe(0);
   expect(disabledManager.getPaseoToolPolicy(disabledAgent.id)).toEqual({ enabled: false });
 

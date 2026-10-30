@@ -1,5 +1,6 @@
 import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
+import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
@@ -1676,7 +1677,10 @@ export class AgentManager {
       paseoToolPolicy,
     } = await this.prepareSessionConfig(config, resolvedAgentId, { env: options?.env });
     const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
-    const launchConfig = this.appendSystemPromptText(preparedLaunchConfig, projectInstructions);
+    const launchConfig = this.appendSystemPromptText(
+      this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
+      HUB_AUTOMATION_CHAT_INSTRUCTION,
+    );
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -1804,10 +1808,14 @@ export class AgentManager {
       : resumeOptions;
     const purpose = currentResumeOptions?.purpose ?? "interactive";
 
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      mergedConfig,
-      resolvedAgentId,
-      { purpose },
+    const {
+      storedConfig,
+      launchConfig: preparedLaunchConfig,
+      paseoToolPolicy,
+    } = await this.prepareSessionConfig(mergedConfig, resolvedAgentId, { purpose });
+    const launchConfig = this.appendSystemPromptText(
+      preparedLaunchConfig,
+      HUB_AUTOMATION_CHAT_INSTRUCTION,
     );
     const client = this.requireClient(handle.provider);
     const available = await client.isAvailable();
@@ -1870,12 +1878,20 @@ export class AgentManager {
       throw new Error(`Provider '${input.provider}' does not support importing sessions`);
     }
 
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
+    const {
+      storedConfig,
+      launchConfig: preparedLaunchConfig,
+      paseoToolPolicy,
+    } = await this.prepareSessionConfig(
       {
         provider: input.provider,
         cwd: input.cwd,
       },
       resolvedAgentId,
+    );
+    const launchConfig = this.appendSystemPromptText(
+      preparedLaunchConfig,
+      HUB_AUTOMATION_CHAT_INSTRUCTION,
     );
     this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
     const launchContext = await this.buildLaunchContext(
@@ -1967,9 +1983,14 @@ export class AgentManager {
       ...overrides,
       provider,
     } as AgentSessionConfig;
-    const { storedConfig, launchConfig, paseoToolPolicy } = await this.prepareSessionConfig(
-      refreshConfig,
-      agentId,
+    const {
+      storedConfig,
+      launchConfig: preparedLaunchConfig,
+      paseoToolPolicy,
+    } = await this.prepareSessionConfig(refreshConfig, agentId);
+    const launchConfig = this.appendSystemPromptText(
+      preparedLaunchConfig,
+      HUB_AUTOMATION_CHAT_INSTRUCTION,
     );
     const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
     const previousPaseoToolPolicy = this.paseoToolPolicies.get(agentId);
@@ -6391,14 +6412,13 @@ export class AgentManager {
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
+    // Cursor only receives tools passed on session/new. The full catalog stays
+    // behind the inject switch; Hub automation tools are registered either way.
     const launchConfig = this.applyDaemonAppendSystemPrompt(
       withRuntimePaseoMcpServer({
         config: storedConfig,
         agentId,
-        mcpBaseUrl:
-          this.paseoToolsEnabled && isPaseoToolPolicyEnabled(paseoToolPolicy)
-            ? this.mcpBaseUrl
-            : null,
+        mcpBaseUrl: this.mcpBaseUrl,
         mcpAuthToken: this.mcpAuthToken,
       }),
     );

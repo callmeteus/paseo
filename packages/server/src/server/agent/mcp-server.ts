@@ -7,6 +7,7 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { addModelVisibleStructuredContent } from "./tools/paseo-tool-serialization.js";
+import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { createPaseoToolCatalog, type PaseoToolHostDependencies } from "./tools/paseo-tools.js";
 import type { PaseoToolResult } from "./tools/types.js";
 
@@ -30,10 +31,15 @@ function toMcpToolResult(result: PaseoToolResult): CallToolResult {
 
 export async function createAgentMcpServer(options: AgentMcpServerOptions): Promise<McpServer> {
   const catalog = await createPaseoToolCatalog(options);
-  const server = new McpServer({
-    name: "agent-mcp",
-    version: "2.0.0",
-  });
+  const server = new McpServer(
+    {
+      name: "agent-mcp",
+      version: "2.0.0",
+    },
+    {
+      instructions: HUB_AUTOMATION_CHAT_INSTRUCTION,
+    },
+  );
 
   for (const tool of catalog.tools.values()) {
     server.registerTool(

@@ -1751,19 +1751,20 @@ export async function createPaseoDaemon(
           const logAndResolve = async () => {
             boundListenTarget = resolveBoundListenTarget(listenTarget, httpServer);
             const mcpBaseUrl = createAgentMcpBaseUrl(boundListenTarget);
-            agentMcpBaseUrl =
-              !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;
+            // Keep the endpoint on session/new even when the full catalog is off,
+            // so Cursor can load the Hub automation tools.
+            agentMcpBaseUrl = mcpEnabled ? mcpBaseUrl : null;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
             agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
               mcpEnabled = value !== false;
               const inject = daemonConfigStore.get().mcp.injectIntoAgents !== false;
-              agentManager.setMcpBaseUrl(mcpEnabled && inject ? mcpBaseUrl : null);
+              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
               agentManager.setPaseoToolsEnabled(mcpEnabled && inject);
               setAgentProviderToolsEnabled(mcpEnabled && inject);
             });
             daemonConfigStore.onFieldChange("mcp.injectIntoAgents", (value) => {
-              agentManager.setMcpBaseUrl(mcpEnabled && value ? mcpBaseUrl : null);
+              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
               agentManager.setPaseoToolsEnabled(mcpEnabled && value !== false);
               setAgentProviderToolsEnabled(mcpEnabled && value !== false);
             });

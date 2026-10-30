@@ -1,4 +1,6 @@
 import { ACPProviderOptionsSchema } from "./acp-options.js";
+import { prependAcpPromptText } from "./acp-prompt.js";
+import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "../tools/hub-automation-tools.js";
 import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -2020,7 +2022,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       .prompt({
         sessionId: this.sessionId,
         messageId,
-        prompt: toACPContentBlocks(prompt),
+        prompt: toACPContentBlocks(prependAcpPromptText(prompt, HUB_AUTOMATION_CHAT_INSTRUCTION)),
       })
       .then((response) => {
         this.handlePromptResponse(response, turnId);

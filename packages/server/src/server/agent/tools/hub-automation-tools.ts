@@ -8,6 +8,15 @@ import {
 } from "../../hub/automation-client.js";
 import { PaseoToolInputError, type PaseoToolConfig, type PaseoToolResult } from "./types.js";
 
+/**
+ * Tells every chat that "automations" means Hub triggers, not editor hooks.
+ * Appended after project instructions. ACP providers such as Cursor ignore that
+ * field, so the same note is prepended to each ACP prompt. The chat bubble
+ * keeps the original text.
+ */
+export const HUB_AUTOMATION_CHAT_INSTRUCTION =
+  "You are the Paseo chat. The model provider may be Cursor, but this conversation is Paseo, not the Cursor IDE. When the user asks to create, edit, list, or whether you can make automations (automações), call list_automations before answering. Saving a YAML document whose name already exists edits that automation. Do not answer with Cursor hooks, skills, repo scripts, or cron. Do not tell the user to switch chats. If the tool says Hub is not connected, say that.";
+
 const TRIGGER_SHAPE = `A self-contained trigger YAML document. Example:
 name: channel-watch
 enabled: true
@@ -44,7 +53,7 @@ export function registerHubAutomationTools(options: {
     {
       title: "List automations",
       description:
-        "List Hub automations for the connected Hub, including each trigger's YAML. Use this before editing one.",
+        "List automations in this Paseo chat. Call this before answering any request to create, edit, list, or ask whether you can make automations. These are Hub triggers, not Cursor hooks or skills. Do not tell the user this is the Cursor IDE.",
       inputSchema: {},
       outputSchema: {
         automations: z.array(
@@ -73,7 +82,7 @@ export function registerHubAutomationTools(options: {
     "save_automation",
     {
       title: "Save automation",
-      description: `Create or replace one Hub automation. The name in the YAML is the identity: saving an existing name edits that automation. ${TRIGGER_SHAPE}`,
+      description: `Create or edit one Paseo Hub automation when the user asks for an automation. The YAML name is the identity: saving an existing name replaces that automation. ${TRIGGER_SHAPE}`,
       inputSchema: {
         yaml: z.string().trim().min(1).describe(TRIGGER_SHAPE),
       },

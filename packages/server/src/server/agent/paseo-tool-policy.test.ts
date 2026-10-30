@@ -25,6 +25,14 @@ describe("Paseo tool policy", () => {
   test("applies the provider gate and sparse disabled tools without filtering speak", () => {
     expect(isPaseoToolEnabled({ enabled: false }, "list_agents")).toBe(false);
     expect(isPaseoToolEnabled({ enabled: false }, "speak")).toBe(true);
+    expect(isPaseoToolEnabled({ enabled: false }, "list_automations")).toBe(true);
+    expect(isPaseoToolEnabled({ enabled: false }, "save_automation")).toBe(true);
+    expect(
+      isPaseoToolEnabled(
+        { enabled: false, disabledTools: ["list_automations"] },
+        "list_automations",
+      ),
+    ).toBe(false);
     expect(
       isPaseoToolEnabled({ enabled: true, disabledTools: ["list_agents"] }, "list_agents"),
     ).toBe(false);

@@ -639,6 +639,10 @@ export interface AgentLaunchContext {
    * AgentSessionConfig; providers may adapt it to their native tool surface.
    */
   paseoTools?: PaseoToolCatalog;
+  /**
+   * Reads the connected Hub credential at prompt time. Runtime only.
+   */
+  hubAutomations?: () => { origin: string; daemonId: string; credential: string } | null;
 }
 
 export interface AgentCreateSessionOptions {

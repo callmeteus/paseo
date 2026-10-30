@@ -390,7 +390,7 @@ describe("agent MCP end-to-end (offline)", () => {
     }
   }, 30_000);
 
-  test("create_agent auto-injects paseo MCP by default and can be disabled", async () => {
+  test("create_agent auto-injects paseo MCP, including when the full catalog is off", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-"));
@@ -477,7 +477,12 @@ describe("agent MCP end-to-end (offline)", () => {
         typeof disabledPayload?.agentId === "string" ? disabledPayload.agentId : null;
       expect(disabledAgentId).toBeTruthy();
 
-      expect(disabledRecorder.recordedLaunches.at(-1)?.mcpServers?.paseo).toBeUndefined();
+      expect(disabledRecorder.recordedLaunches.at(-1)?.mcpServers).toMatchObject({
+        paseo: {
+          type: "http",
+          url: `http://127.0.0.1:${disabledPort}/mcp/agents?callerAgentId=${disabledAgentId!}`,
+        },
+      });
       const disabledAgent = disabledDaemon.agentManager.getAgent(disabledAgentId!);
       expect(disabledAgent?.config.mcpServers?.paseo).toBeUndefined();
     } finally {

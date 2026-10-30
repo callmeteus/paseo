@@ -18,6 +18,11 @@ export function isPaseoToolEnabled(
   if (toolName === "speak") {
     return true;
   }
+  // Hub automations stay callable when the rest of the catalog is off.
+  // A provider can still hide one of them with disabledTools.
+  if (toolName === "list_automations" || toolName === "save_automation") {
+    return !policy?.disabledTools?.includes(toolName);
+  }
   if (!isPaseoToolPolicyEnabled(policy)) {
     return false;
   }

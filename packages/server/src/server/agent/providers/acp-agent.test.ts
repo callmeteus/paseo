@@ -35,6 +35,7 @@ import {
   resolveACPModelSelection,
   summarizeACPRequestError,
 } from "./acp-agent.js";
+import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "../tools/hub-automation-tools.js";
 import { createIdleRuntimeCleanup } from "../idle-runtime-cleanup/index.js";
 import type { ProcessTerminator, TreeKillTarget } from "../../../utils/tree-kill.js";
 import {
@@ -3090,7 +3091,7 @@ describe("ACPAgentSession", () => {
     expect(prompt).toHaveBeenCalledWith({
       sessionId: "session-1",
       messageId: "msg-client-1",
-      prompt: [{ type: "text", text: "hello" }],
+      prompt: [{ type: "text", text: `${HUB_AUTOMATION_CHAT_INSTRUCTION}\n\nhello` }],
     });
     expect(
       events
