@@ -5,29 +5,13 @@ import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/contexts/toast-context";
-import {
-  normalizeWorkspaceDescriptor,
-  useSessionStore,
-  type WorkspaceDescriptor,
-} from "@/stores/session-store";
+import { useSessionStore } from "@/stores/session-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { promoteAgentToWorkspace } from "@/screens/workspace/promote-agent-to-workspace";
 import {
   closePromoteAgentToWorkspace,
   usePromoteAgentToWorkspaceAgentId,
 } from "@/screens/workspace/promote-agent-to-workspace-store";
-
-function findWorkspaceAtDirectory(
-  workspaces: Map<string, WorkspaceDescriptor> | undefined,
-  cwd: string,
-): WorkspaceDescriptor | undefined {
-  return [...(workspaces?.values() ?? [])].find(
-    (workspace) => !workspace.archivingAt && workspace.workspaceDirectory === cwd,
-  );
-}
-
-function workspaceDisplayName(workspace: WorkspaceDescriptor): string {
-  return workspace.title?.trim() || workspace.name;
-}
 
 function resolveAgentServerId(agentId: string | null): string | null {
   if (!agentId) return null;
@@ -55,9 +39,6 @@ export function PromoteAgentToWorkspaceSheet() {
   const agent = useSessionStore((state) =>
     agentId && serverId ? (state.sessions[serverId]?.agents.get(agentId) ?? null) : null,
   );
-  const workspaces = useSessionStore((state) =>
-    serverId ? state.sessions[serverId]?.workspaces : undefined,
-  );
   const [promoting, setPromoting] = useState(false);
   const visible = Boolean(agentId && serverId && agent);
   const sheetHeader = useMemo(() => ({ title: t("workspace.tabs.menu.promoteChat.title") }), [t]);
@@ -66,32 +47,14 @@ export function PromoteAgentToWorkspaceSheet() {
     if (!client || !agent || !serverId || promoting) return;
     setPromoting(true);
     try {
-      if (agent.parentAgentId) {
-        await client.detachAgent(agent.id);
+      const promoted = await promoteAgentToWorkspace({ client, agent });
+      if (!promoted) {
+        throw new Error(t("workspace.tabs.menu.promoteChat.failed"));
       }
-
-      const existing = findWorkspaceAtDirectory(workspaces, agent.cwd);
-      let workspaceId = existing?.id;
-      let workspaceName = existing ? workspaceDisplayName(existing) : null;
-
-      if (!workspaceId) {
-        const created = await client.createWorkspace({
-          source: { kind: "directory", path: agent.cwd },
-          title: agent.title?.trim() || undefined,
-        });
-        if (!created.workspace) {
-          throw new Error(t("workspace.tabs.menu.promoteChat.failed"));
-        }
-        const workspace = normalizeWorkspaceDescriptor(created.workspace);
-        workspaceId = workspace.id;
-        workspaceName = workspaceDisplayName(workspace);
-      }
-
-      await client.setAgentWorkspace(agent.id, workspaceId);
       navigateToAgent({ serverId, agentId: agent.id });
       toast.show(
         t("workspace.tabs.menu.promoteChat.promoted", {
-          workspace: workspaceName ?? workspaceId,
+          workspace: promoted.workspaceName,
         }),
         { variant: "success" },
       );
@@ -103,7 +66,7 @@ export function PromoteAgentToWorkspaceSheet() {
     } finally {
       setPromoting(false);
     }
-  }, [agent, client, promoting, serverId, t, toast, workspaces]);
+  }, [agent, client, promoting, serverId, t, toast]);
 
   return (
     <AdaptiveModalSheet
