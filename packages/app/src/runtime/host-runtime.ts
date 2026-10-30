@@ -1608,9 +1608,35 @@ export function readInitialDaemonConnectionHint(input?: {
   return result.success ? result.data : null;
 }
 
+const LOCAL_DAEMON_ENDPOINT_PATTERN = /^(localhost|127\.0\.0\.1|\[::1\]):(\d+)$/i;
+
+/**
+ * Serves the same build from localhost and from the tailnet: an inlined localhost
+ * endpoint follows the page's hostname when the page itself is not loopback.
+ */
+export function resolveWebLocalDaemonEndpoint(value: string, pageHostname: string | null): string {
+  const host = pageHostname?.trim();
+  if (!host) return value;
+  const normalizedHost = host.toLowerCase();
+  if (
+    normalizedHost === "localhost" ||
+    normalizedHost === "127.0.0.1" ||
+    normalizedHost === "::1" ||
+    normalizedHost === "[::1]"
+  ) {
+    return value;
+  }
+  const match = LOCAL_DAEMON_ENDPOINT_PATTERN.exec(value.trim());
+  return match ? `${host}:${match[2]}` : value;
+}
+
 function readConfiguredLocalDaemonOverride(): string | null {
   const value = process.env.EXPO_PUBLIC_LOCAL_DAEMON?.trim();
-  return value && value.length > 0 ? value : null;
+  if (!value || value.length === 0) return null;
+  if (!isWeb || typeof globalThis === "undefined") return value;
+  const location = Reflect.get(globalThis, "location") as { hostname?: unknown } | undefined;
+  const pageHostname = typeof location?.hostname === "string" ? location.hostname : null;
+  return resolveWebLocalDaemonEndpoint(value, pageHostname);
 }
 
 function isSameLinkedConnection(left: ConnectionOffer, right: ConnectionOffer): boolean {

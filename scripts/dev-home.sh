@@ -4,6 +4,13 @@ default_dev_paseo_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd
 }
 
+# The tailnet IPv4, when Tailscale is installed and the machine is logged in.
+dev_tailscale_ipv4() {
+  if command -v tailscale >/dev/null 2>&1; then
+    tailscale ip -4 2>/dev/null | tr -d '\r' | head -n 1
+  fi
+}
+
 copy_json_tree() {
   local source_dir="$1"
   local target_dir="$2"
@@ -76,6 +83,7 @@ try { cfg = JSON.parse(fs.readFileSync(path, "utf8")); } catch {}
 cfg.version = cfg.version || 1;
 cfg.daemon = cfg.daemon || {};
 cfg.daemon.listen = listen;
+cfg.daemon.hostnames = true;
 cfg.daemon.cors = cfg.daemon.cors || {};
 cfg.daemon.cors.allowedOrigins = ["*"];
 fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
@@ -88,11 +96,33 @@ resolve_dev_daemon_endpoint() {
     return
   fi
 
-  case "${PASEO_LISTEN:-127.0.0.1:6768}" in
+  case "${PASEO_LISTEN:-0.0.0.0:6768}" in
     0.0.0.0:*) echo "localhost:${PASEO_LISTEN#0.0.0.0:}" ;;
     127.0.0.1:*) echo "localhost:${PASEO_LISTEN#127.0.0.1:}" ;;
     *) echo "$PASEO_LISTEN" ;;
   esac
+}
+
+# The endpoint baked into the app bundle: prefer the tailnet address so the same
+# web build works from localhost and from another Tailscale device.
+resolve_dev_app_daemon_endpoint() {
+  if [ -n "${PASEO_DEV_DAEMON_ENDPOINT:-}" ]; then
+    echo "$PASEO_DEV_DAEMON_ENDPOINT"
+    return
+  fi
+
+  local tailscale_ip
+  tailscale_ip="$(dev_tailscale_ipv4 || true)"
+  case "${PASEO_LISTEN:-0.0.0.0:6768}" in
+    0.0.0.0:*)
+      if [ -n "$tailscale_ip" ]; then
+        echo "${tailscale_ip}:${PASEO_LISTEN#0.0.0.0:}"
+        return
+      fi
+      ;;
+  esac
+
+  resolve_dev_daemon_endpoint
 }
 
 configure_dev_paseo_home() {
@@ -127,7 +157,7 @@ configure_dev_command_env() {
     if [ -n "${PASEO_SERVICE_DAEMON_PORT:-}" ]; then
       export PASEO_LISTEN="0.0.0.0:${PASEO_SERVICE_DAEMON_PORT}"
     else
-      export PASEO_LISTEN="127.0.0.1:6768"
+      export PASEO_LISTEN="0.0.0.0:6768"
     fi
   fi
 

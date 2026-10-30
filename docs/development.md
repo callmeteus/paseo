@@ -29,22 +29,30 @@ the titlebar row. Production builds leave the variable unset and show no label.
 
 `npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
 
-### Reaching the dev daemon over Tailscale
+### Reaching the dev stack over Tailscale
 
-`PASEO_LISTEN` overrides `daemon.listen` for a foreground/dev daemon. Bind all interfaces so loopback stays usable and the tailnet can reach it:
+The dev launchers bind the daemon to `0.0.0.0`, allow any hostname and CORS origin,
+and bind Metro/Expo to the LAN. When Tailscale is available they detect `tailscale ip
+-4`, bake that address into `EXPO_PUBLIC_LOCAL_DAEMON`, and print the tailnet URL:
 
-```bash
-PASEO_LISTEN=0.0.0.0:6767 npm run dev:server
+```text
+Tailnet: http://100.101.102.103:8081
+Daemon:  100.101.102.103:6768
 ```
 
-Connect clients to the machine's tailnet address (`tailscale ip -4`) on port `6767`. For the web UI served by Metro, add that origin to `daemon.cors.allowedOrigins`; otherwise the WebSocket upgrade is rejected with `Origin not allowed`:
+Open that URL from another tailnet device. The web client follows the page host for
+the daemon when the bundle's configured endpoint is loopback, so the same build works
+from `localhost` and from Tailscale.
 
-```bash
-paseo daemon config set daemon.cors.allowedOrigins '["http://100.101.102.103:8081"]'
-paseo daemon reload
-```
+`PASEO_LISTEN` overrides the bind; use a tailnet IP instead of `0.0.0.0` when the
+machine shares a LAN you do not trust. Binding `0.0.0.0` exposes the daemon to every
+interface. With no daemon password, any reachable device can control agents: set
+`PASEO_PASSWORD` in that case. `daemon.listen` is not reloadable, so changing it
+requires a worker restart.
 
-Binding `0.0.0.0` exposes the daemon to every interface, not just Tailscale. With no daemon password, any reachable device can control agents. Set `PASEO_PASSWORD` (or bind the tailnet IP alone) when the machine shares a LAN you do not trust. `daemon.listen` is not reloadable, so changing it requires a worker restart.
+Desktop dev (`npm run dev:desktop`) keeps its Electron-managed daemon on loopback;
+use the web dev stack (`npm run dev` + `npm run dev:app`) when you need the tailnet
+to reach the daemon.
 
 ## Nix desktop package
 

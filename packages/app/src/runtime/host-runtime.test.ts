@@ -25,6 +25,7 @@ import {
   HostRuntimeController,
   HostRuntimeStore,
   readInitialDaemonConnectionHint,
+  resolveWebLocalDaemonEndpoint,
   type HostRuntimeControllerDeps,
   type HostRuntimeStorage,
 } from "./host-runtime";
@@ -4806,5 +4807,25 @@ describe("HostRuntimeStore initial connection hint bootstrap", () => {
 
     expect(seenProbes).not.toContainEqual(expect.objectContaining({ endpoint: "metro-host:8081" }));
     expect(store.getHosts()).toHaveLength(0);
+  });
+});
+
+describe("resolveWebLocalDaemonEndpoint", () => {
+  it("follows a non-loopback page host", () => {
+    expect(resolveWebLocalDaemonEndpoint("localhost:6768", "100.101.102.103")).toBe(
+      "100.101.102.103:6768",
+    );
+    expect(resolveWebLocalDaemonEndpoint("127.0.0.1:6768", "gio-pc.tailnet.ts.net")).toBe(
+      "gio-pc.tailnet.ts.net:6768",
+    );
+  });
+
+  it("leaves loopback pages and non-loopback endpoints alone", () => {
+    expect(resolveWebLocalDaemonEndpoint("localhost:6768", "localhost")).toBe("localhost:6768");
+    expect(resolveWebLocalDaemonEndpoint("localhost:6768", "127.0.0.1")).toBe("localhost:6768");
+    expect(resolveWebLocalDaemonEndpoint("remote:6768", "100.101.102.103")).toBe("remote:6768");
+    expect(resolveWebLocalDaemonEndpoint("https://example.test", "100.101.102.103")).toBe(
+      "https://example.test",
+    );
   });
 });
