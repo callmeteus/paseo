@@ -255,6 +255,11 @@ export const ar: TranslationResources = {
       searchPlaceholder: "أوضاع البحث...",
       selectWithValue: "حدد وضع الوكيل ({{value}})",
     },
+    workflowMode: {
+      title: "سير العمل",
+      hint: "تغيير طريقة عمل هذه المحادثة",
+      selectWithValue: "اختيار وضع سير العمل ({{value}})",
+    },
     hints: {
       thinking: "وضع التفكير",
       model: "تغيير النموذج",
@@ -484,6 +489,10 @@ export const ar: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "جلسة الاستيراد",
     searchPlaceholder: "البحث في الجلسات...",

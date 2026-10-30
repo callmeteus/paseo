@@ -256,6 +256,11 @@ export const ko: TranslationResources = {
       searchPlaceholder: "모드 검색...",
       selectWithValue: "에이전트 모드 선택 ({{value}})",
     },
+    workflowMode: {
+      title: "워크플로",
+      hint: "이 채팅의 작동 방식 변경",
+      selectWithValue: "워크플로 모드 선택 ({{value}})",
+    },
     hints: {
       thinking: "사고 모드",
       model: "모델 변경",
@@ -489,6 +494,10 @@ export const ko: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "세션 가져오기",
     searchPlaceholder: "세션 검색...",

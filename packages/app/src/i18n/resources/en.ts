@@ -251,6 +251,11 @@ export const en = {
       searchPlaceholder: "Search modes...",
       selectWithValue: "Select agent mode ({{value}})",
     },
+    workflowMode: {
+      title: "Workflow",
+      hint: "Change how this chat works",
+      selectWithValue: "Select workflow mode ({{value}})",
+    },
     hints: {
       thinking: "Thinking mode",
       model: "Change model",
@@ -481,6 +486,10 @@ export const en = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     title: "Import session",
     chooseHostTitle: "Import from host",
     searchPlaceholder: "Search sessions...",

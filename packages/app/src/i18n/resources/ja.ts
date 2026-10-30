@@ -258,6 +258,11 @@ export const ja: TranslationResources = {
       searchPlaceholder: "モードを検索...",
       selectWithValue: "エージェントモードを選択（{{value}}）",
     },
+    workflowMode: {
+      title: "ワークフロー",
+      hint: "このチャットの動作を変更",
+      selectWithValue: "ワークフローモードを選択 ({{value}})",
+    },
     hints: {
       thinking: "思考モード",
       model: "モデルを変更",
@@ -495,6 +500,10 @@ export const ja: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "セッションをインポート",
     searchPlaceholder: "セッションを検索...",

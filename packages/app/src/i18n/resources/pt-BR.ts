@@ -259,6 +259,11 @@ export const ptBR: TranslationResources = {
       searchPlaceholder: "Buscar modos...",
       selectWithValue: "Selecionar modo do agente ({{value}})",
     },
+    workflowMode: {
+      title: "Fluxo",
+      hint: "Alterar como este chat funciona",
+      selectWithValue: "Selecionar modo de fluxo ({{value}})",
+    },
     hints: {
       thinking: "Modo de raciocínio",
       model: "Alterar modelo",
@@ -493,6 +498,10 @@ export const ptBR: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Sessões de agentes",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sessão",
     searchPlaceholder: "Buscar sessões...",

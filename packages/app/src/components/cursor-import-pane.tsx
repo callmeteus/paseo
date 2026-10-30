@@ -5,31 +5,31 @@ import { useTranslation } from "react-i18next";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { Check } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { useToast } from "@/contexts/toast-context";
 import { useFetchQuery } from "@/data/query";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTimeAgo } from "@/hooks/use-time-ago";
 
-type CursorImportClient = Pick<DaemonClient, "listCursorImportChats" | "importCursorChats">;
+export type CursorImportClient = Pick<DaemonClient, "listCursorImportChats" | "importCursorChats">;
 
 type CursorChatRow = Awaited<
   ReturnType<CursorImportClient["listCursorImportChats"]>
 >["chats"][number];
 
-interface CursorImportSheetProps {
-  visible: boolean;
-  client: CursorImportClient | null;
-  onClose: () => void;
-  onImported?: (agentId: string) => void;
+export interface CursorImportTarget {
+  id: string;
+  cwd: string;
 }
 
-const SEARCH_DEBOUNCE_MS = 200;
-const SHEET_SNAP_POINTS = ["70%", "92%"];
+interface CursorImportPaneProps {
+  client: CursorImportClient | null;
+  /** Debounced search text owned by the sheet header. */
+  query: string;
+  onImported: (target: CursorImportTarget) => void;
+}
 
 const ThemedCheck = withUnistyles(Check, (theme) => ({ color: theme.colors.foreground }));
 const ThemedSpinner = withUnistyles(LoadingSpinner, (theme) => ({
@@ -101,29 +101,22 @@ function CursorRow({
   );
 }
 
-export function CursorImportSheet({
-  visible,
-  client,
-  onClose,
-  onImported,
-}: CursorImportSheetProps) {
+export function CursorImportPane({ client, query, onImported }: CursorImportPaneProps) {
   const { t } = useTranslation();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
 
   const listing = useFetchQuery({
     dataShape: "list",
-    queryKey: ["cursor-import-chats", debouncedQuery],
-    enabled: visible && Boolean(client),
+    queryKey: ["cursor-import-chats", query],
+    enabled: Boolean(client),
     retry: false,
     staleTimeMs: 0,
     queryFn: async () => {
       if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
       return await client.listCursorImportChats({
-        ...(debouncedQuery ? { query: debouncedQuery } : {}),
+        ...(query ? { query } : {}),
         limit: 200,
       });
     },
@@ -143,17 +136,16 @@ export function CursorImportSheet({
       return result;
     },
     onSuccess: (result) => {
-      const firstAgentId = result.chats.find(
-        (chat) => chat.status === "imported" && chat.agentId,
-      )?.agentId;
+      const firstImported = result.chats.find(
+        (chat) => chat.status === "imported" && chat.agentId && chat.cwd,
+      );
       toast.show(t("cursorImport.imported", { count: result.importedCount }), {
         variant: "success",
       });
       setSelected(new Set());
       void queryClient.invalidateQueries({ queryKey: ["cursor-import-chats"] });
-      onClose();
-      if (firstAgentId) {
-        onImported?.(firstAgentId);
+      if (firstImported?.agentId && firstImported.cwd) {
+        onImported({ id: firstImported.agentId, cwd: firstImported.cwd });
       }
     },
     onError: (error) => {
@@ -177,17 +169,9 @@ export function CursorImportSheet({
     });
   }, [selectable]);
 
-  const header = useMemo(
-    () => ({
-      title: t("cursorImport.title"),
-      search: {
-        onChange: setQuery,
-        placeholder: t("cursorImport.searchPlaceholder"),
-        autoFocus: true,
-      },
-    }),
-    [t],
-  );
+  const handleImportSelected = useCallback(() => {
+    importMutation.mutate([...selected]);
+  }, [importMutation, selected]);
 
   const renderRow = useCallback(
     (chat: CursorChatRow) => (
@@ -203,9 +187,6 @@ export function CursorImportSheet({
 
   const isUnavailable = listing.data?.sourceAvailable === false;
   const isSelectAll = selected.size > 0;
-  const handleImportSelected = useCallback(() => {
-    importMutation.mutate([...selected]);
-  }, [importMutation, selected]);
 
   const renderBody = () => {
     if (listing.isPending) {
@@ -244,42 +225,38 @@ export function CursorImportSheet({
   };
 
   return (
-    <AdaptiveModalSheet
-      visible={visible}
-      onClose={onClose}
-      header={header}
-      testID="cursor-import-sheet"
-      desktopMaxWidth={560}
-      desktopHeight="85%"
-      snapPoints={SHEET_SNAP_POINTS}
-      scrollable={false}
-    >
-      <View style={styles.body}>
-        {renderBody()}
-        {chats.length > 0 && !isUnavailable ? (
-          <View style={styles.footer}>
-            <PressHighlight
-              onPress={toggleAll}
-              accessibilityRole="button"
-              style={styles.selectAllButton}
-            >
-              <Text style={styles.selectAll}>
-                {isSelectAll ? t("cursorImport.clearSelection") : t("cursorImport.selectAll")}
-              </Text>
-            </PressHighlight>
-            <Button
-              variant="default"
-              size="md"
-              disabled={selected.size === 0}
-              loading={importMutation.isPending}
-              onPress={handleImportSelected}
-            >
-              {t("cursorImport.importSelected", { count: selected.size })}
-            </Button>
-          </View>
-        ) : null}
-      </View>
-    </AdaptiveModalSheet>
+    <View style={styles.body}>
+      {importMutation.isError ? (
+        <Text style={styles.errorBanner}>
+          {importMutation.error instanceof Error
+            ? importMutation.error.message
+            : t("cursorImport.importFailed")}
+        </Text>
+      ) : null}
+      {renderBody()}
+      {chats.length > 0 && !isUnavailable ? (
+        <View style={styles.footer}>
+          <PressHighlight
+            onPress={toggleAll}
+            accessibilityRole="button"
+            style={styles.selectAllButton}
+          >
+            <Text style={styles.selectAll}>
+              {isSelectAll ? t("cursorImport.clearSelection") : t("cursorImport.selectAll")}
+            </Text>
+          </PressHighlight>
+          <Button
+            variant="default"
+            size="md"
+            disabled={selected.size === 0}
+            loading={importMutation.isPending}
+            onPress={handleImportSelected}
+          >
+            {t("cursorImport.importSelected", { count: selected.size })}
+          </Button>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -298,6 +275,12 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     textAlign: "center",
+  },
+  errorBanner: {
+    marginHorizontal: theme.spacing[4],
+    marginBottom: theme.spacing[2],
+    color: theme.colors.statusDanger,
+    fontSize: theme.fontSize.sm,
   },
   listContent: {
     paddingHorizontal: theme.spacing[2],

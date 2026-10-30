@@ -258,6 +258,11 @@ export const ru: TranslationResources = {
       searchPlaceholder: "Поиск режимов...",
       selectWithValue: "Выбрать режим агента ({{value}})",
     },
+    workflowMode: {
+      title: "Рабочий режим",
+      hint: "Изменить режим работы чата",
+      selectWithValue: "Выбрать режим работы ({{value}})",
+    },
     hints: {
       thinking: "Режим рассуждений",
       model: "Изменить модель",
@@ -492,6 +497,10 @@ export const ru: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Импортировать сессию",
     searchPlaceholder: "Поиск сессий...",

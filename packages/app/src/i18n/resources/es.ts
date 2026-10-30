@@ -259,6 +259,11 @@ export const es: TranslationResources = {
       searchPlaceholder: "Modos de búsqueda...",
       selectWithValue: "Seleccione el modo de agente ({{value}})",
     },
+    workflowMode: {
+      title: "Flujo",
+      hint: "Cambiar cómo funciona este chat",
+      selectWithValue: "Seleccionar modo de flujo ({{value}})",
+    },
     hints: {
       thinking: "Modo de pensamiento",
       model: "Cambiar modelo",
@@ -491,6 +496,10 @@ export const es: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sesión",
     searchPlaceholder: "Buscar sesiones...",

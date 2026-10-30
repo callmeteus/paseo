@@ -19,7 +19,6 @@ import { getIsElectronRuntime, useIsCompactFormFactor } from "@/constants/layout
 import { useKeyboardShortcutOverrides } from "@/hooks/use-keyboard-shortcut-overrides";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useImportSession } from "@/hooks/use-import-session";
-import { useCursorImport } from "@/hooks/use-cursor-import";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
 import { resolveShortcutKeysForAction } from "@/keyboard/keyboard-shortcuts";
@@ -115,7 +114,6 @@ export function CommandCenterRootActions() {
   const shortcutsAvailable = useKeyboardShortcutsAvailable();
   const openAddProject = useOpenAddProject();
   const { open: openImportSession, sheet: importSessionSheet } = useImportSession();
-  const { open: openCursorImport, sheet: cursorImportSheet } = useCursorImport();
   const settingsRoute = useMemo<Href>(() => buildSettingsRoute(), []);
   const homeRoute = useMemo<Href>(() => buildOpenProjectRoute(), []);
   const sessionsRoute = useMemo<Href>(() => buildSessionsRoute(), []);
@@ -189,24 +187,6 @@ export function CommandCenterRootActions() {
         presentation: {
           kind: "action",
           title: t("importSession.title"),
-          sectionTitle: t("shell.commandCenter.actions"),
-          icon: ImportIcon,
-        },
-      },
-      {
-        id: "import-cursor",
-        group: "actions",
-        groupRank: 0,
-        rank: 2.5,
-        keywords: ["import", "cursor", "chat", "ide", "history"],
-        visibility: "always",
-        run: () => {
-          clearCommandCenterFocusRestoreElement();
-          openCursorImport();
-        },
-        presentation: {
-          kind: "action",
-          title: t("cursorImport.title"),
           sectionTitle: t("shell.commandCenter.actions"),
           icon: ImportIcon,
         },
@@ -355,7 +335,6 @@ export function CommandCenterRootActions() {
     homeRoute,
     keyboardActionDispatcher,
     openAddProject,
-    openCursorImport,
     openImportSession,
     overrides,
     schedulesRoute,
@@ -370,10 +349,5 @@ export function CommandCenterRootActions() {
   ]);
 
   useCommandCenterActions({ sourceId: "root", enabled: true, actions });
-  return (
-    <>
-      {importSessionSheet}
-      {cursorImportSheet}
-    </>
-  );
+  return importSessionSheet;
 }

@@ -255,6 +255,11 @@ export const zhCN: TranslationResources = {
       searchPlaceholder: "搜索 modes...",
       selectWithValue: "选择 Agent mode（{{value}}）",
     },
+    workflowMode: {
+      title: "工作流",
+      hint: "更改此对话的工作方式",
+      selectWithValue: "选择工作流模式 ({{value}})",
+    },
     hints: {
       thinking: "Thinking mode",
       model: "切换 Model",
@@ -484,6 +489,10 @@ export const zhCN: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "导入会话",
     searchPlaceholder: "搜索会话...",
