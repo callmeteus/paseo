@@ -67,11 +67,14 @@ function subscriptionBody() {
 
 function successHandlers(): Array<[string, () => Response]> {
   return [
-    ["https://commandcode.ai/alpha/whoami", () => jsonResponse(whoamiBody())],
-    ["https://commandcode.ai/alpha/billing/credits", () => jsonResponse(creditsBody())],
-    ["https://commandcode.ai/alpha/billing/subscriptions", () => jsonResponse(subscriptionBody())],
+    ["https://api.commandcode.ai/alpha/whoami", () => jsonResponse(whoamiBody())],
+    ["https://api.commandcode.ai/alpha/billing/credits", () => jsonResponse(creditsBody())],
     [
-      "https://commandcode.ai/alpha/usage/summary",
+      "https://api.commandcode.ai/alpha/billing/subscriptions",
+      () => jsonResponse(subscriptionBody()),
+    ],
+    [
+      "https://api.commandcode.ai/alpha/usage/summary",
       () => jsonResponse({ totalCost: 12.25, totalCount: 120 }),
     ],
   ];
@@ -144,7 +147,7 @@ describe("Command Code usage source", () => {
     process.env["COMMAND_CODE_API_KEY"] = "cmd_key";
     const handlers = successHandlers();
     handlers[1] = [
-      "https://commandcode.ai/alpha/billing/credits",
+      "https://api.commandcode.ai/alpha/billing/credits",
       () => jsonResponse(creditsBody({ windowLimits: { limited: false } })),
     ];
 
@@ -160,7 +163,7 @@ describe("Command Code usage source", () => {
     process.env["COMMAND_CODE_API_KEY"] = "cmd_key";
     const handlers = successHandlers();
     handlers[1] = [
-      "https://commandcode.ai/alpha/billing/credits",
+      "https://api.commandcode.ai/alpha/billing/credits",
       () =>
         jsonResponse(
           creditsBody({
@@ -194,7 +197,7 @@ describe("Command Code usage source", () => {
 
     const report = await fetchUsage(
       { store: "env", locator: "COMMAND_CODE_API_KEY" },
-      mockFetch([["https://commandcode.ai/alpha/whoami", () => jsonResponse({}, 401)]]),
+      mockFetch([["https://api.commandcode.ai/alpha/whoami", () => jsonResponse({}, 401)]]),
     );
 
     expect(report).toEqual({
