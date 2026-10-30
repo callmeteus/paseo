@@ -1397,6 +1397,17 @@ export const ja: TranslationResources = {
       offlineTitle: "オンラインのデーモンがありません",
       offlineBody: "デーモンを接続してから、自動化を開き直してください。",
       chooseTitle: "Hub を選択",
+      setupTitle: "Hub を接続",
+      setupBody:
+        "すでにある Hub（このコンピュータまたは別の場所）に接続するか、ここでインストールします。",
+      connectExisting: "既存の Hub に接続",
+      installChoice: "Hub をインストール",
+      originLabel: "Hub のアドレス",
+      originHelp:
+        "すでに動いている Hub のアドレスを入力します。ローカルでもリモートでも構いません。",
+      originPlaceholder: "https://hub.example.com",
+      continue: "続ける",
+      invalidOrigin: "http または https のアドレスを入力してください。",
       failed: "Hub をインストールできませんでした。",
       retry: "再試行",
       progress: {

@@ -280,6 +280,24 @@ export class HubRelationshipController implements HubRelationshipManagement {
     };
   }
 
+  /**
+   * Credential the chat uses to list and save automations.
+   *
+   * Present only while the relationship is active. Callers must not log the secret.
+   *
+   * @returns Origin, daemon id, and credential, or null when Hub is not connected
+   */
+  automationAccess(): { origin: string; daemonId: string; credential: string } | null {
+    if (this.record?.state !== "active") {
+      return null;
+    }
+    return {
+      origin: this.record.relationship.hubOrigin,
+      daemonId: this.record.relationship.daemonId,
+      credential: this.record.credential.secret,
+    };
+  }
+
   async connect(input: {
     hubUrl: string;
     token: string;

@@ -409,13 +409,13 @@ export namespace HubDaemonLink {
   }
 
   /**
-   * Enrolls this computer's daemon with the local Hub.
+   * Enrolls this computer's daemon with the Hub the operator chose.
    *
    * `hub.execute` is included because automations on this computer run through it.
    * A daemon that is already connected to the same origin is left as it is.
    *
-   * @param client - Daemon that owns the local Hub process.
-   * @param origin - Hub origin shown in the app.
+   * @param client - Daemon that will run automations for that Hub.
+   * @param origin - Hub origin shown in the app, local or remote.
    * @param token - One-time enrollment token from the Hub session.
    * @returns Nothing.
    */

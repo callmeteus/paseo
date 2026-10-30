@@ -15,6 +15,16 @@ export type AutomationsView =
   | { kind: "webview"; origin: string }
   | { kind: "choose"; options: readonly { serverId: string; label: string; origin: string }[] }
   | { kind: "install"; serverId: string; label: string; installed: boolean }
+  | {
+      kind: "setup";
+      serverId: string;
+      label: string;
+      /** True when this daemon can install or start a Hub on this computer. */
+      canInstall: boolean;
+      installed: boolean;
+      /** Origin of a Hub that is already running here, so the address field can start filled in. */
+      localOrigin: string | null;
+    }
   | { kind: "connect" }
   | { kind: "offline" };
 
@@ -22,9 +32,9 @@ export type AutomationsView =
  * Decides what the Automations page shows from each daemon's Hub relationship.
  *
  * A connected origin opens inside the app. Several origins ask which one.
- * A daemon that is online and has no local Hub offers install. A local Hub
- * that is already running opens inside the app. Otherwise the page asks for
- * `paseo hub connect`, or says that no daemon is online.
+ * The first time, with no connection yet, the page asks whether to connect a Hub
+ * that already exists or to install one. A stopped local install is reached from
+ * that choice. Otherwise the page says that no daemon is online.
  *
  * @param hosts - One snapshot per known daemon
  * @returns The page state
@@ -52,61 +62,20 @@ export function resolveAutomationsView(hosts: readonly AutomationsHostSnapshot[]
     return { kind: "loading" };
   }
 
-  const missing = hosts.find((host) => host.online && host.localInstalled === false);
-  if (missing !== undefined) {
-    return {
-      kind: "install",
-      serverId: missing.serverId,
-      label: missing.label,
-      installed: false,
-    };
+  const online = hosts.find((host) => host.online);
+  if (online === undefined) {
+    return { kind: "offline" };
   }
 
-  const stopped = hosts.find(
-    (host) => host.online && host.localInstalled === true && !host.localRunning,
-  );
-  if (stopped !== undefined) {
-    return {
-      kind: "install",
-      serverId: stopped.serverId,
-      label: stopped.label,
-      installed: true,
-    };
-  }
-
-  const local = runningLocalHubs(hosts);
-  if (local.length === 1) {
-    const origin = local[0]?.origin;
-    if (origin !== undefined) return { kind: "webview", origin };
-  }
-  if (local.length > 1) {
-    return { kind: "choose", options: local };
-  }
-
-  if (!hosts.some((host) => host.online)) return { kind: "offline" };
-  return { kind: "connect" };
-}
-
-/**
- * Local Hubs that are already running, one entry per origin.
- *
- * @param hosts - Daemon snapshots
- * @returns Origins the page can open without a daemon enrollment
- */
-function runningLocalHubs(
-  hosts: readonly AutomationsHostSnapshot[],
-): { serverId: string; label: string; origin: string }[] {
-  const options: { serverId: string; label: string; origin: string }[] = [];
-  for (const host of hosts) {
-    if (!host.online || !host.localRunning || host.localOrigin === null) continue;
-    if (options.some((option) => option.origin === host.localOrigin)) continue;
-    options.push({
-      serverId: host.serverId,
-      label: host.label,
-      origin: host.localOrigin,
-    });
-  }
-  return options;
+  // No relationship yet: ask before installing or opening a Hub that happens to be running.
+  return {
+    kind: "setup",
+    serverId: online.serverId,
+    label: online.label,
+    canInstall: online.localInstalled !== null,
+    installed: online.localInstalled === true,
+    localOrigin: online.localRunning ? online.localOrigin : null,
+  };
 }
 
 function uniqueOrigins(hosts: readonly AutomationsHostSnapshot[]): string[] {

@@ -104,6 +104,8 @@ import {
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
+import { registerHubAutomationTools } from "./hub-automation-tools.js";
+import type { HubAutomationAccess } from "../../hub/automation-client.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import {
   PaseoToolInputError,
@@ -157,6 +159,8 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  /** Connected Hub credential, or null when this daemon is not enrolled. */
+  hubAutomations?: () => HubAutomationAccess | null;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
@@ -1363,6 +1367,11 @@ function createToolCatalog(
       resolveCallerAgent,
     });
   }
+
+  registerHubAutomationTools({
+    registerTool,
+    hubAutomations: options.hubAutomations,
+  });
 
   registerTool(
     "list_hosts",

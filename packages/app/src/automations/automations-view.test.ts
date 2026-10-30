@@ -41,10 +41,14 @@ describe("resolveAutomationsView", () => {
     expect(view.kind).toBe("choose");
   });
 
-  it("opens the local Hub when it is running on this computer", () => {
+  it("asks to connect an existing Hub or install one the first time", () => {
     expect(resolveAutomationsView([host({ relationship: "not_connected" })])).toEqual({
-      kind: "webview",
-      origin: "http://127.0.0.1:3000",
+      kind: "setup",
+      serverId: "local",
+      label: "This computer",
+      canInstall: true,
+      installed: true,
+      localOrigin: "http://127.0.0.1:3000",
     });
   });
 
@@ -58,28 +62,39 @@ describe("resolveAutomationsView", () => {
           localOrigin: null,
         }),
       ]),
-    ).toEqual({ kind: "connect" });
+    ).toEqual({
+      kind: "setup",
+      serverId: "local",
+      label: "This computer",
+      canInstall: false,
+      installed: false,
+      localOrigin: null,
+    });
   });
 
-  it("offers install when Hub is not installed", () => {
+  it("offers install from the first-time choice when Hub is not installed", () => {
     expect(
       resolveAutomationsView([
         host({ localInstalled: false, localRunning: false, localOrigin: null }),
       ]),
     ).toEqual({
-      kind: "install",
+      kind: "setup",
       serverId: "local",
       label: "This computer",
+      canInstall: true,
       installed: false,
+      localOrigin: null,
     });
   });
 
-  it("offers start when Hub is installed and stopped", () => {
+  it("keeps a stopped local Hub on the first-time choice", () => {
     expect(resolveAutomationsView([host({ localRunning: false, localOrigin: null })])).toEqual({
-      kind: "install",
+      kind: "setup",
       serverId: "local",
       label: "This computer",
+      canInstall: true,
       installed: true,
+      localOrigin: null,
     });
   });
 

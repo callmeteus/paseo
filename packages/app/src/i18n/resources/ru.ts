@@ -1399,6 +1399,16 @@ export const ru: TranslationResources = {
       offlineTitle: "Нет демона онлайн",
       offlineBody: "Подключите демон и снова откройте автоматизации.",
       chooseTitle: "Выберите Hub",
+      setupTitle: "Подключить Hub",
+      setupBody:
+        "Подключите уже существующий Hub, на этом компьютере или в другом месте, или установите его здесь.",
+      connectExisting: "Подключить существующий Hub",
+      installChoice: "Установить Hub",
+      originLabel: "Адрес Hub",
+      originHelp: "Укажите адрес Hub, который уже запущен, локально или удалённо.",
+      originPlaceholder: "https://hub.example.com",
+      continue: "Продолжить",
+      invalidOrigin: "Введите адрес http или https.",
       failed: "Не удалось установить Hub.",
       retry: "Повторить",
       progress: {

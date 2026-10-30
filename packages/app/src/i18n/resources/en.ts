@@ -1385,6 +1385,16 @@ export const en = {
       offlineTitle: "No daemon is online",
       offlineBody: "Connect a daemon, then open Automations again.",
       chooseTitle: "Choose a Hub",
+      setupTitle: "Connect Hub",
+      setupBody:
+        "Connect a Hub you already have, on this computer or somewhere else, or install one here.",
+      connectExisting: "Connect an existing Hub",
+      installChoice: "Install Hub",
+      originLabel: "Hub address",
+      originHelp: "Use the address of a Hub that is already running, local or remote.",
+      originPlaceholder: "https://hub.example.com",
+      continue: "Continue",
+      invalidOrigin: "Enter an http or https address.",
       failed: "Hub could not be installed.",
       retry: "Try again",
       progress: {

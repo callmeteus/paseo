@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
+import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import { useTranslation } from "react-i18next";
 import { Workflow } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -41,6 +42,7 @@ export function AutomationsScreen(): ReactElement {
   const [snapshots, setSnapshots] = useState<AutomationsHostSnapshot[] | null>(null);
   const [install, setInstall] = useState<InstallState>({ status: "idle" });
   const [chosenOrigin, setChosenOrigin] = useState<string | null>(null);
+  const [setupStep, setSetupStep] = useState<"ask" | "connect" | "install">("ask");
 
   const reload = useCallback(async () => {
     const runtime = getHostRuntimeStore();
@@ -107,12 +109,12 @@ export function AutomationsScreen(): ReactElement {
     return resolveAutomationsView(snapshots);
   }, [chosenOrigin, snapshots]);
 
-  const connectLocalDaemon = useCallback(
+  const connectDaemon = useCallback(
     (token: string) => {
       if (view.kind !== "webview") {
         return Promise.reject(new Error("Hub is not open."));
       }
-      const serverId = snapshots?.find((host) => host.localOrigin === view.origin)?.serverId;
+      const serverId = snapshots?.find((host) => host.online)?.serverId;
       const client = serverId === undefined ? null : getHostRuntimeStore().getClient(serverId);
       if (client === null) {
         return Promise.reject(new Error("Desktop daemon is not available."));
@@ -141,6 +143,7 @@ export function AutomationsScreen(): ReactElement {
         unsubscribe,
         reload,
         setInstall,
+        setChosenOrigin,
         t("sidebar.automationsPage.failed"),
       );
     },
@@ -153,12 +156,13 @@ export function AutomationsScreen(): ReactElement {
       <AutomationsBody
         view={view}
         install={install}
+        setupStep={setupStep}
         onInstall={handleInstall}
         onChoose={setChosenOrigin}
+        onSetupStep={setSetupStep}
         onEnrollmentToken={
-          view.kind === "webview" &&
-          snapshots?.some((host) => host.localOrigin === view.origin) === true
-            ? connectLocalDaemon
+          view.kind === "webview" && snapshots?.some((host) => host.online) === true
+            ? connectDaemon
             : undefined
         }
       />
@@ -169,10 +173,12 @@ export function AutomationsScreen(): ReactElement {
 async function finishInstall(
   client: {
     installLocalHub: () => Promise<{ success: boolean; error: string | null }>;
+    getLocalHubStatus: () => Promise<{ status: { origin: string | null } }>;
   },
   unsubscribe: () => void,
   reload: () => Promise<void>,
   setInstall: (state: InstallState) => void,
+  setChosenOrigin: (origin: string) => void,
   failed: string,
 ): Promise<void> {
   try {
@@ -187,6 +193,13 @@ async function finishInstall(
     }
     setInstall({ status: "idle" });
     await reload();
+    const local = await client.getLocalHubStatus().then(
+      (status) => status.status,
+      () => null,
+    );
+    if (local?.origin) {
+      setChosenOrigin(local.origin);
+    }
   } catch (error: unknown) {
     unsubscribe();
     setInstall({
@@ -215,6 +228,127 @@ function ChooseOriginButton({
   );
 }
 
+function InstallPanel({
+  serverId,
+  installed,
+  install,
+  onInstall,
+}: {
+  serverId: string;
+  installed: boolean;
+  install: InstallState;
+  onInstall: (serverId: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const running = install.status === "running";
+  const label = installed
+    ? t("sidebar.automationsPage.start")
+    : t("sidebar.automationsPage.install");
+  return (
+    <View style={styles.emptyState} testID="automations-install">
+      <Workflow size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
+      <View style={styles.emptyTextStack}>
+        <Text style={styles.emptyTitle}>
+          {installed
+            ? t("sidebar.automationsPage.startTitle")
+            : t("sidebar.automationsPage.installTitle")}
+        </Text>
+        <Text style={styles.emptyDescription}>
+          {installed
+            ? t("sidebar.automationsPage.startBody")
+            : t("sidebar.automationsPage.installBody")}
+        </Text>
+      </View>
+      {running ? (
+        <InstallProgressBar progress={install.progress} />
+      ) : (
+        <InstallButton label={label} serverId={serverId} onInstall={onInstall} />
+      )}
+      {install.status === "failed" ? <Text style={styles.errorText}>{install.message}</Text> : null}
+    </View>
+  );
+}
+
+function SetupButton({
+  label,
+  testID,
+  onPress,
+}: {
+  label: string;
+  testID: string;
+  onPress: () => void;
+}): ReactElement {
+  return (
+    <Button onPress={onPress} testID={testID}>
+      {label}
+    </Button>
+  );
+}
+
+function ConnectExistingHub({
+  initialOrigin,
+  onChoose,
+}: {
+  initialOrigin: string;
+  onChoose: (origin: string) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(initialOrigin);
+  const [error, setError] = useState<string | null>(null);
+  const submit = useCallback(() => {
+    const origin = parseHubOrigin(value);
+    if (origin === null) {
+      setError(t("sidebar.automationsPage.invalidOrigin"));
+      return;
+    }
+    onChoose(origin);
+  }, [onChoose, t, value]);
+  return (
+    <View style={styles.emptyState} testID="automations-connect-form">
+      <View style={styles.emptyTextStack}>
+        <Text style={styles.emptyTitle}>{t("sidebar.automationsPage.connectExisting")}</Text>
+        <Text style={styles.emptyDescription}>{t("sidebar.automationsPage.originHelp")}</Text>
+      </View>
+      <TextInput
+        testID="automations-origin-input"
+        accessibilityLabel={t("sidebar.automationsPage.originLabel")}
+        initialValue={initialOrigin}
+        onChangeText={setValue}
+        placeholder={t("sidebar.automationsPage.originPlaceholder")}
+        placeholderTextColor={styles.emptyDescription.color}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.originInput}
+      />
+      {error !== null ? <Text style={styles.errorText}>{error}</Text> : null}
+      <Button onPress={submit} testID="automations-origin-continue">
+        {t("sidebar.automationsPage.continue")}
+      </Button>
+    </View>
+  );
+}
+
+/**
+ * Keeps only an http or https origin. Credentials in the address are refused.
+ *
+ * @param value - What the operator typed
+ * @returns Origin, or null when it is not a Hub address
+ */
+function parseHubOrigin(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    if (url.username !== "" || url.password !== "") {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 function InstallButton({
   label,
   serverId,
@@ -237,17 +371,71 @@ function InstallButton({
 function AutomationsBody({
   view,
   install,
+  setupStep,
   onInstall,
   onChoose,
+  onSetupStep,
   onEnrollmentToken,
 }: {
   view: AutomationsView;
   install: InstallState;
+  setupStep: "ask" | "connect" | "install";
   onInstall: (serverId: string) => void;
   onChoose: (origin: string) => void;
+  onSetupStep: (step: "ask" | "connect" | "install") => void;
   onEnrollmentToken?: (token: string) => Promise<void>;
 }): ReactElement {
   const { t } = useTranslation();
+  const chooseConnect = useCallback(() => {
+    onSetupStep("connect");
+  }, [onSetupStep]);
+  const chooseInstall = useCallback(() => {
+    if (view.kind === "setup" && view.installed && view.localOrigin !== null) {
+      onInstall(view.serverId);
+      return;
+    }
+    onSetupStep("install");
+  }, [onInstall, onSetupStep, view]);
+  if (view.kind === "setup" && setupStep === "install") {
+    return (
+      <InstallPanel
+        serverId={view.serverId}
+        installed={view.installed}
+        install={install}
+        onInstall={onInstall}
+      />
+    );
+  }
+  if (view.kind === "setup" && setupStep === "connect") {
+    return <ConnectExistingHub initialOrigin={view.localOrigin ?? ""} onChoose={onChoose} />;
+  }
+  if (view.kind === "setup") {
+    return (
+      <View style={styles.emptyState} testID="automations-setup">
+        <Workflow size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
+        <View style={styles.emptyTextStack}>
+          <Text style={styles.emptyTitle}>{t("sidebar.automationsPage.setupTitle")}</Text>
+          <Text style={styles.emptyDescription}>{t("sidebar.automationsPage.setupBody")}</Text>
+        </View>
+        <SetupButton
+          label={t("sidebar.automationsPage.connectExisting")}
+          testID="automations-connect-existing"
+          onPress={chooseConnect}
+        />
+        {view.canInstall ? (
+          <SetupButton
+            label={
+              view.installed && view.localOrigin === null
+                ? t("sidebar.automationsPage.start")
+                : t("sidebar.automationsPage.installChoice")
+            }
+            testID="automations-install-choice"
+            onPress={chooseInstall}
+          />
+        ) : null}
+      </View>
+    );
+  }
   if (view.kind === "loading") {
     return (
       <View style={styles.emptyState}>
@@ -278,34 +466,13 @@ function AutomationsBody({
     );
   }
   if (view.kind === "install") {
-    const running = install.status === "running";
-    const label = view.installed
-      ? t("sidebar.automationsPage.start")
-      : t("sidebar.automationsPage.install");
     return (
-      <View style={styles.emptyState} testID="automations-install">
-        <Workflow size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
-        <View style={styles.emptyTextStack}>
-          <Text style={styles.emptyTitle}>
-            {view.installed
-              ? t("sidebar.automationsPage.startTitle")
-              : t("sidebar.automationsPage.installTitle")}
-          </Text>
-          <Text style={styles.emptyDescription}>
-            {view.installed
-              ? t("sidebar.automationsPage.startBody")
-              : t("sidebar.automationsPage.installBody")}
-          </Text>
-        </View>
-        {running ? (
-          <InstallProgressBar progress={install.progress} />
-        ) : (
-          <InstallButton label={label} serverId={view.serverId} onInstall={onInstall} />
-        )}
-        {install.status === "failed" ? (
-          <Text style={styles.errorText}>{install.message}</Text>
-        ) : null}
-      </View>
+      <InstallPanel
+        serverId={view.serverId}
+        installed={view.installed}
+        install={install}
+        onInstall={onInstall}
+      />
     );
   }
   if (view.kind === "offline") {
@@ -370,6 +537,18 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     textAlign: "center",
+  },
+  originInput: {
+    width: "100%",
+    maxWidth: 420,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
   },
   errorText: {
     color: theme.colors.destructive,

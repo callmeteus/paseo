@@ -1408,6 +1408,16 @@ export const ptBR: TranslationResources = {
       offlineTitle: "Nenhum daemon online",
       offlineBody: "Conecte um daemon e abra Automações de novo.",
       chooseTitle: "Escolha um Hub",
+      setupTitle: "Conectar o Hub",
+      setupBody:
+        "Conecte um Hub que já existe, neste computador ou em outro lugar, ou instale um aqui.",
+      connectExisting: "Conectar um Hub existente",
+      installChoice: "Instalar Hub",
+      originLabel: "Endereço do Hub",
+      originHelp: "Use o endereço de um Hub que já está em execução, local ou remoto.",
+      originPlaceholder: "https://hub.example.com",
+      continue: "Continuar",
+      invalidOrigin: "Informe um endereço http ou https.",
       failed: "Não foi possível instalar o Hub.",
       retry: "Tentar de novo",
       progress: {
