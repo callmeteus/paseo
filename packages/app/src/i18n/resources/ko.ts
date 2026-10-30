@@ -738,6 +738,7 @@ export const ko: TranslationResources = {
         copyFilePath: "파일 경로 복사",
         rename: "이름 변경",
         moveToWorkspace: "워크스페이스로 이동",
+        promoteToWorkspace: "워크스페이스로 승격",
         openContainingDirectory: "포함된 폴더 열기",
         moveWorkspace: {
           title: "워크스페이스를 폴더로 이동",
@@ -757,6 +758,14 @@ export const ko: TranslationResources = {
           confirmLabel: "이동",
           moved: "채팅을 {{workspace}}(으)로 이동했습니다",
           failed: "채팅을 이동하지 못했습니다",
+        },
+        promoteChat: {
+          title: "워크스페이스로 승격",
+          body: "{{cwd}}에 워크스페이스를 만들고 이 채팅을 이동합니다. 하위 에이전트라면 독립 에이전트가 됩니다.",
+          confirmLabel: "승격",
+          cancel: "취소",
+          promoted: "채팅을 {{workspace}}(으)로 승격했습니다",
+          failed: "채팅을 승격하지 못했습니다",
         },
         closeAbove: "위쪽 탭 닫기",
         closeBelow: "아래쪽 탭 닫기",

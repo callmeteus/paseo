@@ -744,6 +744,7 @@ export const ru: TranslationResources = {
         copyFilePath: "Скопировать путь к файлу",
         rename: "Переименовать",
         moveToWorkspace: "Переместить в рабочее пространство",
+        promoteToWorkspace: "Повысить до рабочего пространства",
         openContainingDirectory: "Открыть содержащую папку",
         moveWorkspace: {
           title: "Переместить рабочее пространство в папку",
@@ -763,6 +764,14 @@ export const ru: TranslationResources = {
           confirmLabel: "Переместить",
           moved: "Чат перемещён в {{workspace}}",
           failed: "Не удалось переместить чат",
+        },
+        promoteChat: {
+          title: "Повысить до рабочего пространства",
+          body: "Создаёт рабочее пространство в {{cwd}} и перемещает туда этот чат. Субагент становится самостоятельным.",
+          confirmLabel: "Повысить",
+          cancel: "Отмена",
+          promoted: "Чат повышен до {{workspace}}",
+          failed: "Не удалось повысить чат",
         },
         closeAbove: "Закрыть вкладки выше",
         closeBelow: "Закрыть вкладки ниже",

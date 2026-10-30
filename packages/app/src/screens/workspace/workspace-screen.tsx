@@ -147,6 +147,7 @@ import {
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
+import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
 import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
@@ -3777,6 +3778,7 @@ function WorkspaceScreenContent({
       >
         {renderedWorkspaceScreen}
         <MoveAgentToWorkspaceSheet />
+        <PromoteAgentToWorkspaceSheet />
         <MoveWorkspaceToFolderSheet />
       </AssistantFileLinkResolverProvider>
     </WorkspaceContentProviders>

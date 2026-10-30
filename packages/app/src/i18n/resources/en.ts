@@ -730,6 +730,7 @@ export const en = {
         copyFilePath: "Copy file path",
         rename: "Rename",
         moveToWorkspace: "Move to workspace",
+        promoteToWorkspace: "Promote to workspace",
         openContainingDirectory: "Open containing directory",
         moveWorkspace: {
           title: "Move workspace to folder",
@@ -749,6 +750,14 @@ export const en = {
           confirmLabel: "Move",
           moved: "Chat moved to {{workspace}}",
           failed: "Could not move the chat",
+        },
+        promoteChat: {
+          title: "Promote to workspace",
+          body: "Create a workspace at {{cwd}} and move this chat there. If it is a subagent, it becomes standalone.",
+          confirmLabel: "Promote",
+          cancel: "Cancel",
+          promoted: "Chat promoted to {{workspace}}",
+          failed: "Could not promote the chat",
         },
         closeAbove: "Close tabs above",
         closeBelow: "Close tabs below",

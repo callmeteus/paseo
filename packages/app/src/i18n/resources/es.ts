@@ -741,6 +741,7 @@ export const es: TranslationResources = {
         copyFilePath: "Copy file path",
         rename: "Rebautizar",
         moveToWorkspace: "Mover a espacio de trabajo",
+        promoteToWorkspace: "Promover a espacio de trabajo",
         openContainingDirectory: "Abrir carpeta contenedora",
         moveWorkspace: {
           title: "Mover espacio de trabajo a carpeta",
@@ -760,6 +761,14 @@ export const es: TranslationResources = {
           confirmLabel: "Mover",
           moved: "Chat movido a {{workspace}}",
           failed: "No se pudo mover el chat",
+        },
+        promoteChat: {
+          title: "Promover a espacio de trabajo",
+          body: "Crea un espacio de trabajo en {{cwd}} y mueve este chat allí. Si es un subagente, pasa a ser independiente.",
+          confirmLabel: "Promover",
+          cancel: "Cancelar",
+          promoted: "Chat promovido a {{workspace}}",
+          failed: "No se pudo promover el chat",
         },
         closeAbove: "Cerrar pestañas arriba",
         closeBelow: "Cerrar pestañas a continuación",

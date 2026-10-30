@@ -745,6 +745,7 @@ export const ja: TranslationResources = {
         copyFilePath: "ファイルパスをコピー",
         rename: "名前を変更",
         moveToWorkspace: "ワークスペースへ移動",
+        promoteToWorkspace: "ワークスペースへ昇格",
         openContainingDirectory: "格納フォルダーを開く",
         moveWorkspace: {
           title: "ワークスペースをフォルダーへ移動",
@@ -764,6 +765,14 @@ export const ja: TranslationResources = {
           confirmLabel: "移動",
           moved: "チャットを {{workspace}} へ移動しました",
           failed: "チャットを移動できませんでした",
+        },
+        promoteChat: {
+          title: "ワークスペースへ昇格",
+          body: "{{cwd}} にワークスペースを作成し、このチャットを移動します。サブエージェントの場合は独立します。",
+          confirmLabel: "昇格",
+          cancel: "キャンセル",
+          promoted: "チャットを {{workspace}} へ昇格しました",
+          failed: "チャットを昇格できませんでした",
         },
         closeAbove: "上のタブを閉じる",
         closeBelow: "下のタブを閉じる",

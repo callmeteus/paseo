@@ -733,6 +733,7 @@ export const ar: TranslationResources = {
         copyFilePath: "Copy file path",
         rename: "إعادة تسمية",
         moveToWorkspace: "نقل إلى مساحة العمل",
+        promoteToWorkspace: "ترقية إلى مساحة عمل",
         openContainingDirectory: "فتح المجلد المحتوي",
         moveWorkspace: {
           title: "نقل مساحة العمل إلى مجلد",
@@ -752,6 +753,14 @@ export const ar: TranslationResources = {
           confirmLabel: "نقل",
           moved: "تم نقل المحادثة إلى {{workspace}}",
           failed: "تعذر نقل المحادثة",
+        },
+        promoteChat: {
+          title: "ترقية إلى مساحة عمل",
+          body: "ينشئ مساحة عمل في {{cwd}} وينقل هذه المحادثة إليها. إذا كان وكيلًا فرعيًا فسيصبح مستقلًا.",
+          confirmLabel: "ترقية",
+          cancel: "إلغاء",
+          promoted: "تمت ترقية المحادثة إلى {{workspace}}",
+          failed: "تعذر ترقية المحادثة",
         },
         closeAbove: "إغلاق علامات التبويب أعلاه",
         closeBelow: "إغلاق علامات التبويب أدناه",

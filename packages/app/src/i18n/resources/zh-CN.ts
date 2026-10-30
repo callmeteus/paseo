@@ -733,6 +733,7 @@ export const zhCN: TranslationResources = {
         copyFilePath: "Copy file path",
         rename: "重命名",
         moveToWorkspace: "移动到工作区",
+        promoteToWorkspace: "提升为工作区",
         openContainingDirectory: "打开所在文件夹",
         moveWorkspace: {
           title: "将工作区移动到文件夹",
@@ -751,6 +752,14 @@ export const zhCN: TranslationResources = {
           confirmLabel: "移动",
           moved: "聊天已移动到 {{workspace}}",
           failed: "无法移动聊天",
+        },
+        promoteChat: {
+          title: "提升为工作区",
+          body: "在 {{cwd}} 创建工作区，并将此聊天移动到那里。如果是子代理，它将变为独立代理。",
+          confirmLabel: "提升",
+          cancel: "取消",
+          promoted: "聊天已提升到 {{workspace}}",
+          failed: "无法提升聊天",
         },
         closeAbove: "关闭上方标签",
         closeBelow: "关闭下方标签",
