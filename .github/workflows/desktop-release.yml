@@ -259,7 +259,7 @@ jobs:
           NODE
 
       - name: Install Linux smoke display
-        run: sudo apt-get update && sudo apt-get install -y xvfb xauth rpm
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth rpm squashfs-tools
 
       - name: Build desktop release
         shell: bash
