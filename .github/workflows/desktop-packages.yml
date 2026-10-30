@@ -38,7 +38,7 @@ jobs:
         run: node scripts/npm-retry.mjs ci
 
       - name: Install package smoke dependencies
-        run: sudo apt-get update && sudo apt-get install -y xvfb xauth rpm
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth rpm squashfs-tools
 
       - name: Build Linux desktop artifacts
         # Smoke package contents and installation without spending minutes on xz compression.

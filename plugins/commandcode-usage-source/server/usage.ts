@@ -20,8 +20,10 @@ import {
 
 // The Command Code CLI reads the same /alpha endpoints for its `/usage` overlay.
 // Server-side source: dist/cli.mjs in the command-code npm package (fetchUsageData).
-const PROD_BASE_URL = "https://commandcode.ai";
-const STAGING_BASE_URL = "https://staging.commandcode.ai";
+// Usage lives on the API host; the website host serves marketing pages and returns 404.
+const PROD_BASE_URL = "https://api.commandcode.ai";
+const STAGING_BASE_URL = "https://staging-api.commandcode.ai";
+const STUDIO_BASE_URL = "https://commandcode.ai";
 const REQUEST_TIMEOUT_MS = 18_000;
 const AUTH_FILE_DIRECTORY = ".commandcode";
 const AUTH_FILE_NAME = "auth.json";
@@ -291,7 +293,6 @@ function usageDetails(input: {
   summary: z.infer<typeof SummarySchema> | null;
   sandbox: SandboxMinutes | null | undefined;
   orgLogin: string | undefined;
-  baseUrl: string;
   now: number;
 }): UsageDetail[] {
   const details: UsageDetail[] = [];
@@ -319,7 +320,7 @@ function usageDetails(input: {
     details.push({
       id: "studio",
       label: "Studio",
-      value: `${input.baseUrl.replace(/^https?:\/\//, "")}/${input.orgLogin}/settings/usage`,
+      value: `${STUDIO_BASE_URL.replace(/^https?:\/\//, "")}/${input.orgLogin}/settings/usage`,
     });
   }
 
@@ -474,7 +475,6 @@ export async function fetchUsage(
       summary,
       sandbox: credits.credits?.sandboxMinutes,
       orgLogin: whoami.org?.login,
-      baseUrl,
       now: Date.now(),
     }),
   };
