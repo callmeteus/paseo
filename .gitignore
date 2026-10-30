@@ -104,6 +104,9 @@ app.json
 # Local scratch files (logs, build output, one-off install scripts)
 .tmp/
 
+# Local Command Code agent state.
+.commandcode/
+
 
 # Stillmark
 .stillmark/plans/
