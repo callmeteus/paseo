@@ -104,6 +104,7 @@ interface ACPSessionInternals {
     cancel?: (input: { sessionId: string }) => Promise<void>;
   };
   agentCapabilities: { promptCapabilities?: { image?: boolean } } | null;
+  authMethods: Array<{ id: string; name: string; description?: string }>;
   activeForegroundTurnId: string | null;
   configOptions: SessionConfigOption[];
   translateSessionUpdate(update: SessionUpdate): AgentStreamEvent[];
@@ -2992,7 +2993,42 @@ describe("ACPAgentSession", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
-  test("fails a turn that stops producing activity instead of loading forever", async () => {
+  test("fails a turn that never starts responding instead of loading forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).agentCapabilities = {
+        promptCapabilities: { image: true },
+      };
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      asInternals<ACPSessionInternals>(session).authMethods = [
+        { id: "kilo-login", name: "Login with Kilo", description: "Run `kilo auth login`" },
+      ];
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(45_000);
+
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("did not start responding"),
+      });
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        error: expect.stringContaining("kilo auth login"),
+      });
+      expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("fails a turn that stops producing activity after it starts", async () => {
     vi.useFakeTimers();
     try {
       const session = createSession();
@@ -3008,6 +3044,14 @@ describe("ACPAgentSession", () => {
       session.subscribe((event) => events.push(event));
 
       const { turnId } = await session.startTurn("hello");
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "assistant-1",
+          content: { type: "text", text: "Working" },
+        } as SessionUpdate,
+      });
       await vi.advanceTimersByTimeAsync(120_000);
 
       expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
