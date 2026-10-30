@@ -1709,6 +1709,7 @@ export const AgentControls = memo(function AgentControls({
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
   const modeControl = useLiveAgentModeControl(serverId, agentId);
+  const supportsWorkflowModes = useHostFeature(serverId, "workflowModes");
   const workflowModeControl = useLiveWorkflowModeControl(serverId, agentId);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
@@ -2069,7 +2070,7 @@ export const AgentControls = memo(function AgentControls({
         onDropdownClose={onDropdownClose}
         disabled={anyTrue(client === null)}
         modeControl={modeControl}
-        workflowModeControl={workflowModeControl}
+        workflowModeControl={supportsWorkflowModes ? workflowModeControl : null}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
         onRouterPicked={handleRouterPicked}
@@ -2165,13 +2166,17 @@ export function DraftAgentControls({
     [selectedProvider, providerDefinitions, modeOptions, selectedMode, onSelectMode, disabled],
   );
 
-  const workflowModeControl = useMemo<WorkflowModeControlValue>(
-    () => ({
-      selectedWorkflowModeId: selectedWorkflowMode,
-      onSelectWorkflowMode,
-      disabled,
-    }),
-    [selectedWorkflowMode, onSelectWorkflowMode, disabled],
+  const supportsWorkflowModes = useHostFeature(modelSelectorServerId, "workflowModes");
+  const workflowModeControl = useMemo<WorkflowModeControlValue | null>(
+    () =>
+      supportsWorkflowModes
+        ? {
+            selectedWorkflowModeId: selectedWorkflowMode,
+            onSelectWorkflowMode,
+            disabled,
+          }
+        : null,
+    [selectedWorkflowMode, onSelectWorkflowMode, disabled, supportsWorkflowModes],
   );
 
   return (
