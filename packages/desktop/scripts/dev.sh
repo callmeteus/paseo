@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$DESKTOP_DIR/../.." && pwd)"
 source "$ROOT_DIR/scripts/dev-home.sh"
 
 export PATH="$ROOT_DIR/node_modules/.bin:$PATH"
-export PASEO_LISTEN="${PASEO_LISTEN:-127.0.0.1:6768}"
+export PASEO_LISTEN="${PASEO_LISTEN:-0.0.0.0:6768}"
 configure_dev_paseo_home
 
 DEV_ROOT="${PASEO_DEV_ROOT:-$(default_dev_paseo_root)}"
@@ -38,6 +38,10 @@ echo "  Paseo Desktop Dev"
 echo "══════════════════════════════════════════════════════"
 echo "  Metro:      ${EXPO_DEV_URL}"
 echo "  Daemon:     ${PASEO_LISTEN}"
+TAILSCALE_IP="$(dev_tailscale_ipv4 || true)"
+if [ -n "$TAILSCALE_IP" ]; then
+  echo "  Tailnet:    http://${TAILSCALE_IP}:${PASEO_LISTEN##*:}"
+fi
 echo "  Home:       ${PASEO_HOME}"
 echo "  userData:   ${PASEO_ELECTRON_USER_DATA_DIR}"
 echo "══════════════════════════════════════════════════════"

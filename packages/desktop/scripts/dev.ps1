@@ -63,7 +63,7 @@ if (-not $env:PASEO_HOME) {
 New-Item -ItemType Directory -Force -Path $env:PASEO_HOME, $env:PASEO_ELECTRON_USER_DATA_DIR | Out-Null
 
 $DevDaemonPort = if ($env:PASEO_DEV_DAEMON_PORT) { $env:PASEO_DEV_DAEMON_PORT } else { "6788" }
-if (-not $env:PASEO_LISTEN) { $env:PASEO_LISTEN = "127.0.0.1:$DevDaemonPort" }
+if (-not $env:PASEO_LISTEN) { $env:PASEO_LISTEN = "0.0.0.0:$DevDaemonPort" }
 
 # Seed the isolated daemon config. The desktop daemon-manager decides whether a
 # daemon is already running by reading `daemon.listen` from this config.json
@@ -85,7 +85,7 @@ let cfg = {};
 try { cfg = JSON.parse(fs.readFileSync(path, 'utf8')); } catch(e) {}
 cfg.version = cfg.version || 1;
 cfg.daemon = cfg.daemon || {};
-cfg.daemon.listen = '127.0.0.1:' + port;
+cfg.daemon.listen = '0.0.0.0:' + port;
 cfg.daemon.cors = cfg.daemon.cors || {};
 cfg.daemon.cors.allowedOrigins = ['*'];
 fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
@@ -99,13 +99,21 @@ fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
     Write-Host "  (custom PASEO_HOME - leaving its config.json untouched)"
 }
 
+$TailnetLine = ""
+if (Get-Command tailscale -ErrorAction SilentlyContinue) {
+    $TailscaleIp = (& tailscale ip -4 2>$null | Select-Object -First 1)
+    if ($TailscaleIp) {
+        $TailnetLine = "  Tailnet:    http://${TailscaleIp}:$($env:PASEO_LISTEN.Split(':')[-1])`n"
+    }
+}
+
 Write-Host @"
 ======================================================
   Paseo Desktop Dev (Windows)
 ======================================================
   Metro:      http://localhost:$($env:EXPO_PORT)
   Daemon:     $($env:PASEO_LISTEN) (isolated)
-  PASEO_HOME: $($env:PASEO_HOME)
+$TailnetLine  PASEO_HOME: $($env:PASEO_HOME)
   userData:   $($env:PASEO_ELECTRON_USER_DATA_DIR)
 ======================================================
 "@

@@ -255,6 +255,11 @@ export const zhCN: TranslationResources = {
       searchPlaceholder: "搜索 modes...",
       selectWithValue: "选择 Agent mode（{{value}}）",
     },
+    workflowMode: {
+      title: "工作流",
+      hint: "更改此对话的工作方式",
+      selectWithValue: "选择工作流模式 ({{value}})",
+    },
     hints: {
       thinking: "Thinking mode",
       model: "切换 Model",
@@ -262,6 +267,7 @@ export const zhCN: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "添加到对话",
     empty: "开始和这个 Agent 对话...",
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",
@@ -484,6 +490,10 @@ export const zhCN: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "导入会话",
     searchPlaceholder: "搜索会话...",
@@ -3211,5 +3221,20 @@ export const zhCN: TranslationResources = {
         cancel: "取消",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 };

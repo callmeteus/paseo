@@ -18,7 +18,9 @@ import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/dra
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
+import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
@@ -201,6 +203,7 @@ async function submitDraftCreateRequest(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     selectedProvider: string | null;
+    selectedWorkflowMode: string;
     effectiveModeId: string;
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -248,6 +251,7 @@ async function submitDraftCreateRequest(input: {
     provider: route.provider,
     cwd,
     ...modeIdOverride,
+    workflowModeId: composerState.selectedWorkflowMode,
     model: autoSubmitConfig?.model ?? route.model,
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
@@ -681,6 +685,14 @@ export function WorkspaceDraftAgentTab({
     }),
     [composerState.agentControls, handleDropdownCloseFocus, isSubmitting],
   );
+  const handleAddSelectionToChat = useCallback(
+    (selection: string) => {
+      const current = useDraftStore.getState().getDraftInput(draftStoreKey)?.text ?? "";
+      replaceDraftText(appendSelectionToDraftText(current, selection));
+    },
+    [draftStoreKey, replaceDraftText],
+  );
+
   const dockContent = (
     <View style={styles.contentContainer}>
       {isSubmitting && draftAgent ? (
@@ -694,6 +706,7 @@ export function WorkspaceDraftAgentTab({
             turnPresentation={turnPresentation}
             pendingPermissions={EMPTY_PENDING_PERMISSIONS}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
+            onAddSelectionToChat={handleAddSelectionToChat}
           />
         </View>
       ) : (

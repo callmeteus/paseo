@@ -2,6 +2,7 @@ import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
+import { isCursorImportedRecord } from "../imports/cursor/import.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -106,6 +107,7 @@ import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtim
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import { composeWorkflowPrompt, isWorkflowModeId } from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -401,6 +403,8 @@ export interface AgentManagerOptions {
   terminalManager?: TerminalManager | null;
   mcpBaseUrl?: string;
   mcpAuthToken?: string;
+  /** Home directory for debug logs and other daemon artifacts. */
+  paseoHome?: string;
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
@@ -1097,6 +1101,8 @@ export class AgentManager {
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
+  private debugIngestBaseUrl: string | null = null;
+  private readonly paseoHome: string | undefined;
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
@@ -1124,6 +1130,7 @@ export class AgentManager {
     this.onWorkspaceStateMayHaveChanged = options?.onWorkspaceStateMayHaveChanged;
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
+    this.paseoHome = options.paseoHome;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
@@ -1208,6 +1215,15 @@ export class AgentManager {
 
   setMcpBaseUrl(url: string | null): void {
     this.mcpBaseUrl = url;
+  }
+
+  setDebugIngestBaseUrl(url: string | null): void {
+    this.debugIngestBaseUrl = url;
+  }
+
+  debugLogPathFor(agentId: string): string {
+    const home = this.paseoHome ?? process.env.PASEO_HOME ?? "";
+    return home ? `${home}/debug/${agentId}.log` : `debug/${agentId}.log`;
   }
 
   prepareForShutdown(): void {
@@ -1609,6 +1625,26 @@ export class AgentManager {
 
   fetchTimeline(id: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
     this.requireAgent(id);
+    return this.timelineStore.fetch(id, options);
+  }
+
+  /**
+   * Serve a durable transcript for an agent that has no runtime and must not
+   * be loaded just to read it (imported chats). Seeds the in-memory store from
+   * the record so later pagination and porting see the same rows.
+   */
+  fetchImportedTimeline(
+    id: string,
+    rows: readonly AgentTimelineRow[],
+    options?: AgentTimelineFetchOptions,
+  ): AgentTimelineFetchResult {
+    if (!this.timelineStore.has(id)) {
+      this.timelineStore.initialize(id, {
+        rows: rows.map((row) => ({ ...row })),
+        nextSeq: rows.reduce((next, row) => Math.max(next, row.seq + 1), 1),
+        timestamp: new Date().toISOString(),
+      });
+    }
     return this.timelineStore.fetch(id, options);
   }
 
@@ -2516,6 +2552,41 @@ export class AgentManager {
     this.touchUpdatedAt(agent);
     this.emitState(agent);
     return notice;
+  }
+
+  /**
+   * Switches the daemon-level workflow mode. The prompt fragment is recomposed
+   * on the next launch; a live runtime keeps its current prompt until then.
+   * Passing null restores the default `agent` mode.
+   */
+  async setAgentWorkflowMode(
+    agentId: string,
+    workflowModeId: string | null,
+  ): Promise<string | null> {
+    const normalized =
+      workflowModeId === null || workflowModeId.trim() === "" ? null : workflowModeId.trim();
+    if (normalized !== null && !isWorkflowModeId(normalized)) {
+      throw new Error(`Unknown workflow mode: ${normalized}`);
+    }
+
+    const liveAgent = this.getAgent(agentId);
+    if (liveAgent) {
+      liveAgent.config.workflowModeId = normalized ?? undefined;
+      this.touchUpdatedAt(liveAgent);
+      this.emitState(liveAgent);
+      return normalized;
+    }
+
+    const storedRecord = this.registry ? await this.registry.get(agentId) : null;
+    if (!storedRecord) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+    await this.registry!.upsert({
+      ...storedRecord,
+      config: { ...storedRecord.config, workflowModeId: normalized },
+      updatedAt: new Date().toISOString(),
+    });
+    return normalized;
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
@@ -5059,6 +5130,18 @@ export class AgentManager {
     const registry = this.requireRegistry();
     let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
     if (previousRows.length === 0) {
+      const imported = await registry.get(agentId);
+      // An imported transcript has no provider to hydrate from; its durable
+      // rows are the transcript the port must carry.
+      if (imported && isCursorImportedRecord(imported)) {
+        previousRows = this.fetchImportedTimeline(
+          agentId,
+          (imported.portedTimeline ?? []) as AgentTimelineRow[],
+          { limit: 0 },
+        ).rows;
+      }
+    }
+    if (previousRows.length === 0) {
       // A chat that was never opened in this daemon has no live rows. Without
       // the provider history the port would silently drop the transcript.
       try {
@@ -5808,6 +5891,11 @@ export class AgentManager {
       this.openActiveTurn(agent, eventTurnId, new Date());
     }
     agent.lifecycle = "running";
+    // External turns (started in the provider's own client) are real activity.
+    // Workspace `statusEnteredAt`, sidebar times and cached directory snapshots
+    // all key off `updatedAt`, so leaving it untouched here keeps an actively
+    // running chat ranked and dated as if it were still idle.
+    this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
 
@@ -6414,7 +6502,7 @@ export class AgentManager {
       : { enabled: false };
     // Cursor only receives tools passed on session/new. The full catalog stays
     // behind the inject switch; Hub automation tools are registered either way.
-    const launchConfig = this.applyDaemonAppendSystemPrompt(
+    const baseLaunchConfig = this.applyDaemonAppendSystemPrompt(
       withRuntimePaseoMcpServer({
         config: storedConfig,
         agentId,
@@ -6422,6 +6510,18 @@ export class AgentManager {
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
+    // Daemon-level workflow mode prompt (Ask/Debug/Multitask/Agent). Composed
+    // at launch from the persisted workflowModeId; never persisted itself.
+    const workflowFragment = composeWorkflowPrompt(storedConfig.workflowModeId, {
+      agentId,
+      cwd: storedConfig.cwd,
+      debugEndpoint: this.debugIngestBaseUrl ? `${this.debugIngestBaseUrl}/${agentId}` : undefined,
+      debugLogPath: this.debugLogPathFor(agentId),
+      debugSessionId: agentId,
+    });
+    const launchConfig = workflowFragment
+      ? this.appendSystemPromptText(baseLaunchConfig, workflowFragment)
+      : baseLaunchConfig;
     return { storedConfig, launchConfig, paseoToolPolicy };
   }
 

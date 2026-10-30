@@ -50,9 +50,9 @@ interface. With no daemon password, any reachable device can control agents: set
 `PASEO_PASSWORD` in that case. `daemon.listen` is not reloadable, so changing it
 requires a worker restart.
 
-Desktop dev (`npm run dev:desktop`) keeps its Electron-managed daemon on loopback;
-use the web dev stack (`npm run dev` + `npm run dev:app`) when you need the tailnet
-to reach the daemon.
+Desktop dev (`npm run dev:desktop`) also binds its Electron-managed daemon to
+`0.0.0.0` and prints the tailnet URL. The same security note applies: without a
+daemon password, every device that can reach the tailnet address can control agents.
 
 ## Nix desktop package
 

@@ -32,6 +32,8 @@ export function buildDraftAgentControls(input: {
     modeOptions: formState.modeOptions,
     selectedMode: formState.selectedMode,
     onSelectMode: formState.setModeFromUser,
+    selectedWorkflowMode: formState.selectedWorkflowMode,
+    onSelectWorkflowMode: formState.setWorkflowModeFromUser,
     models: formState.availableModels,
     selectedModel: formState.selectedModel,
     onSelectModel: formState.setModelFromUser,

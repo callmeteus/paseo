@@ -259,6 +259,11 @@ export const es: TranslationResources = {
       searchPlaceholder: "Modos de búsqueda...",
       selectWithValue: "Seleccione el modo de agente ({{value}})",
     },
+    workflowMode: {
+      title: "Flujo",
+      hint: "Cambiar cómo funciona este chat",
+      selectWithValue: "Seleccionar modo de flujo ({{value}})",
+    },
     hints: {
       thinking: "Modo de pensamiento",
       model: "Cambiar modelo",
@@ -266,6 +271,7 @@ export const es: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Añadir al chat",
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",
@@ -491,6 +497,10 @@ export const es: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sesión",
     searchPlaceholder: "Buscar sesiones...",
@@ -3315,5 +3325,20 @@ export const es: TranslationResources = {
         cancel: "Cancelar",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 };

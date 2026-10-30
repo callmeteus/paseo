@@ -92,6 +92,7 @@ function makeState(
     form: {
       provider: null,
       modeId: "",
+      workflowModeId: "agent",
       model: "",
       thinkingOptionId: "",
 
@@ -554,6 +555,7 @@ describe("resolveFormState", () => {
       {
         provider: true,
         modeId: true,
+        workflowModeId: true,
         model: true,
         thinkingOptionId: true,
       },
@@ -788,6 +790,28 @@ describe("resolveFormState", () => {
     );
 
     expect(resolved.provider).toBe("codex");
+  });
+
+  it("adopts the initial workflow mode until the user overrides it", () => {
+    const resolved = resolveFormState(
+      { workflowModeId: "multitask" },
+      null,
+      null,
+      INITIAL_USER_MODIFIED,
+      makeState().form,
+      codexProviderMap,
+    );
+    expect(resolved.workflowModeId).toBe("multitask");
+
+    const userModified = resolveFormState(
+      { workflowModeId: "multitask" },
+      null,
+      null,
+      { ...INITIAL_USER_MODIFIED, workflowModeId: true },
+      makeState({ workflowModeId: "ask" }).form,
+      codexProviderMap,
+    );
+    expect(userModified.workflowModeId).toBe("ask");
   });
 });
 
@@ -1053,6 +1077,19 @@ describe("resolveAgentForm", () => {
 
       expect(next.form.modeId).toBe("full-access");
       expect(next.userModified.modeId).toBe(true);
+    });
+  });
+
+  describe("SET_WORKFLOW_MODE_FROM_USER", () => {
+    it("updates workflowModeId and marks it modified", () => {
+      const state = makeState({ provider: "codex", workflowModeId: "agent" });
+      const next = resolveAgentForm(state, {
+        type: "SET_WORKFLOW_MODE_FROM_USER",
+        workflowModeId: "debug",
+      });
+
+      expect(next.form.workflowModeId).toBe("debug");
+      expect(next.userModified.workflowModeId).toBe(true);
     });
   });
 

@@ -258,6 +258,11 @@ export const ja: TranslationResources = {
       searchPlaceholder: "モードを検索...",
       selectWithValue: "エージェントモードを選択（{{value}}）",
     },
+    workflowMode: {
+      title: "ワークフロー",
+      hint: "このチャットの動作を変更",
+      selectWithValue: "ワークフローモードを選択 ({{value}})",
+    },
     hints: {
       thinking: "思考モード",
       model: "モデルを変更",
@@ -265,6 +270,7 @@ export const ja: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "チャットに追加",
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
@@ -495,6 +501,10 @@ export const ja: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "セッションをインポート",
     searchPlaceholder: "セッションを検索...",
@@ -3288,5 +3298,20 @@ export const ja: TranslationResources = {
         cancel: "キャンセル",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 } as const;

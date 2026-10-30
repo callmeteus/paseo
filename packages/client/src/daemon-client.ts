@@ -3820,6 +3820,78 @@ export class DaemonClient {
     return payload;
   }
 
+  async listCursorImportChats(
+    options: {
+      query?: string;
+      cwd?: string;
+      since?: string;
+      includeSubagents?: boolean;
+      includeArchived?: boolean;
+      limit?: number;
+      requestId?: string;
+      timeout?: number;
+    } = {},
+  ): Promise<
+    Extract<SessionOutboundMessage, { type: "agent.imports.cursor.list.response" }>["payload"]
+  > {
+    const requestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.imports.cursor.list.request",
+      requestId,
+      ...(options.query ? { query: options.query } : {}),
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(options.since ? { since: options.since } : {}),
+      ...(options.includeSubagents !== undefined
+        ? { includeSubagents: options.includeSubagents }
+        : {}),
+      ...(options.includeArchived !== undefined
+        ? { includeArchived: options.includeArchived }
+        : {}),
+      ...(options.limit ? { limit: options.limit } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: options.timeout,
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.imports.cursor.list.response" &&
+        response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+    return payload;
+  }
+
+  async importCursorChats(input: {
+    composerIds: string[];
+    includeSubagents?: boolean;
+    requestId?: string;
+    timeout?: number;
+  }): Promise<
+    Extract<SessionOutboundMessage, { type: "agent.imports.cursor.run.response" }>["payload"]
+  > {
+    const requestId = this.createRequestId(input.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.imports.cursor.run.request",
+      requestId,
+      composerIds: input.composerIds,
+      ...(input.includeSubagents !== undefined ? { includeSubagents: input.includeSubagents } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: input.timeout,
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.imports.cursor.run.response" &&
+        response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+    return payload;
+  }
+
   async listProviderSubagents(
     parentAgentId: string,
     options: { requestId?: string; timeout?: number } = {},
@@ -4116,6 +4188,38 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "setAgentModelRouter rejected");
     }
+  }
+
+  /** Switches the daemon-level workflow mode (agent, ask, debug, multitask). */
+  async setAgentWorkflowMode(
+    agentId: string,
+    workflowModeId: string | null,
+  ): Promise<string | null> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.workflow_mode.set.request",
+      agentId,
+      workflowModeId,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.workflow_mode.set.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentWorkflowMode rejected");
+    }
+    return payload.workflowModeId;
   }
 
   /** Moves a chat's ownership to another workspace, keeping its cwd. */

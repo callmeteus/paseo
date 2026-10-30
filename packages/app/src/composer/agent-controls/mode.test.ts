@@ -23,6 +23,8 @@ describe("resolveAgentControlsMode", () => {
         modeOptions: [],
         selectedMode: "",
         onSelectMode: () => undefined,
+        selectedWorkflowMode: "agent",
+        onSelectWorkflowMode: () => undefined,
         models: [],
         selectedModel: "",
         onSelectModel: () => undefined,

@@ -256,6 +256,11 @@ export const ko: TranslationResources = {
       searchPlaceholder: "모드 검색...",
       selectWithValue: "에이전트 모드 선택 ({{value}})",
     },
+    workflowMode: {
+      title: "워크플로",
+      hint: "이 채팅의 작동 방식 변경",
+      selectWithValue: "워크플로 모드 선택 ({{value}})",
+    },
     hints: {
       thinking: "사고 모드",
       model: "모델 변경",
@@ -263,6 +268,7 @@ export const ko: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "채팅에 추가",
     empty: "이 에이전트와 대화를 시작하세요...",
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
@@ -489,6 +495,10 @@ export const ko: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "세션 가져오기",
     searchPlaceholder: "세션 검색...",
@@ -3267,5 +3277,20 @@ export const ko: TranslationResources = {
         cancel: "취소",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 };

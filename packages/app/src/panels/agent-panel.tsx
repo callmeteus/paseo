@@ -84,7 +84,9 @@ import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
 import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
+import { useDraftStore } from "@/stores/draft-store";
 import {
   selectAgentTimelineState,
   selectAgentTurnPresentation,
@@ -1150,12 +1152,21 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     archiveFinishedStatus: archiveFinishedSubagents.status,
     hasPluginComposerPills,
   });
-  const rawAgentInputDraft = useAgentInputDraft({
-    draftKey: buildDraftStoreKey({
-      serverId,
-      agentId,
-    }),
+  const draftStoreKey = buildDraftStoreKey({
+    serverId,
+    agentId,
   });
+  const rawAgentInputDraft = useAgentInputDraft({
+    draftKey: draftStoreKey,
+  });
+  const replaceDraftText = rawAgentInputDraft.replaceText;
+  const handleAddSelectionToChat = useCallback(
+    (selection: string) => {
+      const current = useDraftStore.getState().getDraftInput(draftStoreKey)?.text ?? "";
+      replaceDraftText(appendSelectionToDraftText(current, selection));
+    },
+    [draftStoreKey, replaceDraftText],
+  );
   // Stabilize the agentInputDraft object identity so that memo(AgentComposerSection) can bail out
   // when only toast state changes (which does not affect any draft field).
   const {
@@ -1236,6 +1247,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           hasVisibleAgentTracks={hasVisibleAgentTracks}
           toast={toastApi}
           onOpenWorkspaceFile={onOpenWorkspaceFile}
+          onAddSelectionToChat={agentId ? handleAddSelectionToChat : undefined}
         />
       </RenderProfile>
       {hasActiveComposer ? (
@@ -1372,6 +1384,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   hasVisibleAgentTracks,
   toast,
   onOpenWorkspaceFile,
+  onAddSelectionToChat,
 }: {
   streamViewRef: React.RefObject<AgentStreamViewHandle | null>;
   serverId: string;
@@ -1384,6 +1397,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   hasVisibleAgentTracks: boolean;
   toast: ReturnType<typeof useToastHost>["api"];
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
+  onAddSelectionToChat?: (text: string) => void;
 }) {
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
@@ -1485,6 +1499,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       pendingMessageSubmissions={pendingMessageSubmissions}
       turnPresentation={turnPresentation}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
+      onAddSelectionToChat={onAddSelectionToChat}
     />
   );
 });

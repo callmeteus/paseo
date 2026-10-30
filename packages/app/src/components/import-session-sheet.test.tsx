@@ -74,14 +74,22 @@ vi.mock("lucide-react-native", () => {
     return Icon;
   };
   return {
+    AlertTriangle: icon("AlertTriangle"),
+    Check: icon("Check"),
+    CheckCircle2: icon("CheckCircle2"),
     ChevronDown: icon("ChevronDown"),
     Inbox: icon("Inbox"),
+    Info: icon("Info"),
     Layers: icon("Layers"),
     RotateCw: icon("RotateCw"),
     Search: icon("Search"),
     X: icon("X"),
   };
 });
+
+vi.mock("@/contexts/toast-context", () => ({
+  useToast: () => ({ show: vi.fn(), error: vi.fn() }),
+}));
 
 vi.mock("@/components/ui/loading-spinner", () => ({
   LoadingSpinner: () =>
@@ -219,7 +227,7 @@ interface RenderOptions {
   visible?: boolean;
   onClose?: () => void;
   onImportedAgent?: (agentId: string) => void;
-  onImported?: (agent: Awaited<ReturnType<DaemonClient["importAgent"]>>) => void;
+  onImported?: (agent: { id: string; cwd: string }) => void;
   cwd?: string | null;
   workspaceId?: string;
   supportsSearch?: boolean;
@@ -242,10 +250,9 @@ function applyHostMocks(options?: RenderOptions) {
   mockHostProjects.current = options?.projects ?? [];
 }
 
-function renderSheet(
-  client: Pick<DaemonClient, "fetchRecentProviderSessions" | "importAgent">,
-  options?: RenderOptions,
-) {
+type RecentSessionsTestClient = Pick<DaemonClient, "fetchRecentProviderSessions" | "importAgent">;
+
+function renderSheet(client: RecentSessionsTestClient, options?: RenderOptions) {
   applyHostMocks(options);
 
   const queryClient = new QueryClient({
@@ -279,7 +286,7 @@ function createRecentSessionsClient(
     "fetchRecentProviderSessions"
   >["fetchRecentProviderSessions"],
   importAgent: Pick<DaemonClient, "importAgent">["importAgent"],
-): Pick<DaemonClient, "fetchRecentProviderSessions" | "importAgent"> {
+): RecentSessionsTestClient {
   return { fetchRecentProviderSessions, importAgent };
 }
 
@@ -365,10 +372,7 @@ describe("ImportSessionSheet", () => {
     const fetchRecentProviderSessions = vi.fn();
     const importAgent = vi.fn();
 
-    renderSheet({ fetchRecentProviderSessions, importAgent } as Pick<
-      DaemonClient,
-      "fetchRecentProviderSessions" | "importAgent"
-    >);
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient);
 
     await screen.findByText("Update the host to import sessions.");
     expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
@@ -380,15 +384,9 @@ describe("ImportSessionSheet", () => {
     );
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: undefined },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: undefined },
+    });
 
     await screen.findByText("Loading recent sessions...");
     expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
@@ -401,15 +399,9 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("No recent sessions to import.");
   });
@@ -422,15 +414,9 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("All recent sessions are already imported.");
     expect(screen.queryByText("No recent sessions to import.")).toBeNull();
@@ -442,15 +428,9 @@ describe("ImportSessionSheet", () => {
     });
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("Could not load Claude Code sessions");
     screen.getByTestId("import-session-retry-claude");
@@ -472,15 +452,9 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
@@ -583,18 +557,12 @@ describe("ImportSessionSheet", () => {
     const onClose = vi.fn(() => events.push("close"));
     const onImportedAgent = vi.fn(() => events.push("navigate"));
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        onClose,
-        onImportedAgent,
-        workspaceId: "ws-current",
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      onClose,
+      onImportedAgent,
+      workspaceId: "ws-current",
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     const row = await screen.findByTestId("import-session-session-claude-provider-thread-1");
     expect(events).toEqual(["fetch"]);
@@ -629,17 +597,11 @@ describe("ImportSessionSheet", () => {
     const onClose = vi.fn();
     const onImportedAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        onClose,
-        onImportedAgent,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      onClose,
+      onImportedAgent,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     fireEvent.click(await screen.findByTestId("import-session-session-claude-provider-thread-1"));
 
@@ -670,23 +632,17 @@ describe("ImportSessionSheet", () => {
     );
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [
-            createSnapshotEntry("claude"),
-            createSnapshotEntry("codex"),
-            createSnapshotEntry("opencode", { enabled: false }),
-            createSnapshotEntry("z-ai"),
-          ],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [
+          createSnapshotEntry("claude"),
+          createSnapshotEntry("codex"),
+          createSnapshotEntry("opencode", { enabled: false }),
+          createSnapshotEntry("z-ai"),
+        ],
       },
-    );
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
@@ -736,18 +692,12 @@ describe("ImportSessionSheet", () => {
     );
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
       },
-    );
+    });
 
     await screen.findByText("Session codex");
     await screen.findByText("Could not load Claude Code sessions");
@@ -774,18 +724,12 @@ describe("ImportSessionSheet", () => {
     );
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
       },
-    );
+    });
 
     await screen.findByText("Session claude");
     await screen.findByText("Session codex");
@@ -810,21 +754,12 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [
-            createSnapshotEntry("codex"),
-            createSnapshotEntry("claude", { enabled: false }),
-          ],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("codex"), createSnapshotEntry("claude", { enabled: false })],
       },
-    );
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalled();
@@ -837,23 +772,17 @@ describe("ImportSessionSheet", () => {
     const fetchRecentProviderSessions = vi.fn();
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [
-            createSnapshotEntry("claude", { enabled: false }),
-            createSnapshotEntry("codex", { enabled: false }),
-            createSnapshotEntry("opencode", { enabled: false }),
-            createSnapshotEntry("z-ai", { enabled: false }),
-          ],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [
+          createSnapshotEntry("claude", { enabled: false }),
+          createSnapshotEntry("codex", { enabled: false }),
+          createSnapshotEntry("opencode", { enabled: false }),
+          createSnapshotEntry("z-ai", { enabled: false }),
+        ],
       },
-    );
+    });
 
     await screen.findByText("No importable providers are enabled.");
     expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
@@ -873,16 +802,10 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
@@ -915,19 +838,13 @@ describe("ImportSessionSheet", () => {
     const onImportedAgent = vi.fn();
     const onClose = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        onClose,
-        onImported,
-        onImportedAgent,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      onClose,
+      onImported,
+      onImportedAgent,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     fireEvent.click(await screen.findByTestId("import-session-session-claude-provider-thread-1"));
 
@@ -1004,17 +921,11 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        projects: [{ iconWorkingDir: "/home/me/paseo", projectName: "paseo" }],
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      projects: [{ iconWorkingDir: "/home/me/paseo", projectName: "paseo" }],
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByTestId("import-session-session-claude-newest");
     expect(
@@ -1046,17 +957,11 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        workspaceId: "ws-current",
-        projects: [{ iconWorkingDir: "/repo/paseo", projectName: "paseo" }],
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      workspaceId: "ws-current",
+      projects: [{ iconWorkingDir: "/repo/paseo", projectName: "paseo" }],
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("Scoped session");
     expect(screen.queryAllByTestId(/^import-session-row-folder-/)).toHaveLength(0);
@@ -1069,16 +974,10 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalled();
@@ -1104,17 +1003,11 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        supportsSearch: false,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      supportsSearch: false,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalled();
@@ -1129,16 +1022,10 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        cwd: null,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      cwd: null,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     fireEvent.click(await screen.findByTestId("import-session-load-more"));
 
@@ -1174,18 +1061,12 @@ describe("ImportSessionSheet", () => {
     );
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
-        },
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("claude"), createSnapshotEntry("codex")],
       },
-    );
+    });
 
     await screen.findByText("Session codex");
     await screen.findByText("Could not load Claude Code sessions");
@@ -1214,15 +1095,9 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("codex")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("codex")] },
+    });
 
     await screen.findByText("Could not load Codex sessions");
   });
@@ -1243,18 +1118,12 @@ describe("ImportSessionSheet", () => {
     const onImported = vi.fn();
     const onImportedAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        workspaceId: "ws-current",
-        onImported,
-        onImportedAgent,
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      workspaceId: "ws-current",
+      onImported,
+      onImportedAgent,
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("Scoped session");
     fireEvent.click(screen.getByTestId("import-session-show-all"));
@@ -1291,15 +1160,9 @@ describe("ImportSessionSheet", () => {
     }));
     const importAgent = vi.fn();
 
-    renderSheet(
-      { fetchRecentProviderSessions, importAgent } as Pick<
-        DaemonClient,
-        "fetchRecentProviderSessions" | "importAgent"
-      >,
-      {
-        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
-      },
-    );
+    renderSheet({ fetchRecentProviderSessions, importAgent } as RecentSessionsTestClient, {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+    });
 
     await screen.findByText("Refreshable session");
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);

@@ -532,6 +532,11 @@ export interface AgentSessionConfig {
    */
   systemPrompt?: string;
   modeId?: string;
+  /**
+   * Daemon-level workflow mode (agent, ask, debug, multitask). Orthogonal to
+   * the provider permission mode above. Optional; defaults to "agent".
+   */
+  workflowModeId?: string;
   model?: string;
   thinkingOptionId?: string;
   featureValues?: Record<string, unknown>;

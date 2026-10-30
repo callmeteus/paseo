@@ -93,6 +93,34 @@ describe("paseo daemon bootstrap", () => {
     }
   });
 
+  test("writes debug ingest lines for the matching agent session only", async () => {
+    const daemonHandle = await createTestPaseoDaemon();
+    const agentId = "11111111-1111-4111-8111-111111111111";
+    const ingest = (sessionId: string) =>
+      fetch(`http://127.0.0.1:${daemonHandle.port}/debug-ingest/${agentId}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-ndjson",
+          "x-debug-session-id": sessionId,
+        },
+        body: '{"level":"info","message":"boot"}\n',
+      });
+    try {
+      const accepted = await ingest(agentId);
+      expect(accepted.status).toBe(204);
+      const log = await readFile(
+        path.join(daemonHandle.paseoHome, "debug", `${agentId}.log`),
+        "utf8",
+      );
+      expect(log).toContain('"message":"boot"');
+
+      const rejected = await ingest("22222222-2222-4222-8222-222222222222");
+      expect(rejected.status).toBe(403);
+    } finally {
+      await daemonHandle.close();
+    }
+  });
+
   test("keeps timeline activity in memory and removes obsolete timeline files at startup", async () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-timeline-cleanup-"));
     const paseoHome = path.join(paseoHomeRoot, ".paseo");

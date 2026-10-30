@@ -505,6 +505,7 @@ const AgentSessionConfigSchema = z.object({
   provider: AgentProviderSchema,
   cwd: z.string(),
   modeId: z.string().optional(),
+  workflowModeId: z.string().optional(),
   model: z.string().optional(),
   thinkingOptionId: z.string().optional(),
   featureValues: z.record(z.string(), z.unknown()).optional(),
@@ -906,6 +907,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   activeTurn: AgentActiveTurnPayloadSchema.nullable().optional(),
   capabilities: AgentCapabilityFlagsSchema,
   currentModeId: z.string().nullable(),
+  // COMPAT(workflowModes): added with daemon-level workflow modes.
+  workflowModeId: z.string().nullable().optional(),
   availableModes: z.array(AgentModeSchema),
   pendingPermissions: z.array(AgentPermissionRequestPayloadSchema),
   persistence: AgentPersistenceHandleSchema.nullable(),
@@ -2089,6 +2092,50 @@ export const AgentTimelineListPromptsRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const CursorImportListRequestMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.list.request"),
+  requestId: z.string(),
+  query: z.string().optional(),
+  /** Only chats recorded for this workspace folder. */
+  cwd: z.string().optional(),
+  since: z.string().optional(),
+  includeSubagents: z.boolean().optional(),
+  includeArchived: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const CursorImportRunRequestMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.run.request"),
+  requestId: z.string(),
+  composerIds: z.array(z.string()).min(1),
+  includeSubagents: z.boolean().optional(),
+});
+
+export const CursorImportableChatSchema = z.object({
+  composerId: z.string(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  subtitle: z.string().nullable(),
+  createdAt: z.string(),
+  lastUpdatedAt: z.string(),
+  model: z.string().nullable(),
+  isSubagent: z.boolean(),
+  subagentTypeName: z.string().nullable(),
+  importedAgentId: z.string().nullable(),
+  suggestedProviders: z.array(z.string()),
+});
+
+export const CursorImportedChatSchema = z.object({
+  composerId: z.string(),
+  agentId: z.string().nullable(),
+  title: z.string().nullable(),
+  cwd: z.string().nullable(),
+  messageCount: z.number().int().nonnegative(),
+  suggestedProviders: z.array(z.string()),
+  status: z.enum(["imported", "already_imported", "skipped"]),
+  error: z.string().nullable(),
+});
+
 export const ProviderSubagentListRequestMessageSchema = z.object({
   type: z.literal("agent.provider_subagents.list.request"),
   parentAgentId: z.string(),
@@ -2227,6 +2274,14 @@ export const AgentModelRouterSetRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+/** Switches the daemon-level workflow mode (agent, ask, debug, multitask). */
+export const AgentWorkflowModeSetRequestMessageSchema = z.object({
+  type: z.literal("agent.workflow_mode.set.request"),
+  agentId: z.string(),
+  workflowModeId: z.string().nullable(),
+  requestId: z.string(),
+});
+
 /** Moves a chat's ownership to another workspace without changing its cwd. */
 export const AgentWorkspaceSetRequestMessageSchema = z.object({
   type: z.literal("agent.workspace.set.request"),
@@ -2252,6 +2307,17 @@ export const AgentModelRouterSetResponseMessageSchema = z.object({
     requestId: z.string(),
     agentId: z.string(),
     routerId: z.string().nullable(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentWorkflowModeSetResponseMessageSchema = z.object({
+  type: z.literal("agent.workflow_mode.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    workflowModeId: z.string().nullable(),
     accepted: z.boolean(),
     error: z.string().nullable(),
   }),
@@ -3566,6 +3632,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentTimelineRequestMessageSchema,
   AgentTimelineSearchRequestMessageSchema,
   AgentTimelineListPromptsRequestMessageSchema,
+  CursorImportListRequestMessageSchema,
+  CursorImportRunRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
   ProviderSubagentTimelineRequestMessageSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
@@ -3577,6 +3645,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentConfigApplyRequestMessageSchema,
   AgentDetachRequestMessageSchema,
   AgentModelRouterSetRequestMessageSchema,
+  AgentWorkflowModeSetRequestMessageSchema,
   AgentWorkspaceSetRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
@@ -3910,6 +3979,8 @@ export const ServerInfoStatusPayloadSchema = z
         forgeSearch: z.boolean().optional(),
         // COMPAT(daemonStatusRpc): added in v0.1.76, remove gate after 2026-11-18.
         daemonStatusRpc: z.boolean().optional(),
+        // COMPAT(workflowModes): added for daemon-level workflow modes.
+        workflowModes: z.boolean().optional(),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: z.boolean().optional(),
         // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
@@ -5016,6 +5087,28 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
         preview: z.string(),
       }),
     ),
+    error: z.string().nullable(),
+  }),
+});
+
+export const CursorImportListResponseMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    chats: z.array(CursorImportableChatSchema),
+    sourceAvailable: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const CursorImportRunResponseMessageSchema = z.object({
+  type: z.literal("agent.imports.cursor.run.response"),
+  payload: z.object({
+    requestId: z.string(),
+    chats: z.array(CursorImportedChatSchema),
+    importedCount: z.number().int().nonnegative(),
+    alreadyImportedCount: z.number().int().nonnegative(),
+    skippedCount: z.number().int().nonnegative(),
     error: z.string().nullable(),
   }),
 });
@@ -7336,6 +7429,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineReplacementMessageSchema,
   AgentTimelineSearchResponseMessageSchema,
   AgentTimelineListPromptsResponseMessageSchema,
+  CursorImportListResponseMessageSchema,
+  CursorImportRunResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
   ProviderSubagentTimelineResponseMessageSchema,
   ProviderSubagentUpdateMessageSchema,
@@ -7379,6 +7474,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentConfigApplyResponseMessageSchema,
   AgentDetachResponseMessageSchema,
   AgentModelRouterSetResponseMessageSchema,
+  AgentWorkflowModeSetResponseMessageSchema,
   AgentWorkspaceSetResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
@@ -7587,6 +7683,9 @@ export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessa
 export type AgentModelRouterSetResponseMessage = z.infer<
   typeof AgentModelRouterSetResponseMessageSchema
 >;
+export type AgentWorkflowModeSetResponseMessage = z.infer<
+  typeof AgentWorkflowModeSetResponseMessageSchema
+>;
 export type AgentWorkspaceSetResponseMessage = z.infer<
   typeof AgentWorkspaceSetResponseMessageSchema
 >;
@@ -7761,6 +7860,9 @@ export type AgentConfigApplyRequestMessage = z.infer<typeof AgentConfigApplyRequ
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
 export type AgentModelRouterSetRequestMessage = z.infer<
   typeof AgentModelRouterSetRequestMessageSchema
+>;
+export type AgentWorkflowModeSetRequestMessage = z.infer<
+  typeof AgentWorkflowModeSetRequestMessageSchema
 >;
 export type AgentWorkspaceSetRequestMessage = z.infer<typeof AgentWorkspaceSetRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;

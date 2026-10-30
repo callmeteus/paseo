@@ -12951,3 +12951,36 @@ test("reconciliation waits for an in-flight turn instead of duplicating its outp
     rmSync(workdir, { recursive: true, force: true });
   }
 });
+
+test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-workflow-mode-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const client = new TestAgentClient();
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000901",
+  });
+
+  const snapshot = await manager.createAgent(
+    { provider: "codex", cwd: workdir, workflowModeId: "ask" },
+    undefined,
+    { workspaceId: undefined },
+  );
+
+  expect(snapshot.config.workflowModeId).toBe("ask");
+  expect(toAgentPayload(snapshot).workflowModeId).toBe("ask");
+  expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toContain("Ask mode");
+
+  await expect(manager.setAgentWorkflowMode(snapshot.id, "debug")).resolves.toBe("debug");
+  expect(manager.getAgent(snapshot.id)?.config.workflowModeId).toBe("debug");
+
+  await expect(manager.setAgentWorkflowMode(snapshot.id, "unknown")).rejects.toThrow(
+    "Unknown workflow mode",
+  );
+
+  const reloaded = await manager.reloadAgentSession(snapshot.id);
+  expect(reloaded.config.workflowModeId).toBe("debug");
+  expect(client.resumeOverrides.at(-1)?.daemonAppendSystemPrompt).toContain("Debug mode");
+});

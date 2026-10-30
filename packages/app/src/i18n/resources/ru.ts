@@ -258,6 +258,11 @@ export const ru: TranslationResources = {
       searchPlaceholder: "Поиск режимов...",
       selectWithValue: "Выбрать режим агента ({{value}})",
     },
+    workflowMode: {
+      title: "Рабочий режим",
+      hint: "Изменить режим работы чата",
+      selectWithValue: "Выбрать режим работы ({{value}})",
+    },
     hints: {
       thinking: "Режим рассуждений",
       model: "Изменить модель",
@@ -265,6 +270,7 @@ export const ru: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Добавить в чат",
     empty: "Начните общаться с этим агентом...",
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",
@@ -492,6 +498,10 @@ export const ru: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Импортировать сессию",
     searchPlaceholder: "Поиск сессий...",
@@ -3310,5 +3320,20 @@ export const ru: TranslationResources = {
         cancel: "Отмена",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 };

@@ -9,7 +9,7 @@ import type { PluginRegistries } from "@getpaseo/protocol/plugin-registry";
 import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
-import { constants, existsSync, unlinkSync } from "fs";
+import { appendFileSync, constants, existsSync, mkdirSync, unlinkSync } from "fs";
 import { open, rm, stat } from "fs/promises";
 import { randomUUID } from "node:crypto";
 import { getHostName } from "./host-name.js";
@@ -277,6 +277,16 @@ function createAgentMcpBaseUrl(listenTarget: ListenTarget | null): string | null
     "/mcp/agents",
     `http://${formatHostForHttpUrl(host)}:${listenTarget.port}`,
   ).toString();
+}
+
+function createDebugIngestBaseUrl(listenTarget: ListenTarget | null): string | null {
+  if (!listenTarget || listenTarget.type !== "tcp") {
+    return null;
+  }
+  const host = resolveAgentMcpClientHost(listenTarget.host);
+  return new URL("/debug-ingest", `http://${formatHostForHttpUrl(host)}:${listenTarget.port}`)
+    .toString()
+    .replace(/\/$/, "");
 }
 
 function createTerminalActivityUrl(listenTarget: ListenTarget | null): string | null {
@@ -819,6 +829,50 @@ export async function createPaseoDaemon(
     createTerminalActivityRouteHandler(terminalManager),
   );
 
+  // Debug mode log ingest endpoint. Token is the agent id (UUID). Requires the
+  // X-Debug-Session-Id header to match. Appends NDJSON lines to
+  // $PASEO_HOME/debug/<agentId>.log. Token-gated by the unguessable agent id.
+  app.post("/debug-ingest/:agentId", express.text({ type: "*/*", limit: "1mb" }), (req, res) => {
+    const agentId = String(req.params.agentId ?? "").trim();
+    const sessionId = String(req.headers["x-debug-session-id"] ?? "").trim();
+    if (!agentId || !/^[a-zA-Z0-9-]+$/.test(agentId)) {
+      res.status(400).json({ error: "invalid agent id" });
+      return;
+    }
+    if (!sessionId || sessionId !== agentId) {
+      res.status(403).json({ error: "session id mismatch" });
+      return;
+    }
+    // DNS rebinding protection: only localhost clients may ingest.
+    const remote = req.socket.remoteAddress ?? "";
+    if (remote !== "127.0.0.1" && remote !== "::1" && remote !== "::ffff:127.0.0.1") {
+      res.status(403).json({ error: "localhost only" });
+      return;
+    }
+    const home = config.paseoHome ?? process.env.PASEO_HOME;
+    if (!home) {
+      res.status(500).json({ error: "no paseo home" });
+      return;
+    }
+    try {
+      const dir = path.join(home, "debug");
+      mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${agentId}.log`);
+      const body = typeof req.body === "string" ? req.body : "";
+      appendFileSync(file, body.endsWith("\n") ? body : `${body}\n`);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.status(204).end();
+    } catch {
+      res.status(500).json({ error: "write failed" });
+    }
+  });
+  app.options("/debug-ingest/:agentId", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Debug-Session-Id");
+    res.status(204).end();
+  });
+
   // Serve the bundled browser web UI when enabled. Mounted after service-proxy
   // classification and host/CORS handling, but before daemon bearer auth, so
   // static app files load without the daemon password while API/WebSocket calls
@@ -1016,6 +1070,7 @@ export async function createPaseoDaemon(
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
     mcpAuthToken: agentMcpAuthToken,
+    paseoHome: config.paseoHome,
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     rewriteGoalObjective: (input) =>
@@ -1755,6 +1810,7 @@ export async function createPaseoDaemon(
             // so Cursor can load the Hub automation tools.
             agentMcpBaseUrl = mcpEnabled ? mcpBaseUrl : null;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
+            agentManager.setDebugIngestBaseUrl(createDebugIngestBaseUrl(boundListenTarget));
             agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
               mcpEnabled = value !== false;

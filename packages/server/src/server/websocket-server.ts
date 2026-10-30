@@ -1953,6 +1953,7 @@ export class VoiceAssistantWebSocketServer {
         usageSources: true,
         ownedSubscriptions: true,
         agentRequestReceipts: true,
+        workflowModes: true,
         workspaceRequestReceipts: true,
         creationLifecycle: true,
         hubAgentRpc: true,

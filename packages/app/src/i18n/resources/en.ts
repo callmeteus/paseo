@@ -251,6 +251,11 @@ export const en = {
       searchPlaceholder: "Search modes...",
       selectWithValue: "Select agent mode ({{value}})",
     },
+    workflowMode: {
+      title: "Workflow",
+      hint: "Change how this chat works",
+      selectWithValue: "Select workflow mode ({{value}})",
+    },
     hints: {
       thinking: "Thinking mode",
       model: "Change model",
@@ -258,6 +263,7 @@ export const en = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Add to chat",
     empty: "Start chatting with this agent...",
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",
@@ -481,6 +487,10 @@ export const en = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     title: "Import session",
     chooseHostTitle: "Import from host",
     searchPlaceholder: "Search sessions...",
@@ -3378,6 +3388,21 @@ export const en = {
         cancel: "Cancel",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 } as const;
 

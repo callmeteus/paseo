@@ -259,6 +259,11 @@ export const ptBR: TranslationResources = {
       searchPlaceholder: "Buscar modos...",
       selectWithValue: "Selecionar modo do agente ({{value}})",
     },
+    workflowMode: {
+      title: "Fluxo",
+      hint: "Alterar como este chat funciona",
+      selectWithValue: "Selecionar modo de fluxo ({{value}})",
+    },
     hints: {
       thinking: "Modo de raciocínio",
       model: "Alterar modelo",
@@ -266,6 +271,7 @@ export const ptBR: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "Adicionar ao chat",
     empty: "Comece a conversar com este agente...",
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",
@@ -493,6 +499,10 @@ export const ptBR: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Sessões de agentes",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sessão",
     searchPlaceholder: "Buscar sessões...",
@@ -3297,5 +3307,20 @@ export const ptBR: TranslationResources = {
         cancel: "Cancelar",
       },
     },
+  },
+  cursorImport: {
+    title: "Importar chats do Cursor",
+    searchPlaceholder: "Buscar chats do Cursor…",
+    empty: "Nenhum chat do Cursor encontrado.",
+    unavailable: "O banco local de chats do Cursor não foi encontrado neste host.",
+    loadFailed: "Não foi possível ler os chats do Cursor.",
+    importSelected: "Importar selecionados ({{count}})",
+    imported: "{{count}} chats do Cursor importados",
+    importFailed: "Não foi possível importar os chats do Cursor.",
+    alreadyImported: "Já importado",
+    selectAll: "Selecionar todos",
+    clearSelection: "Limpar",
+    subagent: "Subagente",
+    untitled: "Chat sem título",
   },
 };

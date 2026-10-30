@@ -4,6 +4,7 @@ import type { AgentProvider } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
+import { isCursorImportedRecord } from "../imports/cursor/import.js";
 import {
   buildConfigOverrides,
   buildSessionConfig,
@@ -104,6 +105,12 @@ export async function ensureAgentLoaded(
     const record = await deps.agentStorage.get(agentId);
     if (!record) {
       throw new AgentNotFoundError(agentId);
+    }
+
+    if (isCursorImportedRecord(record) && !record.archivedAt) {
+      throw new Error(
+        "This chat was imported from Cursor and has no provider session. Continue it with another provider (port) before prompting.",
+      );
     }
 
     const validProviders = deps.validProviders ?? deps.agentManager.getRegisteredProviderIds();

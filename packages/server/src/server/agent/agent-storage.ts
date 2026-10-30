@@ -14,6 +14,7 @@ import { clampSystemPrompt, MAX_COMPOSED_SYSTEM_PROMPT_CHARS } from "./system-pr
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
     modeId: z.string().nullable().optional(),
+    workflowModeId: z.string().nullable().optional(),
     model: z.string().nullable().optional(),
     thinkingOptionId: z.string().nullable().optional(),
     featureValues: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -125,6 +126,7 @@ const STORED_AGENT_SCHEMA = z.object({
 export type SerializableAgentConfig = Pick<
   AgentSessionConfig,
   | "modeId"
+  | "workflowModeId"
   | "model"
   | "thinkingOptionId"
   | "featureValues"

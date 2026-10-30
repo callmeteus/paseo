@@ -141,12 +141,18 @@ import {
 } from "./agent/agent-sdk-types.js";
 import type { StoredAgentRecord } from "./agent/agent-storage.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
+import type { AgentTimelineRow } from "./agent/agent-timeline-store-types.js";
 import {
   ImportSessionsRequestError,
   importProviderSession,
   listImportableProviderSessions,
   normalizeImportAgentRequest,
 } from "./agent/import-sessions.js";
+import { importCursorChats, isCursorImportedRecord } from "./imports/cursor/import.js";
+import { listCursorChats, readCursorChatModel } from "./imports/cursor/reader.js";
+import { openCursorStateDb, resolveCursorStateDbPath } from "./imports/cursor/state-db.js";
+import { suggestContinuationProvider } from "./imports/cursor/model-map.js";
+import { IMPORT_SOURCE_ID_LABEL, IMPORT_SOURCE_LABEL } from "@getpaseo/protocol/agent-labels";
 import {
   checkoutLiteFromGitSnapshot,
   checkoutFromPersistedWorkspacePlacement,
@@ -1143,6 +1149,9 @@ export class Session {
       projectStored: (record) => this.buildStoredAgentPayload(record),
       isProviderVisible: (provider) => this.isProviderVisibleToClient(provider),
       isStoredProviderAvailable: (record) =>
+        // An imported chat is readable without the product's provider being
+        // installed; only continuing it needs a runnable provider.
+        isCursorImportedRecord(record) ||
         isStoredAgentProviderAvailable(
           record,
           new Set(this.providerSnapshotManager.listRegisteredProviderIds()),
@@ -2422,6 +2431,7 @@ export class Session {
       this.connectedHostSession?.dispatch(msg) ??
       this.dispatchSubscriptionMessage(msg, source) ??
       this.dispatchVoiceAndControlMessage(msg) ??
+      this.dispatchAgentImportMessage(msg) ??
       this.dispatchAgentObservationMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchCreationMessage(msg, source) ??
@@ -2437,6 +2447,150 @@ export class Session {
       this.dispatchHostServiceMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
+  }
+
+  private dispatchAgentImportMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.imports.cursor.list.request":
+        return this.handleCursorImportListRequest(msg);
+      case "agent.imports.cursor.run.request":
+        return this.handleCursorImportRunRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleCursorImportListRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.imports.cursor.list.request" }>,
+  ): Promise<void> {
+    const requestId = msg.requestId;
+    let db;
+    try {
+      db = openCursorStateDb(resolveCursorStateDbPath());
+    } catch (error) {
+      this.emit({
+        type: "agent.imports.cursor.list.response",
+        payload: {
+          requestId,
+          chats: [],
+          sourceAvailable: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return;
+    }
+
+    try {
+      const since = msg.since ? new Date(msg.since) : null;
+      if (since && Number.isNaN(since.getTime())) {
+        throw new Error("Invalid 'since' timestamp");
+      }
+      const summaries = listCursorChats(db, {
+        includeSubagents: msg.includeSubagents === true,
+        includeArchived: msg.includeArchived === true,
+        query: msg.query,
+        since,
+        limit: msg.limit ?? 200,
+      }).filter((summary) => (msg.cwd ? summary.cwd === msg.cwd : true));
+      const imported = await this.collectImportedCursorAgentIds();
+
+      this.emit({
+        type: "agent.imports.cursor.list.response",
+        payload: {
+          requestId,
+          chats: summaries.map((summary) => {
+            const model = readCursorChatModel(db, summary.composerId);
+            return {
+              composerId: summary.composerId,
+              title: summary.title,
+              cwd: summary.cwd,
+              subtitle: summary.subtitle,
+              createdAt: summary.createdAt,
+              lastUpdatedAt: summary.lastUpdatedAt,
+              model,
+              isSubagent: summary.isSubagent,
+              subagentTypeName: summary.subagentTypeName,
+              importedAgentId: imported.get(summary.composerId) ?? null,
+              suggestedProviders: [...suggestContinuationProvider(model).preferredProviders],
+            };
+          }),
+          sourceAvailable: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error }, "Failed to list Cursor chats");
+      this.emit({
+        type: "agent.imports.cursor.list.response",
+        payload: {
+          requestId,
+          chats: [],
+          sourceAvailable: true,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  private async handleCursorImportRunRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.imports.cursor.run.request" }>,
+  ): Promise<void> {
+    const requestId = msg.requestId;
+    try {
+      const result = await importCursorChats({
+        agentStorage: this.agentStorage,
+        workspaceProvisioning: this.workspaceProvisioning,
+        logger: this.sessionLogger,
+        composerIds: msg.composerIds,
+        includeSubagents: msg.includeSubagents === true,
+      });
+      for (const workspace of result.createdWorkspaces) {
+        await this.registerWorkspaceForImportedAgent(workspace);
+      }
+      for (const chat of result.chats) {
+        if (!chat.agentId) continue;
+        const record = await this.agentStorage.get(chat.agentId);
+        if (record) {
+          await this.agentUpdates.emitStoredRecord(record);
+        }
+      }
+      this.emit({
+        type: "agent.imports.cursor.run.response",
+        payload: {
+          requestId,
+          chats: result.chats,
+          importedCount: result.importedCount,
+          alreadyImportedCount: result.alreadyImportedCount,
+          skippedCount: result.skippedCount,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error }, "Failed to import Cursor chats");
+      this.emit({
+        type: "agent.imports.cursor.run.response",
+        payload: {
+          requestId,
+          chats: [],
+          importedCount: 0,
+          alreadyImportedCount: 0,
+          skippedCount: 0,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async collectImportedCursorAgentIds(): Promise<Map<string, string>> {
+    const imported = new Map<string, string>();
+    for (const record of await this.agentStorage.list()) {
+      if (record.labels?.[IMPORT_SOURCE_LABEL] !== "cursor") continue;
+      const sourceId = record.labels?.[IMPORT_SOURCE_ID_LABEL];
+      if (sourceId) imported.set(sourceId, record.id);
+    }
+    return imported;
   }
 
   private dispatchAgentObservationMessage(
@@ -2767,6 +2921,12 @@ export class Session {
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
       case "agent.model_router.set.request":
         return this.handleAgentModelRouterSetRequest(msg.agentId, msg.routerId, msg.requestId);
+      case "agent.workflow_mode.set.request":
+        return this.handleAgentWorkflowModeSetRequest(
+          msg.agentId,
+          msg.workflowModeId,
+          msg.requestId,
+        );
       case "agent.workspace.set.request":
         return this.handleAgentWorkspaceSetRequest(msg.agentId, msg.workspaceId, msg.requestId);
       default:
@@ -3617,6 +3777,42 @@ export class Session {
           requestId,
           agentId,
           routerId: routerId ?? null,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleAgentWorkflowModeSetRequest(
+    agentId: string,
+    workflowModeId: string | null,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const applied = await this.agentManager.setAgentWorkflowMode(agentId, workflowModeId);
+      this.emit({
+        type: "agent.workflow_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workflowModeId: applied,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to update the workflow mode");
+      this.sessionLogger.error(
+        { err: error, agentId, workflowModeId, requestId },
+        "Failed to update the workflow mode",
+      );
+      this.emit({
+        type: "agent.workflow_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          workflowModeId: workflowModeId ?? null,
           accepted: false,
           error: message,
         },
@@ -8156,6 +8352,58 @@ export class Session {
     });
   }
 
+  /**
+   * Timeline reads must not instantiate a provider just to show history.
+   * Imported transcripts are served from their durable rows; every other agent
+   * goes through the normal resume-and-hydrate path.
+   */
+  private async resolveTimelineSource(input: {
+    agentId: string;
+    direction: AgentTimelineFetchDirection;
+    cursor: AgentTimelineCursor | undefined;
+    pageLimit: number;
+  }): Promise<{
+    agentPayload: AgentSnapshotPayload;
+    provider: string;
+    timeline: ReturnType<AgentManager["fetchTimeline"]>;
+  }> {
+    const liveSnapshot = this.agentManager.getAgent(input.agentId);
+    const storedRecord = liveSnapshot ? null : await this.agentStorage.get(input.agentId);
+    const importedRecord =
+      !liveSnapshot && storedRecord && isCursorImportedRecord(storedRecord) ? storedRecord : null;
+
+    if (importedRecord) {
+      return {
+        agentPayload: this.buildStoredAgentPayload(importedRecord),
+        provider: importedRecord.provider,
+        timeline: this.agentManager.fetchImportedTimeline(
+          input.agentId,
+          (importedRecord.portedTimeline ?? []) as AgentTimelineRow[],
+          { direction: input.direction, cursor: input.cursor, limit: input.pageLimit },
+        ),
+      };
+    }
+
+    let snapshot = await ensureAgentLoaded(input.agentId, {
+      agentManager: this.agentManager,
+      agentStorage: this.agentStorage,
+      logger: this.sessionLogger,
+    });
+    // Opening a chat long after its provider stream went quiet is the other
+    // chance to catch up. Throttled, so switching chats stays cheap.
+    await this.agentManager.syncTimelineFromProvider(input.agentId);
+    snapshot = this.agentManager.getAgent(input.agentId) ?? snapshot;
+    return {
+      agentPayload: await this.buildAgentPayload(snapshot),
+      provider: snapshot.provider,
+      timeline: this.agentManager.fetchTimeline(input.agentId, {
+        direction: input.direction,
+        cursor: input.cursor,
+        limit: input.pageLimit,
+      }),
+    };
+  }
+
   private async handleFetchAgentTimelineRequest(
     msg: Extract<SessionInboundMessage, { type: "fetch_agent_timeline_request" }>,
     source?: object,
@@ -8172,21 +8420,15 @@ export class Session {
       : undefined;
 
     try {
-      let snapshot = await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
-      // Opening a chat long after its provider stream went quiet is the other
-      // chance to catch up. Throttled, so switching chats stays cheap.
-      await this.agentManager.syncTimelineFromProvider(msg.agentId);
-      snapshot = this.agentManager.getAgent(msg.agentId) ?? snapshot;
-      const agentPayload = await this.buildAgentPayload(snapshot);
-
-      const fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, {
+      const {
+        agentPayload,
+        provider,
+        timeline: fetchedControlTimeline,
+      } = await this.resolveTimelineSource({
+        agentId: msg.agentId,
         direction,
         cursor,
-        limit: pageLimit,
+        pageLimit,
       });
       const selectedTimeline = {
         timeline: fetchedControlTimeline,
@@ -8229,7 +8471,7 @@ export class Session {
             ...(msg.mergeWindow === true ? { mergeWindow: true } : {}),
             entries: entries.map((entry) => {
               const payloadEntry = {
-                provider: snapshot.provider,
+                provider,
                 item: entry.item,
                 timestamp: entry.timestamp,
                 seqStart: entry.seqStart,

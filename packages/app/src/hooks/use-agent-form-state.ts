@@ -55,6 +55,8 @@ export interface UseAgentFormStateResult {
   selectedProvider: AgentProvider | null;
   selectedMode: string;
   setModeFromUser: (modeId: string) => void;
+  selectedWorkflowMode: string;
+  setWorkflowModeFromUser: (workflowModeId: string) => void;
   selectedModel: string;
   setModelFromUser: (modelId: string) => void;
   selectedThinkingOptionId: string;
@@ -175,7 +177,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   );
 
   const [{ form: formState, userModified, resolution }, dispatch] = useReducer(resolveAgentForm, {
-    form: { provider: null, modeId: "", model: "", thinkingOptionId: "" },
+    form: { provider: null, modeId: "", workflowModeId: "agent", model: "", thinkingOptionId: "" },
     userModified: INITIAL_USER_MODIFIED,
     resolution: INITIAL_AGENT_FORM_RESOLUTION,
   });
@@ -410,6 +412,10 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     [formState.provider, updateCurrentPreferences],
   );
 
+  const setWorkflowModeFromUser = useCallback((workflowModeId: string) => {
+    dispatch({ type: "SET_WORKFLOW_MODE_FROM_USER", workflowModeId });
+  }, []);
+
   const setModelFromUser = useCallback(
     (modelId: string) => {
       const provider = formState.provider;
@@ -503,6 +509,8 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       selectedProvider: formState.provider,
       selectedMode: formState.modeId,
       setModeFromUser,
+      selectedWorkflowMode: formState.workflowModeId,
+      setWorkflowModeFromUser,
       selectedModel: formState.model,
       setModelFromUser,
       selectedThinkingOptionId: formState.thinkingOptionId,
@@ -533,10 +541,12 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       serverId,
       formState.provider,
       formState.modeId,
+      formState.workflowModeId,
       formState.model,
       formState.thinkingOptionId,
       workingDir,
       setModeFromUser,
+      setWorkflowModeFromUser,
       setModelFromUser,
       setThinkingOptionFromUser,
       providerDefinitions,

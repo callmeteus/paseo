@@ -710,6 +710,7 @@ function toFormState(state: ScheduleFormState): FormState {
   return {
     provider: state.selectedProvider,
     modeId: state.selectedMode,
+    workflowModeId: "agent",
     model: state.selectedModel,
     thinkingOptionId: state.selectedThinkingOptionId,
   };

@@ -255,6 +255,11 @@ export const ar: TranslationResources = {
       searchPlaceholder: "أوضاع البحث...",
       selectWithValue: "حدد وضع الوكيل ({{value}})",
     },
+    workflowMode: {
+      title: "سير العمل",
+      hint: "تغيير طريقة عمل هذه المحادثة",
+      selectWithValue: "اختيار وضع سير العمل ({{value}})",
+    },
     hints: {
       thinking: "وضع التفكير",
       model: "تغيير النموذج",
@@ -262,6 +267,7 @@ export const ar: TranslationResources = {
     },
   },
   agentStream: {
+    addSelectionToChat: "أضف إلى المحادثة",
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
@@ -484,6 +490,10 @@ export const ar: TranslationResources = {
     },
   },
   importSession: {
+    sources: {
+      sessions: "Agent sessions",
+      cursor: "Cursor",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "جلسة الاستيراد",
     searchPlaceholder: "البحث في الجلسات...",
@@ -3283,5 +3293,20 @@ export const ar: TranslationResources = {
         cancel: "يلغي",
       },
     },
+  },
+  cursorImport: {
+    title: "Import Cursor chats",
+    searchPlaceholder: "Search Cursor chats…",
+    empty: "No Cursor chats found.",
+    unavailable: "Cursor's local chat database was not found on this host.",
+    loadFailed: "Could not read Cursor chats.",
+    importSelected: "Import selected ({{count}})",
+    imported: "{{count}} Cursor chats imported",
+    importFailed: "Could not import Cursor chats.",
+    alreadyImported: "Already imported",
+    selectAll: "Select all",
+    clearSelection: "Clear",
+    subagent: "Subagent",
+    untitled: "Untitled chat",
   },
 };

@@ -136,7 +136,7 @@ function stopAll(signal) {
 
 registerDevRunnerShutdownSignals({ signalSource: process, stop: stopAll });
 
-spawnChild("metro", "npx", ["expo", "start", "--port", String(expoPort)], {
+spawnChild("metro", "npx", ["expo", "start", "--host", "lan", "--port", String(expoPort)], {
   cwd: appDir,
   detached: true,
   env: {

@@ -46,6 +46,11 @@ import {
   useLiveAgentModeControl,
   type AgentModeControlValue,
 } from "@/composer/agent-controls/mode-control";
+import {
+  WorkflowModeControl,
+  useLiveWorkflowModeControl,
+  type WorkflowModeControlValue,
+} from "@/composer/agent-controls/workflow-mode-control";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -141,6 +146,7 @@ interface ControlledAgentControlsProps {
   onRetryModelProvider?: (provider: AgentProvider) => void;
   isRetryingModelProvider?: boolean;
   modeControl?: AgentModeControlValue | null;
+  workflowModeControl?: WorkflowModeControlValue | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
   /** Router the chat is bound to (or staged), for the selector subtitle. */
@@ -155,6 +161,8 @@ export interface DraftAgentControlsProps {
   modeOptions: AgentMode[];
   selectedMode: string;
   onSelectMode: (modeId: string) => void;
+  selectedWorkflowMode: string;
+  onSelectWorkflowMode: (workflowModeId: string) => void;
   models: AgentModelDefinition[];
   selectedModel: string;
   onSelectModel: (modelId: string) => void;
@@ -266,19 +274,22 @@ function resolveHasAnyControl({
   thinkingOptions,
   features,
   hasMode,
+  hasWorkflowMode,
 }: {
   providerOptions: AgentControlOption[] | undefined;
   canSelectModel: boolean;
   thinkingOptions: AgentControlOption[] | undefined;
   features: AgentFeature[] | undefined;
   hasMode: boolean;
+  hasWorkflowMode: boolean;
 }) {
   return (
     Boolean(providerOptions?.length) ||
     canSelectModel ||
     Boolean(thinkingOptions?.length) ||
     Boolean(features?.length) ||
-    hasMode
+    hasMode ||
+    hasWorkflowMode
   );
 }
 
@@ -524,6 +535,7 @@ function ControlledAgentControls({
   onRetryModelProvider,
   isRetryingModelProvider = false,
   modeControl,
+  workflowModeControl,
   modelSelectorServerId = null,
   isCompactLayout,
   activeRouterId,
@@ -574,6 +586,7 @@ function ControlledAgentControls({
     thinkingOptions,
     features,
     hasMode: modeControl !== null && modeControl !== undefined,
+    hasWorkflowMode: workflowModeControl !== null && workflowModeControl !== undefined,
   });
   const featureControls = useMemo(
     () =>
@@ -810,6 +823,7 @@ function ControlledAgentControls({
             handleNestedOpenChange={handleSheetOpenChange}
             renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
+            workflowModeControl={workflowModeControl}
             presentation={presentation}
             glyphSize={layoutContextValue.glyphSize}
             activeSheet={activeSheet}
@@ -852,6 +866,7 @@ function ControlledAgentControls({
             handleOpenChange={handleSheetOpenChange}
             renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
+            workflowModeControl={workflowModeControl}
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
@@ -914,6 +929,7 @@ interface DesktopAgentControlsContentProps {
     onPress: () => void;
   }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
+  workflowModeControl?: WorkflowModeControlValue | null;
   presentation: ComposerControlPresentation;
   glyphSize: number;
   activeSheet: ActiveSheet;
@@ -973,6 +989,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleNestedOpenChange,
     renderThinkingOption,
     modeControl,
+    workflowModeControl,
     presentation,
     glyphSize,
     activeSheet,
@@ -1096,6 +1113,9 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
       ) : null}
 
       {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
+      {workflowModeControl ? (
+        <WorkflowModeControl {...workflowModeControl} onClose={onDropdownClose} />
+      ) : null}
 
       {presentation.aggregateFeatures && features?.length ? (
         <>
@@ -1183,6 +1203,7 @@ interface SheetAgentControlsContentProps {
     onPress: () => void;
   }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
+  workflowModeControl?: WorkflowModeControlValue | null;
   glyphSize: number;
   modelSelectorServerId: string | null;
   canSwitchProvider: boolean;
@@ -1224,6 +1245,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     handleOpenChange,
     renderThinkingOption,
     modeControl,
+    workflowModeControl,
     glyphSize,
     modelSelectorServerId,
     canSwitchProvider,
@@ -1281,6 +1303,9 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       ) : null}
 
       {modeControl ? <AgentModeControl {...modeControl} surface="sheet" /> : null}
+      {workflowModeControl ? (
+        <WorkflowModeControl {...workflowModeControl} surface="sheet" />
+      ) : null}
 
       {(features ?? []).map((feature) => (
         <SheetFeatureItem
@@ -1684,6 +1709,8 @@ export const AgentControls = memo(function AgentControls({
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
   const modeControl = useLiveAgentModeControl(serverId, agentId);
+  const supportsWorkflowModes = useHostFeature(serverId, "workflowModes");
+  const workflowModeControl = useLiveWorkflowModeControl(serverId, agentId);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
 
@@ -2043,6 +2070,7 @@ export const AgentControls = memo(function AgentControls({
         onDropdownClose={onDropdownClose}
         disabled={anyTrue(client === null)}
         modeControl={modeControl}
+        workflowModeControl={supportsWorkflowModes ? workflowModeControl : null}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
         onRouterPicked={handleRouterPicked}
@@ -2057,6 +2085,8 @@ export function DraftAgentControls({
   modeOptions,
   selectedMode,
   onSelectMode,
+  selectedWorkflowMode,
+  onSelectWorkflowMode,
   models,
   selectedModel,
   onSelectModel,
@@ -2136,6 +2166,19 @@ export function DraftAgentControls({
     [selectedProvider, providerDefinitions, modeOptions, selectedMode, onSelectMode, disabled],
   );
 
+  const supportsWorkflowModes = useHostFeature(modelSelectorServerId, "workflowModes");
+  const workflowModeControl = useMemo<WorkflowModeControlValue | null>(
+    () =>
+      supportsWorkflowModes
+        ? {
+            selectedWorkflowModeId: selectedWorkflowMode,
+            onSelectWorkflowMode,
+            disabled,
+          }
+        : null,
+    [selectedWorkflowMode, onSelectWorkflowMode, disabled, supportsWorkflowModes],
+  );
+
   return (
     <>
       {profileEditor.element}
@@ -2163,6 +2206,7 @@ export function DraftAgentControls({
         isRetryingModelProvider={isRetryingModelProvider}
         disabled={disabled}
         modeControl={modeControl}
+        workflowModeControl={workflowModeControl}
         modelSelectorServerId={modelSelectorServerId}
         isCompactLayout={isCompactLayout}
       />
