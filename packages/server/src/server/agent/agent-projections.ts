@@ -393,6 +393,9 @@ function buildSerializableConfig(config: AgentSessionConfig): SerializableAgentC
   if (config.modeId) {
     serializable.modeId = config.modeId;
   }
+  if (config.workflowModeId) {
+    serializable.workflowModeId = config.workflowModeId;
+  }
   if (config.model) {
     serializable.model = config.model;
   }

@@ -71,6 +71,7 @@ export function buildConfigOverrides(record: StoredAgentRecord): Partial<AgentSe
     // (ACP current_mode_update, in-session commands) that never reach
     // record.config.modeId.
     modeId: record.lastModeId ?? record.config?.modeId ?? undefined,
+    workflowModeId: record.config?.workflowModeId ?? undefined,
     model: record.config?.model ?? undefined,
     thinkingOptionId: record.config?.thinkingOptionId ?? undefined,
     featureValues: record.config?.featureValues ?? undefined,
@@ -93,6 +94,7 @@ export function buildSessionConfig(
     provider: record.provider,
     cwd: record.cwd,
     modeId: overrides.modeId,
+    workflowModeId: overrides.workflowModeId,
     model: overrides.model,
     thinkingOptionId: overrides.thinkingOptionId,
     featureValues: overrides.featureValues,

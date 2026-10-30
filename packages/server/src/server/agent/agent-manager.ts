@@ -106,6 +106,7 @@ import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtim
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
+import { composeWorkflowPrompt } from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -401,6 +402,8 @@ export interface AgentManagerOptions {
   terminalManager?: TerminalManager | null;
   mcpBaseUrl?: string;
   mcpAuthToken?: string;
+  /** Home directory for debug logs and other daemon artifacts. */
+  paseoHome?: string;
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
@@ -1097,6 +1100,8 @@ export class AgentManager {
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
+  private debugIngestBaseUrl: string | null = null;
+  private readonly paseoHome: string | null;
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
@@ -1124,6 +1129,7 @@ export class AgentManager {
     this.onWorkspaceStateMayHaveChanged = options?.onWorkspaceStateMayHaveChanged;
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
+    this.paseoHome = options?.paseoHome ?? null;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
@@ -1208,6 +1214,15 @@ export class AgentManager {
 
   setMcpBaseUrl(url: string | null): void {
     this.mcpBaseUrl = url;
+  }
+
+  setDebugIngestBaseUrl(url: string | null): void {
+    this.debugIngestBaseUrl = url;
+  }
+
+  debugLogPathFor(agentId: string): string {
+    const home = this.paseoHome ?? process.env.PASEO_HOME ?? "";
+    return home ? `${home}/debug/${agentId}.log` : `debug/${agentId}.log`;
   }
 
   prepareForShutdown(): void {
@@ -6429,7 +6444,7 @@ export class AgentManager {
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
-    const launchConfig = this.applyDaemonAppendSystemPrompt(
+    const baseLaunchConfig = this.applyDaemonAppendSystemPrompt(
       withRuntimePaseoMcpServer({
         config: storedConfig,
         agentId,
@@ -6440,6 +6455,18 @@ export class AgentManager {
         mcpAuthToken: this.mcpAuthToken,
       }),
     );
+    // Daemon-level workflow mode prompt (Ask/Debug/Multitask/Agent). Composed
+    // at launch from the persisted workflowModeId; never persisted itself.
+    const workflowFragment = composeWorkflowPrompt(storedConfig.workflowModeId, {
+      agentId,
+      cwd: storedConfig.cwd,
+      debugEndpoint: this.debugIngestBaseUrl ? `${this.debugIngestBaseUrl}/${agentId}` : undefined,
+      debugLogPath: this.debugLogPathFor(agentId),
+      debugSessionId: agentId,
+    });
+    const launchConfig = workflowFragment
+      ? this.appendSystemPromptText(baseLaunchConfig, workflowFragment)
+      : baseLaunchConfig;
     return { storedConfig, launchConfig, paseoToolPolicy };
   }
 

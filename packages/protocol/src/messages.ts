@@ -505,6 +505,7 @@ const AgentSessionConfigSchema = z.object({
   provider: AgentProviderSchema,
   cwd: z.string(),
   modeId: z.string().optional(),
+  workflowModeId: z.string().optional(),
   model: z.string().optional(),
   thinkingOptionId: z.string().optional(),
   featureValues: z.record(z.string(), z.unknown()).optional(),
@@ -3956,6 +3957,8 @@ export const ServerInfoStatusPayloadSchema = z
         forgeSearch: z.boolean().optional(),
         // COMPAT(daemonStatusRpc): added in v0.1.76, remove gate after 2026-11-18.
         daemonStatusRpc: z.boolean().optional(),
+        // COMPAT(workflowModes): added for daemon-level workflow modes.
+        workflowModes: z.boolean().optional(),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: z.boolean().optional(),
         // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
