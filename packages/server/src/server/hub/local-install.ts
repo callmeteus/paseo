@@ -7,8 +7,13 @@ import { findExecutable } from "../../executable-resolution/executable-resolutio
 /** The automations tab installs Hub from this public fork. */
 export const HUB_GITHUB_REPOSITORY = "callmeteus/paseo-hub";
 export const HUB_GITHUB_CLONE_URL = "https://github.com/callmeteus/paseo-hub.git";
-export const LOCAL_HUB_ORIGIN = "http://127.0.0.1:3000";
-export const LOCAL_HUB_PORT = "3000";
+/**
+ * Local Hub listen port.
+ *
+ * 3000 is the LuckyMaker site and the pixrouter Caddy, so this Hub stays off that port.
+ */
+export const LOCAL_HUB_PORT = "25000";
+export const LOCAL_HUB_ORIGIN = `http://127.0.0.1:${LOCAL_HUB_PORT}`;
 
 export interface HubLocalInstallState {
   installed: boolean;

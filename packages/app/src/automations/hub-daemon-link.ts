@@ -189,7 +189,7 @@ const LINK_SCRIPT = `
       const id = parsed.ids[index];
       let result = null;
       try {
-        result = await factory(id)({ data: { userCode } });
+        result = await factory(id)({ method: "POST", data: { userCode } });
       } catch {
         result = null;
       }
@@ -209,6 +209,7 @@ const LINK_SCRIPT = `
     }
     try {
       const decision = await factory(decideId)({
+        method: "POST",
         data: {
           userCode,
           decision: "approve",

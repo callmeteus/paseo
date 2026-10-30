@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   HUB_GITHUB_CLONE_URL,
+  LOCAL_HUB_ORIGIN,
   createHubLocalInstaller,
   hubInstallPercent,
   installToolPaths,
@@ -61,7 +62,7 @@ test("install clones callmeteus/paseo-hub, builds it, and starts it", async () =
   expect(result).toEqual({
     installed: true,
     running: true,
-    origin: "http://127.0.0.1:3000",
+    origin: LOCAL_HUB_ORIGIN,
   });
 });
 
@@ -95,7 +96,7 @@ test("a built checkout starts without cloning or installing again", async () => 
   expect(result).toEqual({
     installed: true,
     running: true,
-    origin: "http://127.0.0.1:3000",
+    origin: LOCAL_HUB_ORIGIN,
   });
 });
 

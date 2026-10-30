@@ -38,7 +38,8 @@ function guest(options: Partial<GuestOptions> = {}) {
     ...options,
   };
   const calls: RecordedCall[] = [];
-  const serverCalls: { id: string; data: Record<string, unknown> }[] = [];
+  const serverCalls: { id: string; method: string | undefined; data: Record<string, unknown> }[] =
+    [];
   const firstId = settings.inspectFirst ? INSPECT_ID : DECIDE_ID;
   const secondId = settings.inspectFirst ? DECIDE_ID : INSPECT_ID;
   const source = cliLoginSource(firstId, secondId);
@@ -58,8 +59,8 @@ function guest(options: Partial<GuestOptions> = {}) {
     },
   } as unknown as Document;
   globalThis.__paseoLoadModule = async () => ({
-    z: (id: string) => async (input: { data: Record<string, unknown> }) => {
-      serverCalls.push({ id, data: input.data });
+    z: (id: string) => async (input: { method?: string; data: Record<string, unknown> }) => {
+      serverCalls.push({ id, method: input.method, data: input.data });
       if (id === INSPECT_ID && typeof input.data.decision !== "string") {
         return {
           status: "ok",
@@ -146,6 +147,7 @@ describe("HubDaemonLink", () => {
     expect(HubDaemonLink.readEnrollmentToken(second)).toBe("enroll-once");
     expect(page.calls.filter((call) => call.path === "/api/v1/cli-authorizations")).toHaveLength(1);
     expect(page.serverCalls.map((call) => call.id)).toEqual([INSPECT_ID, DECIDE_ID]);
+    expect(page.serverCalls.map((call) => call.method)).toEqual(["POST", "POST"]);
     expect(page.serverCalls[1]?.data).toEqual({
       userCode: "ABCD-EFGH",
       decision: "approve",
