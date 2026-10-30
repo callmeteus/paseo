@@ -275,6 +275,11 @@ export const ja: TranslationResources = {
       showDetails: "詳細を表示",
       hideDetails: "詳細を隠す",
       kinds: {
+        creditsExhausted: {
+          title: "クレジット切れ",
+          description:
+            "{{provider}} のクレジットがなくなりました。クレジットを追加するか、別のプロバイダーに切り替えてください。",
+        },
         usageLimit: {
           title: "利用上限に達しました",
           description:

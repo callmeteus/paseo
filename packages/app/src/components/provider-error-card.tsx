@@ -18,6 +18,10 @@ const KIND_KEYS = {
     title: "agentStream.providerError.kinds.usageLimit.title",
     description: "agentStream.providerError.kinds.usageLimit.description",
   },
+  credits_exhausted: {
+    title: "agentStream.providerError.kinds.creditsExhausted.title",
+    description: "agentStream.providerError.kinds.creditsExhausted.description",
+  },
   auth: {
     title: "agentStream.providerError.kinds.auth.title",
     description: "agentStream.providerError.kinds.auth.description",

@@ -268,6 +268,10 @@ export const en = {
       showDetails: "Show details",
       hideDetails: "Hide details",
       kinds: {
+        creditsExhausted: {
+          title: "Out of credits",
+          description: "{{provider}} has no credits left. Add credits or switch providers.",
+        },
         usageLimit: {
           title: "Usage limit reached",
           description: "{{provider}} reached its usage limit. Switch models or adjust your plan.",

@@ -273,6 +273,11 @@ export const ko: TranslationResources = {
       showDetails: "세부 정보 보기",
       hideDetails: "세부 정보 숨기기",
       kinds: {
+        creditsExhausted: {
+          title: "크레딧 소진",
+          description:
+            "{{provider}}에 크레딧이 없습니다. 크레딧을 추가하거나 다른 공급자로 전환하세요.",
+        },
         usageLimit: {
           title: "사용 한도에 도달했습니다",
           description:

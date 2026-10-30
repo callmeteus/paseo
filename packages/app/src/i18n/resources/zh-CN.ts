@@ -272,6 +272,10 @@ export const zhCN: TranslationResources = {
       showDetails: "显示详情",
       hideDetails: "隐藏详情",
       kinds: {
+        creditsExhausted: {
+          title: "额度不足",
+          description: "{{provider}} 的额度已用完。请充值或切换提供商。",
+        },
         usageLimit: {
           title: "已达到使用上限",
           description: "{{provider}} 已达到使用上限。请切换模型或调整套餐。",

@@ -275,6 +275,11 @@ export const ru: TranslationResources = {
       showDetails: "Показать детали",
       hideDetails: "Скрыть детали",
       kinds: {
+        creditsExhausted: {
+          title: "Закончились кредиты",
+          description:
+            "У {{provider}} не осталось кредитов. Пополните кредиты или смените провайдера.",
+        },
         usageLimit: {
           title: "Достигнут лимит использования",
           description:

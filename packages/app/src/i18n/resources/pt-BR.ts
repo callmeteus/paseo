@@ -276,6 +276,10 @@ export const ptBR: TranslationResources = {
       showDetails: "Ver detalhes",
       hideDetails: "Ocultar detalhes",
       kinds: {
+        creditsExhausted: {
+          title: "Sem créditos",
+          description: "{{provider}} está sem créditos. Adicione créditos ou troque de provider.",
+        },
         usageLimit: {
           title: "Limite de uso atingido",
           description:

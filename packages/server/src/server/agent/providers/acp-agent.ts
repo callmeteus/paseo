@@ -477,6 +477,12 @@ interface ACPAgentClientOptions {
   clientCapabilityMeta?: ACPClientCapabilityMeta;
   modeIdTransformer?: (modeId: string) => string | null;
   toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  /**
+   * Rewrites one assistant text chunk. Return null to drop it. Providers that forward
+   * harness notices as assistant text use this to keep background failures out of the
+   * transcript without hiding the turn's own error.
+   */
+  assistantTextTransform?: (text: string) => string | null;
   providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -509,6 +515,7 @@ interface ACPAgentSessionOptions {
   clientCapabilityMeta?: ACPClientCapabilityMeta;
   modeIdTransformer?: (modeId: string) => string | null;
   toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  assistantTextTransform?: (text: string) => string | null;
   providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -943,6 +950,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
   private readonly toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  private readonly assistantTextTransform?: (text: string) => string | null;
   private readonly providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -982,6 +990,7 @@ export class ACPAgentClient implements AgentClient {
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
     this.toolSnapshotTransformer = options.toolSnapshotTransformer;
+    this.assistantTextTransform = options.assistantTextTransform;
     this.providerModeWriter = options.providerModeWriter;
     this.beforeModeWriter = options.beforeModeWriter;
     this.thinkingOptionWriter = options.thinkingOptionWriter;
@@ -1015,6 +1024,7 @@ export class ACPAgentClient implements AgentClient {
         clientCapabilityMeta: this.clientCapabilityMeta,
         modeIdTransformer: this.modeIdTransformer,
         toolSnapshotTransformer: this.toolSnapshotTransformer,
+        assistantTextTransform: this.assistantTextTransform,
         providerModeWriter: this.providerModeWriter,
         beforeModeWriter: this.beforeModeWriter,
         thinkingOptionWriter: this.thinkingOptionWriter,
@@ -1073,6 +1083,7 @@ export class ACPAgentClient implements AgentClient {
       clientCapabilityMeta: this.clientCapabilityMeta,
       modeIdTransformer: this.modeIdTransformer,
       toolSnapshotTransformer: this.toolSnapshotTransformer,
+      assistantTextTransform: this.assistantTextTransform,
       providerModeWriter: this.providerModeWriter,
       beforeModeWriter: this.beforeModeWriter,
       thinkingOptionWriter: this.thinkingOptionWriter,
@@ -1717,6 +1728,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
   private readonly toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  private readonly assistantTextTransform?: (text: string) => string | null;
   private readonly providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -1791,6 +1803,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
     this.toolSnapshotTransformer = options.toolSnapshotTransformer;
+    this.assistantTextTransform = options.assistantTextTransform;
     this.providerModeWriter = options.providerModeWriter;
     this.beforeModeWriter = options.beforeModeWriter;
     this.thinkingOptionWriter = options.thinkingOptionWriter;
@@ -3264,9 +3277,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return null;
     }
     if (type === "assistant_message") {
+      const text = this.assistantTextTransform ? this.assistantTextTransform(chunkText) : chunkText;
+      if (text === null || text.length === 0) {
+        return null;
+      }
       return {
         type: "assistant_message",
-        text: chunkText,
+        text,
         messageId: this.resolveAssistantMessageId(update.messageId),
       };
     }

@@ -272,6 +272,10 @@ export const ar: TranslationResources = {
       showDetails: "إظهار التفاصيل",
       hideDetails: "إخفاء التفاصيل",
       kinds: {
+        creditsExhausted: {
+          title: "نفدت الأرصدة",
+          description: "لم يتبقَّ لدى {{provider}} أي رصيد. أضف رصيدًا أو بدّل المزوّد.",
+        },
         usageLimit: {
           title: "تم الوصول إلى حد الاستخدام",
           description: "وصل {{provider}} إلى حد الاستخدام. بدّل النموذج أو عدّل خطتك.",

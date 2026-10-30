@@ -29,6 +29,7 @@ interface GenericACPAgentClientOptions {
   clientCapabilityMeta?: ACPClientCapabilityMeta;
   configFeatureOptions?: ACPConfigFeatureOption[];
   extensionCommandsParser?: ACPExtensionCommandsParser;
+  assistantTextTransform?: (text: string) => string | null;
   catalogModelResolver?: ACPCatalogModelResolver;
   now?: () => number;
 }
@@ -56,6 +57,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       clientCapabilityMeta: options.clientCapabilityMeta,
       configFeatureOptions: options.configFeatureOptions,
       extensionCommandsParser: options.extensionCommandsParser,
+      assistantTextTransform: options.assistantTextTransform,
       catalogModelResolver: options.catalogModelResolver,
       now: options.now,
     });

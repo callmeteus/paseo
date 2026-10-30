@@ -41,6 +41,10 @@ const mockState = vi.hoisted(() => {
         command: string[];
         env?: Record<string, string>;
       }>,
+      commandcode: [] as Array<{
+        command: string[];
+        env?: Record<string, string>;
+      }>,
       kimi: [] as Array<{
         command: string[];
         env?: Record<string, string>;
@@ -63,6 +67,7 @@ const mockState = vi.hoisted(() => {
       this.constructorArgs.copilot = [];
       this.constructorArgs.cursor = [];
       this.constructorArgs.trae = [];
+      this.constructorArgs.commandcode = [];
       this.constructorArgs.kimi = [];
       this.constructorArgs.pi = [];
       this.constructorArgs.genericAcp = [];
@@ -503,6 +508,54 @@ vi.mock("./providers/kimi-acp-agent.js", () => ({
   },
 }));
 
+vi.mock("./providers/commandcode-acp-agent.js", () => ({
+  CommandCodeACPAgentClient: class CommandCodeACPAgentClient {
+    readonly capabilities = {
+      supportsStreaming: true,
+      supportsSessionPersistence: true,
+      supportsDynamicModes: true,
+      supportsMcpServers: true,
+      supportsReasoningStream: true,
+      supportsToolInvocations: true,
+    };
+    readonly provider = "acp";
+    readonly runtimeSettings?: unknown;
+
+    constructor(options: { command: string[]; env?: Record<string, string> }) {
+      this.runtimeSettings = {
+        command: {
+          mode: "replace",
+          argv: options.command,
+        },
+        env: options.env,
+      };
+      mockState.constructorArgs.commandcode.push({
+        command: options.command,
+        env: options.env,
+      });
+    }
+
+    async createSession(): Promise<never> {
+      throw new Error("not implemented");
+    }
+
+    async resumeSession(): Promise<never> {
+      throw new Error("not implemented");
+    }
+
+    async fetchCatalog(): Promise<ProviderCatalog> {
+      return {
+        models: mockState.runtimeModels.get(this.provider) ?? [],
+        modes: [],
+      };
+    }
+
+    async isAvailable(): Promise<boolean> {
+      return true;
+    }
+  },
+}));
+
 import {
   AGENT_PROVIDER_DEFINITIONS,
   buildProviderRegistry,
@@ -877,6 +930,31 @@ test("traecli provider extending acp uses TraeACPAgentClient", () => {
     },
     {
       command: ["traecli", "acp", "serve"],
+      env: undefined,
+    },
+  ]);
+  expect(mockState.constructorArgs.genericAcp).toEqual([]);
+});
+
+test("commandcode provider extending acp uses CommandCodeACPAgentClient", () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      commandcode: {
+        extends: "acp",
+        label: "Command Code",
+        command: ["command-code", "acp"],
+      },
+    },
+  });
+
+  expect(registry.commandcode.createClient(logger).provider).toBe("commandcode");
+  expect(mockState.constructorArgs.commandcode).toEqual([
+    {
+      command: ["command-code", "acp"],
+      env: undefined,
+    },
+    {
+      command: ["command-code", "acp"],
       env: undefined,
     },
   ]);

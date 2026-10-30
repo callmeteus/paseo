@@ -277,6 +277,11 @@ export const fr: TranslationResources = {
       showDetails: "Afficher les détails",
       hideDetails: "Masquer les détails",
       kinds: {
+        creditsExhausted: {
+          title: "Plus de crédits",
+          description:
+            "{{provider}} n'a plus de crédits. Ajoutez des crédits ou changez de fournisseur.",
+        },
         usageLimit: {
           title: "Limite d’utilisation atteinte",
           description:
