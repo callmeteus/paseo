@@ -49,6 +49,9 @@ describe("ACP provider catalog", () => {
     expect(findProvider("amp-acp").command).toEqual(["amp-acp"]);
     expect(findProvider("cursor").command).toEqual(["cursor-agent", "acp"]);
     expect(findProvider("codewhale").command).toEqual(["codewhale", "serve", "--acp"]);
+    // `cmd` is Windows' command interpreter, so the catalog uses the package's
+    // equivalent `command-code` bin instead.
+    expect(findProvider("commandcode").command).toEqual(["command-code", "acp"]);
     expect(findProvider("devin").command).toEqual(["devin", "acp"]);
     expect(findProvider("goose").command).toEqual(["goose", "acp"]);
     expect(findProvider("hoplite").command).toEqual(["hoplite", "acp"]);

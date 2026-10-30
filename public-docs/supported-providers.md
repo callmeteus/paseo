@@ -69,6 +69,7 @@ Pick any of these from the in-app provider catalog. Each entry is a one-click in
 - [Cline](https://cline.bot/cli), autonomous coding agent.
 - [Codebuddy Code](https://www.codebuddy.cn/cli/), Tencent Cloud's coding tool.
 - [CodeWhale](https://codewhale.net/), terminal coding agent for DeepSeek V4 and open models.
+- [Command Code](https://commandcode.ai/docs/quickstart), coding agent for open models with tool-call repairs, taste profiles, skills, and plans.
 - [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code-cli), Snowflake's coding agent.
 - [Corust Agent](https://github.com/Corust-ai/corust-agent-release/releases), Rust-focused coding partner.
 - [crow-cli](https://crow-ai.dev/), minimal ACP-native coding agent.
@@ -101,6 +102,19 @@ Pick any of these from the in-app provider catalog. Each entry is a one-click in
 - [VT Code](https://github.com/vinhnx/VTCode/blob/main/docs/guides/zed-acp.md), open-source multi-provider coding agent.
 
 The in-app catalog is the canonical, version-pinned source. Anything not listed here can still be added manually, see [Custom providers](/docs/custom-providers).
+
+### Command Code
+
+Install the CLI with `npm i -g command-code`, then run `command-code login` once on the daemon host
+(the upstream docs spell this `cmd login`). In **Settings → Hosts → your host → Providers**, find
+**Command Code** in the catalog and choose **Add**. Paseo launches `command-code acp`.
+
+The upstream quickstart names the binary `cmd`, which is Windows' command interpreter. Paseo uses the
+`command-code` bin that the same package also publishes, so the command works on every platform.
+
+The usage card reuses the CLI login and reads the same quota `/usage` shows: the 5-hour and weekly
+caps, monthly and extra credits, and the billing-period spend. Paseo never refreshes those
+credentials.
 
 ### Hoplite
 

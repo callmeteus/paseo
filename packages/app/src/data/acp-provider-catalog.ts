@@ -84,6 +84,18 @@ const CATALOG_DATA = [
     command: ["codewhale", "serve", "--acp"],
   },
   {
+    id: "commandcode",
+    title: "Command Code",
+    description:
+      "Coding agent for open models with tool-call repairs, taste profiles, skills, and plans",
+    version: "manual",
+    iconId: "commandcode",
+    installLink: "https://commandcode.ai/docs/quickstart",
+    // `cmd` collides with the Windows command interpreter, so use the equivalent
+    // `command-code` bin that the npm package also publishes.
+    command: ["command-code", "acp"],
+  },
+  {
     id: "cortex-code",
     title: "Cortex Code",
     description: "Snowflake's Cortex Code coding agent",

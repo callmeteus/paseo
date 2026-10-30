@@ -18,6 +18,7 @@ export const ACP_PROVIDER_ICON_NAMES = [
   "cline",
   "codebuddy-code",
   "codewhale",
+  "commandcode",
   "cortex-code",
   "corust-agent",
   "crow-cli",
