@@ -29,6 +29,8 @@ import { UsageSourceIcon } from "./source-icon";
 import type { UsageReport, UsageReportEntry, UsageWindow } from "./types";
 import { UsageWindowBar } from "./window-bar";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
+import { resolveReportUnifiedUsage } from "./unified";
+import { UnifiedUsageSummary } from "./unified-summary";
 
 function statusText(report: UsageReport, t: TFunction): string | null {
   if (report.status === "available") return null;
@@ -70,6 +72,10 @@ export function UsageCard({
   const sourceLabel = formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t);
   const { windows, balances, details, planLabel, successfulAt, retained, messages } =
     resolveUsageReport(entry, t);
+  const unified =
+    windows.length > 1
+      ? resolveReportUnifiedUsage({ windows, displayAs: display.displayAs, t })
+      : null;
 
   const containerStyle = useMemo(
     () => [styles.container, compact ? styles.containerCompact : styles.containerPadded],
@@ -117,6 +123,10 @@ export function UsageCard({
         <Text style={styles.error} testID="usage-login-error">
           {messages.join("\n")}
         </Text>
+      ) : null}
+
+      {unified && unified.windows.length > 1 ? (
+        <UnifiedUsageSummary unified={unified} displayAs={display.displayAs} retained={retained} />
       ) : null}
 
       {windows.length > 0 || balances.length > 0 ? (

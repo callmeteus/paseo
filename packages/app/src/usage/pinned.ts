@@ -9,30 +9,16 @@ import {
 import { displayPercent, usedPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
-import type { UsageReportEntry, UsageTone } from "./types";
+import type { UsageReportEntry } from "./types";
+import type { UnifiedWindow } from "./unified";
 
 /** One summary window of one account, as the sidebar Usage item shows it. */
-export interface PinnedUsageWindow {
-  key: string;
-  /** Accessible description, including the source, account, window and percent meaning. */
-  label: string;
-  /** The window's short name ("5h"), empty for none, or its label when the source sends none. */
-  shortLabel: string;
-  /** The share shown, under the user's used/remaining preference. */
-  percent: number;
-  percentText: string;
-  tone: UsageTone;
+export interface PinnedUsageWindow extends UnifiedWindow {
   sourceId: string;
   sourceLabel: string;
   accountLabel: string | null;
   icon: string | null;
   windowLabel: string;
-  /** The share used, independent of the display preference. */
-  usedPercent: number;
-  resetsAt: string | null;
-  /** When the source projects the window to run out, if it does. */
-  runsOutAt: string | null;
-  shortfallPct: number | null;
 }
 
 /** One account's summary windows, under its source's icon. */

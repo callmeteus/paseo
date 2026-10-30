@@ -9,10 +9,6 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import type { UsageDisplay } from "./display";
 import { UsageControls } from "./controls";
 import { UsageList } from "./list";
-import { resolvePinnedUsage } from "./pinned";
-import type { UsagePreferences } from "./preferences";
-import { UnifiedUsageSummary } from "./unified-summary";
-import { resolveUnifiedUsage } from "./unified";
 import type { UsageView } from "./types";
 
 export function UsageSection({
@@ -20,7 +16,6 @@ export function UsageSection({
   title,
   view,
   display,
-  preferences,
   onRefresh,
   testID,
 }: {
@@ -28,7 +23,6 @@ export function UsageSection({
   title: string;
   view: UsageView;
   display: UsageDisplay;
-  preferences: UsagePreferences;
   onRefresh: () => void;
   testID?: string;
 }) {
@@ -39,13 +33,7 @@ export function UsageSection({
 
   return (
     <SettingsSection title={title} testID={testID} trailing={trailing}>
-      <UsageBody
-        serverId={serverId}
-        view={view}
-        display={display}
-        preferences={preferences}
-        onRefresh={onRefresh}
-      />
+      <UsageBody serverId={serverId} view={view} display={display} onRefresh={onRefresh} />
     </SettingsSection>
   );
 }
@@ -55,21 +43,14 @@ export function UsageBody({
   serverId,
   view,
   display,
-  preferences,
   onRefresh,
 }: {
   serverId: string;
   view: UsageView;
   display: UsageDisplay;
-  preferences: UsagePreferences;
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
-  const reports = view.kind === "ready" ? view.reports : null;
-  const unified = useMemo(
-    () => (reports ? resolveUnifiedUsage(resolvePinnedUsage(reports, preferences, t)) : null),
-    [preferences, reports, t],
-  );
   if (view.kind === "unavailable") {
     return <UsageMessage text={view.message} />;
   }
@@ -97,16 +78,7 @@ export function UsageBody({
     return <UsageMessage text={t("providerUsage.empty")} />;
   }
 
-  return (
-    <>
-      {unified ? (
-        <View style={styles.unified}>
-          <UnifiedUsageSummary unified={unified} displayAs={display.displayAs} />
-        </View>
-      ) : null}
-      <UsageList serverId={serverId} reports={view.reports} display={display} />
-    </>
-  );
+  return <UsageList serverId={serverId} reports={view.reports} display={display} />;
 }
 
 export function UsageMessage({ text }: { text: string }) {
@@ -118,9 +90,6 @@ export function UsageMessage({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  unified: {
-    marginBottom: theme.spacing[3],
-  },
   emptyCard: {
     padding: theme.spacing[4],
     alignItems: "center",
