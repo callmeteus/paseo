@@ -28,5 +28,8 @@
     "typecheck": {
       "command": "npm run typecheck"
     }
+  },
+  "chat": {
+    "instructions": "Before finishing, reinstall your compute-but DO NOT reinstall if another re/installation is already in progress!"
   }
 }
