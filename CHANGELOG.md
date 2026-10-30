@@ -3334,3 +3334,20 @@ _This release only fixes an Android issue — desktop users don't need to update
 ### Added
 
 - Initial `0.1.x` release line
+
+## [Unreleased]
+
+### Added
+
+- Added workflow modes (Agent, Ask, Debug, Multitask) that change how a chat works without changing the provider permission mode
+- Added a Workflow control in the composer to switch modes on a live chat
+- Added importing Cursor IDE chats from the import sheet
+- Added promoting an agent tab to its own workspace
+
+### Changed
+
+- Changed every dev launcher to bind `0.0.0.0` and print the tailnet URL
+
+### Fixed
+
+- Fixed ACP providers hanging when they never respond
