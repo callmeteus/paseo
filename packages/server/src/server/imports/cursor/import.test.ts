@@ -11,7 +11,6 @@ import {
 import type { StoredAgentRecord } from "../../agent/agent-storage.js";
 import type { PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { WorkspaceProvisioningService } from "../../session/workspace-provisioning/workspace-provisioning-service.js";
-import type { ImportWorkspaceInput } from "../../session/workspace-provisioning/workspace-provisioning-service.js";
 
 const directories: string[] = [];
 
@@ -31,25 +30,38 @@ class FakeAgentStorage {
   }
 }
 
-function fakeProvisioning(): Pick<WorkspaceProvisioningService, "runInImportWorkspace"> {
-  return {
-    async runInImportWorkspace<T>(
-      input: ImportWorkspaceInput,
-      operation: (workspace: PersistedWorkspaceRecord) => Promise<T>,
-    ) {
-      const workspace = {
-        workspaceId: "wks_cursor_test",
-        cwd: input.cwd,
-      } as PersistedWorkspaceRecord;
-      return { value: await operation(workspace), createdWorkspace: null };
-    },
-  };
+interface CreatedWorkspace {
+  workspaceId: string;
+  cwd: string;
+  title: string | null;
 }
 
-function importInput(dbPath: string, storage: FakeAgentStorage, composerIds: string[]) {
+function fakeProvisioning() {
+  const created: CreatedWorkspace[] = [];
+  let next = 0;
+  const service = {
+    async createWorkspaceForDirectory(cwd: string, title?: string | null) {
+      const workspace = {
+        workspaceId: `wks_cursor_${next++}`,
+        cwd,
+        title: title ?? null,
+      } as PersistedWorkspaceRecord;
+      created.push({ workspaceId: workspace.workspaceId, cwd, title: workspace.title });
+      return workspace;
+    },
+  } satisfies Pick<WorkspaceProvisioningService, "createWorkspaceForDirectory">;
+  return { created, service };
+}
+
+function importInput(
+  dbPath: string,
+  storage: FakeAgentStorage,
+  composerIds: string[],
+  provisioning = fakeProvisioning(),
+) {
   return {
     agentStorage: storage,
-    workspaceProvisioning: fakeProvisioning(),
+    workspaceProvisioning: provisioning.service,
     logger: createTestLogger(),
     dbPath,
     composerIds,
@@ -62,7 +74,7 @@ function importInput(dbPath: string, storage: FakeAgentStorage, composerIds: str
 }
 
 describe("importCursorChats", () => {
-  test("imports a root chat and its Cursor subagents with a parent link", async () => {
+  test("gives a root chat its own workspace and keeps subagents in it", async () => {
     const parentId = "11111111-1111-4111-8111-111111111111";
     const childId = "33333333-3333-4333-8333-333333333333";
     const dbPath = createCursorFixtureDb(
@@ -80,11 +92,19 @@ describe("importCursorChats", () => {
       directories,
     );
     const storage = new FakeAgentStorage();
+    const provisioning = fakeProvisioning();
 
-    const result = await importCursorChats(importInput(dbPath, storage, [parentId]));
+    const result = await importCursorChats(importInput(dbPath, storage, [parentId], provisioning));
 
     expect(result.importedCount).toBe(2);
     expect(result.skippedCount).toBe(0);
+    expect(provisioning.created).toEqual([
+      {
+        workspaceId: "wks_cursor_0",
+        cwd: "C:\\Users\\Gio\\Documents\\Projetos\\Pacotes\\artdirector",
+        title: "ArtDirector graphic design system",
+      },
+    ]);
 
     const parent = storage.records.get(result.chats[0]!.agentId as string);
     const child = storage.records.get(result.chats[1]!.agentId as string);
@@ -93,7 +113,7 @@ describe("importCursorChats", () => {
       cwd: "C:\\Users\\Gio\\Documents\\Projetos\\Pacotes\\artdirector",
       lastStatus: "closed",
       persistence: null,
-      workspaceId: "wks_cursor_test",
+      workspaceId: "wks_cursor_0",
       title: "ArtDirector graphic design system",
       labels: {
         "paseo.import.source": "cursor",
@@ -102,18 +122,49 @@ describe("importCursorChats", () => {
       },
     });
     expect(parent?.portedTimeline?.length).toBeGreaterThan(0);
+    expect(child?.workspaceId).toBe(parent?.workspaceId);
     expect(child?.labels[PARENT_AGENT_ID_LABEL]).toBe(parent?.id);
+  });
+
+  test("creates one workspace per root chat even when they share a directory", async () => {
+    const firstId = "11111111-1111-4111-8111-111111111111";
+    const secondId = "22222222-2222-4222-8222-222222222222";
+    const dbPath = createCursorFixtureDb(
+      [
+        mainFixtureChat({ composerId: firstId, name: "First chat" }),
+        mainFixtureChat({ composerId: secondId, name: "Second chat" }),
+      ],
+      directories,
+    );
+    const storage = new FakeAgentStorage();
+    const provisioning = fakeProvisioning();
+
+    const result = await importCursorChats(
+      importInput(dbPath, storage, [firstId, secondId], provisioning),
+    );
+
+    expect(result.importedCount).toBe(2);
+    expect(provisioning.created.map((workspace) => workspace.title)).toEqual([
+      "First chat",
+      "Second chat",
+    ]);
+    const first = storage.records.get(result.chats[0]!.agentId as string);
+    const second = storage.records.get(result.chats[1]!.agentId as string);
+    expect(first?.workspaceId).toBe("wks_cursor_0");
+    expect(second?.workspaceId).toBe("wks_cursor_1");
+    expect(first?.workspaceId).not.toBe(second?.workspaceId);
   });
 
   test("is idempotent: a second run reports the existing agent instead of duplicating", async () => {
     const dbPath = createCursorFixtureDb([mainFixtureChat()], directories);
     const storage = new FakeAgentStorage();
+    const provisioning = fakeProvisioning();
 
     const first = await importCursorChats(
-      importInput(dbPath, storage, ["11111111-1111-4111-8111-111111111111"]),
+      importInput(dbPath, storage, ["11111111-1111-4111-8111-111111111111"], provisioning),
     );
     const second = await importCursorChats(
-      importInput(dbPath, storage, ["11111111-1111-4111-8111-111111111111"]),
+      importInput(dbPath, storage, ["11111111-1111-4111-8111-111111111111"], provisioning),
     );
 
     expect(first.importedCount).toBe(1);
@@ -121,6 +172,7 @@ describe("importCursorChats", () => {
     expect(second.alreadyImportedCount).toBe(1);
     expect(second.chats[0]?.agentId).toBe(first.chats[0]?.agentId);
     expect(storage.records.size).toBe(1);
+    expect(provisioning.created).toHaveLength(1);
   });
 
   test("skips chats Cursor never tied to a workspace folder", async () => {
@@ -134,13 +186,15 @@ describe("importCursorChats", () => {
       directories,
     );
     const storage = new FakeAgentStorage();
+    const provisioning = fakeProvisioning();
 
     const result = await importCursorChats(
-      importInput(dbPath, storage, ["22222222-2222-4222-8222-222222222222"]),
+      importInput(dbPath, storage, ["22222222-2222-4222-8222-222222222222"], provisioning),
     );
 
     expect(result.skippedCount).toBe(1);
     expect(result.chats[0]?.error).toContain("workspace folder");
     expect(storage.records.size).toBe(0);
+    expect(provisioning.created).toHaveLength(0);
   });
 });

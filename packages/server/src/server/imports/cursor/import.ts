@@ -24,7 +24,7 @@ const MAX_TITLE_CHARS = 80;
 
 export interface ImportCursorChatsInput {
   agentStorage: Pick<AgentStorage, "list" | "upsert">;
-  workspaceProvisioning: Pick<WorkspaceProvisioningService, "runInImportWorkspace">;
+  workspaceProvisioning: Pick<WorkspaceProvisioningService, "createWorkspaceForDirectory">;
   logger: Logger;
   /** Explicit selection. Omit to import every chat that matches the filters. */
   composerIds?: readonly string[];
@@ -84,71 +84,78 @@ export async function importCursorChats(
     const existing = await collectExistingImports(input.agentStorage);
     const results = new Map<string, ImportedCursorChat>();
     const agentIdByComposer = new Map<string, string>();
+    const workspaceByComposer = new Map<string, string>();
+    const createdWorkspaces: PersistedWorkspaceRecord[] = [];
 
-    const grouped = new Map<string, CursorChat[]>();
-    for (const chat of chats) {
+    for (const chat of sortParentsFirst(chats)) {
       if (!chat.cwd) {
         results.set(chat.composerId, skipped(chat, "Chat has no workspace folder in Cursor"));
         continue;
       }
-      const group = grouped.get(chat.cwd) ?? [];
-      group.push(chat);
-      grouped.set(chat.cwd, group);
-    }
 
-    const createdWorkspaces: PersistedWorkspaceRecord[] = [];
-    for (const [cwd, group] of grouped) {
-      const placement = await input.workspaceProvisioning.runInImportWorkspace(
-        { cwd },
-        async (workspace) => {
-          for (const chat of sortParentsFirst(group)) {
-            const alreadyImportedAgentId = existing.get(chat.composerId);
-            if (alreadyImportedAgentId) {
-              agentIdByComposer.set(chat.composerId, alreadyImportedAgentId);
-              results.set(chat.composerId, {
-                ...imported(chat, alreadyImportedAgentId),
-                status: "already_imported",
-              });
-              continue;
-            }
-            try {
-              const timeline = cursorChatToTimeline(chat);
-              if (timeline.length === 0) {
-                results.set(chat.composerId, skipped(chat, "Chat has no importable messages"));
-                continue;
-              }
-              const parentComposerId = chat.parentComposerId;
-              const parentAgentId =
-                parentComposerId &&
-                (agentIdByComposer.get(parentComposerId) ?? existing.get(parentComposerId));
-              const agentId = createId();
-              const record = buildRecord({
-                chat,
-                agentId,
-                workspaceId: workspace.workspaceId,
-                timeline,
-                parentAgentId: parentAgentId ?? null,
-                now,
-              });
-              await input.agentStorage.upsert(record);
-              agentIdByComposer.set(chat.composerId, agentId);
-              results.set(chat.composerId, imported(chat, agentId));
-            } catch (error) {
-              input.logger.warn(
-                { err: error, composerId: chat.composerId },
-                "Failed to import Cursor chat",
-              );
-              results.set(
-                chat.composerId,
-                skipped(chat, error instanceof Error ? error.message : String(error)),
-              );
-            }
-          }
-          return null;
-        },
-      );
-      if (placement.createdWorkspace) {
-        createdWorkspaces.push(placement.createdWorkspace);
+      const existingImport = existing.get(chat.composerId);
+      if (existingImport) {
+        agentIdByComposer.set(chat.composerId, existingImport.agentId);
+        if (existingImport.workspaceId) {
+          workspaceByComposer.set(chat.composerId, existingImport.workspaceId);
+        }
+        results.set(chat.composerId, {
+          ...imported(chat, existingImport.agentId),
+          status: "already_imported",
+        });
+        continue;
+      }
+
+      try {
+        const timeline = cursorChatToTimeline(chat);
+        if (timeline.length === 0) {
+          results.set(chat.composerId, skipped(chat, "Chat has no importable messages"));
+          continue;
+        }
+        const parent = resolveParentImport({
+          parentComposerId: chat.parentComposerId,
+          existing,
+          agentIdByComposer,
+          workspaceByComposer,
+        });
+
+        // Every imported root chat gets its own workspace under the project,
+        // titled with the chat. Subagents share their parent's workspace so
+        // they stay in the parent's subagent track instead of the sidebar.
+        let workspaceId = parent.workspaceId;
+        if (!workspaceId) {
+          const workspace = await input.workspaceProvisioning.createWorkspaceForDirectory(
+            chat.cwd,
+            resolveTitle(chat),
+            undefined,
+            { expectsInitialAgent: true },
+          );
+          workspaceId = workspace.workspaceId;
+          createdWorkspaces.push(workspace);
+        }
+
+        const agentId = createId();
+        const record = buildRecord({
+          chat,
+          agentId,
+          workspaceId,
+          timeline,
+          parentAgentId: parent.agentId,
+          now,
+        });
+        await input.agentStorage.upsert(record);
+        agentIdByComposer.set(chat.composerId, agentId);
+        workspaceByComposer.set(chat.composerId, workspaceId);
+        results.set(chat.composerId, imported(chat, agentId));
+      } catch (error) {
+        input.logger.warn(
+          { err: error, composerId: chat.composerId },
+          "Failed to import Cursor chat",
+        );
+        results.set(
+          chat.composerId,
+          skipped(chat, error instanceof Error ? error.message : String(error)),
+        );
       }
     }
 
@@ -212,17 +219,42 @@ function sortParentsFirst(chats: CursorChat[]): CursorChat[] {
   });
 }
 
+interface ExistingCursorImport {
+  agentId: string;
+  workspaceId: string | null;
+}
+
+function resolveParentImport(input: {
+  parentComposerId: string | null;
+  existing: Map<string, ExistingCursorImport>;
+  agentIdByComposer: Map<string, string>;
+  workspaceByComposer: Map<string, string>;
+}): { agentId: string | null; workspaceId: string | null } {
+  const parentComposerId = input.parentComposerId;
+  if (!parentComposerId) {
+    return { agentId: null, workspaceId: null };
+  }
+  const existing = input.existing.get(parentComposerId);
+  return {
+    agentId: input.agentIdByComposer.get(parentComposerId) ?? existing?.agentId ?? null,
+    workspaceId: input.workspaceByComposer.get(parentComposerId) ?? existing?.workspaceId ?? null,
+  };
+}
+
 async function collectExistingImports(
   agentStorage: Pick<AgentStorage, "list">,
-): Promise<Map<string, string>> {
-  const existing = new Map<string, string>();
+): Promise<Map<string, ExistingCursorImport>> {
+  const existing = new Map<string, ExistingCursorImport>();
   for (const record of await agentStorage.list()) {
     if (!isCursorImportedRecord(record)) {
       continue;
     }
     const sourceId = record.labels?.[IMPORT_SOURCE_ID_LABEL];
     if (sourceId) {
-      existing.set(sourceId, record.id);
+      existing.set(sourceId, {
+        agentId: record.id,
+        workspaceId: record.workspaceId ?? null,
+      });
     }
   }
   return existing;
