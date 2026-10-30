@@ -154,7 +154,7 @@ export function resolvePinnedUsageItems(
     const items: PinnedUsageItem[] = [];
 
     if (allWindows.length > 0 && sourcePins.some((pin) => pin.windowId === UNIFIED_USAGE_PIN_ID)) {
-      const unified = resolveUnifiedUsage([source]);
+      const unified = resolveUnifiedUsage([source], { displayAs: preferences.displayAs });
       if (unified) {
         items.push({
           kind: "unified",

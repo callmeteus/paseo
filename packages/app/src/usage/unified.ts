@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { formatPct, formatProviderUsageLabel } from "./format";
+import { clampPct, formatPct, formatProviderUsageLabel } from "./format";
 import { displayPercent, usedPercent } from "./model";
 import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import type { UsageDisplayAs } from "./preferences";
@@ -24,11 +24,13 @@ export interface UnifiedWindow {
   shortfallPct: number | null;
 }
 
-/** The window that drives the summary: the most constrained one. */
+/** The combined summary and the window that drives it. */
 export interface UnifiedUsage<T extends UnifiedWindow = UnifiedWindow> {
-  /** The driver's share under the user's used/remaining preference. */
+  /** The combined share, under the user's used/remaining preference. */
   percent: number;
   percentText: string;
+  /** The combined share used, independent of the display preference. */
+  usedPercent: number;
   /** The worst tone among the selected windows, escalated when one may run out. */
   tone: UsageTone;
   driver: T;
@@ -57,13 +59,32 @@ function isAtRisk(window: UnifiedWindow, now: number): boolean {
   );
 }
 
+function toneForPercent(percent: number): UsageTone {
+  if (percent > 90) return "danger";
+  if (percent >= 70) return "warning";
+  return "default";
+}
+
 /**
- * One number for a set of windows: the most constrained window, never an average, so a
- * weekly or monthly window nearing its end cannot hide behind a fresh one.
+ * The chance that at least one selected window has reached its limit, treating each
+ * window's remaining share as independent. Bounded by 100 and always at least the
+ * largest single window, so a near-limit weekly or monthly cannot hide behind a fresh one.
+ */
+function combinedUsedPercent(windows: readonly UnifiedWindow[]): number {
+  let allRemaining = 1;
+  for (const window of windows) {
+    allRemaining *= 1 - clampPct(window.usedPercent) / 100;
+  }
+  return (1 - allRemaining) * 100;
+}
+
+/**
+ * One number for a set of windows: their combined pressure, not an average. Adding a
+ * window with real usage always raises it; any window at its limit makes it 100.
  */
 export function resolveUnifiedWindows<T extends UnifiedWindow>(
   windows: readonly T[],
-  options: { now?: number } = {},
+  options: { now?: number; displayAs?: UsageDisplayAs } = {},
 ): UnifiedUsage<T> | null {
   if (windows.length === 0) return null;
 
@@ -77,8 +98,10 @@ export function resolveUnifiedWindows<T extends UnifiedWindow>(
         left.index - right.index,
     )
     .map(({ window }) => window);
+  const combinedUsed = combinedUsedPercent(ordered);
+  const percent = options.displayAs === "remaining" ? 100 - combinedUsed : combinedUsed;
   const driver = ordered[0]!;
-  let tone = driver.tone;
+  let tone = toneForPercent(combinedUsed);
   let atRiskCount = 0;
   for (const window of ordered) {
     if (TONE_RANK[window.tone] > TONE_RANK[tone]) tone = window.tone;
@@ -87,8 +110,9 @@ export function resolveUnifiedWindows<T extends UnifiedWindow>(
   if (atRiskCount > 0) tone = "danger";
 
   return {
-    percent: driver.percent,
-    percentText: formatPct(driver.percent),
+    percent,
+    percentText: formatPct(percent),
+    usedPercent: combinedUsed,
     tone,
     driver,
     windows: ordered,
@@ -99,7 +123,7 @@ export function resolveUnifiedWindows<T extends UnifiedWindow>(
 /** The unified summary over the user's pinned windows, across every source. */
 export function resolveUnifiedUsage(
   sources: readonly PinnedUsageSource[],
-  options: { now?: number } = {},
+  options: { now?: number; displayAs?: UsageDisplayAs } = {},
 ): UnifiedUsage<PinnedUsageWindow> | null {
   return resolveUnifiedWindows(
     sources.flatMap((source) => source.windows),
@@ -115,7 +139,7 @@ export interface SourceUnifiedUsage {
 /** One unified summary per provider account, each over its own pinned windows. */
 export function resolveUnifiedUsageBySource(
   sources: readonly PinnedUsageSource[],
-  options: { now?: number } = {},
+  options: { now?: number; displayAs?: UsageDisplayAs } = {},
 ): SourceUnifiedUsage[] {
   return sources.flatMap((source) => {
     const unified = resolveUnifiedUsage([source], options);
@@ -149,5 +173,5 @@ export function resolveReportUnifiedUsage(input: {
       shortfallPct: window.shortfallPct ?? null,
     });
   }
-  return resolveUnifiedWindows(windows, { now: input.now });
+  return resolveUnifiedWindows(windows, { now: input.now, displayAs: input.displayAs });
 }

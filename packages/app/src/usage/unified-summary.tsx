@@ -66,7 +66,9 @@ export function UnifiedUsageSummary({
       <UsageMeter percent={unified.percent} tone={unified.tone} style={styles.meter} />
       <View style={styles.driverRow}>
         <Text style={styles.driver} numberOfLines={1}>
-          {t("providerUsage.unified.highest", { window: unified.driver.label })}
+          {t("providerUsage.unified.highest", {
+            window: `${unified.driver.label} · ${unified.driver.percentText}`,
+          })}
         </Text>
         {reset ? (
           <Text style={styles.reset} numberOfLines={1}>

@@ -38,7 +38,7 @@ function source(windows: PinnedUsageWindow[], key = "source"): PinnedUsageSource
 }
 
 describe("resolveUnifiedUsage", () => {
-  it("takes the most constrained window instead of averaging", () => {
+  it("combines the windows instead of repeating the largest", () => {
     const unified = resolveUnifiedUsage([
       source([
         window({ key: "session", usedPercent: 20, tone: "ok" }),
@@ -48,21 +48,38 @@ describe("resolveUnifiedUsage", () => {
     ]);
 
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBe(95);
+    expect(unified?.percent).toBeCloseTo(97.12, 2);
+    expect(unified?.usedPercent).toBeCloseTo(97.12, 2);
     expect(unified?.tone).toBe("danger");
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["weekly", "monthly", "session"]);
   });
 
-  it("shows the smallest remaining share when the preference is remaining", () => {
+  it("shows the combined remaining share when the preference is remaining", () => {
+    const unified = resolveUnifiedUsage(
+      [
+        source([
+          window({ key: "session", usedPercent: 20, percent: 80 }),
+          window({ key: "weekly", usedPercent: 95, percent: 5, tone: "danger" }),
+        ]),
+      ],
+      { displayAs: "remaining" },
+    );
+
+    expect(unified?.driver.key).toBe("weekly");
+    expect(unified?.percent).toBeCloseTo(4, 2);
+  });
+
+  it("combines the rolling, weekly and monthly windows above the largest one", () => {
     const unified = resolveUnifiedUsage([
       source([
-        window({ key: "session", usedPercent: 20, percent: 80 }),
-        window({ key: "weekly", usedPercent: 95, percent: 5, tone: "danger" }),
+        window({ key: "rolling", usedPercent: 14 }),
+        window({ key: "weekly", usedPercent: 69 }),
+        window({ key: "monthly", usedPercent: 37 }),
       ]),
     ]);
 
+    expect(unified?.percent).toBeCloseTo(83.2, 1);
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBe(5);
   });
 
   it("breaks ties by the nearest reset", () => {
@@ -122,10 +139,10 @@ describe("resolveUnifiedUsageBySource", () => {
       ),
     ]);
 
-    expect(items.map((item) => [item.source.key, item.unified.percent])).toEqual([
-      ["claude", 69],
-      ["cursor", 100],
-    ]);
+    const bySource = items.map((item) => [item.source.key, item.unified.percent] as const);
+    expect(bySource[0]?.[0]).toBe("claude");
+    expect(bySource[0]?.[1]).toBeCloseTo(75.2, 2);
+    expect(bySource[1]).toEqual(["cursor", 100]);
     expect(items[0]?.unified.driver.key).toBe("weekly");
     expect(items[1]?.unified.driver.key).toBe("total");
   });
