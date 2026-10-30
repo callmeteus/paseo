@@ -116,6 +116,13 @@ The usage card reuses the CLI login and reads the same quota `/usage` shows: the
 caps, monthly and extra credits, and the billing-period spend. Paseo never refreshes those
 credentials.
 
+Command Code's learned taste is markdown under `.commandcode/taste/` and `~/.commandcode/taste/`.
+Command Code sessions read it themselves. To reuse it on other providers, open the **Taste** panel
+from the Command Center (Ctrl/⌘K): it lists the packages, shows whether learning is on, and can add
+the profile to the prompt of every **new** chat on Claude, Codex, OpenCode, Pi, and Oh My Pi.
+Existing chats keep the prompt they started with, and the injected block is capped by the panel's
+prompt size limit.
+
 ### Hoplite
 
 Install the [Hoplite CLI](https://hoplite.sh/docs/cli) on your daemon host and run
