@@ -1,7 +1,12 @@
 import type { TFunction } from "i18next";
 import { i18n } from "@/i18n/i18next";
-import { formatPct, formatDisplayPct, formatProviderUsageLabel } from "./format";
-import { displayPercent } from "./model";
+import {
+  formatDisplayPct,
+  formatPct,
+  formatProviderUsageLabel,
+  formatUsageSourceLabel,
+} from "./format";
+import { displayPercent, usedPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
 import type { UsageReportEntry, UsageTone } from "./types";
@@ -17,6 +22,17 @@ export interface PinnedUsageWindow {
   percent: number;
   percentText: string;
   tone: UsageTone;
+  sourceId: string;
+  sourceLabel: string;
+  accountLabel: string | null;
+  icon: string | null;
+  windowLabel: string;
+  /** The share used, independent of the display preference. */
+  usedPercent: number;
+  resetsAt: string | null;
+  /** When the source projects the window to run out, if it does. */
+  runsOutAt: string | null;
+  shortfallPct: number | null;
 }
 
 /** One account's summary windows, under its source's icon. */
@@ -84,13 +100,23 @@ export function resolvePinnedUsage(
       .map((window) => {
         const percent = displayPercent(window, preferences.displayAs) ?? 0;
         const percentText = formatPct(percent);
+        const windowLabel = formatProviderUsageLabel(window.id, window.label, t);
         return {
           key: `${entry.id}/${window.id}`,
-          label: `${describe(entry, formatProviderUsageLabel(window.id, window.label, t))} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
-          shortLabel: window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t),
+          label: `${describe(entry, windowLabel)} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
+          shortLabel: window.shortLabel ?? windowLabel,
           percent,
           percentText,
           tone: windowTone(window),
+          sourceId: entry.sourceId,
+          sourceLabel: formatUsageSourceLabel(entry.sourceId, entry.sourceLabel, t),
+          accountLabel: entry.account.label ?? null,
+          icon: entry.icon ?? null,
+          windowLabel,
+          usedPercent: usedPercent(window) ?? 0,
+          resetsAt: window.resetsAt ?? null,
+          runsOutAt: window.runsOutAt ?? null,
+          shortfallPct: window.shortfallPct ?? null,
         };
       });
     if (windows.length === 0) return [];

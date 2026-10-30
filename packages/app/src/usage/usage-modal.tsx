@@ -52,7 +52,7 @@ function HostUsageModal({
   hosts: UsageHost[];
   onSelectHost: (serverId: string) => void;
 }) {
-  const { display } = useUsagePreferences();
+  const { preferences, display } = useUsagePreferences(serverId);
   const hostSelection = useMemo(
     () => ({ hosts, serverId, onSelect: onSelectHost }),
     [hosts, onSelectHost, serverId],
@@ -61,7 +61,13 @@ function HostUsageModal({
   return (
     <UsageModalFrame {...props} actions={controls}>
       <View testID={`usage-host-${serverId}`}>
-        <UsageBody serverId={serverId} view={view} display={display} onRefresh={refresh} />
+        <UsageBody
+          serverId={serverId}
+          view={view}
+          display={display}
+          preferences={preferences}
+          onRefresh={refresh}
+        />
       </View>
     </UsageModalFrame>
   );

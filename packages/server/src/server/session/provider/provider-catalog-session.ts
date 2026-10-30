@@ -11,6 +11,7 @@ import {
   type ProviderSnapshot,
   type ProviderSnapshotTransition,
 } from "../../agent/provider-snapshot-manager.js";
+import { PROVIDER_CATALOG_REFRESH_INTERVAL_MS } from "../../agent/provider-catalog-refresh-scheduler.js";
 import {
   filterSelectableAgentModels,
   type AgentFeature,
@@ -428,6 +429,13 @@ export class ProviderCatalogSession {
         requestId: msg.requestId,
       },
     });
+    // Opening the app or a workspace is the freshest signal we get. Refresh in the
+    // background when this target aged past a cycle; never delay the snapshot itself.
+    void this.providerSnapshotManager
+      .refreshStaleSnapshots({ cwd, maxAgeMs: PROVIDER_CATALOG_REFRESH_INTERVAL_MS })
+      .catch((error) =>
+        this.logger.warn({ err: error, cwd }, "Failed to refresh stale provider catalog"),
+      );
   }
 
   async handleRefreshProvidersSnapshotRequest(

@@ -32,6 +32,29 @@ export function usageWindowRowLabel(input: {
   return `${input.pinLabel}, ${summary}`;
 }
 
+function hasDisplayablePercent(entry: UsageReportEntry): boolean {
+  return (
+    entry.report.status === "available" &&
+    entry.report.windows.some((window) => usedPercent(window) != null)
+  );
+}
+
+function usageReportRank(entry: UsageReportEntry): number {
+  if (entry.report.status !== "available") return 2;
+  return hasDisplayablePercent(entry) ? 0 : 1;
+}
+
+/**
+ * Puts working reports first, percentage-bearing ones above reports that only
+ * carry balances or details, and failed reports last. Stable within each group.
+ */
+export function sortUsageReports(reports: readonly UsageReportEntry[]): UsageReportEntry[] {
+  return reports
+    .map((report, index) => ({ report, index, rank: usageReportRank(report) }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ report }) => report);
+}
+
 /** A user-requested refresh of one report. The previous report stays on screen throughout. */
 export type UsageRefresh = "idle" | "pending" | "failed";
 

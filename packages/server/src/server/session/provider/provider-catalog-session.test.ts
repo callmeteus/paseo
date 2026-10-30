@@ -14,6 +14,7 @@ import {
   type ProviderSnapshotTransition,
 } from "../../agent/provider-snapshot-manager.js";
 import type { ProviderSnapshotEntry } from "../../agent/agent-sdk-types.js";
+import { PROVIDER_CATALOG_REFRESH_INTERVAL_MS } from "../../agent/provider-catalog-refresh-scheduler.js";
 import { expandProviderSnapshot } from "@getpaseo/protocol/provider-snapshot-codec";
 
 type SnapshotChangeHandler = (transition: ProviderSnapshotTransition) => void;
@@ -66,6 +67,7 @@ function makeSubsystem(options: MakeOptions = {}) {
       changeHandler = handler;
     },
     off: () => {},
+    refreshStaleSnapshots: async () => {},
     ...options.snapshot,
   });
   const subsystem = new ProviderCatalogSession({
@@ -135,6 +137,25 @@ describe("ProviderCatalogSession", () => {
     const canonicalCwd = getSnapshot.mock.calls[0]?.[0];
     expect(canonicalCwd).toEqual(expect.any(String));
     expect(findByType(emitted, "get_providers_snapshot_response")?.payload.cwd).toBe(canonicalCwd);
+  });
+
+  it("asks for a stale background refresh for the target it just served", async () => {
+    const getSnapshot = vi.fn((cwd?: string) => createProviderSnapshot(makeEntries(), cwd));
+    const refreshStaleSnapshots = vi.fn(async () => {});
+    const { subsystem } = makeSubsystem({
+      snapshot: { getSnapshot, refreshStaleSnapshots },
+    });
+
+    await subsystem.handleGetProvidersSnapshotRequest({
+      type: "get_providers_snapshot_request",
+      requestId: "stale-kick",
+      cwd: "/repo/./sdk",
+    });
+
+    expect(refreshStaleSnapshots).toHaveBeenCalledWith({
+      cwd: getSnapshot.mock.calls[0]?.[0],
+      maxAgeMs: PROVIDER_CATALOG_REFRESH_INTERVAL_MS,
+    });
   });
 
   it("pushes the compact encoding to capable clients", () => {

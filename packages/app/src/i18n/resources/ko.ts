@@ -2239,6 +2239,12 @@ export const ko: TranslationResources = {
       error: "오류",
       unavailable: "사용할 수 없음",
     },
+    unified: {
+      title: "통합 사용량",
+      short: "전체",
+      highest: "최대 사용: {{window}}",
+      atRisk: "재설정 전에 한도에 도달할 수 있습니다",
+    },
     values: {
       used: "{{percentage}} 사용됨",
       remaining: "{{amount}} 남음",

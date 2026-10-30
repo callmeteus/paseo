@@ -10,6 +10,7 @@ import {
   resolveUsageModalHostId,
   resolveUsageView,
   settleReports,
+  sortUsageReports,
   upsertReport,
   usageWindowRowLabel,
   type UsageHost,
@@ -404,4 +405,51 @@ it("available and retained usage show the same successful completion time", () =
     resolveUsageReport(success, i18n.t).successfulAt,
   );
   expect(upsertReport([failure], success)).toEqual([failure]);
+});
+
+describe("sortUsageReports", () => {
+  it("puts percentage-bearing reports first, amount-only reports next and failures last", () => {
+    const failed: UsageReportEntry = {
+      id: "failed",
+      account: {},
+      fetchedAt: "2026-01-01T00:00:00.000Z",
+      sourceId: "failed",
+      sourceLabel: "Failed",
+      report: { status: "error", error: "boom" },
+    };
+    const percentages = entry({
+      sourceId: "claude",
+      windows: [{ id: "session", label: "Session", usedPct: 25 }],
+    });
+    const amounts: UsageReportEntry = {
+      id: "opencode-local",
+      account: {},
+      fetchedAt: "2026-01-01T00:00:00.000Z",
+      sourceId: "opencode-local",
+      sourceLabel: "OpenCode (local)",
+      report: {
+        status: "available",
+        windows: [],
+        balances: [{ id: "cost", label: "Spent", used: 7, unit: "usd" }],
+      },
+    };
+
+    expect(sortUsageReports([failed, amounts, percentages])).toEqual([
+      percentages,
+      amounts,
+      failed,
+    ]);
+  });
+
+  it("keeps the incoming order within each group", () => {
+    const first = entry({
+      sourceId: "first",
+      windows: [{ id: "session", label: "Session", usedPct: 10 }],
+    });
+    const second = entry({
+      sourceId: "second",
+      windows: [{ id: "weekly", label: "Weekly", usedPct: 90 }],
+    });
+    expect(sortUsageReports([first, second])).toEqual([first, second]);
+  });
 });

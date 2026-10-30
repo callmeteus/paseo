@@ -127,11 +127,20 @@ export interface ProviderSnapshotManagerOptions {
 interface ProviderSnapshotRefreshOptions {
   cwd: string;
   providers?: AgentProvider[];
+  /** Automatic refreshes keep the last good catalogue when discovery fails. */
+  keepLastGoodOnError?: boolean;
+}
+
+interface ProviderSnapshotStaleOptions {
+  cwd?: string | null;
+  maxAgeMs: number;
 }
 
 interface ProviderSnapshotWarmUpOptions {
   cwd?: string | null;
   providers?: AgentProvider[];
+  /** Records this warmup as an automatic attempt so a read does not probe again. */
+  markAutoRefreshAttempt?: boolean;
 }
 
 interface ProviderSnapshotReadOptions {
@@ -197,6 +206,7 @@ interface ProviderLoadOptions {
   providers: AgentProvider[];
   catalogScope: ProviderCatalogScope;
   force: boolean;
+  keepLastGoodOnError: boolean;
 }
 interface CatalogBinding {
   key?: string;
@@ -236,6 +246,8 @@ interface ProviderSnapshotTarget {
 export class ProviderSnapshotManager {
   private readonly catalogs = new Map<string, Map<AgentProvider, ProviderCatalog>>();
   private readonly targets = new Map<string, Target>();
+  private readonly autoRefreshAttempts = new Map<string, number>();
+  private readonly autoRefreshes = new Map<string, Promise<void>>();
   private readonly events = new EventEmitter();
   private destroyed = false;
   private refreshTimeoutMs: number;
@@ -293,7 +305,9 @@ export class ProviderSnapshotManager {
     const target = createWorkspaceSnapshotTarget(snapshotCwd);
     const providers = this.resolveRefreshProviders(options.providers);
     const providersToRefresh = providers ?? this.getProviderIds();
-    await this.refreshProviders(target, providersToRefresh);
+    await this.refreshProviders(target, providersToRefresh, {
+      keepLastGoodOnError: options.keepLastGoodOnError === true,
+    });
   }
 
   async refreshSettingsSnapshot(
@@ -303,8 +317,14 @@ export class ProviderSnapshotManager {
     const homeCwd = target.snapshotCwd;
     const providers = this.resolveRefreshProviders(options.providers);
     const providersToRefresh = providers ?? this.getProviderIds();
+    const keepLastGoodOnError = options.keepLastGoodOnError === true;
 
     this.getOrCreateTarget(homeCwd);
+    if (keepLastGoodOnError) {
+      const attemptedAt = Date.now();
+      this.autoRefreshAttempts.set(homeCwd, attemptedAt);
+      for (const cwd of this.targets.keys()) this.autoRefreshAttempts.set(cwd, attemptedAt);
+    }
     for (const catalogs of this.catalogs.values()) {
       for (const provider of providersToRefresh) {
         const catalog = catalogs.get(provider);
@@ -313,12 +333,50 @@ export class ProviderSnapshotManager {
     }
     // Refresh each known target: provider keys coalesce reads, while target-scoped
     // providers must discover again in their own execution context.
-    await this.refreshProviders(target, providersToRefresh);
+    await this.refreshProviders(target, providersToRefresh, { keepLastGoodOnError });
     await Promise.all(
       [...this.targets.keys()]
         .filter((cwd) => cwd !== homeCwd)
-        .map((cwd) => this.warmUp(createWorkspaceSnapshotTarget(cwd), providersToRefresh)),
+        .map((cwd) =>
+          this.warmUp(createWorkspaceSnapshotTarget(cwd), providersToRefresh, {
+            keepLastGoodOnError,
+          }),
+        ),
     );
+  }
+
+  /**
+   * Refreshes a target whose catalogue is older than `maxAgeMs`. The attempt is recorded
+   * before discovery, so opening several surfaces does not probe providers repeatedly.
+   */
+  async refreshStaleSnapshots(options: ProviderSnapshotStaleOptions): Promise<void> {
+    if (this.destroyed) return;
+    const target = resolveProviderSnapshotTarget(options.cwd);
+    const targetKey = target.snapshotCwd;
+    if (this.autoRefreshes.has(targetKey)) return;
+    const now = Date.now();
+    if (now - (this.autoRefreshAttempts.get(targetKey) ?? 0) < options.maxAgeMs) return;
+
+    const records = this.getOrCreateTarget(targetKey).snapshot.records;
+    const stale = records.some(({ entry }) => {
+      if (!entry.enabled) return false;
+      // A warmup already in flight will settle this entry; probing again would duplicate it.
+      if (entry.status === "loading") return false;
+      if (!entry.fetchedAt) return true;
+      return now - Date.parse(entry.fetchedAt) >= options.maxAgeMs;
+    });
+    if (!stale) return;
+
+    this.autoRefreshAttempts.set(targetKey, now);
+    const refresh = options.cwd
+      ? this.refreshSnapshotForCwd({ cwd: options.cwd, keepLastGoodOnError: true })
+      : this.refreshSettingsSnapshot({ keepLastGoodOnError: true });
+    this.autoRefreshes.set(targetKey, refresh);
+    try {
+      await refresh;
+    } finally {
+      if (this.autoRefreshes.get(targetKey) === refresh) this.autoRefreshes.delete(targetKey);
+    }
   }
 
   async warmUpSnapshotForCwd(options: ProviderSnapshotWarmUpOptions): Promise<void> {
@@ -332,6 +390,9 @@ export class ProviderSnapshotManager {
     const providersToWarm = this.resolveProvidersToWarm(snapshotCwd, providers);
     if (providersToWarm.length === 0) {
       return;
+    }
+    if (options.markAutoRefreshAttempt) {
+      this.autoRefreshAttempts.set(snapshotCwd, Date.now());
     }
     await this.warmUp(target, providersToWarm);
   }
@@ -688,6 +749,8 @@ export class ProviderSnapshotManager {
 
   async shutdown(): Promise<void> {
     this.destroyed = true;
+    this.autoRefreshAttempts.clear();
+    this.autoRefreshes.clear();
     for (const state of this.generation.providerStates.values()) state.discoveryLimit.clearQueue();
     // Materialize a client per enabled provider so provider-owned resources
     // (background processes, sockets, etc.) get a chance to release even when
@@ -701,6 +764,8 @@ export class ProviderSnapshotManager {
     for (const state of this.generation.providerStates.values()) state.discoveryLimit.clearQueue();
     this.catalogs.clear();
     this.targets.clear();
+    this.autoRefreshAttempts.clear();
+    this.autoRefreshes.clear();
     this.events.removeAllListeners();
   }
 
@@ -863,7 +928,11 @@ export class ProviderSnapshotManager {
     return { definitions, order, providerStates };
   }
 
-  private async warmUp(target: ProviderSnapshotTarget, providers?: AgentProvider[]): Promise<void> {
+  private async warmUp(
+    target: ProviderSnapshotTarget,
+    providers?: AgentProvider[],
+    options: { keepLastGoodOnError?: boolean } = {},
+  ): Promise<void> {
     const providersToRefresh = providers ?? this.getProviderIds();
 
     await this.loadProviders({
@@ -871,18 +940,21 @@ export class ProviderSnapshotManager {
       catalogScope: target.catalogScope,
       providers: providersToRefresh,
       force: false,
+      keepLastGoodOnError: options.keepLastGoodOnError === true,
     });
   }
 
   private async refreshProviders(
     target: ProviderSnapshotTarget,
     providers: AgentProvider[],
+    options: { keepLastGoodOnError?: boolean } = {},
   ): Promise<void> {
     await this.loadProviders({
       snapshotCwd: target.snapshotCwd,
       catalogScope: target.catalogScope,
       providers,
       force: true,
+      keepLastGoodOnError: options.keepLastGoodOnError === true,
     });
   }
 
@@ -980,6 +1052,8 @@ export class ProviderSnapshotManager {
           definition,
           initial,
           client,
+          keepLastGoodOnError: options.keepLastGoodOnError,
+          hasLastGoodResult: current.result?.entry.status === "ready",
           publish: (entry) => {
             if (!isCurrent()) return false;
             current.result = identifyEntry(structuredClone(entry));
@@ -1004,6 +1078,8 @@ export class ProviderSnapshotManager {
     definition: ProviderDefinition;
     initial: ProviderSnapshotEntry;
     client: AgentClient;
+    keepLastGoodOnError: boolean;
+    hasLastGoodResult: boolean;
     publish: (entry: ProviderSnapshotEntry) => boolean;
   }): Promise<void> {
     const {
@@ -1012,6 +1088,8 @@ export class ProviderSnapshotManager {
       definition,
       initial: base,
       client,
+      keepLastGoodOnError,
+      hasLastGoodResult,
       publish: setEntry,
     } = options;
 
@@ -1034,6 +1112,13 @@ export class ProviderSnapshotManager {
         },
       });
       if (!catalog) {
+        if (keepLastGoodOnError && hasLastGoodResult) {
+          this.logger.warn(
+            { provider, target: catalogOptions },
+            "Provider became unavailable during automatic refresh; keeping the last good catalog",
+          );
+          return;
+        }
         setEntry({ ...base, status: "unavailable", enabled: true });
         return;
       }
@@ -1056,6 +1141,13 @@ export class ProviderSnapshotManager {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
+      if (keepLastGoodOnError && hasLastGoodResult) {
+        this.logger.warn(
+          { err: error, provider, target: catalogOptions },
+          "Automatic provider refresh failed; keeping the last good catalog",
+        );
+        return;
+      }
       const emitted = setEntry({
         ...base,
         status: "error",

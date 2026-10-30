@@ -2226,6 +2226,12 @@ export const ar: TranslationResources = {
       error: "خطأ",
       unavailable: "غير متاح",
     },
+    unified: {
+      title: "الاستخدام الموحّد",
+      short: "الإجمالي",
+      highest: "أعلى استخدام: {{window}}",
+      atRisk: "قد ينفد أحد النطاقات قبل إعادة الضبط",
+    },
     values: {
       used: "تم استخدام {{percentage}}",
       remaining: "متبقٍ {{amount}}",

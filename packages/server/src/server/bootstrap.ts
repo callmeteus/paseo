@@ -151,6 +151,7 @@ import {
 } from "./agent/tools/paseo-tools.js";
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { createAgentProviderRuntime } from "./agent/provider-runtime.js";
+import { createProviderCatalogRefreshScheduler } from "./agent/provider-catalog-refresh-scheduler.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -985,6 +986,10 @@ export async function createPaseoDaemon(
     },
   });
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;
+  const providerCatalogRefreshScheduler = createProviderCatalogRefreshScheduler({
+    manager: providerSnapshotManager,
+    logger: logger.child({ module: "provider-catalog-refresh" }),
+  });
   daemonConfigStore.onFieldChange("catalogRefreshTimeoutMs", (value) => {
     providerSnapshotManager.setRefreshTimeoutMs(typeof value === "number" ? value : undefined);
   });
@@ -1870,6 +1875,7 @@ export async function createPaseoDaemon(
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
+            providerCatalogRefreshScheduler.start();
             await finishSubscriptions.start();
             wsServer.beginAcceptingConnections();
             const relaySecurityLogger = logger.child({ module: "relay-security" });
@@ -1928,6 +1934,7 @@ export async function createPaseoDaemon(
       speechService.start();
       scriptHealthMonitor.start();
     } catch (error) {
+      providerCatalogRefreshScheduler.stop();
       localCredential = null;
       await deleteLocalCredential(config.paseoHome);
       unsubscribePluginProviders();
@@ -1943,6 +1950,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    providerCatalogRefreshScheduler.stop();
     localCredential = null;
     await deleteLocalCredential(config.paseoHome);
     // Stop tracking plugin provider registrations before anything tears plugins

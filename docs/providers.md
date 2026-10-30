@@ -151,9 +151,18 @@ aborts the shared refresh signal at the deadline. Providers name active catalog 
 finish subprocess, server, or session cleanup before rejecting. Timeout errors list the operations
 that were still active when the deadline expired.
 
-Catalogue results stay cached by identity until explicit refresh or a change to that provider's configuration.
+Catalogue results stay cached by identity until a refresh or a change to that provider's configuration.
+The daemon resolves the global catalogue when it starts and refreshes every known target every 30
+minutes after that, so a newly installed CLI or a changed model list appears without the user
+pressing Refresh.
+Automatic refreshes keep the last good catalogue when discovery fails or the provider becomes
+unavailable; a manual refresh stays authoritative and reports the failure. Reads do not force
+probing: opening the app or a workspace asks for a background refresh only when that target's
+`fetchedAt` is older than the refresh interval, and a warmup already in flight is left to settle.
 Keys are resolved on each read so project configuration can select a different cached catalogue.
 Selector opening may read a loading or stale query, but does not force provider probing.
+`PASEO_PROVIDER_CATALOG_REFRESH_INTERVAL_MS` overrides the interval; `0` keeps the boot warmup and
+disables the periodic cycle.
 
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot

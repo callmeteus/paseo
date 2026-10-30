@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { settingsStyles } from "@/styles/settings";
 import { UsageCard } from "./card";
 import type { UsageDisplay } from "./display";
 import { useUsageInSidebar } from "./in-sidebar";
+import { sortUsageReports } from "./model";
 import type { UsageReportEntry } from "./types";
 
 /** One card per report (source + account). Window rows pin while the sidebar summary is on. */
@@ -17,9 +19,10 @@ export function UsageList({
   display: UsageDisplay;
 }) {
   const { inSidebar } = useUsageInSidebar();
+  const ordered = useMemo(() => sortUsageReports(reports), [reports]);
   return (
     <View style={styles.list}>
-      {reports.map((entry) => (
+      {ordered.map((entry) => (
         <View key={entry.id} style={settingsStyles.card}>
           <UsageCard
             serverId={serverId}

@@ -2203,6 +2203,12 @@ export const zhCN: TranslationResources = {
       error: "错误",
       unavailable: "不可用",
     },
+    unified: {
+      title: "统一用量",
+      short: "总体",
+      highest: "最高用量：{{window}}",
+      atRisk: "可能有窗口在重置前用完",
+    },
     values: {
       used: "已使用 {{percentage}}",
       remaining: "剩余 {{amount}}",

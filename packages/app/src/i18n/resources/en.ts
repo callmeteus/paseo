@@ -2251,6 +2251,12 @@ export const en = {
       error: "Error",
       unavailable: "Unavailable",
     },
+    unified: {
+      title: "Unified usage",
+      short: "Overall",
+      highest: "Highest: {{window}}",
+      atRisk: "A window may run out before it resets",
+    },
     values: {
       used: "{{percentage}} used",
       remaining: "{{amount}} left",

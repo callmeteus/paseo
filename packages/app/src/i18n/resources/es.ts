@@ -2276,6 +2276,12 @@ export const es: TranslationResources = {
       error: "Error",
       unavailable: "No disponible",
     },
+    unified: {
+      title: "Uso unificado",
+      short: "General",
+      highest: "Mayor consumo: {{window}}",
+      atRisk: "Una ventana puede agotarse antes de restablecerse",
+    },
     values: {
       used: "Usado: {{percentage}}",
       remaining: "Quedan {{amount}}",

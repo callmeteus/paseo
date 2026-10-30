@@ -2279,6 +2279,12 @@ export const fr: TranslationResources = {
       error: "Erreur",
       unavailable: "Indisponible",
     },
+    unified: {
+      title: "Utilisation unifiée",
+      short: "Général",
+      highest: "Plus forte consommation : {{window}}",
+      atRisk: "Une fenêtre peut s’épuiser avant sa réinitialisation",
+    },
     values: {
       used: "Utilisé : {{percentage}}",
       remaining: "Il reste {{amount}}",

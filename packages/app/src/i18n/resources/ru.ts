@@ -2262,6 +2262,12 @@ export const ru: TranslationResources = {
       error: "Ошибка",
       unavailable: "Недоступно",
     },
+    unified: {
+      title: "Сводный расход",
+      short: "Общий",
+      highest: "Наибольший расход: {{window}}",
+      atRisk: "Одно из окон может закончиться до сброса",
+    },
     values: {
       used: "Использовано: {{percentage}}",
       remaining: "Осталось: {{amount}}",

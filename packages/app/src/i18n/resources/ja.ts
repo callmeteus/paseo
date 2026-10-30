@@ -2252,6 +2252,12 @@ export const ja: TranslationResources = {
       error: "エラー",
       unavailable: "利用不可",
     },
+    unified: {
+      title: "統合使用量",
+      short: "全体",
+      highest: "最大消費: {{window}}",
+      atRisk: "リセット前に上限へ達する可能性があります",
+    },
     values: {
       used: "{{percentage}} 使用済み",
       remaining: "残り {{amount}}",

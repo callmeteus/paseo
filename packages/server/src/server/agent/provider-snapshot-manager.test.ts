@@ -3773,3 +3773,122 @@ test("model overrides preserve negotiated plugin capabilities and connection shu
     manager.destroy();
   }
 });
+
+test("refreshStaleSnapshots skips fresh targets and throttles automatic attempts", async () => {
+  const fetchCatalog = vi.fn(async () => ({
+    models: [{ provider: "codex" as const, id: "fresh", label: "Fresh" }],
+    modes: [],
+  }));
+  const manager = new ProviderSnapshotManager({
+    logger: createTestLogger(),
+    providerOverrides: PUBLICATION_PROVIDERS,
+    extraClients: {
+      codex: createExtraClient("codex", {
+        isAvailable: async () => true,
+        fetchCatalog,
+      }),
+    },
+  });
+  const cwd = "/tmp/stale-catalog";
+  try {
+    await manager.warmUpSnapshotForCwd({ cwd });
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+
+    await manager.refreshStaleSnapshots({ cwd, maxAgeMs: 60_000 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+
+    await manager.refreshStaleSnapshots({ cwd, maxAgeMs: 0 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
+
+    await manager.refreshStaleSnapshots({ cwd, maxAgeMs: 60_000 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(2);
+  } finally {
+    await manager.shutdown();
+    manager.destroy();
+  }
+});
+
+test("automatic refresh keeps the last good catalog on discovery failure", async () => {
+  let fail = false;
+  let available = true;
+  const fetchCatalog = vi.fn(async () => {
+    if (fail) throw new Error("provider exploded");
+    return {
+      models: [{ provider: "codex" as const, id: "kept", label: "Kept" }],
+      modes: [],
+    };
+  });
+  const manager = new ProviderSnapshotManager({
+    logger: createTestLogger(),
+    providerOverrides: PUBLICATION_PROVIDERS,
+    extraClients: {
+      codex: createExtraClient("codex", {
+        isAvailable: async () => available,
+        fetchCatalog,
+      }),
+    },
+  });
+  const cwd = "/tmp/keep-last-good";
+  const read = () =>
+    manager.getSnapshot(cwd).records.find(({ entry }) => entry.provider === "codex")!.entry;
+  try {
+    await manager.warmUpSnapshotForCwd({ cwd });
+    const ready = read();
+    expect(ready.status).toBe("ready");
+    expect(ready.models?.map((model) => model.id)).toEqual(["kept"]);
+
+    fail = true;
+    await manager.refreshSnapshotForCwd({ cwd, providers: ["codex"], keepLastGoodOnError: true });
+    expect(read()).toBe(ready);
+    expect(read().status).toBe("ready");
+
+    available = false;
+    fail = false;
+    await manager.refreshSnapshotForCwd({ cwd, providers: ["codex"], keepLastGoodOnError: true });
+    expect(read()).toBe(ready);
+    expect(read().status).toBe("ready");
+
+    available = true;
+    fail = true;
+    await manager.refreshSnapshotForCwd({ cwd, providers: ["codex"] });
+    expect(read().status).toBe("error");
+    expect(read().models).toBeUndefined();
+  } finally {
+    await manager.shutdown();
+    manager.destroy();
+  }
+});
+
+test("refreshStaleSnapshots leaves an in-flight warmup alone", async () => {
+  let finishFetch!: (catalog: { models: AgentModelDefinition[]; modes: AgentMode[] }) => void;
+  const fetchCatalog = vi.fn(
+    () =>
+      new Promise<{ models: AgentModelDefinition[]; modes: AgentMode[] }>((complete) => {
+        finishFetch = complete;
+      }),
+  );
+  const manager = new ProviderSnapshotManager({
+    logger: createTestLogger(),
+    providerOverrides: PUBLICATION_PROVIDERS,
+    extraClients: {
+      codex: createExtraClient("codex", {
+        isAvailable: async () => true,
+        fetchCatalog,
+      }),
+    },
+  });
+  const cwd = "/tmp/loading-catalog";
+  try {
+    const warmup = manager.warmUpSnapshotForCwd({ cwd });
+    await vi.waitFor(() => expect(fetchCatalog).toHaveBeenCalledTimes(1));
+
+    await manager.refreshStaleSnapshots({ cwd, maxAgeMs: 0 });
+    expect(fetchCatalog).toHaveBeenCalledTimes(1);
+
+    finishFetch({ models: [], modes: [] });
+    await warmup;
+  } finally {
+    await manager.shutdown();
+    manager.destroy();
+  }
+});

@@ -2264,6 +2264,12 @@ export const ptBR: TranslationResources = {
       error: "Erro",
       unavailable: "Indisponível",
     },
+    unified: {
+      title: "Uso unificado",
+      short: "Geral",
+      highest: "Maior consumo: {{window}}",
+      atRisk: "Uma janela pode acabar antes do reset",
+    },
     values: {
       used: "{{percentage}} usado",
       remaining: "{{amount}} restantes",
