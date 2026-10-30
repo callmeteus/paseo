@@ -100,3 +100,7 @@ app.json
 
 # Project-local Serena configuration and memories.
 .serena/
+
+# Local scratch files (logs, build output, one-off install scripts)
+.tmp/
+
