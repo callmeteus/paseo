@@ -19,18 +19,22 @@ processes and subscriptions while retaining its Paseo identity, persistence hand
 workspace, labels, title, usage, attention, timestamps, and parent relationship. Opening or prompting
 the agent runs through `ensureAgentLoaded()`, which resumes the durable provider session under the
 same Paseo agent ID. Provider history is not appended again when the canonical timeline is already
-primed.
+primed. A runtime that died mid-turn leaves live-status rows (a loading thought, a running tool
+call). Repainting the cached timeline settles them, so an interrupted chat does not show an eternal
+"Thinking" or a spinning tool call.
 
 Reload releases the old runtime before resuming its durable session: an idle provider process can
 still own an exclusive writer. A close failure retains that runtime for cleanup and blocks the
 replacement. Once closure succeeds, a failed resume leaves the durable agent closed and retryable.
 
 Idle resumable runtimes are collected after one hour without activity, checked once a minute.
-Collection releases the process and preserves the agent record, conversation, relationships, and
-provider session. The next prompt resumes that session. Set `agents.idleRuntimeCleanup: false` in
-host config to disable automatic collection. The host setting applies immediately; config-file edits
-apply on reload. Disabling invalidates pending safety checks and close admission. A close already
-started finishes. Re-enabling keeps the existing idle timestamps.
+Loading a runtime (opening a chat, resuming after a restart) starts its own idle clock, so a stale
+stored `updatedAt` cannot make a freshly resumed runtime eligible. Collection releases the process
+and preserves the agent record, conversation, relationships, and provider session. The next prompt
+resumes that session. Set `agents.idleRuntimeCleanup: false` in host config to disable automatic
+collection. The host setting applies immediately; config-file edits apply on reload. Disabling
+invalidates pending safety checks and close admission. A close already started finishes.
+Re-enabling keeps the existing idle timestamps.
 
 Foreground runs, permissions and responses, queued deliveries, lifecycle operations, and working
 managed or native descendants prevent collection. Outstanding local or remote finish subscriptions
