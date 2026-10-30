@@ -1,5 +1,9 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  finishPortingActivity,
+  startPortingActivity,
+} from "@/composer/agent-controls/porting-activity";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import {
   buildWorkspaceTabSnapshot,
@@ -544,6 +548,33 @@ describe("ported agent tabs", () => {
 
     expect(result.activeAgentIds.has("ported-agent")).toBe(true);
     expect(result.autoOpenAgentIds.has("ported-agent")).toBe(false);
+  });
+
+  it("keeps the ported chat out while the source port is running", () => {
+    startPortingActivity("srv", "source-agent", { toProvider: "opencode" });
+    try {
+      const ported = makeAgent({
+        id: "ported-agent",
+        cwd: "/repo/worktree",
+        workspaceId: WORKSPACE_ID,
+        migratedFrom: {
+          provider: "codex",
+          agentId: "source-agent",
+          portedAt: "2026-03-04T00:00:00.000Z",
+        },
+        lastUserMessageAt: new Date("2026-03-04T00:00:01.000Z"),
+      });
+      const result = deriveWorkspaceAgentVisibility({
+        serverId: "srv",
+        sessionAgents: new Map([[ported.id, ported]]),
+        workspaceId: WORKSPACE_ID,
+      });
+
+      expect(result.activeAgentIds.has("ported-agent")).toBe(true);
+      expect(result.autoOpenAgentIds.has("ported-agent")).toBe(false);
+    } finally {
+      finishPortingActivity("srv", "source-agent");
+    }
   });
 
   it("auto-opens the ported chat once it has a message", () => {

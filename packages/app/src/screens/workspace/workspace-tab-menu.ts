@@ -1,6 +1,7 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
 import { openMoveAgentToWorkspace } from "@/screens/workspace/move-agent-to-workspace-store";
+import { openPromoteAgentToWorkspace } from "@/screens/workspace/promote-agent-to-workspace-store";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 
@@ -13,6 +14,7 @@ export interface WorkspaceTabMenuLabels {
   copyFilePath: string;
   rename: string;
   moveToWorkspace: string;
+  promoteToWorkspace: string;
   closeAbove: string;
   closeBelow: string;
   closeLeft: string;
@@ -31,6 +33,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   copyFilePath: i18n.t("workspace.tabs.menu.copyFilePath"),
   rename: i18n.t("workspace.tabs.menu.rename"),
   moveToWorkspace: i18n.t("workspace.tabs.menu.moveToWorkspace"),
+  promoteToWorkspace: i18n.t("workspace.tabs.menu.promoteToWorkspace"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
   closeLeft: i18n.t("workspace.tabs.menu.closeLeft"),
@@ -55,6 +58,7 @@ export type WorkspaceTabMenuEntry =
         | "copy-x"
         | "pencil"
         | "folder-input"
+        | "folder-plus"
         | "x";
       hint?: string;
       tooltip?: string;
@@ -291,6 +295,16 @@ export function buildWorkspaceTabMenuEntries(
         testID: `${menuTestIDBase}-move-to-workspace`,
         onSelect: () => {
           openMoveAgentToWorkspace(agentId);
+        },
+      });
+      entries.push({
+        kind: "item",
+        key: "promote-to-workspace",
+        label: labels.promoteToWorkspace,
+        icon: "folder-plus",
+        testID: `${menuTestIDBase}-promote-to-workspace`,
+        onSelect: () => {
+          openPromoteAgentToWorkspace(agentId);
         },
       });
     }

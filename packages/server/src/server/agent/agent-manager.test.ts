@@ -12308,6 +12308,31 @@ test("idle cleanup rechecks new prompt activity after an asynchronous safety pro
   expect(h.closes).toBe(0);
 });
 
+test("loading a runtime starts its own idle clock instead of reusing the stored one", async () => {
+  const h = idleCleanupHarness();
+  const agent = await h.create();
+  await h.manager.closeAgent(agent.id);
+  const closesAfterClose = h.closes;
+  const record = await h.storage.get(agent.id);
+  if (!record) throw new Error("Expected the created agent record");
+  await h.storage.upsert({
+    ...record,
+    updatedAt: "2025-01-01T00:00:00.000Z",
+    lastActivityAt: "2025-01-01T00:00:00.000Z",
+  });
+
+  const resumed = await ensureAgentLoaded(agent.id, {
+    agentManager: h.manager,
+    agentStorage: h.storage,
+    logger,
+  });
+  expect(resumed.updatedAt.toISOString()).toBe("2025-01-01T00:00:00.000Z");
+
+  expect((await h.sweep({ now: h.later(1) })).collected).toEqual([]);
+  expect(h.closes).toBe(closesAfterClose);
+  expect((await h.sweep({ now: h.later(61) })).collected).toHaveLength(1);
+});
+
 test("idle cleanup retains a parent whose idle managed child owns background work", async () => {
   const h = idleCleanupHarness();
   const parent = await h.create();

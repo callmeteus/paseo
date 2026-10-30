@@ -6,6 +6,7 @@ export const builtinPlugins = [
   "antigravity-provider",
   "claude-usage-source",
   "codex-usage-source",
+  "commandcode-taste",
   "commandcode-usage-source",
   "copilot-usage-source",
   "cursor-usage-source",

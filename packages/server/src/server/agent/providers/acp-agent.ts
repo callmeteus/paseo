@@ -328,6 +328,10 @@ const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 // forever. Two minutes without any session update (or while a permission is
 // pending) is a hung turn, not a slow one.
 const ACP_TURN_IDLE_TIMEOUT_MS = 120_000;
+// A provider that never starts a turn usually needs authentication or is
+// otherwise broken. Fail early with an actionable message instead of leaving
+// the chat loading until the longer idle watchdog fires.
+const ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS = 45_000;
 
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
@@ -477,6 +481,12 @@ interface ACPAgentClientOptions {
   clientCapabilityMeta?: ACPClientCapabilityMeta;
   modeIdTransformer?: (modeId: string) => string | null;
   toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  /**
+   * Rewrites one assistant text chunk. Return null to drop it. Providers that forward
+   * harness notices as assistant text use this to keep background failures out of the
+   * transcript without hiding the turn's own error.
+   */
+  assistantTextTransform?: (text: string) => string | null;
   providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -509,6 +519,7 @@ interface ACPAgentSessionOptions {
   clientCapabilityMeta?: ACPClientCapabilityMeta;
   modeIdTransformer?: (modeId: string) => string | null;
   toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  assistantTextTransform?: (text: string) => string | null;
   providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -943,6 +954,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
   private readonly toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  private readonly assistantTextTransform?: (text: string) => string | null;
   private readonly providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -982,6 +994,7 @@ export class ACPAgentClient implements AgentClient {
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
     this.toolSnapshotTransformer = options.toolSnapshotTransformer;
+    this.assistantTextTransform = options.assistantTextTransform;
     this.providerModeWriter = options.providerModeWriter;
     this.beforeModeWriter = options.beforeModeWriter;
     this.thinkingOptionWriter = options.thinkingOptionWriter;
@@ -1015,6 +1028,7 @@ export class ACPAgentClient implements AgentClient {
         clientCapabilityMeta: this.clientCapabilityMeta,
         modeIdTransformer: this.modeIdTransformer,
         toolSnapshotTransformer: this.toolSnapshotTransformer,
+        assistantTextTransform: this.assistantTextTransform,
         providerModeWriter: this.providerModeWriter,
         beforeModeWriter: this.beforeModeWriter,
         thinkingOptionWriter: this.thinkingOptionWriter,
@@ -1073,6 +1087,7 @@ export class ACPAgentClient implements AgentClient {
       clientCapabilityMeta: this.clientCapabilityMeta,
       modeIdTransformer: this.modeIdTransformer,
       toolSnapshotTransformer: this.toolSnapshotTransformer,
+      assistantTextTransform: this.assistantTextTransform,
       providerModeWriter: this.providerModeWriter,
       beforeModeWriter: this.beforeModeWriter,
       thinkingOptionWriter: this.thinkingOptionWriter,
@@ -1717,6 +1732,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly clientCapabilityMeta?: ACPClientCapabilityMeta;
   private readonly modeIdTransformer?: (modeId: string) => string | null;
   private readonly toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
+  private readonly assistantTextTransform?: (text: string) => string | null;
   private readonly providerModeWriter?: (
     context: ACPProviderModeWriterContext,
   ) => Promise<ACPProviderModeWriteResult>;
@@ -1766,6 +1782,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
   private turnIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+  private turnFirstActivityTimeout: ReturnType<typeof setTimeout> | null = null;
+  private authMethods: NonNullable<InitializeResponse["authMethods"]> = [];
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
   private historyPending = false;
@@ -1791,6 +1809,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.clientCapabilityMeta = options.clientCapabilityMeta;
     this.modeIdTransformer = options.modeIdTransformer;
     this.toolSnapshotTransformer = options.toolSnapshotTransformer;
+    this.assistantTextTransform = options.assistantTextTransform;
     this.providerModeWriter = options.providerModeWriter;
     this.beforeModeWriter = options.beforeModeWriter;
     this.thinkingOptionWriter = options.thinkingOptionWriter;
@@ -1995,6 +2014,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
     this.emitSubmittedUserMessage(prompt, messageId, turnId, options?.clientMessageId);
     this.armTurnIdleTimeout(turnId);
+    this.armTurnFirstActivityTimeout(turnId);
 
     void this.connection
       .prompt({
@@ -2588,6 +2608,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.closed = true;
 
     this.clearTurnIdleTimeout();
+    this.clearTurnFirstActivityTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     this.settleCommandsReady();
 
@@ -2639,6 +2660,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    this.clearTurnFirstActivityTimeout();
     const canAutoAccept =
       isACPAutoAcceptEnabled(this.config) && !isACPChooserRequest(params.options);
     if (canAutoAccept) {
@@ -2684,6 +2706,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async sessionUpdate(params: SessionNotification): Promise<void> {
+    this.clearTurnFirstActivityTimeout();
     this.logger.trace(
       {
         agentId: this.agentId,
@@ -2970,6 +2993,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       ]),
     );
 
+    this.authMethods = initialize.authMethods ?? [];
     return { child, connection, initialize };
   }
 
@@ -3264,9 +3288,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return null;
     }
     if (type === "assistant_message") {
+      const text = this.assistantTextTransform ? this.assistantTextTransform(chunkText) : chunkText;
+      if (text === null || text.length === 0) {
+        return null;
+      }
       return {
         type: "assistant_message",
-        text: chunkText,
+        text,
         messageId: this.resolveAssistantMessageId(update.messageId),
       };
     }
@@ -3452,28 +3480,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
-  private hasActiveToolOrTerminal(): boolean {
-    for (const tool of this.toolCalls.values()) {
-      if (tool.status === "pending" || tool.status === "in_progress") {
-        return true;
-      }
-    }
-    for (const terminal of this.terminalEntries.values()) {
-      if (terminal.running) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private armTurnIdleTimeout(turnId: string): void {
     this.clearTurnIdleTimeout();
     this.turnIdleTimeout = setTimeout(() => {
       this.turnIdleTimeout = null;
       if (this.activeForegroundTurnId !== turnId) return;
-      // A pending permission or a running tool blocks the provider on purpose;
-      // keep waiting instead of failing work that is still in progress.
-      if (this.pendingPermissions.size > 0 || this.hasActiveToolOrTerminal()) {
+      // A pending permission blocks the provider on purpose; keep waiting.
+      // A running tool that stopped producing updates is a hung turn.
+      if (this.pendingPermissions.size > 0) {
         this.armTurnIdleTimeout(turnId);
         return;
       }
@@ -3489,6 +3503,40 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         turnId,
       });
     }, ACP_TURN_IDLE_TIMEOUT_MS);
+  }
+
+  private armTurnFirstActivityTimeout(turnId: string): void {
+    this.clearTurnFirstActivityTimeout();
+    this.turnFirstActivityTimeout = setTimeout(() => {
+      this.turnFirstActivityTimeout = null;
+      if (this.activeForegroundTurnId !== turnId) return;
+      if (this.pendingPermissions.size > 0) {
+        this.armTurnFirstActivityTimeout(turnId);
+        return;
+      }
+      const authHint = this.authMethods.length
+        ? ` The provider may need authentication: ${this.authMethods
+            .map((method) => method.description ?? method.name)
+            .join("; ")}.`
+        : "";
+      const message = `${this.config.provider} did not start responding within ${ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS}ms.${authHint}`;
+      if (this.connection && this.sessionId) {
+        void this.connection.cancel({ sessionId: this.sessionId }).catch(() => undefined);
+      }
+      this.finishTurn({
+        type: "turn_failed",
+        provider: this.provider,
+        error: message,
+        diagnostic: this.collectDiagnostic(message),
+        turnId,
+      });
+    }, ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS);
+  }
+
+  private clearTurnFirstActivityTimeout(): void {
+    if (!this.turnFirstActivityTimeout) return;
+    clearTimeout(this.turnFirstActivityTimeout);
+    this.turnFirstActivityTimeout = null;
   }
 
   private touchTurnIdleTimeout(): void {
@@ -3507,6 +3555,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     event: Extract<AgentStreamEvent, { type: "turn_completed" | "turn_failed" | "turn_canceled" }>,
   ): void {
     this.clearTurnIdleTimeout();
+    this.clearTurnFirstActivityTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
     // A turn that ends without completing leaves no way to answer its open
     // permission requests, so tell the agent they were cancelled.

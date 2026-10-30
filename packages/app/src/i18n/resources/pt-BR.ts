@@ -276,6 +276,10 @@ export const ptBR: TranslationResources = {
       showDetails: "Ver detalhes",
       hideDetails: "Ocultar detalhes",
       kinds: {
+        creditsExhausted: {
+          title: "Sem créditos",
+          description: "{{provider}} está sem créditos. Adicione créditos ou troque de provider.",
+        },
         usageLimit: {
           title: "Limite de uso atingido",
           description:
@@ -739,6 +743,7 @@ export const ptBR: TranslationResources = {
         copyFilePath: "Copiar caminho do arquivo",
         rename: "Renomear",
         moveToWorkspace: "Mover para workspace",
+        promoteToWorkspace: "Promover a workspace",
         openContainingDirectory: "Abrir diretório do arquivo",
         moveWorkspace: {
           title: "Mover workspace para pasta",
@@ -758,6 +763,14 @@ export const ptBR: TranslationResources = {
           confirmLabel: "Mover",
           moved: "Chat movido para {{workspace}}",
           failed: "Não foi possível mover o chat",
+        },
+        promoteChat: {
+          title: "Promover a workspace",
+          body: "Cria um workspace em {{cwd}} e move este chat para lá. Se for um subagente, ele deixa de ser filho.",
+          confirmLabel: "Promover",
+          cancel: "Cancelar",
+          promoted: "Chat promovido para {{workspace}}",
+          failed: "Não foi possível promover o chat",
         },
         closeAbove: "Fechar abas acima",
         closeBelow: "Fechar abas abaixo",

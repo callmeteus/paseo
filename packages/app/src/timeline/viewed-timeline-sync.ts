@@ -7,6 +7,7 @@ import type { CachedTimeline } from "@/runtime/replica-cache";
 import {
   selectAgentTimelineState,
   useSessionStore,
+  type Agent,
   type AgentTimelineCursorState,
   type AgentTimelineState,
 } from "@/stores/session-store";
@@ -26,11 +27,26 @@ import {
   processTimelineResponse,
 } from "./session-stream-reducers";
 import { isTimelineResumeSnapshotAuthoritative } from "./timeline-sync-plan";
-import { replaceWithCanonicalStream } from "@/types/stream";
+import {
+  replaceWithCanonicalStream,
+  settleInterruptedStreamItems,
+  type StreamItem,
+} from "@/types/stream";
 
 export interface TimelineReplicaStorage {
   readTimeline(serverId: string, agentId: string): Promise<CachedTimeline | undefined>;
   commitTimeline(serverId: string, agentId: string, timeline: CachedTimeline): void;
+}
+
+function settleCachedTimelineItems(input: {
+  session: { agents: Map<string, Agent>; agentDetails: Map<string, Agent> } | undefined;
+  agentId: string;
+  items: readonly StreamItem[];
+}): StreamItem[] {
+  const agent =
+    input.session?.agents.get(input.agentId) ?? input.session?.agentDetails.get(input.agentId);
+  const activeTurnId = agent?.turn.phase === "open" ? agent.turn.turnId : null;
+  return settleInterruptedStreamItems(input.items, { activeTurnId });
 }
 
 async function prepareCachedTimeline(input: {
@@ -51,6 +67,13 @@ async function prepareCachedTimeline(input: {
   const currentTimeline = selectAgentTimelineState(session, input.agentId);
   const currentHead = session?.agentStreamHead.get(input.agentId);
   if (currentTimeline.status === "synced") return undefined;
+  // A cached row can outlive the turn that wrote it (daemon restart, app reload).
+  // Settle live rows unless the agent is still on that same turn.
+  const storedItems = settleCachedTimelineItems({
+    session,
+    agentId: input.agentId,
+    items: stored.items,
+  });
   if (!stored.range) {
     if (beforeTimeline.status === "painted") {
       return currentTimeline.status === "painted" && currentTimeline.items === beforeTimeline.items
@@ -64,7 +87,7 @@ async function prepareCachedTimeline(input: {
       ? [...currentTimeline.items, ...(currentHead ?? [])]
       : (currentHead ?? []);
   const replacement = replaceWithCanonicalStream({
-    canonical: stored.items,
+    canonical: storedItems,
     previousTail: [],
     previousHead: liveItems,
     sendingClientMessageIds: getSendingClientMessageIds(

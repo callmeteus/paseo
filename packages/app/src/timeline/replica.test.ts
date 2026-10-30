@@ -206,6 +206,42 @@ describe("viewed timeline persistence", () => {
     owner.dispose();
   });
 
+  it("settles live rows a restart left behind when painting the cache", async () => {
+    useSessionStore.getState().initializeSession(SERVER_ID, null);
+    const replica = createTimelineReplica({
+      serverId: SERVER_ID,
+      storage: {
+        readTimeline: async () => ({
+          agentId: AGENT_ID,
+          items: [
+            {
+              kind: "thought",
+              id: "interrupted-thought",
+              text: "Working",
+              timestamp: new Date("2026-08-26T10:00:00.000Z"),
+              timelineCursor: { epoch: "epoch-1", seq: 4 },
+              status: "loading",
+            },
+          ],
+          range: { epoch: "epoch-1", startSeq: 1, endSeq: 4 },
+          hasOlder: false,
+        }),
+        commitTimeline: () => undefined,
+      },
+      prepareAgent: async () => undefined,
+    });
+
+    await replica.prepare(AGENT_ID);
+
+    const timeline = selectAgentTimelineState(
+      useSessionStore.getState().sessions[SERVER_ID],
+      AGENT_ID,
+    );
+    expect(timeline.status).toBe("painted");
+    if (timeline.status !== "painted") throw new Error("Expected a painted timeline");
+    expect(timeline.items).toMatchObject([{ kind: "thought", status: "ready" }]);
+  });
+
   it("reconciles an overlapping projected message against its cached cursor", async () => {
     useSessionStore.getState().initializeSession(SERVER_ID, null);
     const partial = "```mermaid\nflowchart LR\n  Start --> Mid";

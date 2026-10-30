@@ -1,3 +1,4 @@
+import { getPortingActivity } from "@/composer/agent-controls/porting-activity";
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceTabSnapshot } from "@/stores/workspace-layout-actions";
 import { isWorkspaceRootAgent } from "@/subagents/policies";
@@ -13,6 +14,7 @@ function agentBelongsToWorkspace(agent: Agent, workspaceId: string): boolean {
 }
 
 export function deriveWorkspaceAgentVisibility(input: {
+  serverId?: string;
   sessionAgents: Map<string, Agent> | undefined;
   agentDetails?: Map<string, Agent> | undefined;
   workspaceId: string | null | undefined;
@@ -37,9 +39,14 @@ export function deriveWorkspaceAgentVisibility(input: {
       const parentAgent = agent.parentAgentId
         ? (sessionAgents?.get(agent.parentAgentId) ?? agentDetails?.get(agent.parentAgentId))
         : undefined;
-      // A freshly ported chat stays out of the tab bar until its first message
-      // lands; the caller navigates to it explicitly once porting finishes.
-      const isPendingPort = Boolean(agent.migratedFrom) && !agent.lastUserMessageAt;
+      // A ported chat stays out of the tab bar while its source port is running,
+      // even though it already carries the source's historical user messages. The
+      // caller navigates to it explicitly once the port finishes.
+      const source = agent.migratedFrom;
+      const portSource = source
+        ? getPortingActivity(source.host ?? input.serverId ?? "", source.agentId)
+        : null;
+      const isPendingPort = Boolean(source) && (Boolean(portSource) || !agent.lastUserMessageAt);
       if (isWorkspaceRootAgent(agent, parentAgent) && !isPendingPort) {
         autoOpenAgentIds.add(agent.id);
       }
@@ -75,6 +82,7 @@ export function createWorkspaceAgentVisibilitySelector(input: {
     }
 
     const visibility = deriveWorkspaceAgentVisibility({
+      serverId: input.serverId,
       sessionAgents: agents,
       agentDetails,
       workspaceId: input.workspaceId,

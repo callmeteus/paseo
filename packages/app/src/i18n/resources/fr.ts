@@ -277,6 +277,11 @@ export const fr: TranslationResources = {
       showDetails: "Afficher les détails",
       hideDetails: "Masquer les détails",
       kinds: {
+        creditsExhausted: {
+          title: "Plus de crédits",
+          description:
+            "{{provider}} n'a plus de crédits. Ajoutez des crédits ou changez de fournisseur.",
+        },
         usageLimit: {
           title: "Limite d’utilisation atteinte",
           description:
@@ -740,6 +745,7 @@ export const fr: TranslationResources = {
         copyFilePath: "Copier le chemin du fichier",
         rename: "Renommer",
         moveToWorkspace: "Déplacer vers un espace de travail",
+        promoteToWorkspace: "Promouvoir en espace de travail",
         openContainingDirectory: "Ouvrir le dossier parent",
         moveWorkspace: {
           title: "Déplacer l'espace de travail vers un dossier",
@@ -759,6 +765,14 @@ export const fr: TranslationResources = {
           confirmLabel: "Déplacer",
           moved: "Conversation déplacée vers {{workspace}}",
           failed: "Impossible de déplacer la conversation",
+        },
+        promoteChat: {
+          title: "Promouvoir en espace de travail",
+          body: "Crée un espace de travail dans {{cwd}} et y déplace cette conversation. Si c’est un sous-agent, il devient autonome.",
+          confirmLabel: "Promouvoir",
+          cancel: "Annuler",
+          promoted: "Conversation promue vers {{workspace}}",
+          failed: "Impossible de promouvoir la conversation",
         },
         closeAbove: "Fermer les onglets au-dessus",
         closeBelow: "Fermer les onglets en dessous",

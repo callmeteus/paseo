@@ -832,6 +832,67 @@ export interface PluginTimelineStreamItem {
   data: JsonValue;
 }
 
+/**
+ * Close live-status rows whose turn is gone. A daemon restart drops the writer
+ * mid-row, and a cached timeline would otherwise keep spinning a thought or a
+ * tool call that nothing will ever finish.
+ *
+ * Pass the active turn id to leave rows from the current turn untouched. With no
+ * active turn, every live row is settled.
+ */
+export function settleInterruptedStreamItems(
+  items: readonly StreamItem[],
+  options: { activeTurnId?: string | null } = {},
+): StreamItem[] {
+  const activeTurnId = options.activeTurnId ?? null;
+  let changed = false;
+  const settled = items.map((item): StreamItem => {
+    // An untagged row may belong to the running turn: never close it under one.
+    const belongsToActiveTurn =
+      activeTurnId !== null && (item.turnId === undefined || item.turnId === activeTurnId);
+    if (belongsToActiveTurn) return item;
+
+    switch (item.kind) {
+      case "thought":
+        if (item.status !== "loading") return item;
+        changed = true;
+        return { ...item, status: "ready" };
+      case "tool_call":
+        if (item.payload.source === "agent") {
+          if (item.payload.data.status !== "running") return item;
+          changed = true;
+          return {
+            ...item,
+            payload: {
+              ...item.payload,
+              data: { ...item.payload.data, status: "canceled", error: null },
+            },
+          };
+        }
+        if (item.payload.data.status !== "executing") return item;
+        changed = true;
+        return {
+          ...item,
+          payload: {
+            ...item.payload,
+            data: { ...item.payload.data, status: "failed", error: "Interrupted" },
+          },
+        };
+      case "compaction":
+        if (item.status !== "loading") return item;
+        changed = true;
+        return { ...item, status: "completed" };
+      case "porting":
+        if (item.status !== "loading") return item;
+        changed = true;
+        return { ...item, status: "completed" };
+      default:
+        return item;
+    }
+  });
+  return changed ? settled : (items as StreamItem[]);
+}
+
 export interface TodoEntry {
   text: string;
   completed: boolean;

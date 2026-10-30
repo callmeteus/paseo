@@ -276,6 +276,10 @@ export const es: TranslationResources = {
       showDetails: "Ver detalles",
       hideDetails: "Ocultar detalles",
       kinds: {
+        creditsExhausted: {
+          title: "Sin créditos",
+          description: "{{provider}} se quedó sin créditos. Añade créditos o cambia de proveedor.",
+        },
         usageLimit: {
           title: "Límite de uso alcanzado",
           description: "{{provider}} alcanzó su límite de uso. Cambia de modelo o ajusta tu plan.",
@@ -737,6 +741,7 @@ export const es: TranslationResources = {
         copyFilePath: "Copy file path",
         rename: "Rebautizar",
         moveToWorkspace: "Mover a espacio de trabajo",
+        promoteToWorkspace: "Promover a espacio de trabajo",
         openContainingDirectory: "Abrir carpeta contenedora",
         moveWorkspace: {
           title: "Mover espacio de trabajo a carpeta",
@@ -756,6 +761,14 @@ export const es: TranslationResources = {
           confirmLabel: "Mover",
           moved: "Chat movido a {{workspace}}",
           failed: "No se pudo mover el chat",
+        },
+        promoteChat: {
+          title: "Promover a espacio de trabajo",
+          body: "Crea un espacio de trabajo en {{cwd}} y mueve este chat allí. Si es un subagente, pasa a ser independiente.",
+          confirmLabel: "Promover",
+          cancel: "Cancelar",
+          promoted: "Chat promovido a {{workspace}}",
+          failed: "No se pudo promover el chat",
         },
         closeAbove: "Cerrar pestañas arriba",
         closeBelow: "Cerrar pestañas a continuación",

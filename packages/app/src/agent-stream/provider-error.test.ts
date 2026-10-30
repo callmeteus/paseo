@@ -11,6 +11,16 @@ describe("provider error classification", () => {
     expect(classifyProviderError("402 payment required")).toBe("usage_limit");
   });
 
+  it("separates an empty balance from a rolling usage window", () => {
+    expect(
+      classifyProviderError(
+        "taste learning failed: POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+      ),
+    ).toBe("credits_exhausted");
+    expect(classifyProviderError("Out of credits")).toBe("credits_exhausted");
+    expect(classifyProviderError("You've reached your 5-hour usage limit")).toBe("usage_limit");
+  });
+
   it("detects authentication and model failures", () => {
     expect(classifyProviderError("401 Unauthorized: invalid API key")).toBe("auth");
     expect(classifyProviderError("Model gpt-5 is not available")).toBe("model_unavailable");
