@@ -257,6 +257,10 @@ export const en = {
           label: "Agent",
           description: "Full coding agent",
         },
+        plan: {
+          label: "Plan",
+          description: "Investigate and produce an implementation plan",
+        },
         ask: {
           label: "Ask",
           description: "Read-only answers",

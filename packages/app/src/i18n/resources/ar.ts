@@ -261,6 +261,10 @@ export const ar: TranslationResources = {
           label: "وكيل",
           description: "وكيل برمجة كامل",
         },
+        plan: {
+          label: "تخطيط",
+          description: "استكشاف وإعداد خطة تنفيذ",
+        },
         ask: {
           label: "اسأل",
           description: "إجابات للقراءة فقط",

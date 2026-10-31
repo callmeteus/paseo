@@ -18,7 +18,7 @@
  * `AgentManager.prepareSessionConfig`.
  */
 
-export type WorkflowModeId = "agent" | "ask" | "debug" | "multitask";
+export type WorkflowModeId = "agent" | "plan" | "ask" | "debug" | "multitask";
 
 export interface WorkflowModeContext {
   agentId: string;
@@ -79,6 +79,20 @@ NOT edit files, run commands, or make changes of any kind. If the user asks for
 a change, describe what you would do and let them switch to Agent mode to apply
 it.`;
 
+const PLAN_PROMPT = `You are in Plan mode.
+
+You are a planning assistant. Investigate the codebase with read-only tools, then
+produce a concrete implementation plan. Do NOT edit files, run mutating commands,
+or make changes of any kind.
+
+The plan must include:
+1. The goal and the relevant files.
+2. Ordered implementation steps naming the functions or components to change.
+3. Risks, edge cases, and anything that needs a decision from the user.
+4. How to verify the change.
+
+Stop after presenting the plan and ask the user to switch to Agent mode to execute it.`;
+
 export const WORKFLOW_MODES: WorkflowMode[] = [
   {
     id: "agent",
@@ -89,6 +103,16 @@ export const WORKFLOW_MODES: WorkflowMode[] = [
     readOnly: false,
     requiresPaseoTools: false,
     prompt: () => "",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    description: "Investigate and produce an implementation plan without making changes.",
+    icon: "todos",
+    color: "#eab308",
+    readOnly: true,
+    requiresPaseoTools: false,
+    prompt: () => PLAN_PROMPT,
   },
   {
     id: "ask",

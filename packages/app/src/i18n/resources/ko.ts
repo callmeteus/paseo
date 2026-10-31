@@ -262,6 +262,10 @@ export const ko: TranslationResources = {
           label: "에이전트",
           description: "전체 코딩 에이전트",
         },
+        plan: {
+          label: "계획",
+          description: "조사하고 구현 계획을 작성",
+        },
         ask: {
           label: "질문",
           description: "읽기 전용 답변",

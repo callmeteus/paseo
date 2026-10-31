@@ -29,9 +29,18 @@ describe("workflow modes", () => {
     expect(prompt).toContain("#region paseo-debug");
   });
 
+  test("plan produces an implementation plan without changes", () => {
+    const prompt = composeWorkflowPrompt("plan", { agentId: "a", cwd: "/repo" });
+    expect(prompt).toContain("Plan mode");
+    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("Do NOT edit files");
+    expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
+  });
+
   test("only known ids validate", () => {
     expect(isWorkflowModeId("multitask")).toBe(true);
-    expect(isWorkflowModeId("plan")).toBe(false);
+    expect(isWorkflowModeId("plan")).toBe(true);
+    expect(isWorkflowModeId("unknown")).toBe(false);
     expect(isWorkflowModeId(null)).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
-import { Bug, Layers, MessageCircle, Sparkles } from "lucide-react-native";
+import { Bug, Layers, ListTodo, MessageCircle, Sparkles } from "lucide-react-native";
 import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,7 +14,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
 
-export type WorkflowModeId = "agent" | "ask" | "debug" | "multitask";
+export type WorkflowModeId = "agent" | "plan" | "ask" | "debug" | "multitask";
 
 export interface WorkflowModeDefinition {
   id: WorkflowModeId;
@@ -32,6 +32,13 @@ export const WORKFLOW_MODES: WorkflowModeDefinition[] = [
     descriptionKey: "agentControls.workflowMode.modes.agent.description",
     color: "#3b82f6",
     icon: Sparkles,
+  },
+  {
+    id: "plan",
+    labelKey: "agentControls.workflowMode.modes.plan.label",
+    descriptionKey: "agentControls.workflowMode.modes.plan.description",
+    color: "#eab308",
+    icon: ListTodo,
   },
   {
     id: "ask",

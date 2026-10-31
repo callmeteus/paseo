@@ -265,6 +265,10 @@ export const ptBR: TranslationResources = {
           label: "Agente",
           description: "Agente de código completo",
         },
+        plan: {
+          label: "Planejar",
+          description: "Investigar e produzir um plano de implementação",
+        },
         ask: {
           label: "Perguntar",
           description: "Respostas somente leitura",

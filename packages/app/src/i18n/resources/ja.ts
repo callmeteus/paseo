@@ -264,6 +264,10 @@ export const ja: TranslationResources = {
           label: "エージェント",
           description: "フルコーディングエージェント",
         },
+        plan: {
+          label: "計画",
+          description: "調査して実装計画を作成",
+        },
         ask: {
           label: "質問",
           description: "読み取り専用の回答",

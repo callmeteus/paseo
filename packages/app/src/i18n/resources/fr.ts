@@ -266,6 +266,10 @@ export const fr: TranslationResources = {
           label: "Agent",
           description: "Agent de code complet",
         },
+        plan: {
+          label: "Planifier",
+          description: "Analyser et produire un plan d'implémentation",
+        },
         ask: {
           label: "Demander",
           description: "Réponses en lecture seule",

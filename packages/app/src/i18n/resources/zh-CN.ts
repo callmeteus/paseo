@@ -261,6 +261,10 @@ export const zhCN: TranslationResources = {
           label: "代理",
           description: "完整编码代理",
         },
+        plan: {
+          label: "规划",
+          description: "调研并制定实施计划",
+        },
         ask: {
           label: "提问",
           description: "只读回答",

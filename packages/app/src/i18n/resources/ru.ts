@@ -264,6 +264,10 @@ export const ru: TranslationResources = {
           label: "Агент",
           description: "Полный агент для кода",
         },
+        plan: {
+          label: "Планировать",
+          description: "Исследовать и составить план реализации",
+        },
         ask: {
           label: "Спросить",
           description: "Ответы только для чтения",

@@ -265,6 +265,10 @@ export const es: TranslationResources = {
           label: "Agente",
           description: "Agente de código completo",
         },
+        plan: {
+          label: "Planificar",
+          description: "Investigar y producir un plan de implementación",
+        },
         ask: {
           label: "Preguntar",
           description: "Respuestas de solo lectura",
