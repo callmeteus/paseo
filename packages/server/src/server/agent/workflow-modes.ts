@@ -9,13 +9,13 @@
  * Each mode contributes a fragment appended to the provider's system prompt.
  * Debug mode also points the agent at the daemon's local log ingest endpoint.
  *
- * `readOnly` and `requiresPaseoTools` describe the mode to clients. The daemon
- * currently enforces Ask through the prompt fragment only; provider-level
- * permission gating still follows the provider mode.
+ * A read-only mode additionally forces the provider's own read-only mode, so
+ * enforcement does not depend on the prompt alone. Providers without a known
+ * read-only mode fail closed instead of silently becoming writable.
  *
  * The mode id is persisted on `AgentSessionConfig.workflowModeId`. The prompt
- * fragment is never persisted; it is recomposed on every launch in
- * `AgentManager.prepareSessionConfig`.
+ * fragment is never persisted; it is composed for every request at dispatch and
+ * again at launch in `AgentManager.prepareSessionConfig`.
  */
 
 export type WorkflowModeId = "agent" | "plan" | "ask" | "debug" | "multitask";
@@ -147,6 +147,38 @@ export const WORKFLOW_MODES: WorkflowMode[] = [
 ];
 
 const BY_ID = new Map(WORKFLOW_MODES.map((m) => [m.id, m]));
+
+/**
+ * Provider modes that make writes impossible, keyed by provider id. A read-only
+ * workflow mode forces this mode; providers without an entry cannot honor a
+ * read-only workflow and fail closed at session creation.
+ */
+const READ_ONLY_PROVIDER_MODE: Record<string, string> = {
+  opencode: "plan",
+  claude: "plan",
+  codex: "read-only",
+  copilot: "https://agentclientprotocol.com/protocol/session-modes#plan",
+  kilo: "plan",
+  cline: "plan",
+};
+
+export function resolveReadOnlyProviderMode(provider: string): string | null {
+  return READ_ONLY_PROVIDER_MODE[provider] ?? null;
+}
+
+/** The provider's normal writable mode, restored when a read-only workflow ends. */
+const DEFAULT_WRITABLE_PROVIDER_MODE: Record<string, string> = {
+  opencode: "build",
+  claude: "default",
+  codex: "auto",
+  copilot: "https://agentclientprotocol.com/protocol/session-modes#agent",
+  kilo: "code",
+  cline: "act",
+};
+
+export function resolveDefaultWritableProviderMode(provider: string): string | null {
+  return DEFAULT_WRITABLE_PROVIDER_MODE[provider] ?? null;
+}
 
 export function getWorkflowMode(id: string | null | undefined): WorkflowMode {
   if (id && BY_ID.has(id as WorkflowModeId)) {

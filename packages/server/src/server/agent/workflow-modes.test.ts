@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 
-import { composeWorkflowPrompt, isWorkflowModeId, WORKFLOW_MODES } from "./workflow-modes.js";
+import {
+  composeWorkflowPrompt,
+  isWorkflowModeId,
+  resolveDefaultWritableProviderMode,
+  resolveReadOnlyProviderMode,
+  WORKFLOW_MODES,
+} from "./workflow-modes.js";
 
 describe("workflow modes", () => {
   test("agent is the default and contributes no prompt", () => {
@@ -35,6 +41,20 @@ describe("workflow modes", () => {
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("Do NOT edit files");
     expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
+  });
+
+  test("read-only workflow modes resolve the provider's own read-only mode", () => {
+    expect(resolveReadOnlyProviderMode("opencode")).toBe("plan");
+    expect(resolveReadOnlyProviderMode("claude")).toBe("plan");
+    expect(resolveReadOnlyProviderMode("codex")).toBe("read-only");
+    expect(resolveReadOnlyProviderMode("cline")).toBe("plan");
+    expect(resolveReadOnlyProviderMode("pi")).toBeNull();
+  });
+
+  test("leaving a read-only workflow restores a writable provider mode", () => {
+    expect(resolveDefaultWritableProviderMode("opencode")).toBe("build");
+    expect(resolveDefaultWritableProviderMode("claude")).toBe("default");
+    expect(resolveDefaultWritableProviderMode("pi")).toBeNull();
   });
 
   test("only known ids validate", () => {

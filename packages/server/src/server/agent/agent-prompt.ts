@@ -15,6 +15,7 @@ export type AgentRunController = Pick<
   AgentManager,
   | "getAgent"
   | "planGoalTurn"
+  | "planWorkflowTurn"
   | "tryRunOutOfBand"
   | "hasInFlightRun"
   | "replaceAgentRun"
@@ -81,6 +82,16 @@ async function startOrReplaceRun(
   return { iterator, replaced };
 }
 
+function promptText(prompt: AgentPromptInput): string {
+  if (typeof prompt === "string") {
+    return prompt;
+  }
+  return prompt
+    .flatMap((block) => (block.type === "text" && !("mimeType" in block) ? [block.text] : []))
+    .join("\n")
+    .trim();
+}
+
 async function drainAgentRunIterator(
   iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>,
 ): Promise<void> {
@@ -115,6 +126,28 @@ async function planGoalDispatch(
   };
 }
 
+function applyWorkflowDispatch(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+  fallbackSubmittedText: string,
+): { prompt: AgentPromptInput; options: StartAgentRunOptions | undefined } {
+  const workflowPrompt = agentManager.planWorkflowTurn(agentId, prompt);
+  if (!workflowPrompt) return { prompt, options };
+  return {
+    prompt: workflowPrompt,
+    options: {
+      ...options,
+      runOptions: {
+        ...options?.runOptions,
+        clientMessageId: options?.runOptions?.clientMessageId ?? randomUUID(),
+        submittedPromptText: options?.runOptions?.submittedPromptText ?? fallbackSubmittedText,
+      },
+    },
+  };
+}
+
 export async function startAgentRun(
   agentManager: AgentRunController,
   agentId: string,
@@ -138,6 +171,7 @@ export async function startAgentRun(
   // Daemon-level `/goal` runs before the out-of-band intercept: setting a goal
   // rewrites the prompt into a real turn, while pause/resume/clear stay
   // out-of-band. Both paths work for every provider.
+  const originalSubmittedText = promptText(prompt);
   ({ prompt, options } = await planGoalDispatch(agentManager, agentId, prompt, options));
   // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
   // in-flight turn — replaceAgentRun would interrupt the running turn. The
@@ -146,6 +180,16 @@ export async function startAgentRun(
     options?.onDispatch?.("out_of_band");
     return { disposition: "out_of_band" };
   }
+  // Re-assert the active workflow on every dispatch. The provider mode switch
+  // is the enforcement; this instruction keeps the role explicit mid-session
+  // and applies immediately when the user changes the workflow.
+  ({ prompt, options } = applyWorkflowDispatch(
+    agentManager,
+    agentId,
+    prompt,
+    options,
+    originalSubmittedText,
+  ));
   try {
     return await startAgentRunInner(agentManager, agentId, prompt, logger, options);
   } catch (error) {

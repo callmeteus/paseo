@@ -107,7 +107,13 @@ import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtim
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
-import { composeWorkflowPrompt, isWorkflowModeId } from "./workflow-modes.js";
+import {
+  composeWorkflowPrompt,
+  getWorkflowMode,
+  isWorkflowModeId,
+  resolveDefaultWritableProviderMode,
+  resolveReadOnlyProviderMode,
+} from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -132,6 +138,14 @@ const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
 };
 
 type TimeoutResult = "completed" | "timed_out";
+
+function prependWorkflowInstruction(prompt: AgentPromptInput, fragment: string): AgentPromptInput {
+  const block = `<paseo-workflow>\n${fragment}\n</paseo-workflow>`;
+  if (typeof prompt === "string") {
+    return `${block}\n\n${prompt}`;
+  }
+  return [{ type: "text", text: block }, ...prompt];
+}
 
 function submittedPromptText(prompt: AgentPromptInput): string {
   if (typeof prompt === "string") {
@@ -1106,6 +1120,8 @@ export class AgentManager {
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
+  /** Provider mode to restore when a read-only workflow mode is left. */
+  private readonly readOnlyWorkflowPreviousMode = new Map<string, string | null>();
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
@@ -2555,9 +2571,10 @@ export class AgentManager {
   }
 
   /**
-   * Switches the daemon-level workflow mode. The prompt fragment is recomposed
-   * on the next launch; a live runtime keeps its current prompt until then.
-   * Passing null restores the default `agent` mode.
+   * Switches the daemon-level workflow mode. Read-only modes also switch the
+   * live provider session to its own read-only mode; the workflow instruction
+   * itself is prepended to every prompt at dispatch. Passing null restores the
+   * default `agent` mode and the provider mode it had before Plan/Ask.
    */
   async setAgentWorkflowMode(
     agentId: string,
@@ -2571,6 +2588,34 @@ export class AgentManager {
 
     const liveAgent = this.getAgent(agentId);
     if (liveAgent) {
+      const currentWorkflowId = liveAgent.config.workflowModeId ?? null;
+      if (currentWorkflowId === normalized) {
+        return normalized;
+      }
+      const currentWorkflow = getWorkflowMode(currentWorkflowId);
+      const nextWorkflow = getWorkflowMode(normalized);
+      if (nextWorkflow.readOnly) {
+        const readOnlyModeId = resolveReadOnlyProviderMode(liveAgent.provider);
+        if (!readOnlyModeId) {
+          throw new Error(
+            `Workflow mode '${nextWorkflow.id}' is read-only, but provider '${liveAgent.provider}' has no known read-only mode`,
+          );
+        }
+        if (!currentWorkflow.readOnly) {
+          this.readOnlyWorkflowPreviousMode.set(agentId, liveAgent.currentModeId);
+        }
+        // Switch the provider's own mode; a running turn keeps running, but its
+        // next edit request is rejected by the provider's read-only mode.
+        await this.setAgentMode(agentId, readOnlyModeId);
+      } else if (currentWorkflow.readOnly) {
+        const previousModeId =
+          this.readOnlyWorkflowPreviousMode.get(agentId) ??
+          resolveDefaultWritableProviderMode(liveAgent.provider);
+        this.readOnlyWorkflowPreviousMode.delete(agentId);
+        if (previousModeId) {
+          await this.setAgentMode(agentId, previousModeId);
+        }
+      }
       liveAgent.config.workflowModeId = normalized ?? undefined;
       this.touchUpdatedAt(liveAgent);
       this.emitState(liveAgent);
@@ -3018,6 +3063,30 @@ export class AgentManager {
    * immediately; control subcommands return null and are claimed by
    * `tryRunOutOfBand` without interrupting a running turn.
    */
+  /**
+   * Prepends the active workflow instruction to a provider-facing prompt.
+   * Returns null for the default Agent workflow, which contributes nothing.
+   */
+  planWorkflowTurn(agentId: string, prompt: AgentPromptInput): AgentPromptInput | null {
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+    // Agent-to-agent envelopes and slash commands must reach the provider
+    // untouched; wrapping them would break their parsers.
+    if (typeof prompt === "string") {
+      if (parseAgentMessage(prompt)) return null;
+      if (prompt.trimStart().startsWith("/")) return null;
+    }
+    const fragment = composeWorkflowPrompt(agent.config.workflowModeId, {
+      agentId,
+      cwd: agent.cwd,
+      debugEndpoint: this.debugIngestBaseUrl ? `${this.debugIngestBaseUrl}/${agentId}` : undefined,
+      debugLogPath: this.debugLogPathFor(agentId),
+      debugSessionId: agentId,
+    });
+    if (!fragment) return null;
+    return prependWorkflowInstruction(prompt, fragment);
+  }
+
   async planGoalTurn(agentId: string, prompt: AgentPromptInput): Promise<GoalTurnPlan | null> {
     if (typeof prompt !== "string") return null;
     const command = parseGoalCommand(prompt);
@@ -6493,10 +6562,22 @@ export class AgentManager {
     agentId: string,
     options: { env?: Record<string, string>; purpose?: AgentResumePurpose } = {},
   ): Promise<PreparedSessionConfig> {
-    const storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), {
+    let storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), {
       env: options.env,
       purpose: options.purpose,
     });
+    const workflowMode = getWorkflowMode(storedConfig.workflowModeId);
+    if (workflowMode.readOnly) {
+      const readOnlyModeId = resolveReadOnlyProviderMode(storedConfig.provider);
+      if (!readOnlyModeId) {
+        throw new Error(
+          `Workflow mode '${workflowMode.id}' is read-only, but provider '${storedConfig.provider}' has no known read-only mode`,
+        );
+      }
+      // The provider mode is the enforcement; the workflow prompt only explains
+      // the role. Resuming a writable session in Plan/Ask would let it edit.
+      storedConfig = { ...storedConfig, modeId: readOnlyModeId };
+    }
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
