@@ -18,42 +18,39 @@ export type WorkflowModeId = "agent" | "ask" | "debug" | "multitask";
 
 export interface WorkflowModeDefinition {
   id: WorkflowModeId;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   color: string;
   icon: AgentControlIcon;
 }
 
-/**
- * Mirrors the daemon's workflow mode table. The labels are product names, so
- * they stay untranslated; descriptions are short and shown in the picker.
- */
+/** Mirrors the daemon's workflow mode table. Labels and descriptions are translated. */
 export const WORKFLOW_MODES: WorkflowModeDefinition[] = [
   {
     id: "agent",
-    label: "Agent",
-    description: "Full coding agent",
+    labelKey: "agentControls.workflowMode.modes.agent.label",
+    descriptionKey: "agentControls.workflowMode.modes.agent.description",
     color: "#3b82f6",
     icon: Sparkles,
   },
   {
     id: "ask",
-    label: "Ask",
-    description: "Read-only answers",
+    labelKey: "agentControls.workflowMode.modes.ask.label",
+    descriptionKey: "agentControls.workflowMode.modes.ask.description",
     color: "#8b5cf6",
     icon: MessageCircle,
   },
   {
     id: "debug",
-    label: "Debug",
-    description: "Hypothesis-driven debugging",
+    labelKey: "agentControls.workflowMode.modes.debug.label",
+    descriptionKey: "agentControls.workflowMode.modes.debug.description",
     color: "#f97316",
     icon: Bug,
   },
   {
     id: "multitask",
-    label: "Multitask",
-    description: "Coordinate parallel sub-agents",
+    labelKey: "agentControls.workflowMode.modes.multitask.label",
+    descriptionKey: "agentControls.workflowMode.modes.multitask.description",
     color: "#22c55e",
     icon: Layers,
   },
@@ -76,6 +73,7 @@ function WorkflowModeComboboxOption({
   active: boolean;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const mode = resolveWorkflowMode(option.id);
   const Icon = mode.icon;
   const leadingSlot = useMemo(
@@ -89,12 +87,12 @@ function WorkflowModeComboboxOption({
   );
   return (
     <ComboboxItem
-      label={option.label}
+      label={t(mode.labelKey)}
       selected={selected}
       active={active}
       onPress={onPress}
       leadingSlot={leadingSlot}
-      description={mode.description}
+      description={t(mode.descriptionKey)}
     />
   );
 }
@@ -119,9 +117,10 @@ export function WorkflowModeControl({
 
   const selected = resolveWorkflowMode(selectedWorkflowModeId);
   const Icon = selected.icon;
+  const selectedLabel = t(selected.labelKey);
   const options = useMemo<ComboboxOption[]>(
-    () => WORKFLOW_MODES.map((mode) => ({ id: mode.id, label: mode.label })),
-    [],
+    () => WORKFLOW_MODES.map((mode) => ({ id: mode.id, label: t(mode.labelKey) })),
+    [t],
   );
 
   const handleOpenChange = useCallback(
@@ -165,14 +164,14 @@ export function WorkflowModeControl({
             iconColor={selected.color}
             surface={surface}
             label={t("agentControls.workflowMode.title")}
-            value={selected.label}
+            value={selectedLabel}
             showToolbarLabel={presentation.showModeLabel}
             showCaret={surface === "toolbar" && presentation.showCarets}
             open={open}
             disabled={disabled}
             onPress={handlePress}
             accessibilityLabel={t("agentControls.workflowMode.selectWithValue", {
-              value: selected.label,
+              value: selectedLabel,
             })}
             testID="workflow-mode-control"
           />
@@ -238,11 +237,14 @@ export function useLiveWorkflowModeControl(
 
 const styles = StyleSheet.create((theme) => ({
   optionLeading: {
-    flexDirection: "row",
+    width: 16,
+    height: 16,
     alignItems: "center",
-    gap: theme.spacing[2],
+    justifyContent: "center",
   },
   colorDot: {
+    position: "absolute",
+    right: -4,
     width: 8,
     height: 8,
     borderRadius: 4,

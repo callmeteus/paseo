@@ -259,6 +259,24 @@ export const ru: TranslationResources = {
       selectWithValue: "Выбрать режим агента ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "Агент",
+          description: "Полный агент для кода",
+        },
+        ask: {
+          label: "Спросить",
+          description: "Ответы только для чтения",
+        },
+        debug: {
+          label: "Отладка",
+          description: "Отладка по гипотезам",
+        },
+        multitask: {
+          label: "Мультизадачность",
+          description: "Координация параллельных субагентов",
+        },
+      },
       title: "Рабочий режим",
       hint: "Изменить режим работы чата",
       selectWithValue: "Выбрать режим работы ({{value}})",
@@ -2639,6 +2657,14 @@ export const ru: TranslationResources = {
           full: "Полностью",
           collapseToolCalls: "Сворачивать вызовы инструментов",
           collapseTurns: "Сворачивать ходы",
+        },
+      },
+      workflowModeSource: {
+        label: "Источник режима работы",
+        description: "Выберите между режимами Paseo и режимами разрешений CLI",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

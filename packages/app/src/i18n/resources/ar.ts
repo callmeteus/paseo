@@ -256,6 +256,24 @@ export const ar: TranslationResources = {
       selectWithValue: "حدد وضع الوكيل ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "وكيل",
+          description: "وكيل برمجة كامل",
+        },
+        ask: {
+          label: "اسأل",
+          description: "إجابات للقراءة فقط",
+        },
+        debug: {
+          label: "تصحيح",
+          description: "تصحيح قائم على الفرضيات",
+        },
+        multitask: {
+          label: "تعدد المهام",
+          description: "تنسيق وكلاء فرعيين متوازيين",
+        },
+      },
       title: "سير العمل",
       hint: "تغيير طريقة عمل هذه المحادثة",
       selectWithValue: "اختيار وضع سير العمل ({{value}})",
@@ -2630,6 +2648,14 @@ export const ar: TranslationResources = {
           full: "كامل",
           collapseToolCalls: "طيّ استدعاءات الأدوات",
           collapseTurns: "طيّ الأدوار",
+        },
+      },
+      workflowModeSource: {
+        label: "مصدر وضع سير العمل",
+        description: "اختر بين أوضاع سير العمل في Paseo وأوضاع صلاحيات CLI",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

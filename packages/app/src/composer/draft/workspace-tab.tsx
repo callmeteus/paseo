@@ -19,6 +19,7 @@ import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liv
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
+import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useDraftStore } from "@/stores/draft-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -54,7 +55,7 @@ import {
   type WorkspaceDraftTabSetup,
 } from "@/workspace-tabs/model";
 import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
-import { useSettings } from "@/hooks/use-settings";
+import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
@@ -201,6 +202,7 @@ async function submitDraftCreateRequest(input: {
   workspaceDirectory: string | null;
   workspaceId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
+  workflowModeSource: WorkflowModeSource;
   composerState: {
     selectedProvider: string | null;
     selectedWorkflowMode: string;
@@ -222,6 +224,7 @@ async function submitDraftCreateRequest(input: {
     workspaceDirectory,
     workspaceId,
     autoSubmitConfig,
+    workflowModeSource,
     composerState,
   } = input;
 
@@ -235,10 +238,13 @@ async function submitDraftCreateRequest(input: {
   if (!provider) {
     throw new Error(input.selectModelMessage);
   }
-  const modeIdOverride = resolveDraftModeIdOverride({
-    autoSubmitConfig,
-    effectiveModeId: composerState.effectiveModeId,
-  });
+  const modeIdOverride =
+    workflowModeSource === "paseo"
+      ? { modeId: FORCED_AGENT_MODE_ID }
+      : resolveDraftModeIdOverride({
+          autoSubmitConfig,
+          effectiveModeId: composerState.effectiveModeId,
+        });
   // A default router overrides the draft's provider/model so new chats rotate
   // (distribution) or start at the top of the chain (fallback).
   const routerTarget = autoSubmitConfig ? null : await resolveDraftRouterTarget(client);
@@ -251,7 +257,7 @@ async function submitDraftCreateRequest(input: {
     provider: route.provider,
     cwd,
     ...modeIdOverride,
-    workflowModeId: composerState.selectedWorkflowMode,
+    workflowModeId: workflowModeSource === "paseo" ? composerState.selectedWorkflowMode : "agent",
     model: autoSubmitConfig?.model ?? route.model,
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
@@ -284,6 +290,7 @@ function buildDraftAgentSnapshot(input: {
   tabId: string;
   workspaceDirectory: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
+  workflowModeSource: WorkflowModeSource;
   composerState: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -293,16 +300,21 @@ function buildDraftAgentSnapshot(input: {
   };
   selectModelMessage: string;
 }): Agent {
-  const { attempt, serverId, tabId, workspaceDirectory, autoSubmitConfig, composerState } = input;
+  const { attempt, serverId, tabId, workspaceDirectory, autoSubmitConfig, workflowModeSource } =
+    input;
+  const { composerState } = input;
   invariant(workspaceDirectory, "Workspace directory is required");
   const now = attempt.timestamp;
   const model = autoSubmitConfig?.model ?? (composerState.effectiveModelId || null);
   const thinkingOptionId =
     autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || null);
-  const modeId = resolveDraftModeId({
-    autoSubmitConfig,
-    effectiveModeId: composerState.effectiveModeId,
-  });
+  const modeId =
+    workflowModeSource === "paseo"
+      ? FORCED_AGENT_MODE_ID
+      : resolveDraftModeId({
+          autoSubmitConfig,
+          effectiveModeId: composerState.effectiveModeId,
+        });
   const provider = autoSubmitConfig?.provider ?? composerState.selectedProvider;
   if (!provider) {
     throw new Error(input.selectModelMessage);
@@ -485,6 +497,7 @@ export function WorkspaceDraftAgentTab({
   });
   const draftAttachmentScopeKey = useDraftWorkspaceAttachmentScopeKey(draftId);
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
+  const workflowModeSource = useSettings((settings) => settings.workflowModeSource);
   const attachmentScopeKeys = useMemo(
     () => [draftAttachmentScopeKey, workspaceAttachmentScopeKey].filter(Boolean),
     [draftAttachmentScopeKey, workspaceAttachmentScopeKey],
@@ -547,6 +560,7 @@ export function WorkspaceDraftAgentTab({
         tabId,
         workspaceDirectory: draftWorkingDirectory,
         autoSubmitConfig,
+        workflowModeSource,
         composerState,
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
@@ -566,6 +580,7 @@ export function WorkspaceDraftAgentTab({
         workspaceDirectory: draftWorkingDirectory,
         workspaceId: workspaceFields?.id ?? null,
         autoSubmitConfig,
+        workflowModeSource,
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),

@@ -53,6 +53,7 @@ import {
   type Settings,
   type SidebarWorkspaceTrailing,
   type SettingsDeps,
+  type WorkflowModeSource,
   type WorkspaceTitleSource,
 } from "./storage";
 
@@ -97,6 +98,7 @@ export type {
   Settings,
   SettingsDeps,
   SidebarWorkspaceTrailing,
+  WorkflowModeSource,
   WorkspaceTitleSource,
 };
 

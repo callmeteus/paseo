@@ -8,9 +8,10 @@ import {
   SettingsSwitch,
 } from "@/components/settings";
 import { isNative } from "@/constants/platform";
-import { useAppSettings, type ChatDisplay } from "@/hooks/use-settings";
+import { useAppSettings, type ChatDisplay, type WorkflowModeSource } from "@/hooks/use-settings";
 
 const CHAT_DISPLAYS: readonly ChatDisplay[] = ["full", "collapseToolCalls", "collapseTurns"];
+const WORKFLOW_MODE_SOURCES: readonly WorkflowModeSource[] = ["paseo", "cli"];
 
 export function ChatSection() {
   const { t } = useTranslation();
@@ -27,6 +28,18 @@ export function ChatSection() {
 
   const changeChatDisplay = useCallback(
     (chatDisplay: ChatDisplay) => void updateSettings({ chatDisplay }),
+    [updateSettings],
+  );
+  const workflowModeSourceOptions = useMemo(
+    () =>
+      WORKFLOW_MODE_SOURCES.map((value) => ({
+        value,
+        label: t(`settings.general.workflowModeSource.options.${value}`),
+      })),
+    [t],
+  );
+  const changeWorkflowModeSource = useCallback(
+    (workflowModeSource: WorkflowModeSource) => void updateSettings({ workflowModeSource }),
     [updateSettings],
   );
   const changeAutoExpandReasoning = useCallback(
@@ -54,6 +67,13 @@ export function ChatSection() {
             value={settings.chatDisplay}
             options={chatDisplayOptions}
             onValueChange={changeChatDisplay}
+          />
+          <SettingsSelect
+            label={t("settings.general.workflowModeSource.label")}
+            hint={t("settings.general.workflowModeSource.description")}
+            value={settings.workflowModeSource}
+            options={workflowModeSourceOptions}
+            onValueChange={changeWorkflowModeSource}
           />
           {isNative ? null : (
             <SettingsSwitch

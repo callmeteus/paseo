@@ -102,6 +102,8 @@ export interface AppSettings {
   usage: UsagePreferences;
   autoExpandReasoning: boolean;
   chatDisplay: ChatDisplay;
+  /** Which mode picker the composer shows: Paseo workflow modes or CLI permission modes. */
+  workflowModeSource: WorkflowModeSource;
   chatOutlineEnabled: boolean;
   vimKeybindings: boolean;
   filePanelAssociations: Record<string, string>;
@@ -109,6 +111,8 @@ export interface AppSettings {
   openInSidePane: OpenInSidePanePreferences;
   pullRequestOpenLocation: PullRequestOpenLocation;
 }
+
+export type WorkflowModeSource = "paseo" | "cli";
 
 export type AppSettingsUpdate =
   | Partial<AppSettings>
@@ -158,6 +162,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   usage: DEFAULT_USAGE_PREFERENCES,
   autoExpandReasoning: false,
   chatDisplay: "collapseTurns",
+  workflowModeSource: "paseo",
   chatOutlineEnabled: true,
   vimKeybindings: false,
   filePanelAssociations: {},
@@ -254,6 +259,7 @@ const StoredAppSettingsSchema = z
     usage: UsagePreferencesSchema,
     autoExpandReasoning: z.boolean().catch(false),
     chatDisplay: z.enum(["full", "collapseToolCalls", "collapseTurns"]).optional().catch("full"),
+    workflowModeSource: z.enum(["paseo", "cli"]).catch("paseo"),
     // COMPAT(toolCallDetailLevel): replaced by chatDisplay in v0.13, remove after 2027-04-24.
     toolCallDetailLevel: z
       .enum(["overview", "detailed"])

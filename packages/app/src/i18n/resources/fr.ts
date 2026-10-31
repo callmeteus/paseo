@@ -261,6 +261,24 @@ export const fr: TranslationResources = {
       selectWithValue: "Choisir le mode de l’agent ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "Agent",
+          description: "Agent de code complet",
+        },
+        ask: {
+          label: "Demander",
+          description: "Réponses en lecture seule",
+        },
+        debug: {
+          label: "Déboguer",
+          description: "Débogage par hypothèses",
+        },
+        multitask: {
+          label: "Multitâche",
+          description: "Coordonner des sous-agents en parallèle",
+        },
+      },
       title: "Flux",
       hint: "Changer le fonctionnement de ce chat",
       selectWithValue: "Sélectionner le mode de flux ({{value}})",
@@ -2653,6 +2671,15 @@ export const fr: TranslationResources = {
           full: "Complet",
           collapseToolCalls: "Réduire les appels d’outils",
           collapseTurns: "Réduire les tours",
+        },
+      },
+      workflowModeSource: {
+        label: "Source du mode de flux",
+        description:
+          "Choisissez entre les modes de flux Paseo et les modes d'autorisation de la CLI",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

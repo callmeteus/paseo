@@ -257,6 +257,24 @@ export const ko: TranslationResources = {
       selectWithValue: "에이전트 모드 선택 ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "에이전트",
+          description: "전체 코딩 에이전트",
+        },
+        ask: {
+          label: "질문",
+          description: "읽기 전용 답변",
+        },
+        debug: {
+          label: "디버그",
+          description: "가설 기반 디버깅",
+        },
+        multitask: {
+          label: "멀티태스크",
+          description: "병렬 하위 에이전트 조정",
+        },
+      },
       title: "워크플로",
       hint: "이 채팅의 작동 방식 변경",
       selectWithValue: "워크플로 모드 선택 ({{value}})",
@@ -2610,6 +2628,14 @@ export const ko: TranslationResources = {
           full: "전체",
           collapseToolCalls: "도구 호출 접기",
           collapseTurns: "턴 접기",
+        },
+      },
+      workflowModeSource: {
+        label: "워크플로 모드 소스",
+        description: "Paseo 워크플로 모드와 CLI 권한 모드를 전환합니다",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

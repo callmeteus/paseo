@@ -259,6 +259,24 @@ export const ja: TranslationResources = {
       selectWithValue: "エージェントモードを選択（{{value}}）",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "エージェント",
+          description: "フルコーディングエージェント",
+        },
+        ask: {
+          label: "質問",
+          description: "読み取り専用の回答",
+        },
+        debug: {
+          label: "デバッグ",
+          description: "仮説駆動のデバッグ",
+        },
+        multitask: {
+          label: "マルチタスク",
+          description: "並列サブエージェントの調整",
+        },
+      },
       title: "ワークフロー",
       hint: "このチャットの動作を変更",
       selectWithValue: "ワークフローモードを選択 ({{value}})",
@@ -2625,6 +2643,14 @@ export const ja: TranslationResources = {
           full: "すべて",
           collapseToolCalls: "ツール呼び出しを折りたたむ",
           collapseTurns: "ターンを折りたたむ",
+        },
+      },
+      workflowModeSource: {
+        label: "ワークフローモードのソース",
+        description: "Paseo のワークフローモードと CLI の権限モードを切り替えます",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

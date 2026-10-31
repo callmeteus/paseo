@@ -25,6 +25,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
 import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
+import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
@@ -37,6 +38,7 @@ import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { useSessionStore } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature } from "@/runtime/host-features";
+import { useAppSettings } from "@/hooks/use-settings";
 import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
@@ -239,6 +241,51 @@ function toCommandCenterModes(modeControl: AgentModeControlValue | null) {
 
 function getModeProviderDefinitions(modeControl: AgentModeControlValue | null) {
   return modeControl?.providerDefinitions ?? EMPTY_AGENT_PROVIDER_DEFINITIONS;
+}
+
+function useModeControls(serverId: string, agentId: string, supportsWorkflowModes: boolean) {
+  const workflowModeSource = useAppSettings().settings.workflowModeSource;
+  const usesPaseoWorkflowModes = workflowModeSource === "paseo" && supportsWorkflowModes;
+  const liveModeControl = useLiveAgentModeControl(serverId, agentId);
+  const liveWorkflowModeControl = useLiveWorkflowModeControl(serverId, agentId);
+  return {
+    usesPaseoWorkflowModes,
+    modeControl: usesPaseoWorkflowModes ? null : liveModeControl,
+    workflowModeControl: usesPaseoWorkflowModes ? liveWorkflowModeControl : null,
+  };
+}
+
+/**
+ * The product hides the provider permission-mode picker and always runs chats
+ * in Build while Paseo workflow modes are active. Providers that do not
+ * advertise Build keep their default mode.
+ */
+function useForceAgentMode(serverId: string, agentId: string, enabled: boolean): void {
+  const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const agent = useSessionStore(
+    useShallow((state) => {
+      const current = state.sessions[serverId]?.agents?.get(agentId);
+      if (!current) return null;
+      return {
+        currentModeId: current.currentModeId,
+        supportsBuild: current.availableModes.some((mode) => mode.id === FORCED_AGENT_MODE_ID),
+      };
+    }),
+  );
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      !client ||
+      !agent?.supportsBuild ||
+      agent.currentModeId === FORCED_AGENT_MODE_ID
+    ) {
+      return;
+    }
+    void client.setAgentMode(agentId, FORCED_AGENT_MODE_ID).catch((error: unknown) => {
+      console.warn("[AgentControls] force build mode failed", error);
+    });
+  }, [agent, agentId, client, enabled]);
 }
 
 function getFeatureIconColor(
@@ -1708,9 +1755,13 @@ export const AgentControls = memo(function AgentControls({
   const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
-  const modeControl = useLiveAgentModeControl(serverId, agentId);
   const supportsWorkflowModes = useHostFeature(serverId, "workflowModes");
-  const workflowModeControl = useLiveWorkflowModeControl(serverId, agentId);
+  const { usesPaseoWorkflowModes, modeControl, workflowModeControl } = useModeControls(
+    serverId,
+    agentId,
+    supportsWorkflowModes,
+  );
+  useForceAgentMode(serverId, agentId, usesPaseoWorkflowModes);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
 
@@ -2070,7 +2121,7 @@ export const AgentControls = memo(function AgentControls({
         onDropdownClose={onDropdownClose}
         disabled={anyTrue(client === null)}
         modeControl={modeControl}
-        workflowModeControl={supportsWorkflowModes ? workflowModeControl : null}
+        workflowModeControl={workflowModeControl}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
         onRouterPicked={handleRouterPicked}
@@ -2151,9 +2202,12 @@ export function DraftAgentControls({
   const profileEditor = useAgentProfileEditor(modelSelectorServerId);
   const profileActions = resolveAgentProfileEditorActions(agentProfiles !== null, profileEditor);
 
+  const workflowModeSource = useAppSettings().settings.workflowModeSource;
+  const supportsWorkflowModes = useHostFeature(modelSelectorServerId, "workflowModes");
+  const usesPaseoWorkflowModes = workflowModeSource === "paseo" && supportsWorkflowModes;
   const modeControl = useMemo<AgentModeControlValue | null>(
     () =>
-      selectedProvider && modeOptions.length > 0
+      !usesPaseoWorkflowModes && selectedProvider && modeOptions.length > 0
         ? {
             provider: selectedProvider,
             providerDefinitions,
@@ -2163,20 +2217,26 @@ export function DraftAgentControls({
             disabled,
           }
         : null,
-    [selectedProvider, providerDefinitions, modeOptions, selectedMode, onSelectMode, disabled],
+    [
+      usesPaseoWorkflowModes,
+      selectedProvider,
+      providerDefinitions,
+      modeOptions,
+      selectedMode,
+      onSelectMode,
+      disabled,
+    ],
   );
-
-  const supportsWorkflowModes = useHostFeature(modelSelectorServerId, "workflowModes");
   const workflowModeControl = useMemo<WorkflowModeControlValue | null>(
     () =>
-      supportsWorkflowModes
+      usesPaseoWorkflowModes
         ? {
             selectedWorkflowModeId: selectedWorkflowMode,
             onSelectWorkflowMode,
             disabled,
           }
         : null,
-    [selectedWorkflowMode, onSelectWorkflowMode, disabled, supportsWorkflowModes],
+    [selectedWorkflowMode, onSelectWorkflowMode, disabled, usesPaseoWorkflowModes],
   );
 
   return (

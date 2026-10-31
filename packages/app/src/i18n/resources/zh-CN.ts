@@ -256,6 +256,24 @@ export const zhCN: TranslationResources = {
       selectWithValue: "选择 Agent mode（{{value}}）",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "代理",
+          description: "完整编码代理",
+        },
+        ask: {
+          label: "提问",
+          description: "只读回答",
+        },
+        debug: {
+          label: "调试",
+          description: "基于假设的调试",
+        },
+        multitask: {
+          label: "多任务",
+          description: "协调并行子代理",
+        },
+      },
       title: "工作流",
       hint: "更改此对话的工作方式",
       selectWithValue: "选择工作流模式 ({{value}})",
@@ -2568,6 +2586,14 @@ export const zhCN: TranslationResources = {
           full: "完整",
           collapseToolCalls: "折叠工具调用",
           collapseTurns: "折叠轮次",
+        },
+      },
+      workflowModeSource: {
+        label: "工作流模式来源",
+        description: "在 Paseo 工作流模式与 CLI 权限模式之间切换",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

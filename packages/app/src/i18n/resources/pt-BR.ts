@@ -260,6 +260,24 @@ export const ptBR: TranslationResources = {
       selectWithValue: "Selecionar modo do agente ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "Agente",
+          description: "Agente de código completo",
+        },
+        ask: {
+          label: "Perguntar",
+          description: "Respostas somente leitura",
+        },
+        debug: {
+          label: "Depurar",
+          description: "Depuração por hipóteses",
+        },
+        multitask: {
+          label: "Multitarefa",
+          description: "Coordenar subagentes em paralelo",
+        },
+      },
       title: "Fluxo",
       hint: "Alterar como este chat funciona",
       selectWithValue: "Selecionar modo de fluxo ({{value}})",
@@ -2636,6 +2654,14 @@ export const ptBR: TranslationResources = {
           full: "Completo",
           collapseToolCalls: "Recolher chamadas de ferramentas",
           collapseTurns: "Recolher turnos",
+        },
+      },
+      workflowModeSource: {
+        label: "Origem do modo de fluxo",
+        description: "Escolha entre os modos de fluxo do Paseo e os modos de permissão da CLI",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {

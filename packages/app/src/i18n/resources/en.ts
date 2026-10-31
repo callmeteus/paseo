@@ -252,6 +252,24 @@ export const en = {
       selectWithValue: "Select agent mode ({{value}})",
     },
     workflowMode: {
+      modes: {
+        agent: {
+          label: "Agent",
+          description: "Full coding agent",
+        },
+        ask: {
+          label: "Ask",
+          description: "Read-only answers",
+        },
+        debug: {
+          label: "Debug",
+          description: "Hypothesis-driven debugging",
+        },
+        multitask: {
+          label: "Multitask",
+          description: "Coordinate parallel sub-agents",
+        },
+      },
       title: "Workflow",
       hint: "Change how this chat works",
       selectWithValue: "Select workflow mode ({{value}})",
@@ -2720,6 +2738,14 @@ export const en = {
           full: "Full",
           collapseToolCalls: "Collapse tool calls",
           collapseTurns: "Collapse turns",
+        },
+      },
+      workflowModeSource: {
+        label: "Workflow mode source",
+        description: "Choose between Paseo workflow modes and CLI permission modes",
+        options: {
+          paseo: "Paseo",
+          cli: "CLI",
         },
       },
       language: {
