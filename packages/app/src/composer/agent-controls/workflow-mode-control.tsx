@@ -87,7 +87,6 @@ function WorkflowModeComboboxOption({
     () => (
       <View style={styles.optionLeading}>
         <Icon size={16} color={mode.color} />
-        <View style={[styles.colorDot, { backgroundColor: mode.color }]} />
       </View>
     ),
     [Icon, mode.color],
@@ -248,13 +247,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 16,
     alignItems: "center",
     justifyContent: "center",
-  },
-  colorDot: {
-    position: "absolute",
-    right: -4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   tooltipRow: {
     flexDirection: "row",
