@@ -6,6 +6,7 @@ export interface WorkspaceDraftTabSetup {
   provider: AgentProvider;
   cwd: string;
   modeId: string | null;
+  workflowModeId?: string | null;
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;

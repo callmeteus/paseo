@@ -70,6 +70,7 @@ const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
 interface AutoSubmitConfig {
   provider: string;
   modeId: string | null;
+  workflowModeId: string | null;
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
@@ -79,6 +80,7 @@ function resolveAutoSubmitConfig(
   pending: {
     provider: string;
     modeId?: string | null;
+    workflowModeId?: string | null;
     model?: string | null;
     thinkingOptionId?: string | null;
     featureValues?: Record<string, unknown>;
@@ -88,6 +90,7 @@ function resolveAutoSubmitConfig(
   return {
     provider: pending.provider,
     modeId: pending.modeId ?? null,
+    workflowModeId: pending.workflowModeId ?? null,
     model: pending.model ?? null,
     thinkingOptionId: pending.thinkingOptionId ?? null,
     featureValues: pending.featureValues ?? {},
@@ -238,6 +241,8 @@ async function submitDraftCreateRequest(input: {
   if (!provider) {
     throw new Error(input.selectModelMessage);
   }
+  const selectedWorkflowMode =
+    autoSubmitConfig?.workflowModeId ?? composerState.selectedWorkflowMode;
   const modeIdOverride =
     workflowModeSource === "paseo"
       ? { modeId: FORCED_AGENT_MODE_ID }
@@ -257,7 +262,7 @@ async function submitDraftCreateRequest(input: {
     provider: route.provider,
     cwd,
     ...modeIdOverride,
-    workflowModeId: workflowModeSource === "paseo" ? composerState.selectedWorkflowMode : "agent",
+    workflowModeId: workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
     model: autoSubmitConfig?.model ?? route.model,
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
@@ -296,6 +301,7 @@ function buildDraftAgentSnapshot(input: {
     effectiveThinkingOptionId: string | null;
     effectiveModeId: string;
     selectedProvider: string | null;
+    selectedWorkflowMode: string;
     agentControls: { features?: Agent["features"] };
   };
   selectModelMessage: string;
@@ -319,6 +325,8 @@ function buildDraftAgentSnapshot(input: {
   if (!provider) {
     throw new Error(input.selectModelMessage);
   }
+  const selectedWorkflowMode =
+    autoSubmitConfig?.workflowModeId ?? composerState.selectedWorkflowMode;
   return {
     serverId,
     id: tabId,
@@ -331,6 +339,7 @@ function buildDraftAgentSnapshot(input: {
     lastActivityAt: now,
     capabilities: DRAFT_CAPABILITIES,
     currentModeId: modeId,
+    workflowModeId: workflowModeSource === "paseo" ? selectedWorkflowMode : null,
     availableModes: [],
     pendingPermissions: [],
     persistence: null,

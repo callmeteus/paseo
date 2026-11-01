@@ -21,6 +21,7 @@ export interface PendingWorkspaceDraftSubmission {
   clientMessageId: string;
   timestamp: number;
   modeId?: string;
+  workflowModeId?: string;
   model?: string;
   thinkingOptionId?: string;
   featureValues?: Record<string, unknown>;

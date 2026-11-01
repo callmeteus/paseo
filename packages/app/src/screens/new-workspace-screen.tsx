@@ -15,6 +15,8 @@ import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Composer } from "@/composer";
 import { ComposerDock } from "@/composer/dock";
+import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { useComposerEditingSession, useComposerFullscreen } from "@/composer/editing-session";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import {
@@ -269,6 +271,7 @@ interface WorkspaceDraftSubmissionConfig {
   cwd: string;
   provider: AgentProvider;
   modeId: string | null;
+  workflowModeId: string | null;
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown> | undefined;
@@ -340,6 +343,7 @@ async function createMultiplicityWorkspace(input: {
 interface CreateChatAgentInput {
   payload: MessagePayload;
   composerState: ReturnType<typeof useAgentInputDraft>["composerState"];
+  workflowModeSource: WorkflowModeSource;
   forkDraftSetup?: PendingWorkspaceDraftSetup | null;
   ensureWorkspace: (input: {
     cwd: string;
@@ -372,6 +376,7 @@ function buildWorkspaceDraftSetupFromComposer(input: {
     provider: input.provider,
     cwd: input.cwd,
     modeId: input.composerState.effectiveModeId || null,
+    workflowModeId: input.composerState.selectedWorkflowMode,
     model: input.composerState.effectiveModelId || null,
     thinkingOptionId: input.composerState.effectiveThinkingOptionId || null,
     featureValues: input.composerState.featureValues ?? {},
@@ -405,6 +410,7 @@ function buildComposerInitialValues(input: {
     return {
       provider: input.initialSetup.provider,
       modeId: input.initialSetup.modeId,
+      workflowModeId: input.initialSetup.workflowModeId,
       model: input.initialSetup.model,
       thinkingOptionId: input.initialSetup.thinkingOptionId,
     };
@@ -424,7 +430,8 @@ function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome>
 }
 
 async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
-  const { payload, composerState, ensureWorkspace, serverId, clearDraft } = input;
+  const { payload, composerState, workflowModeSource, ensureWorkspace, serverId, clearDraft } =
+    input;
   const clearConsumedDraft = captureWorkspaceDraftCleanup(input);
   const { text, attachments, cwd } = payload;
   if (!composerState) {
@@ -447,11 +454,17 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   const images = await encodeImages(wirePayload.images);
   let navigated = false;
   let outcome: SubmitOutcome = "background";
+  const usesPaseoWorkflowModes = workflowModeSource === "paseo";
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
     config: {
       provider,
       cwd,
-      modeId: composerState.effectiveModeId || undefined,
+      modeId: usesPaseoWorkflowModes
+        ? FORCED_AGENT_MODE_ID
+        : composerState.effectiveModeId || undefined,
+      ...(usesPaseoWorkflowModes && composerState.selectedWorkflowMode !== "agent"
+        ? { workflowModeId: composerState.selectedWorkflowMode }
+        : {}),
       model: composerState.effectiveModelId || undefined,
       thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
       featureValues: composerState.featureValues,
@@ -565,6 +578,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
       cwd: initialSetup.cwd,
       provider: initialSetup.provider,
       modeId: initialSetup.modeId,
+      workflowModeId: initialSetup.workflowModeId ?? null,
       model: initialSetup.model,
       thinkingOptionId: initialSetup.thinkingOptionId,
       featureValues: initialSetup.featureValues,
@@ -575,6 +589,7 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
     cwd: workspaceDirectory,
     provider,
     modeId: composerState.effectiveModeId || null,
+    workflowModeId: composerState.selectedWorkflowMode,
     model: composerState.effectiveModelId || null,
     thinkingOptionId: composerState.effectiveThinkingOptionId || null,
     featureValues: composerState.featureValues,
@@ -633,6 +648,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     clientMessageId,
     timestamp,
     ...(submission.modeId ? { modeId: submission.modeId } : {}),
+    ...(submission.workflowModeId ? { workflowModeId: submission.workflowModeId } : {}),
     ...(submission.model ? { model: submission.model } : {}),
     ...(submission.thinkingOptionId ? { thinkingOptionId: submission.thinkingOptionId } : {}),
     ...(submission.featureValues ? { featureValues: submission.featureValues } : {}),
@@ -1000,6 +1016,7 @@ export function NewWorkspaceScreen({
     }),
   });
   const composerState = chatDraft.composerState;
+  const workflowModeSource = useSettings((settings) => settings.workflowModeSource);
   const [pickerSelection, dispatchPickerSelection] = useReducer(
     reducePickerSelection,
     initialPickerSelectionState,
@@ -1320,6 +1337,7 @@ export function NewWorkspaceScreen({
         const outcome = await runCreateChatAgent({
           payload,
           composerState,
+          workflowModeSource,
           forkDraftSetup,
           ensureWorkspace,
           serverId: selectedServerId,
@@ -1362,6 +1380,7 @@ export function NewWorkspaceScreen({
       toast,
       updateFormPreferences,
       withConnectedClient,
+      workflowModeSource,
     ],
   );
 

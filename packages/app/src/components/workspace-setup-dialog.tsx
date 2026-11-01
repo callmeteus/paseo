@@ -9,6 +9,8 @@ import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { Composer } from "@/composer";
+import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { ICON_SIZE } from "@/styles/theme";
 import { useToast } from "@/contexts/toast-context";
@@ -123,11 +125,13 @@ function buildCreateAgentOptions({
   workspaceDirectory,
   workspaceId,
   provider,
+  workflowModeSource,
 }: {
   composerState: {
     effectiveModeId: string;
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
+    selectedWorkflowMode: string;
   };
   text: string;
   attachments: NonNullable<CreateAgentRequestOptions["attachments"]>;
@@ -135,12 +139,20 @@ function buildCreateAgentOptions({
   workspaceDirectory: string;
   workspaceId: string;
   provider: CreateAgentRequestOptions["provider"];
+  workflowModeSource: WorkflowModeSource;
 }): CreateAgentRequestOptions {
+  const usesPaseoWorkflowModes = workflowModeSource === "paseo";
+  const modeId = usesPaseoWorkflowModes
+    ? FORCED_AGENT_MODE_ID
+    : composerState.effectiveModeId || undefined;
   return {
     provider,
     cwd: workspaceDirectory,
     workspaceId,
-    ...(composerState.effectiveModeId ? { modeId: composerState.effectiveModeId } : {}),
+    ...(modeId ? { modeId } : {}),
+    ...(usesPaseoWorkflowModes && composerState.selectedWorkflowMode !== "agent"
+      ? { workflowModeId: composerState.selectedWorkflowMode }
+      : {}),
     ...(composerState.effectiveModelId ? { model: composerState.effectiveModelId } : {}),
     ...(composerState.effectiveThinkingOptionId
       ? { thinkingOptionId: composerState.effectiveThinkingOptionId }
@@ -188,6 +200,7 @@ export function WorkspaceSetupDialog() {
     }),
   });
   const composerState = chatDraft.composerState;
+  const workflowModeSource = useSettings((settings) => settings.workflowModeSource);
   if (!composerState && pendingWorkspaceSetup) {
     throw new Error(t("workspaceSetup.errors.composerStateRequired"));
   }
@@ -333,6 +346,7 @@ export function WorkspaceSetupDialog() {
           workspaceDirectory: cwd,
           workspaceId: "",
           provider: composerState.selectedProvider,
+          workflowModeSource,
         });
         const ensuredWorkspace = await ensureWorkspace({
           cwd,
@@ -380,6 +394,7 @@ export function WorkspaceSetupDialog() {
       t,
       toast,
       supportsForgeSearch,
+      workflowModeSource,
     ],
   );
 
