@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { Composer } from "@/composer";
-import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { resolveForcedAgentModeId } from "@/agent-controls/policy";
 import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { ICON_SIZE } from "@/styles/theme";
@@ -35,6 +35,8 @@ import type {
   CreateAgentRequestOptions,
   DaemonClient,
 } from "@getpaseo/client/internal/daemon-client";
+import type { AgentMode } from "@getpaseo/protocol/agent-types";
+import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
@@ -132,6 +134,8 @@ function buildCreateAgentOptions({
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
     selectedWorkflowMode: string;
+    modeOptions: readonly AgentMode[];
+    agentDefinition?: AgentProviderDefinition | null;
   };
   text: string;
   attachments: NonNullable<CreateAgentRequestOptions["attachments"]>;
@@ -142,8 +146,14 @@ function buildCreateAgentOptions({
   workflowModeSource: WorkflowModeSource;
 }): CreateAgentRequestOptions {
   const usesPaseoWorkflowModes = workflowModeSource === "paseo";
+  const forcedModeId = usesPaseoWorkflowModes
+    ? resolveForcedAgentModeId(
+        composerState.modeOptions,
+        composerState.agentDefinition?.defaultModeId ?? null,
+      )
+    : null;
   const modeId = usesPaseoWorkflowModes
-    ? FORCED_AGENT_MODE_ID
+    ? (forcedModeId ?? undefined)
     : composerState.effectiveModeId || undefined;
   return {
     provider,

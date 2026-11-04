@@ -25,7 +25,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
 import { getAgentFeatureIcon, ThinkingIcon } from "@/agent-controls/icons";
-import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { resolveForcedLiveModeId } from "@/agent-controls/policy";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
@@ -268,22 +268,20 @@ function useForceAgentMode(serverId: string, agentId: string, enabled: boolean):
       if (!current) return null;
       return {
         currentModeId: current.currentModeId,
-        supportsBuild: current.availableModes.some((mode) => mode.id === FORCED_AGENT_MODE_ID),
+        forcedModeId: resolveForcedLiveModeId(current.availableModes, current.currentModeId),
       };
     }),
   );
 
   useEffect(() => {
-    if (
-      !enabled ||
-      !client ||
-      !agent?.supportsBuild ||
-      agent.currentModeId === FORCED_AGENT_MODE_ID
-    ) {
+    if (!enabled || !client || !agent?.forcedModeId) {
       return;
     }
-    void client.setAgentMode(agentId, FORCED_AGENT_MODE_ID).catch((error: unknown) => {
-      console.warn("[AgentControls] force build mode failed", error);
+    if (agent.currentModeId === agent.forcedModeId) {
+      return;
+    }
+    void client.setAgentMode(agentId, agent.forcedModeId).catch((error: unknown) => {
+      console.warn("[AgentControls] force permission mode failed", error);
     });
   }, [agent, agentId, client, enabled]);
 }

@@ -15,7 +15,7 @@ import { createNameId } from "mnemonic-id";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Composer } from "@/composer";
 import { ComposerDock } from "@/composer/dock";
-import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { resolveForcedAgentModeId } from "@/agent-controls/policy";
 import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { useComposerEditingSession, useComposerFullscreen } from "@/composer/editing-session";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -455,12 +455,18 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
   let navigated = false;
   let outcome: SubmitOutcome = "background";
   const usesPaseoWorkflowModes = workflowModeSource === "paseo";
+  const forcedModeId = usesPaseoWorkflowModes
+    ? resolveForcedAgentModeId(
+        composerState.modeOptions,
+        composerState.agentDefinition?.defaultModeId ?? null,
+      )
+    : null;
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
     config: {
       provider,
       cwd,
       modeId: usesPaseoWorkflowModes
-        ? FORCED_AGENT_MODE_ID
+        ? (forcedModeId ?? undefined)
         : composerState.effectiveModeId || undefined,
       ...(usesPaseoWorkflowModes && composerState.selectedWorkflowMode !== "agent"
         ? { workflowModeId: composerState.selectedWorkflowMode }

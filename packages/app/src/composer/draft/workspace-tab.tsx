@@ -19,7 +19,7 @@ import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liv
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
-import { FORCED_AGENT_MODE_ID } from "@/agent-controls/policy";
+import { resolveForcedAgentModeId } from "@/agent-controls/policy";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useDraftStore } from "@/stores/draft-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -35,7 +35,8 @@ import {
   shouldAllowEmptyDraftText,
   validateDraftSubmission,
 } from "@/composer/draft/workspace-tab-core";
-import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
+import type { AgentCapabilityFlags, AgentMode } from "@getpaseo/protocol/agent-types";
+import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type {
   DaemonClient,
@@ -109,6 +110,28 @@ function resolveDraftModeIdOverride(input: {
     return { modeId: effectiveModeId };
   }
   return {};
+}
+
+function resolveDraftCreateModeId(input: {
+  workflowModeSource: WorkflowModeSource;
+  autoSubmitConfig: AutoSubmitConfig | null;
+  composerState: {
+    effectiveModeId: string;
+    modeOptions: readonly AgentMode[];
+    agentDefinition?: AgentProviderDefinition | null;
+  };
+}): { modeId: string } | Record<string, never> {
+  if (input.workflowModeSource === "paseo") {
+    const forcedModeId = resolveForcedAgentModeId(
+      input.composerState.modeOptions,
+      input.composerState.agentDefinition?.defaultModeId ?? null,
+    );
+    return forcedModeId ? { modeId: forcedModeId } : {};
+  }
+  return resolveDraftModeIdOverride({
+    autoSubmitConfig: input.autoSubmitConfig,
+    effectiveModeId: input.composerState.effectiveModeId,
+  });
 }
 
 function resolveDraftModeId(input: {
@@ -212,6 +235,8 @@ async function submitDraftCreateRequest(input: {
     effectiveModeId: string;
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
+    modeOptions: readonly AgentMode[];
+    agentDefinition?: AgentProviderDefinition | null;
     featureValues: Record<string, unknown> | undefined;
   };
   hostDisconnectedMessage: string;
@@ -243,13 +268,11 @@ async function submitDraftCreateRequest(input: {
   }
   const selectedWorkflowMode =
     autoSubmitConfig?.workflowModeId ?? composerState.selectedWorkflowMode;
-  const modeIdOverride =
-    workflowModeSource === "paseo"
-      ? { modeId: FORCED_AGENT_MODE_ID }
-      : resolveDraftModeIdOverride({
-          autoSubmitConfig,
-          effectiveModeId: composerState.effectiveModeId,
-        });
+  const modeIdOverride = resolveDraftCreateModeId({
+    workflowModeSource,
+    autoSubmitConfig,
+    composerState,
+  });
   // A default router overrides the draft's provider/model so new chats rotate
   // (distribution) or start at the top of the chain (fallback).
   const routerTarget = autoSubmitConfig ? null : await resolveDraftRouterTarget(client);
@@ -302,6 +325,8 @@ function buildDraftAgentSnapshot(input: {
     effectiveModeId: string;
     selectedProvider: string | null;
     selectedWorkflowMode: string;
+    modeOptions: readonly AgentMode[];
+    agentDefinition?: AgentProviderDefinition | null;
     agentControls: { features?: Agent["features"] };
   };
   selectModelMessage: string;
@@ -314,9 +339,16 @@ function buildDraftAgentSnapshot(input: {
   const model = autoSubmitConfig?.model ?? (composerState.effectiveModelId || null);
   const thinkingOptionId =
     autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || null);
+  const forcedModeId =
+    workflowModeSource === "paseo"
+      ? resolveForcedAgentModeId(
+          composerState.modeOptions,
+          composerState.agentDefinition?.defaultModeId ?? null,
+        )
+      : null;
   const modeId =
     workflowModeSource === "paseo"
-      ? FORCED_AGENT_MODE_ID
+      ? forcedModeId
       : resolveDraftModeId({
           autoSubmitConfig,
           effectiveModeId: composerState.effectiveModeId,

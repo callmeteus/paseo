@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMode } from "@getpaseo/protocol/agent-types";
-import { isPlanningAgentMode, resolveNonPlanningModeId } from "./policy";
+import {
+  isPlanningAgentMode,
+  resolveForcedAgentModeId,
+  resolveForcedLiveModeId,
+  resolveNonPlanningModeId,
+} from "./policy";
 
 describe("isPlanningAgentMode", () => {
   it("prefers planning metadata and recognizes existing provider ids", () => {
@@ -33,5 +38,62 @@ describe("resolveNonPlanningModeId", () => {
 
   it("returns null when no non-planning mode exists", () => {
     expect(resolveNonPlanningModeId([modes[0]], "plan")).toBeNull();
+  });
+});
+
+describe("resolveForcedAgentModeId", () => {
+  const cursorModes = [
+    { id: "agent", label: "Agent", colorTier: "moderate" },
+    { id: "plan", label: "Plan", colorTier: "planning" },
+    { id: "ask", label: "Ask", colorTier: "safe" },
+  ] satisfies AgentMode[];
+  const buildModes = [
+    { id: "build", label: "Build", colorTier: "moderate" },
+    { id: "plan", label: "Plan", colorTier: "planning" },
+  ] satisfies AgentMode[];
+
+  it("prefers build when the provider offers it", () => {
+    expect(resolveForcedAgentModeId(buildModes, "plan")).toBe("build");
+  });
+
+  it("uses the provider default when build does not exist", () => {
+    expect(resolveForcedAgentModeId(cursorModes, "agent")).toBe("agent");
+  });
+
+  it("avoids a planning provider default", () => {
+    expect(resolveForcedAgentModeId(cursorModes, "plan")).toBe("agent");
+  });
+
+  it("returns null when the provider exposes no modes", () => {
+    expect(resolveForcedAgentModeId([], null)).toBeNull();
+  });
+});
+
+describe("resolveForcedLiveModeId", () => {
+  const cursorModes = [
+    { id: "agent", label: "Agent", colorTier: "moderate" },
+    { id: "plan", label: "Plan", colorTier: "planning" },
+    { id: "ask", label: "Ask", colorTier: "safe" },
+  ] satisfies AgentMode[];
+
+  it("leaves a provider's own non-planning mode alone", () => {
+    expect(resolveForcedLiveModeId(cursorModes, "agent")).toBeNull();
+    expect(resolveForcedLiveModeId(cursorModes, "ask")).toBeNull();
+  });
+
+  it("moves a live agent out of a planning mode", () => {
+    expect(resolveForcedLiveModeId(cursorModes, "plan")).toBe("agent");
+  });
+
+  it("forces build when the provider offers it", () => {
+    expect(
+      resolveForcedLiveModeId(
+        [
+          { id: "build", label: "Build", colorTier: "moderate" },
+          { id: "plan", label: "Plan", colorTier: "planning" },
+        ],
+        "plan",
+      ),
+    ).toBe("build");
   });
 });
