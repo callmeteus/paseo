@@ -160,6 +160,7 @@ const READ_ONLY_PROVIDER_MODE: Record<string, string> = {
   copilot: "https://agentclientprotocol.com/protocol/session-modes#plan",
   kilo: "plan",
   cline: "plan",
+  cursor: "plan",
 };
 
 export function resolveReadOnlyProviderMode(provider: string): string | null {
@@ -174,6 +175,7 @@ const DEFAULT_WRITABLE_PROVIDER_MODE: Record<string, string> = {
   copilot: "https://agentclientprotocol.com/protocol/session-modes#agent",
   kilo: "code",
   cline: "act",
+  cursor: "agent",
 };
 
 export function resolveDefaultWritableProviderMode(provider: string): string | null {

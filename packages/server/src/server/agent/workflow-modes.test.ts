@@ -48,12 +48,14 @@ describe("workflow modes", () => {
     expect(resolveReadOnlyProviderMode("claude")).toBe("plan");
     expect(resolveReadOnlyProviderMode("codex")).toBe("read-only");
     expect(resolveReadOnlyProviderMode("cline")).toBe("plan");
+    expect(resolveReadOnlyProviderMode("cursor")).toBe("plan");
     expect(resolveReadOnlyProviderMode("pi")).toBeNull();
   });
 
   test("leaving a read-only workflow restores a writable provider mode", () => {
     expect(resolveDefaultWritableProviderMode("opencode")).toBe("build");
     expect(resolveDefaultWritableProviderMode("claude")).toBe("default");
+    expect(resolveDefaultWritableProviderMode("cursor")).toBe("agent");
     expect(resolveDefaultWritableProviderMode("pi")).toBeNull();
   });
 
