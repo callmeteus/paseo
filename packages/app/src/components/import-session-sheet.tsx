@@ -605,9 +605,14 @@ export function ImportSessionSheet({
         if (result.error) {
           throw new Error(result.error);
         }
-        const imported = result.chats.find(
-          (chat) => chat.status === "imported" && chat.agentId && chat.cwd,
-        );
+        const imported =
+          result.chats.find(
+            (chat) =>
+              chat.composerId === row.chat.composerId &&
+              chat.status === "imported" &&
+              chat.agentId &&
+              chat.cwd,
+          ) ?? result.chats.find((chat) => chat.status === "imported" && chat.agentId && chat.cwd);
         if (!imported?.agentId || !imported.cwd) {
           throw new Error(t("cursorImport.importFailed"));
         }
