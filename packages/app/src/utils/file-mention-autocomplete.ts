@@ -15,7 +15,11 @@ interface ApplyFileMentionReplacementInput {
   relativePath: string;
 }
 
-const INVALID_MENTION_QUERY_CHARS = /[\s\n\r\t"'<>]/;
+// Spaces are legal inside the query: chat search is often multi-word ("@add chat
+// search"), so the picker stays open until Escape instead of closing on the first
+// space. Line breaks, quotes and angle brackets still end the token, which is what
+// closes it after a quoted path is inserted.
+const INVALID_MENTION_QUERY_CHARS = /[\n\r\t"'<>]/;
 
 export function findActiveFileMention(input: FindActiveFileMentionInput): FileMentionRange | null {
   const clampedCursor = Math.max(0, Math.min(input.cursorIndex, input.text.length));

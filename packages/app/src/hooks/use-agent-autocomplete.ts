@@ -314,6 +314,23 @@ function resolveChatMentionSupport(args: {
   return args.chatSearch && args.agentForkContext;
 }
 
+function resolveAutocompleteEscape(args: {
+  mode: AutocompleteMode;
+  slashCommand: SlashCommandRange | null;
+  fileMention: FileMentionRange | null;
+  clearInput: () => void;
+  dismissMention: (start: number) => void;
+}): (() => void) | undefined {
+  if (args.mode === "command" && args.slashCommand?.position === "start") {
+    return args.clearInput;
+  }
+  const mention = args.fileMention;
+  if (args.mode === "file" && mention) {
+    return () => args.dismissMention(mention.start);
+  }
+  return undefined;
+}
+
 function resolveCanLoadCommands(args: {
   serverId: string;
   agentId: string;
@@ -427,8 +444,20 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }),
     [cursorIndex, userInput],
   );
-  const showFileAutocomplete = activeFileMention !== null;
-  const fileFilterQuery = activeFileMention?.query ?? "";
+  // Escape closes the picker for the token it was pressed on. Tracking the start
+  // index keeps it closed while the user keeps typing that same mention, and
+  // reopens it as soon as a different `@` token begins.
+  const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
+  useEffect(() => {
+    if (dismissedMentionStart !== null && activeFileMention?.start !== dismissedMentionStart) {
+      setDismissedMentionStart(null);
+    }
+  }, [activeFileMention, dismissedMentionStart]);
+  const mentionDismissed =
+    dismissedMentionStart !== null && activeFileMention?.start === dismissedMentionStart;
+  const fileMention = mentionDismissed ? null : activeFileMention;
+  const showFileAutocomplete = fileMention !== null;
+  const fileFilterQuery = fileMention?.query ?? "";
   const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(fileFilterQuery);
 
   useEffect(() => {
@@ -528,7 +557,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const options = useMemo<AgentAutocompleteOption[]>(
     () =>
       buildCommandAutocompleteOptions({
-        activeFileMention,
+        activeFileMention: fileMention,
         commandFilterQuery,
         commands,
         pluginCommands: pluginClientSlashCommands,
@@ -541,7 +570,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         t,
       }),
     [
-      activeFileMention,
+      fileMention,
       activeSlashCommand,
       commandFilterQuery,
       commands,
@@ -563,7 +592,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         userInput,
         cursorIndex,
         activeSlashCommand,
-        activeFileMention,
+        activeFileMention: fileMention,
       });
       const selectedIsCommand =
         selected.type === "client_command" ||
@@ -622,7 +651,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       setUserInput,
       userInput,
       cursorIndex,
-      activeFileMention,
+      fileMention,
       activeSlashCommand,
     ],
   );
@@ -633,15 +662,25 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [onSelectOption],
   );
 
+  const clearInputOnEscape = useCallback(() => setUserInput(""), [setUserInput]);
+  const dismissMentionOnEscape = useCallback(
+    (start: number) => setDismissedMentionStart(start),
+    [],
+  );
+  const onEscape = resolveAutocompleteEscape({
+    mode,
+    slashCommand: activeSlashCommand,
+    fileMention,
+    clearInput: clearInputOnEscape,
+    dismissMention: dismissMentionOnEscape,
+  });
+
   const { selectedIndex, onKeyPress } = useAutocomplete({
     isVisible,
     options,
     query: mode === "command" ? commandFilterQuery : fileFilterQuery,
     onSelectOption: selectOptionFromKeyPress,
-    onEscape:
-      mode === "command" && activeSlashCommand?.position === "start"
-        ? () => setUserInput("")
-        : undefined,
+    onEscape,
   });
 
   const isLoading = resolveAutocompleteIsLoading({

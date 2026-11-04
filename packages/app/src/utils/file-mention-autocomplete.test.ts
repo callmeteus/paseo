@@ -32,19 +32,24 @@ describe("findActiveFileMention", () => {
     });
   });
 
-  it("returns null when cursor is outside the mention token", () => {
-    const text = "please review @src/components now";
+  it("keeps the token open across spaces so multi-word searches work", () => {
+    const text = "please review @add chat search";
     const mention = findActiveFileMention({
       text,
       cursorIndex: text.length,
     });
-    expect(mention).toBeNull();
+    expect(mention).toEqual({
+      start: text.indexOf("@"),
+      end: text.length,
+      query: "add chat search",
+    });
   });
 
-  it("returns null when @ at start is followed by a delimiter", () => {
+  it("still ends the token at a quote inserted by a picked path", () => {
+    const text = 'open @"src/components/chat.tsx" next';
     const mention = findActiveFileMention({
-      text: "@ ",
-      cursorIndex: 2,
+      text,
+      cursorIndex: text.length,
     });
     expect(mention).toBeNull();
   });
