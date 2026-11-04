@@ -675,13 +675,27 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     dismissMention: dismissMentionOnEscape,
   });
 
-  const { selectedIndex, onKeyPress } = useAutocomplete({
+  const { selectedIndex, onKeyPress: handleAutocompleteKeyPress } = useAutocomplete({
     isVisible,
     options,
     query: mode === "command" ? commandFilterQuery : fileFilterQuery,
     onSelectOption: selectOptionFromKeyPress,
     onEscape,
   });
+  // useAutocomplete ignores Escape when there are no options, which would let it
+  // fall through to the global shortcut (interrupt the agent) while the mention is
+  // still open with an empty result list. Escape belongs to the picker either way.
+  const onKeyPress = useCallback(
+    (event: AgentAutocompleteKeyPressEvent) => {
+      if (event.key === "Escape" && onEscape) {
+        event.preventDefault();
+        onEscape();
+        return true;
+      }
+      return handleAutocompleteKeyPress(event);
+    },
+    [handleAutocompleteKeyPress, onEscape],
+  );
 
   const isLoading = resolveAutocompleteIsLoading({
     mode,
