@@ -50,7 +50,14 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { resyncProviderSubagents, useProviderSubagentStore } from "@/subagents/provider-store";
-import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import {
+  getLastWorkspaceSelection,
+  navigateToWorkspace,
+} from "@/stores/navigation-active-workspace-store";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { usePlanStore } from "@/plans/store";
 
 // Re-export types from session-store and draft-store for backward compatibility
@@ -551,10 +558,30 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         title: message.payload.title ?? message.payload.path,
         agentId: message.payload.agentId,
       });
+      const target = { kind: "file" as const, path: message.payload.path };
+      const active = getLastWorkspaceSelection();
+      if (active?.serverId === serverId && active.workspaceId === message.payload.workspaceId) {
+        const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+        const resolvedWorkspaceId =
+          resolveWorkspaceMapKeyByIdentity({
+            workspaces,
+            workspaceId: message.payload.workspaceId,
+          }) ?? message.payload.workspaceId;
+        const workspaceKey = buildWorkspaceTabPersistenceKey({
+          serverId,
+          workspaceId: resolvedWorkspaceId,
+        });
+        if (workspaceKey) {
+          const layout = useWorkspaceLayoutStore.getState();
+          const tabId = layout.openTab({ workspaceKey, target, intent: "reveal" });
+          if (tabId) revealWorkspaceTab(workspaceKey, tabId);
+        }
+        return;
+      }
       navigateToWorkspace({
         serverId,
         workspaceId: message.payload.workspaceId,
-        target: { kind: "file", path: message.payload.path },
+        target,
       });
     });
 
