@@ -11,7 +11,7 @@ import type {
   FetchAgentsOptions,
 } from "@getpaseo/client/internal/daemon-client";
 import { DaemonAuthenticationError } from "@getpaseo/client/internal/daemon-client";
-import type { HostDirectory } from "@getpaseo/protocol/hosts";
+import type { HostAdd, HostDirectory, HostSummary, HostUpdate } from "@getpaseo/protocol/hosts";
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import type { AgentPermissionRequest } from "@getpaseo/protocol/agent-types";
@@ -171,10 +171,67 @@ class FakeDaemonClient {
   }
 
   public connectedHosts = false;
+  public sourceId: string | undefined = "owner";
+  public hostRows: HostSummary[] = [];
+  public addedHosts: HostAdd[] = [];
+  public updatedHosts: Array<{ registrationId: string; patch: HostUpdate }> = [];
+  public removedHosts: string[] = [];
+  public listHostsCalls = 0;
   public hostDirectory: Promise<HostDirectory> = Promise.resolve({
     self: { serverId: "srv_test", label: "test" },
     hosts: [],
   });
+
+  async listHosts(): Promise<HostDirectory> {
+    this.listHostsCalls += 1;
+    return {
+      self: { serverId: "srv_test", label: "test" },
+      hosts: this.hostRows.map((row) => structuredClone(row)),
+    };
+  }
+
+  async addHost(input: HostAdd): Promise<HostSummary> {
+    this.addedHosts.push(input);
+    const row: HostSummary = {
+      registrationId: `hst_added_${this.addedHosts.length}`,
+      serverId: null,
+      label: input.label ?? null,
+      source: {
+        id: this.sourceId ?? "owner",
+        key: input.sourceKey ?? `key_${this.addedHosts.length}`,
+      },
+      metadata: input.metadata ?? {},
+      enabled: true,
+      status: "connecting",
+      targetDescription: input.connection,
+      lastOnlineAt: null,
+      nextRetryAt: null,
+      error: null,
+    };
+    this.hostRows.push(row);
+    return structuredClone(row);
+  }
+
+  async updateHost(registrationId: string, patch: HostUpdate): Promise<HostSummary> {
+    this.updatedHosts.push({ registrationId, patch });
+    const index = this.hostRows.findIndex((row) => row.registrationId === registrationId);
+    const current = this.hostRows[index];
+    if (!current) throw new Error(`unknown host ${registrationId}`);
+    const next: HostSummary = {
+      ...current,
+      ...(patch.label !== undefined ? { label: patch.label } : {}),
+      ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
+      ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+      ...(patch.connection !== undefined ? { targetDescription: patch.connection } : {}),
+    };
+    this.hostRows[index] = next;
+    return structuredClone(next);
+  }
+
+  async removeHost(registrationId: string): Promise<void> {
+    this.removedHosts.push(registrationId);
+    this.hostRows = this.hostRows.filter((row) => row.registrationId !== registrationId);
+  }
 
   observeHosts() {
     return subscriptionFixture(this.hostDirectory, () => () => {});
@@ -190,6 +247,7 @@ class FakeDaemonClient {
       serverId: "srv_test",
       hostname: "test",
       version: this.daemonVersion,
+      ...(this.sourceId ? { sourceId: this.sourceId } : {}),
       features: {
         ownedSubscriptions: this.ownedSubscriptions,
         connectedHosts: this.connectedHosts,
@@ -4827,5 +4885,191 @@ describe("resolveWebLocalDaemonEndpoint", () => {
     expect(resolveWebLocalDaemonEndpoint("https://example.test", "100.101.102.103")).toBe(
       "https://example.test",
     );
+  });
+});
+
+describe("host mirror", () => {
+  function mirrorTargetHost(): HostProfile {
+    return makeHost({
+      serverId: "srv_target",
+      label: "target",
+      connections: [{ id: "direct:lan:17000", type: "directTcp", endpoint: "lan:17000" }],
+      preferredConnectionId: "direct:lan:17000",
+    });
+  }
+
+  function mirrorRemoteHost(input?: {
+    serverId?: string;
+    label?: string;
+    endpoint?: string;
+  }): HostProfile {
+    const endpoint = input?.endpoint ?? "100.66.222.98:6767";
+    return makeHost({
+      serverId: input?.serverId ?? "srv_remote",
+      label: input?.label ?? "remote",
+      password: "secret",
+      connections: [{ id: `direct:${endpoint}`, type: "directTcp", endpoint }],
+      preferredConnectionId: `direct:${endpoint}`,
+    });
+  }
+
+  function bootMirrorStore(input: { hosts: HostProfile[]; connectedHosts?: boolean }): {
+    store: HostRuntimeStore;
+    clients: Map<string, FakeDaemonClient>;
+  } {
+    const connectedHosts = input.connectedHosts ?? true;
+    const clients = new Map<string, FakeDaemonClient>();
+    const clientFor = (serverId: string): FakeDaemonClient => {
+      const existing = clients.get(serverId);
+      if (existing) return existing;
+      const client = new FakeDaemonClient();
+      client.connectedHosts = connectedHosts;
+      client.setConnectionState({ status: "connected" });
+      clients.set(serverId, client);
+      return client;
+    };
+    const store = new HostRuntimeStore({
+      storage: createMemoryHostRuntimeStorage({
+        "@paseo:daemon-registry": JSON.stringify(input.hosts),
+      }),
+      deps: {
+        createClient: ({ host }) => clientFor(host.serverId) as unknown as DaemonClient,
+        connectToDaemon: async ({ host }) => ({
+          client: clientFor(host.serverId) as unknown as DaemonClient,
+          serverId: host.serverId,
+          hostname: host.label,
+        }),
+        getClientId: async () => "cid_test_runtime",
+        readInitialConnectionHint: () => ({ listen: "lan:17000" }),
+      },
+      revokePushNotifications: async () => {},
+    });
+    return { store, clients };
+  }
+
+  function targetClient(clients: Map<string, FakeDaemonClient>): FakeDaemonClient {
+    const client = clients.get("srv_target");
+    if (!client) throw new Error("expected a client for srv_target");
+    return client;
+  }
+
+  async function flushMirror(store: HostRuntimeStore): Promise<void> {
+    await waitForHostOnline(store, "srv_target");
+    await vi.advanceTimersByTimeAsync(2_000);
+  }
+
+  it("publishes saved remote hosts to the daemon this client bootstrapped from", async () => {
+    useHostRuntimeClock();
+    const { store, clients } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost()],
+    });
+    await store.boot();
+    await flushMirror(store);
+
+    const client = targetClient(clients);
+    expect(client.addedHosts).toHaveLength(1);
+    const added = client.addedHosts[0]!;
+    expect(added.sourceKey).toBe("app-registry:cid_test_runtime:srv_remote");
+    expect(added.label).toBe("remote");
+    expect(added.connection).toContain("tcp://100.66.222.98:6767");
+    expect(added.connection).toContain("password=secret");
+    expect(Object.keys(added.metadata ?? {})).toEqual(["mirrorHash"]);
+  });
+
+  it("stays silent when the daemon does not expose connected hosts", async () => {
+    useHostRuntimeClock();
+    const { store, clients } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost()],
+      connectedHosts: false,
+    });
+    await store.boot();
+    await flushMirror(store);
+
+    const client = targetClient(clients);
+    expect(client.listHostsCalls).toBe(0);
+    expect(client.addedHosts).toEqual([]);
+  });
+
+  it("skips hosts only this machine can reach", async () => {
+    useHostRuntimeClock();
+    const loopback = makeHost({
+      serverId: "srv_loop",
+      label: "loopback",
+      connections: [{ id: "direct:localhost:6768", type: "directTcp", endpoint: "localhost:6768" }],
+      preferredConnectionId: "direct:localhost:6768",
+    });
+    const routed = makeHost({
+      serverId: "srv_routed",
+      label: "routed",
+      connections: [{ id: "via:srv_target", type: "routed", originServerId: "srv_target" }],
+      preferredConnectionId: "via:srv_target",
+    });
+    const ssh = makeHost({
+      serverId: "srv_ssh",
+      label: "ssh",
+      connections: [{ id: "ssh:box:22", type: "remoteSsh", host: "box", sshPort: 22 }],
+      preferredConnectionId: "ssh:box:22",
+    });
+    const { store, clients } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), loopback, routed, ssh],
+    });
+    await store.boot();
+    await flushMirror(store);
+
+    expect(targetClient(clients).addedHosts).toEqual([]);
+  });
+
+  it("leaves rows mirrored by another client alone", async () => {
+    useHostRuntimeClock();
+    const { store, clients } = bootMirrorStore({ hosts: [mirrorTargetHost()] });
+    await store.boot();
+    const client = targetClient(clients);
+    client.hostRows.push({
+      registrationId: "hst_other_client",
+      serverId: "srv_other",
+      label: "other",
+      source: { id: "owner", key: "app-registry:cid_other:srv_other" },
+      metadata: {},
+      enabled: true,
+      status: "online",
+      targetDescription: "tcp://10.0.0.9:6767",
+      lastOnlineAt: null,
+      nextRetryAt: null,
+      error: null,
+    });
+
+    await flushMirror(store);
+
+    expect(client.removedHosts).toEqual([]);
+    expect(client.hostRows).toHaveLength(1);
+  });
+
+  it("updates and removes mirrored rows as the registry changes", async () => {
+    useHostRuntimeClock();
+    const { store, clients } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost()],
+    });
+    await store.boot();
+    await flushMirror(store);
+    const client = targetClient(clients);
+    expect(client.addedHosts).toHaveLength(1);
+    const registrationId = client.hostRows[0]!.registrationId;
+
+    await store.renameHost("srv_remote", "renamed");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(client.updatedHosts).toHaveLength(1);
+    expect(client.updatedHosts[0]!.registrationId).toBe(registrationId);
+    expect(client.updatedHosts[0]!.patch).toEqual({ label: "renamed" });
+
+    await store.setHostPassword("srv_remote", "rotated");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(client.updatedHosts).toHaveLength(2);
+    expect(client.updatedHosts[1]!.patch.connection).toContain("password=rotated");
+
+    await store.removeHost("srv_remote");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(client.removedHosts).toEqual([registrationId]);
+    expect(client.hostRows).toEqual([]);
+    expect(client.addedHosts).toHaveLength(1);
   });
 });

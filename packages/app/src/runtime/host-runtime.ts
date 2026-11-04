@@ -1,7 +1,7 @@
 import { watchdog } from "@/watchdog";
 import { createHostChannelTransport } from "@getpaseo/client/internal/hosts";
 import type { OwnedSubscription } from "@getpaseo/client";
-import type { HostDirectory } from "@getpaseo/protocol/hosts";
+import type { HostDirectory, HostSummary, HostUpdate } from "@getpaseo/protocol/hosts";
 import { useSyncExternalStore, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import equal from "fast-deep-equal/es6";
@@ -20,6 +20,7 @@ import {
   upsertHostConnectionInProfiles,
   registryHasConnection,
   relayConnectionFromOffer,
+  hostHasConnection,
   StoredHostRegistrySchema,
   type HostConnection,
   type HostProfile,
@@ -30,13 +31,16 @@ import {
   buildRelayWebSocketUrl,
   decodeOfferFragmentPayload,
   normalizeHostPort,
+  parseHostPort,
   parseRelayConnectionUri,
+  serializeConnectionUriForStorage,
+  serializeRelayConnectionUri,
   shouldUseTlsForDefaultHostedRelay,
 } from "@/utils/daemon-endpoints";
 import { resolveAppVersion } from "@/utils/app-version";
 import { ConnectionOfferSchema, type ConnectionOffer } from "@getpaseo/protocol/connection-offer";
 import { HostConfirmations, type HostConfirmationRequest } from "./host-confirmation";
-import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
+import { getDesktopDaemonStatus, shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { isWeb } from "@/constants/platform";
 import { connectToDaemon, getConnectionAuthFailureReason } from "@/utils/test-daemon-connection";
 import { getOrCreateClientId } from "@/utils/client-id";
@@ -1583,6 +1587,12 @@ const REGISTRY_STORAGE_KEY = "@paseo:daemon-registry";
 const LOCALHOST_FALLBACK_ENDPOINT = "localhost:17000";
 const DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS = 2500;
 const E2E_STORAGE_KEY = "@paseo:e2e";
+// Mirrored rows are keyed `app-registry:<clientId>:<serverId>` so installs sharing one producer
+// identity never reconcile each other away.
+const HOST_MIRROR_SOURCE_KEY_PREFIX = "app-registry:";
+const HOST_MIRROR_HASH_METADATA_KEY = "mirrorHash";
+const HOST_MIRROR_SALT_STORAGE_KEY = "@paseo:host-mirror-salt";
+const HOST_MIRROR_DEBOUNCE_MS = 1_500;
 const INITIAL_DAEMON_CONNECTION_HINT_GLOBAL_KEY = "__PASEO_INITIAL_DAEMON_CONNECTION__";
 
 export interface InitialDaemonConnectionHint {
@@ -1667,6 +1677,125 @@ function isPlaceholderServerId(serverId: string): boolean {
   return serverId.startsWith("local:");
 }
 
+function isMachineLocalHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "0.0.0.0" ||
+    normalized === "::" ||
+    normalized === "::1" ||
+    normalized.startsWith("127.")
+  );
+}
+
+function isMachineLocalConnection(connection: HostConnection): boolean {
+  if (connection.type === "directSocket" || connection.type === "directPipe") {
+    return true;
+  }
+  if (connection.type !== "directTcp") {
+    return false;
+  }
+  try {
+    return isMachineLocalHost(parseHostPort(connection.endpoint).host);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Mirroring exists so a browser client can reach the hosts this app saved. Only endpoints
+ * another machine can dial qualify: loopback addresses, unix sockets, pipes, and SSH tunnels
+ * describe how *this* client reaches a daemon's machine, so every other client would inherit a
+ * row it can never connect to.
+ */
+function mirrorableConnection(profile: HostProfile): HostConnection | null {
+  const candidates = profile.connections.filter(
+    (connection) =>
+      (connection.type === "directTcp" || connection.type === "relay") &&
+      !isMachineLocalConnection(connection),
+  );
+  return (
+    candidates.find((connection) => connection.id === profile.preferredConnectionId) ??
+    candidates[0] ??
+    null
+  );
+}
+
+function serializeMirrorConnection(
+  profile: HostProfile,
+  connection: HostConnection,
+): string | null {
+  if (connection.type === "directTcp") {
+    try {
+      const parts = parseHostPort(connection.endpoint);
+      return serializeConnectionUriForStorage({
+        ...parts,
+        useTls: connection.useTls ?? false,
+        ...(profile.password ? { password: profile.password } : {}),
+      });
+    } catch {
+      return null;
+    }
+  }
+  if (connection.type === "relay") {
+    return serializeRelayConnectionUri({
+      offer: {
+        v: 2,
+        serverId: profile.serverId,
+        daemonPublicKeyB64: connection.daemonPublicKeyB64,
+        relay: {
+          endpoint: connection.relayEndpoint,
+          useTls: connection.useTls ?? false,
+        },
+        ...(connection.minimumSecurityMode
+          ? { minimumSecurityMode: connection.minimumSecurityMode }
+          : {}),
+      },
+      ...(profile.password ? { password: profile.password } : {}),
+    });
+  }
+  return null;
+}
+
+/** Fingerprints a serialized connection so drift is detectable without storing the secret. */
+function mirrorFingerprint(salt: string, uri: string): string {
+  const input = `${salt}\n${uri}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function createMirrorSalt(): string {
+  const cryptoObject = globalThis.crypto;
+  const suffix =
+    cryptoObject && typeof cryptoObject.randomUUID === "function"
+      ? cryptoObject.randomUUID()
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return `salt_${suffix}`;
+}
+
+interface MirroredHost {
+  sourceKey: string;
+  connection: string;
+  label: string;
+  hash: string;
+}
+
+function mirrorHostPatch(row: HostSummary, entry: MirroredHost): HostUpdate | null {
+  const patch: HostUpdate = {};
+  if ((row.label ?? "") !== entry.label) {
+    patch.label = entry.label;
+  }
+  if (row.metadata[HOST_MIRROR_HASH_METADATA_KEY] !== entry.hash) {
+    patch.connection = entry.connection;
+    patch.metadata = { ...row.metadata, [HOST_MIRROR_HASH_METADATA_KEY]: entry.hash };
+  }
+  return patch.label === undefined && patch.connection === undefined ? null : patch;
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1712,6 +1841,12 @@ export class HostRuntimeStore {
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
   private bootPromise: Promise<void> | null = null;
+  private hostMirrorTimer: ReturnType<typeof setTimeout> | null = null;
+  private hostMirrorChain: Promise<void> = Promise.resolve();
+  private hostMirrorSalt: Promise<string> | null = null;
+  private hostMirrorClientId: Promise<string> | null = null;
+  private hostMirrorDisabled: boolean | null = null;
+  private hostMirrorErrorLogged = new Set<string>();
   private registryLoad: Promise<void> | null = null;
   private readonly hostConfirmations = new HostConfirmations();
   private storage: HostRuntimeStorage;
@@ -2414,6 +2549,7 @@ export class HostRuntimeStore {
     this.hosts = hosts;
     this.syncHosts(hosts, options);
     this.emitHostList();
+    this.scheduleHostMirror();
   }
 
   private async persistHosts(hosts = this.hosts): Promise<void> {
@@ -2632,7 +2768,179 @@ export class HostRuntimeStore {
       void invalidateCheckoutGitQueriesForServer(queryClient, serverId);
       invalidateServerDataQueriesAfterReconnect({ queryClient, serverId });
       void queryClient.invalidateQueries({ queryKey: schedulesQueryBaseKey });
+      this.scheduleHostMirror(0);
     }
+  }
+
+  /**
+   * Publishes the app's saved connections to the daemon this client bootstrapped from, so a
+   * browser opening that daemon sees the same fleet. The registry stays authoritative: the
+   * mirror only adds, updates, and removes rows this producer created.
+   */
+  private scheduleHostMirror(delayMs = HOST_MIRROR_DEBOUNCE_MS): void {
+    if (!this.hasHostMirrorTargetHint()) return;
+    if (this.hostMirrorTimer !== null) clearTimeout(this.hostMirrorTimer);
+    this.hostMirrorTimer = setTimeout(() => {
+      this.hostMirrorTimer = null;
+      this.hostMirrorChain = this.hostMirrorChain.then(() => this.reconcileMirroredHosts());
+    }, delayMs);
+  }
+
+  private hasHostMirrorTargetHint(): boolean {
+    if (shouldUseDesktopDaemon()) return true;
+    if (this.deps.readInitialConnectionHint) {
+      return this.deps.readInitialConnectionHint() !== null;
+    }
+    return (
+      readInitialDaemonConnectionHint() !== null || readConfiguredLocalDaemonOverride() !== null
+    );
+  }
+
+  private async reconcileMirroredHosts(): Promise<void> {
+    try {
+      if (await this.isHostMirrorDisabled()) return;
+      const target = await this.resolveHostMirrorTarget();
+      if (!target) return;
+      const { client, serverId } = target;
+      const serverInfo = client.getLastServerInfoMessage();
+      if (!client.isConnected || !serverInfo?.features?.connectedHosts) return;
+      const sourceId = serverInfo.sourceId;
+      if (!sourceId) return;
+
+      const directory = await client.listHosts();
+      const desired = await this.buildMirroredHosts(serverId);
+      const keyPrefix = await this.hostMirrorKeyPrefix();
+      const desiredByKey = new Map(desired.map((entry) => [entry.sourceKey, entry]));
+      const owned = directory.hosts.filter(
+        (row) => row.source.id === sourceId && row.source.key.startsWith(keyPrefix),
+      );
+      const mirroredKeys = new Set<string>();
+
+      for (const row of owned) {
+        const entry = desiredByKey.get(row.source.key);
+        if (!entry) {
+          await client.removeHost(row.registrationId);
+          continue;
+        }
+        mirroredKeys.add(row.source.key);
+        const patch = mirrorHostPatch(row, entry);
+        if (patch) {
+          await client.updateHost(row.registrationId, patch);
+        }
+      }
+
+      for (const entry of desired) {
+        if (mirroredKeys.has(entry.sourceKey)) continue;
+        await client.addHost({
+          connection: entry.connection,
+          label: entry.label,
+          metadata: { [HOST_MIRROR_HASH_METADATA_KEY]: entry.hash },
+          sourceKey: entry.sourceKey,
+        });
+      }
+      this.hostMirrorErrorLogged.clear();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.hostMirrorErrorLogged.has(message)) return;
+      this.hostMirrorErrorLogged.add(message);
+      console.warn("[HostRuntime] host mirror failed", { error: message });
+    }
+  }
+
+  private async isHostMirrorDisabled(): Promise<boolean> {
+    if (this.hostMirrorDisabled !== null) return this.hostMirrorDisabled;
+    try {
+      const isE2E = await readValidatedString(this.storage, E2E_STORAGE_KEY, z.string().min(1));
+      this.hostMirrorDisabled = isE2E !== null;
+    } catch {
+      this.hostMirrorDisabled = false;
+    }
+    return this.hostMirrorDisabled;
+  }
+
+  /**
+   * The mirror targets the daemon this client bootstrapped from: the desktop-managed daemon on
+   * Electron, or the daemon serving the page (connection hint first, override second).
+   */
+  private async resolveHostMirrorTarget(): Promise<{
+    client: DaemonClient;
+    serverId: string;
+  } | null> {
+    if (shouldUseDesktopDaemon()) {
+      const status = await getDesktopDaemonStatus().catch(() => null);
+      const serverId = status?.serverId.trim() ?? "";
+      if (!serverId) return null;
+      const client = this.getClient(serverId);
+      return client ? { client, serverId } : null;
+    }
+
+    const hint = this.deps.readInitialConnectionHint
+      ? this.deps.readInitialConnectionHint()
+      : readInitialDaemonConnectionHint();
+    const listen = hint?.listen ?? readConfiguredLocalDaemonOverride();
+    if (!listen) return null;
+    const base = connectionFromListen(listen);
+    if (!base) return null;
+    const connection: HostConnection =
+      base.type === "directTcp" ? { ...base, useTls: hint?.useTls ?? base.useTls ?? false } : base;
+    const profile = this.hosts.find((candidate) => hostHasConnection(candidate, connection));
+    if (!profile) return null;
+    const client = this.getClient(profile.serverId);
+    return client ? { client, serverId: profile.serverId } : null;
+  }
+
+  private async buildMirroredHosts(targetServerId: string): Promise<MirroredHost[]> {
+    const salt = await this.getHostMirrorSalt();
+    const keyPrefix = await this.hostMirrorKeyPrefix();
+    const mirrored: MirroredHost[] = [];
+    for (const profile of this.hosts) {
+      if (profile.serverId === targetServerId || isPlaceholderServerId(profile.serverId)) continue;
+      const connection = mirrorableConnection(profile);
+      if (!connection) continue;
+      const uri = serializeMirrorConnection(profile, connection);
+      if (!uri) continue;
+      mirrored.push({
+        sourceKey: `${keyPrefix}${profile.serverId}`,
+        connection: uri,
+        label: profile.label.trim().slice(0, 256) || profile.serverId,
+        hash: mirrorFingerprint(salt, uri),
+      });
+    }
+    return mirrored;
+  }
+
+  private getHostMirrorSalt(): Promise<string> {
+    if (!this.hostMirrorSalt) {
+      this.hostMirrorSalt = (async () => {
+        const existing = await this.storage.getItem(HOST_MIRROR_SALT_STORAGE_KEY);
+        if (existing) return existing;
+        const created = createMirrorSalt();
+        await this.storage.setItem(HOST_MIRROR_SALT_STORAGE_KEY, created);
+        return created;
+      })().catch((error) => {
+        this.hostMirrorSalt = null;
+        throw error;
+      });
+    }
+    return this.hostMirrorSalt;
+  }
+
+  /**
+   * Two clients of the same daemon (a desktop app and a browser, say) usually authenticate as the
+   * same producer. Scoping source keys by client id keeps each install's reconcile from deleting
+   * the other's mirrored rows.
+   */
+  private hostMirrorKeyPrefix(): Promise<string> {
+    if (!this.hostMirrorClientId) {
+      this.hostMirrorClientId = this.deps.getClientId().then(
+        (clientId) => `${HOST_MIRROR_SOURCE_KEY_PREFIX}${clientId}:`,
+        (error: unknown) => {
+          this.hostMirrorClientId = null;
+          throw error;
+        },
+      );
+    }
+    return this.hostMirrorClientId;
   }
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {

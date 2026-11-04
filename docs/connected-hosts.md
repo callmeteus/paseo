@@ -1,6 +1,11 @@
 # Connected hosts
 
-A saved host belongs to the daemon that stores it. The app's saved connections remain a separate list.
+A saved host belongs to the daemon that stores it. The app keeps its own registry and mirrors the
+saved connections another machine can reach into the daemon it bootstrapped from, so a browser client
+of that daemon sees the same fleet. Mirrored rows use an `app-registry:` source key and carry a salted
+hash of their connection in `metadata`; the app adds, updates, and removes only the rows its own
+producer created. Loopback, unix socket, pipe, and SSH connections stay local because only the client
+that saved them can dial them.
 Connect A to B through `paseo --host A host` or `paseo.hosts`. Consumers select B by its learned `serverId`; management uses the stable
 `registrationId` created before B is reachable.
 
