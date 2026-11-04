@@ -4092,6 +4092,8 @@ export const ServerInfoStatusPayloadSchema = z
         importSessionWorkspaceTarget: z.boolean().optional(),
         // COMPAT(importSessionSearch): added in v0.8.0, remove gate after 2027-03-02.
         importSessionSearch: z.boolean().optional(),
+        // COMPAT(cursorImport): added in v0.13.1, remove gate after 2027-10-31.
+        cursorImport: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.2.0-beta.1. Drop the gate after
         // 2027-01-17 once the supported daemon floor is >= v0.2.0.
         // Daemon advertises pluggable non-GitHub forge support (the forge registry);

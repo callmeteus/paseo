@@ -81,7 +81,6 @@ export function useImportSession({
       <ImportSessionSheet
         visible={isSheetOpen}
         client={client}
-        cursorClient={client}
         serverId={importServerId}
         cwd={cwd}
         workspaceId={workspaceId}

@@ -2491,7 +2491,9 @@ export class Session {
         query: msg.query,
         since,
         limit: msg.limit ?? 200,
-      }).filter((summary) => (msg.cwd ? summary.cwd === msg.cwd : true));
+      }).filter(
+        (summary) => !msg.cwd || (summary.cwd !== null && areEquivalentPaths(summary.cwd, msg.cwd)),
+      );
       const imported = await this.collectImportedCursorAgentIds();
 
       this.emit({

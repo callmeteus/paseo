@@ -200,10 +200,11 @@ vi.mock("@/hooks/use-providers-snapshot", () => ({
 }));
 
 const mockHostFeatures = vi.hoisted(() => ({
-  current: { importSessionSearch: true, importSessionWorkspaceTarget: true } as Record<
-    string,
-    boolean
-  >,
+  current: {
+    importSessionSearch: true,
+    importSessionWorkspaceTarget: true,
+    cursorImport: false,
+  } as Record<string, boolean>,
 }));
 
 vi.mock("@/runtime/host-features", () => ({
@@ -231,6 +232,7 @@ interface RenderOptions {
   cwd?: string | null;
   workspaceId?: string;
   supportsSearch?: boolean;
+  cursorImport?: boolean;
   projects?: Array<{ iconWorkingDir: string; projectName: string }>;
   snapshot?: {
     entries?: ProviderSnapshotEntry[];
@@ -246,11 +248,13 @@ function applyHostMocks(options?: RenderOptions) {
   mockHostFeatures.current = {
     importSessionSearch: options?.supportsSearch ?? true,
     importSessionWorkspaceTarget: true,
+    cursorImport: options?.cursorImport ?? false,
   };
   mockHostProjects.current = options?.projects ?? [];
 }
 
-type RecentSessionsTestClient = Pick<DaemonClient, "fetchRecentProviderSessions" | "importAgent">;
+type RecentSessionsTestClient = Pick<DaemonClient, "fetchRecentProviderSessions" | "importAgent"> &
+  Partial<Pick<DaemonClient, "listCursorImportChats" | "importCursorChats">>;
 
 function renderSheet(client: RecentSessionsTestClient, options?: RenderOptions) {
   applyHostMocks(options);
@@ -360,6 +364,31 @@ function createSnapshotEntry(
     label: PROVIDER_LABELS[provider] ?? provider,
     ...overrides,
   };
+}
+
+type CursorChatFixture = Awaited<
+  ReturnType<DaemonClient["listCursorImportChats"]>
+>["chats"][number];
+
+function createCursorChat(overrides?: Partial<CursorChatFixture>): CursorChatFixture {
+  return {
+    composerId: "composer-1",
+    title: "Cursor chat",
+    cwd: "/repo/paseo",
+    subtitle: null,
+    createdAt: "2026-04-30T10:00:00.000Z",
+    lastUpdatedAt: "2026-04-30T11:00:00.000Z",
+    model: "gpt-5",
+    isSubagent: false,
+    subagentTypeName: null,
+    importedAgentId: null,
+    suggestedProviders: ["claude"],
+    ...overrides,
+  };
+}
+
+function cursorListResponse(chats: CursorChatFixture[]) {
+  return { requestId: "cursor-list", chats, sourceAvailable: true, error: null };
 }
 
 describe("ImportSessionSheet", () => {
@@ -1172,5 +1201,161 @@ describe("ImportSessionSheet", () => {
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("lists Cursor chats in the same agent-session list", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "claude",
+          providerLabel: "Claude Code",
+          title: "Provider session",
+        }),
+      ],
+    }));
+    const importAgent = vi.fn();
+    const listCursorImportChats = vi.fn(async () => cursorListResponse([createCursorChat()]));
+
+    renderSheet(
+      {
+        fetchRecentProviderSessions,
+        importAgent,
+        listCursorImportChats,
+      } as RecentSessionsTestClient,
+      {
+        cursorImport: true,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    await screen.findByText("Provider session");
+    await screen.findByText("Cursor chat");
+    expect(screen.queryByTestId("import-session-source")).toBeNull();
+    expect(screen.getByPlaceholderText("Search sessions...")).toBeTruthy();
+    await waitFor(() => {
+      expect(listCursorImportChats).toHaveBeenCalledWith({ cwd: "/repo/paseo", limit: 200 });
+    });
+  });
+
+  it("imports a Cursor chat from its row", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [],
+    }));
+    const importAgent = vi.fn();
+    const listCursorImportChats = vi.fn(async () => cursorListResponse([createCursorChat()]));
+    const importCursorChats = vi.fn(async () => ({
+      requestId: "cursor-run",
+      chats: [
+        {
+          composerId: "composer-1",
+          agentId: "agent-cursor-1",
+          title: "Cursor chat",
+          cwd: "/repo/paseo",
+          messageCount: 2,
+          suggestedProviders: ["claude"],
+          status: "imported" as const,
+          error: null,
+        },
+      ],
+      importedCount: 1,
+      alreadyImportedCount: 0,
+      skippedCount: 0,
+      error: null,
+    }));
+    const onImported = vi.fn();
+
+    renderSheet(
+      {
+        fetchRecentProviderSessions,
+        importAgent,
+        listCursorImportChats,
+        importCursorChats,
+      } as RecentSessionsTestClient,
+      {
+        cursorImport: true,
+        onImported,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    await screen.findByText("Cursor chat");
+    fireEvent.click(screen.getByTestId("import-session-cursor-composer-1"));
+
+    await waitFor(() => {
+      expect(importCursorChats).toHaveBeenCalledWith({
+        composerIds: ["composer-1"],
+        includeSubagents: true,
+      });
+    });
+    expect(onImported).toHaveBeenCalledWith({ id: "agent-cursor-1", cwd: "/repo/paseo" });
+  });
+
+  it("keeps an already imported Cursor chat visible but disabled", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [],
+    }));
+    const importAgent = vi.fn();
+    const listCursorImportChats = vi.fn(async () =>
+      cursorListResponse([createCursorChat({ importedAgentId: "agent-existing" })]),
+    );
+    const importCursorChats = vi.fn();
+
+    renderSheet(
+      {
+        fetchRecentProviderSessions,
+        importAgent,
+        listCursorImportChats,
+        importCursorChats,
+      } as RecentSessionsTestClient,
+      {
+        cursorImport: true,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    await screen.findByText("Already imported");
+    fireEvent.click(screen.getByTestId("import-session-cursor-composer-1"));
+
+    expect(importCursorChats).not.toHaveBeenCalled();
+  });
+
+  it("filters the unified list to Cursor chats", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "claude",
+          providerLabel: "Claude Code",
+          title: "Provider session",
+        }),
+      ],
+    }));
+    const importAgent = vi.fn();
+    const listCursorImportChats = vi.fn(async () => cursorListResponse([createCursorChat()]));
+
+    renderSheet(
+      {
+        fetchRecentProviderSessions,
+        importAgent,
+        listCursorImportChats,
+      } as RecentSessionsTestClient,
+      {
+        cursorImport: true,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("claude")] },
+      },
+    );
+
+    await screen.findByText("Provider session");
+    await screen.findByText("Cursor chat");
+    fireEvent.click(screen.getByTestId("import-session-filter-trigger"));
+    fireEvent.click(screen.getByTestId("import-session-filter-cursor"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Provider session")).toBeNull();
+    });
+    screen.getByText("Cursor chat");
   });
 });

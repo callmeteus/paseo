@@ -243,6 +243,101 @@ export function getPromptPreview(entry: FetchRecentProviderSessionEntry): string
   );
 }
 
+/** Provider id used by both Cursor ACP sessions and imported Cursor IDE chats. */
+export const CURSOR_PROVIDER_ID = "cursor";
+
+export interface CursorImportEntryData {
+  composerId: string;
+  title: string | null;
+  cwd: string | null;
+  subtitle: string | null;
+  createdAt: string;
+  lastUpdatedAt: string;
+  model: string | null;
+  isSubagent: boolean;
+  subagentTypeName: string | null;
+  importedAgentId: string | null;
+}
+
+/**
+ * One list holds both importable provider sessions and Cursor IDE chats. They
+ * differ in origin, not in what the user does with them: search, view, import.
+ */
+export type ImportSessionEntry =
+  | { kind: "provider"; entry: FetchRecentProviderSessionEntry }
+  | { kind: "cursor"; chat: CursorImportEntryData };
+
+export function getImportEntryKey(row: ImportSessionEntry): string {
+  return row.kind === "provider"
+    ? `${row.entry.providerId}:${row.entry.providerHandleId}`
+    : `cursor:${row.chat.composerId}`;
+}
+
+export function getImportEntryProviderId(row: ImportSessionEntry): string {
+  return row.kind === "provider" ? row.entry.providerId : CURSOR_PROVIDER_ID;
+}
+
+export function getImportEntryTimestamp(row: ImportSessionEntry): number {
+  const value = row.kind === "provider" ? row.entry.lastActivityAt : row.chat.lastUpdatedAt;
+  return new Date(value).getTime();
+}
+
+export function getImportEntryCwd(row: ImportSessionEntry): string | null {
+  return row.kind === "provider" ? row.entry.cwd : row.chat.cwd;
+}
+
+export function isImportEntryAlreadyImported(row: ImportSessionEntry): boolean {
+  return row.kind === "cursor" && row.chat.importedAgentId !== null;
+}
+
+export function mergeImportEntries(
+  providerEntries: ReadonlyArray<FetchRecentProviderSessionEntry>,
+  cursorChats: ReadonlyArray<CursorImportEntryData>,
+): ImportSessionEntry[] {
+  const rows: ImportSessionEntry[] = [
+    ...providerEntries.map((entry): ImportSessionEntry => ({ kind: "provider", entry })),
+    ...cursorChats.map((chat): ImportSessionEntry => ({ kind: "cursor", chat })),
+  ];
+  rows.sort((left, right) => getImportEntryTimestamp(right) - getImportEntryTimestamp(left));
+  return rows;
+}
+
+export function filterImportEntriesByProvider(
+  rows: ReadonlyArray<ImportSessionEntry>,
+  selectedProvider: string,
+): ImportSessionEntry[] {
+  if (selectedProvider === ALL_FILTER_VALUE) return [...rows];
+  return rows.filter((row) => getImportEntryProviderId(row) === selectedProvider);
+}
+
+export function getImportEntryTitle(row: ImportSessionEntry): string {
+  if (row.kind === "provider") return getSessionTitle(row.entry);
+  return row.chat.title?.trim() || i18n.t("cursorImport.untitled");
+}
+
+export function getImportEntryPreview(row: ImportSessionEntry): string {
+  if (row.kind === "provider") return getPromptPreview(row.entry);
+  const meta = [
+    row.chat.model,
+    row.chat.isSubagent ? (row.chat.subagentTypeName ?? i18n.t("cursorImport.subagent")) : null,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+  return meta || row.chat.subtitle?.trim() || i18n.t("importSession.preview.noPrompt");
+}
+
+/**
+ * Hosts without `importSessionSearch` only search Cursor chats on the daemon, so
+ * provider rows are filtered here with the same fields a user sees.
+ */
+export function matchesImportEntryQuery(row: ImportSessionEntry, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [getImportEntryTitle(row), getImportEntryPreview(row), getImportEntryCwd(row) ?? ""].some(
+    (value) => value.toLowerCase().includes(needle),
+  );
+}
+
 export interface EmptyStateInputs {
   isLoadingSessions: boolean;
   allQueriesErrored: boolean;
@@ -289,4 +384,128 @@ export function computeEmptyState(input: EmptyStateInputs): {
     };
   }
   return { showEmptyState, emptyStateTitle: i18n.t("importSession.empty.noRecent") };
+}
+
+export interface ImportSheetStatusInput {
+  isClientReady: boolean;
+  isWaitingForSnapshot: boolean;
+  isSnapshotUnsupported: boolean;
+  providersToFetchCount: number | null;
+  providerQueries: ReadonlyArray<SessionsQueryResult>;
+  cursorEnabled: boolean;
+  cursorLoading: boolean;
+  cursorErrored: boolean;
+  cursorUnavailable: boolean;
+  showFilter: boolean;
+  hasProviderErrors: boolean;
+  importErrored: boolean;
+  visibleCount: number;
+  selectedProvider: string;
+  hasQuery: boolean;
+  aggregatedCount: number;
+  totalAlreadyImportedCount: number;
+  providerLabelById: ReadonlyMap<string, string>;
+}
+
+export interface ImportSheetStatus {
+  isLoadingSessions: boolean;
+  isCursorErrored: boolean;
+  showCursorUnavailable: boolean;
+  hasNoImportableProviders: boolean;
+  hasCursorStatus: boolean;
+  showListHeader: boolean;
+  showEmptyState: boolean;
+  emptyStateTitle: string;
+}
+
+function isProviderListLoading(queries: ReadonlyArray<SessionsQueryResult>): boolean {
+  return queries.some((query) => query.isLoading || query.isPending);
+}
+
+function didAllProvidersFail(queries: ReadonlyArray<SessionsQueryResult>): boolean {
+  return queries.every((query) => query.isError);
+}
+
+function didAllProvidersSettle(queries: ReadonlyArray<SessionsQueryResult>): boolean {
+  return queries.every((query) => !query.isLoading && !query.isPending);
+}
+
+function computeIsLoading(input: ImportSheetStatusInput): boolean {
+  if (input.isWaitingForSnapshot || input.cursorLoading) return true;
+  if (input.providerQueries.length === 0) return false;
+  return isProviderListLoading(input.providerQueries);
+}
+
+function computeAllErrored(input: ImportSheetStatusInput): boolean {
+  if (input.providerQueries.length === 0) {
+    return input.cursorEnabled && input.cursorErrored;
+  }
+  if (!didAllProvidersFail(input.providerQueries)) return false;
+  return !input.cursorEnabled || input.cursorErrored;
+}
+
+function computeAllSettled(input: ImportSheetStatusInput): boolean {
+  const providersSettled =
+    input.providerQueries.length === 0 || didAllProvidersSettle(input.providerQueries);
+  const cursorSettled = !input.cursorEnabled || !input.cursorLoading;
+  return providersSettled && cursorSettled;
+}
+
+function shouldShowListHeader(input: {
+  status: ImportSheetStatusInput;
+  hasCursorStatus: boolean;
+  hasNoImportableProviders: boolean;
+  isLoadingSessions: boolean;
+}): boolean {
+  const { status } = input;
+  if (input.hasCursorStatus || !status.isClientReady || status.showFilter) return true;
+  if (status.isSnapshotUnsupported || input.hasNoImportableProviders) return true;
+  if (input.isLoadingSessions && status.visibleCount === 0) return true;
+  return status.importErrored || status.hasProviderErrors;
+}
+
+/**
+ * One place decides what the sheet shows around the rows: loading, errors,
+ * empty state, and whether the header block is needed at all.
+ */
+export function resolveImportSheetStatus(input: ImportSheetStatusInput): ImportSheetStatus {
+  const hasProviderQueries = input.providerQueries.length > 0;
+  const hasAnySource = hasProviderQueries || input.cursorEnabled;
+  const isLoadingSessions = computeIsLoading(input);
+  const allQueriesErrored = computeAllErrored(input);
+  const allQueriesSettled = computeAllSettled(input);
+  const { showEmptyState, emptyStateTitle } = computeEmptyState({
+    isLoadingSessions,
+    allQueriesErrored,
+    isQueryingProviders: hasAnySource,
+    allQueriesSettled,
+    selectedProvider: input.selectedProvider,
+    hasQuery: input.hasQuery,
+    aggregatedCount: input.aggregatedCount,
+    visibleCount: input.visibleCount,
+    totalAlreadyImportedCount: input.totalAlreadyImportedCount,
+    providerLabelById: input.providerLabelById,
+  });
+  const hasNoImportableProviders = input.providersToFetchCount === 0 && !input.cursorEnabled;
+  // A host without Cursor installed should not warn on every import sheet; the
+  // notice only helps when there is nothing else to import.
+  const showCursorUnavailable =
+    input.cursorEnabled && input.cursorUnavailable && input.visibleCount === 0;
+  const hasCursorStatus = input.cursorEnabled && (input.cursorErrored || showCursorUnavailable);
+  const showListHeader = shouldShowListHeader({
+    status: input,
+    hasCursorStatus,
+    hasNoImportableProviders,
+    isLoadingSessions,
+  });
+  return {
+    isLoadingSessions,
+    isCursorErrored: input.cursorErrored,
+    showCursorUnavailable,
+    hasNoImportableProviders,
+    hasCursorStatus,
+    showListHeader,
+    showEmptyState,
+    emptyStateTitle,
+  };
 }
