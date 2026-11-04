@@ -203,6 +203,17 @@ export function isWorkflowModeId(value: unknown): value is WorkflowModeId {
   return typeof value === "string" && BY_ID.has(value as WorkflowModeId);
 }
 
+/**
+ * Removes the daemon's workflow preamble from text a provider echoes back as a user message.
+ *
+ * The block is prepended to the provider-facing prompt, so providers that persist their input
+ * verbatim replay it as part of the user's turn. Only the anchored prefix is stripped; a user
+ * quoting the tag mid-message keeps their text.
+ */
+export function stripWorkflowInstruction(text: string): string {
+  return text.replace(/^<paseo-workflow>\n[\s\S]*?\n<\/paseo-workflow>\n*/, "");
+}
+
 export function composeWorkflowPrompt(
   modeId: string | null | undefined,
   ctx: WorkflowModeContext,
