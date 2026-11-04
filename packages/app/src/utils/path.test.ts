@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAbsolutePath } from "./path";
+import { isAbsolutePath, resolveWorkspacePath } from "./path";
 
 describe("isAbsolutePath", () => {
   it("returns true for Unix absolute paths", () => {
@@ -35,5 +35,22 @@ describe("isAbsolutePath", () => {
   it("handles mixed separators in absolute paths", () => {
     expect(isAbsolutePath("C:/Users\\mixed/path")).toBe(true);
     expect(isAbsolutePath("/tmp\\mixed/path")).toBe(true);
+  });
+});
+
+describe("resolveWorkspacePath", () => {
+  it("resolves relative paths against the workspace root", () => {
+    expect(resolveWorkspacePath("src/app.ts", "C:/repo")).toBe("C:/repo/src/app.ts");
+    expect(resolveWorkspacePath(".", "C:/repo")).toBe("C:/repo");
+    expect(resolveWorkspacePath("src/../docs/readme.md", "C:/repo")).toBe("C:/repo/docs/readme.md");
+  });
+
+  it("passes absolute paths through unchanged", () => {
+    expect(resolveWorkspacePath("C:/repo/src/app.ts", "D:/other")).toBe("C:/repo/src/app.ts");
+    expect(resolveWorkspacePath("/repo/src/app.ts", "/other")).toBe("/repo/src/app.ts");
+  });
+
+  it("returns the path unchanged when there is no workspace root", () => {
+    expect(resolveWorkspacePath("src/app.ts", "")).toBe("src/app.ts");
   });
 });

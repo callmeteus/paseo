@@ -965,7 +965,9 @@ function TabChip({
                 <OpenInFileManagerMenuItem
                   key={entry.key}
                   surface="context"
-                  path={parentDirectory(entry.path)}
+                  path={parentDirectory(entry.path) ?? "."}
+                  serverId={serverId}
+                  workspaceId={workspaceId}
                   label={entry.label}
                   testID={entry.testID}
                 />

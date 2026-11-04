@@ -100,12 +100,16 @@ export function MobileTabTrailingAccessory({
   presentationLabel,
   menuEntries,
   openWith,
+  serverId,
+  workspaceId,
 }: {
   menuTestIDBase: string;
   presentationLabel: string;
   menuEntries: WorkspaceTabMenuEntry[];
   /** A file tab's "Open with…" row and its page. */
   openWith?: FilePanelOpenWithMenu;
+  serverId?: string | null;
+  workspaceId?: string | null;
 }): ReactElement {
   const { t } = useTranslation();
   return (
@@ -137,7 +141,9 @@ export function MobileTabTrailingAccessory({
               <OpenInFileManagerMenuItem
                 key={entry.key}
                 surface="dropdown"
-                path={parentDirectory(entry.path)}
+                path={parentDirectory(entry.path) ?? "."}
+                serverId={serverId}
+                workspaceId={workspaceId}
                 label={entry.label}
                 testID={entry.testID}
               />

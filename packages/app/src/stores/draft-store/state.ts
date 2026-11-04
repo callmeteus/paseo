@@ -96,6 +96,7 @@ export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z
   [
     z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),
+    z.strictObject({ kind: z.literal("quote"), text: z.string() }),
     z.strictObject({
       kind: z.literal("workspace_file"),
       path: z.string(),

@@ -8,7 +8,8 @@ import {
   type ToolHosts,
 } from "../host-operations/index.js";
 import { AgentDirectory } from "../directory.js";
-import { stat } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, relative } from "node:path";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
@@ -164,6 +165,8 @@ export interface PaseoToolHostDependencies {
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
+  /** Pushes a plan tab to connected clients after plan_create_update writes it. */
+  emitPlanUpdate?: (input: { workspaceId: string; path: string; title: string }) => void;
   /**
    * ID of the agent that is using this tool catalog.
    * Used for cwd/mode inheritance when agents spawn child agents.
@@ -609,6 +612,10 @@ function resolveTerminalKeyToken({ key, literal, preamble }: TerminalKeyTokenInp
       { inputMode: inputMode.getState() },
     ) || key
   );
+}
+
+function ensureMarkdownPath(path: string): string {
+  return /\.(md|markdown)$/i.test(path) ? path : `${path}.md`;
 }
 
 export function createPaseoToolCatalog(options: PaseoToolHostDependencies): PaseoToolCatalog {
@@ -2422,6 +2429,67 @@ function createToolCatalog(
       return {
         content: [],
         structuredContent: ensureValidJson({ success: true }),
+      };
+    },
+  );
+
+  registerTool(
+    "plan_create_update",
+    {
+      title: "Create or update plan",
+      description:
+        "Create or update a markdown plan and open it in the workspace sidebar. Pass a workspace-relative path such as plans/feature.md.",
+      inputSchema: {
+        path: z.string().min(1).describe("Markdown plan path, relative to the workspace."),
+        title: z.string().optional().describe("Plan title shown in the sidebar."),
+        content: z
+          .string()
+          .optional()
+          .describe("Full markdown plan. Omit to open an existing plan without rewriting it."),
+      },
+      outputSchema: {
+        path: z.string(),
+        title: z.string(),
+        created: z.boolean(),
+      },
+    },
+    async ({ path: requestedPath, title, content }) => {
+      if (!callerAgentId) {
+        throw new PaseoToolInputError("plan_create_update requires an agent caller");
+      }
+      const caller = agentManager.getAgent(callerAgentId);
+      if (!caller) {
+        throw new PaseoToolInputError(`Caller agent ${callerAgentId} not found`);
+      }
+      const workspaceId = caller.workspaceId;
+      if (!workspaceId) {
+        throw new PaseoToolInputError("Caller agent has no workspace");
+      }
+      const workspace = options.workspaceRegistry
+        ? await options.workspaceRegistry.get(workspaceId)
+        : null;
+      const workspaceRoot = workspace?.cwd ?? caller.cwd;
+      const absolutePath = ensureMarkdownPath(resolvePathFromBase(workspaceRoot, requestedPath));
+      if (!isSameOrDescendantPath(workspaceRoot, absolutePath)) {
+        throw new PaseoToolInputError("Plan path must stay inside the workspace");
+      }
+      const created = content !== undefined;
+      if (created) {
+        await mkdir(dirname(absolutePath), { recursive: true });
+        await writeFile(absolutePath, content, "utf8");
+      } else {
+        try {
+          await stat(absolutePath);
+        } catch {
+          throw new PaseoToolInputError(`Plan file not found: ${requestedPath}`);
+        }
+      }
+      const planPath = relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
+      const planTitle = title?.trim() || basename(absolutePath, extname(absolutePath));
+      options.emitPlanUpdate?.({ workspaceId, path: planPath, title: planTitle });
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ path: planPath, title: planTitle, created }),
       };
     },
   );

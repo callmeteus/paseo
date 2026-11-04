@@ -1584,6 +1584,9 @@ export async function createPaseoDaemon(
     listActiveWorkspaces: listActiveWorkspacesExternal,
     archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
     emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
+    emitPlanUpdate: (input) => {
+      wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
+    },
     workspaceRegistry,
     projectRegistry,
     createDirectoryWorkspace: async (cwd, title, projectId, context) => {

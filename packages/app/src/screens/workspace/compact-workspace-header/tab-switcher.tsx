@@ -250,9 +250,18 @@ function MobileWorkspaceTabOption({
         presentationLabel={fallbackLabel}
         menuEntries={menuEntries}
         openWith={openWith}
+        serverId={normalizedServerId}
+        workspaceId={normalizedWorkspaceId}
       />
     ),
-    [menuTestIDBase, fallbackLabel, menuEntries, openWith],
+    [
+      menuTestIDBase,
+      fallbackLabel,
+      menuEntries,
+      openWith,
+      normalizedServerId,
+      normalizedWorkspaceId,
+    ],
   );
 
   const renderPresentation = useCallback(

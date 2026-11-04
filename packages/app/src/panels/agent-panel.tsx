@@ -84,9 +84,7 @@ import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
 import { ParentAgentCallout, useParentAgentId } from "@/subagents/parent";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
-import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
 import { buildDraftStoreKey, generateDraftId } from "@/stores/draft-keys";
-import { useDraftStore } from "@/stores/draft-store";
 import {
   selectAgentTimelineState,
   selectAgentTurnPresentation,
@@ -1159,14 +1157,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: draftStoreKey,
   });
-  const replaceDraftText = rawAgentInputDraft.replaceText;
-  const handleAddSelectionToChat = useCallback(
-    (selection: string) => {
-      const current = useDraftStore.getState().getDraftInput(draftStoreKey)?.text ?? "";
-      replaceDraftText(appendSelectionToDraftText(current, selection));
-    },
-    [draftStoreKey, replaceDraftText],
-  );
   // Stabilize the agentInputDraft object identity so that memo(AgentComposerSection) can bail out
   // when only toast state changes (which does not affect any draft field).
   const {
@@ -1176,6 +1166,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     textReplacement,
     attachments,
     setAttachments,
+    requestAttachmentFocus,
     clear,
     isHydrated,
     attachmentFocusRequestId,
@@ -1189,6 +1180,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
+      requestAttachmentFocus,
       clear,
       isHydrated,
       attachmentFocusRequestId,
@@ -1201,11 +1193,19 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       textReplacement,
       attachments,
       setAttachments,
+      requestAttachmentFocus,
       clear,
       isHydrated,
       attachmentFocusRequestId,
       composerState,
     ],
+  );
+  const handleAddSelectionToChat = useCallback(
+    (selection: string) => {
+      setAttachments((current) => [...current, { kind: "quote", text: selection }]);
+      requestAttachmentFocus();
+    },
+    [requestAttachmentFocus, setAttachments],
   );
   const parentCallout = parentAgentId ? (
     <ParentAgentCallout serverId={serverId} parentAgentId={parentAgentId} />

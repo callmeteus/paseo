@@ -50,6 +50,10 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { resyncProviderSubagents, useProviderSubagentStore } from "@/subagents/provider-store";
+import {
+  getLastWorkspaceSelection,
+  navigateToWorkspace,
+} from "@/stores/navigation-active-workspace-store";
 
 // Re-export types from session-store and draft-store for backward compatibility
 export type { DraftInput } from "@/stores/draft-store";
@@ -539,6 +543,23 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       }
     });
 
+    const unsubPlanUpdate = client.on("plan_update", (message) => {
+      if (message.type !== "plan_update") return;
+      const active = getLastWorkspaceSelection();
+      if (
+        !active ||
+        active.serverId !== serverId ||
+        active.workspaceId !== message.payload.workspaceId
+      ) {
+        return;
+      }
+      navigateToWorkspace({
+        serverId,
+        workspaceId: message.payload.workspaceId,
+        target: { kind: "file", path: message.payload.path },
+      });
+    });
+
     const unsubPermissionRequest = onFeed("agent_permission_request", (message) => {
       if (message.type !== "agent_permission_request") return;
       const { agentId, request } = message.payload;
@@ -689,6 +710,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubAgentAttention();
       unsubCheckoutStatusUpdate();
       unsubStatus();
+      unsubPlanUpdate();
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();

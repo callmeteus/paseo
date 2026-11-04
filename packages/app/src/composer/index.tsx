@@ -50,6 +50,8 @@ import {
   Minus,
   Pause,
   Play,
+  MessageSquare,
+  X,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { FOOTER_HEIGHT } from "@/constants/layout";
@@ -446,6 +448,7 @@ interface RenderAttachmentTrayArgs {
     openImage: string;
     removeImage: string;
     removeFile: string;
+    removeQuote: string;
     openGithub: (kind: string, numberLabel: string) => string;
     removeGithub: (kind: string, numberLabel: string) => string;
   };
@@ -551,6 +554,18 @@ function renderComposerAttachmentPill(args: RenderComposerAttachmentPillArgs): R
         disabled={disabled}
         onRemove={onRemove}
         removeLabel={labels.removeFile}
+      />
+    );
+  }
+  if (attachment.kind === "quote") {
+    return (
+      <QuoteAttachmentPill
+        key={`quote:${index}`}
+        attachment={attachment}
+        index={index}
+        disabled={disabled}
+        onRemove={onRemove}
+        removeLabel={labels.removeQuote}
       />
     );
   }
@@ -1091,6 +1106,42 @@ function FileAttachmentPill({
         subtitle={getFileTypeLabel(fileName) ?? t("message.attachments.file")}
       />
     </AttachmentPill>
+  );
+}
+
+function QuoteAttachmentPill({
+  attachment,
+  index,
+  disabled,
+  onRemove,
+  removeLabel,
+}: {
+  attachment: Extract<ComposerAttachment, { kind: "quote" }>;
+  index: number;
+  disabled: boolean;
+  onRemove: (index: number) => void;
+  removeLabel: string;
+}) {
+  const handleRemove = useCallback(() => {
+    onRemove(index);
+  }, [onRemove, index]);
+  return (
+    <View style={styles.quotePill} testID="composer-quote-attachment-pill">
+      <ThemedMessageSquare size={14} uniProps={iconForegroundMutedMapping} />
+      <Text numberOfLines={1} style={styles.quotePillText}>
+        {`"${attachment.text}"`}
+      </Text>
+      <Pressable
+        onPress={handleRemove}
+        disabled={disabled}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={removeLabel}
+        style={styles.quotePillRemove}
+      >
+        <ThemedX size={12} uniProps={iconForegroundMutedMapping} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -2656,6 +2707,7 @@ function ComposerContentImpl({
           openImage: t("composer.attachments.openImage"),
           removeImage: t("composer.attachments.removeImage"),
           removeFile: t("composer.attachments.removeFile"),
+          removeQuote: t("composer.attachments.removeQuote"),
           openGithub: (kind: string, numberLabel: string) =>
             t("composer.attachments.openGithub", { kind, number: numberLabel }),
           removeGithub: (kind: string, numberLabel: string) =>
@@ -2999,6 +3051,31 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[2],
     flexWrap: "wrap",
   },
+  quotePill: {
+    maxWidth: 420,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    paddingLeft: theme.spacing[3],
+    paddingRight: theme.spacing[2],
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface1,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+  },
+  quotePillText: {
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  quotePillRemove: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tooltipRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3129,6 +3206,8 @@ const ThemedMinus = withUnistyles(Minus);
 const ThemedPause = withUnistyles(Pause);
 const ThemedPlay = withUnistyles(Play);
 const ThemedSquare = withUnistyles(Square);
+const ThemedMessageSquare = withUnistyles(MessageSquare);
+const ThemedX = withUnistyles(X);
 
 function renderForgeAttachmentIcon(icon: string): ReactElement {
   return (

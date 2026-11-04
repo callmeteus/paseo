@@ -4671,6 +4671,16 @@ export const WorkspaceUpdateMessageSchema = z.object({
   ]),
 });
 
+export const PlanUpdateMessageSchema = z.object({
+  type: z.literal("plan_update"),
+  payload: z.object({
+    workspaceId: z.string(),
+    /** Workspace-relative markdown path. */
+    path: z.string(),
+    title: z.string().optional(),
+  }),
+});
+
 const WorkspaceLabelSyncMetadataSchema = z.object({
   mode: z.enum(["snapshot", "changes"]),
   generation: z.string(),
@@ -7395,6 +7405,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ArtifactMessageSchema,
   AgentUpdateMessageSchema,
   WorkspaceUpdateMessageSchema,
+  PlanUpdateMessageSchema,
   WorkspaceLabelListResponseSchema,
   WorkspaceLabelUpdateSchema,
   WorkspaceLabelAssignmentSetResponseSchema,

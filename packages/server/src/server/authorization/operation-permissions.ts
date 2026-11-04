@@ -486,6 +486,7 @@ const OUTBOUND_PERMISSION = {
   "workspace.setup.subscribe.response": "workspace.read",
   "workspace.setup.run.response": "workspace.write",
   workspace_update: ["workspace.read", "hub.execute"],
+  plan_update: "workspace.read",
   write_project_config_response: "workspace.write",
 } as const satisfies Record<OutboundOperation, PermissionRequirement>;
 

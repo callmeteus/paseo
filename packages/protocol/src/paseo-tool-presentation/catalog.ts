@@ -198,6 +198,11 @@ export const PASEO_TOOL_CATALOG = {
   },
 
   // Workspaces and scripts
+  plan_create_update: {
+    label: "Update plan",
+    context: field("title", "path"),
+    detail: { inputOrder: ["path", "title"] },
+  },
   create_workspace: {
     label: "Create workspace",
     context: workspaceContext(),
@@ -322,6 +327,14 @@ export const PASEO_TOOL_CATALOG = {
     label: "Inspect provider",
     context: field("provider"),
     detail: { inputOrder: ["provider", "cwd", "settings"] },
+  },
+
+  // Hub automations
+  list_automations: { label: "List automations" },
+  save_automation: {
+    label: "Save automation",
+    context: field("name"),
+    detail: { inputOrder: ["name"] },
   },
 
   // Browser

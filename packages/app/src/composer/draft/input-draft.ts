@@ -62,6 +62,7 @@ export interface AgentInputDraft {
   textReplacement: TextReplacement;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
+  requestAttachmentFocus: () => void;
   clear: (lifecycle: "sent" | "abandoned") => void;
   isHydrated: boolean;
   attachmentFocusRequestId: number;
@@ -348,6 +349,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     workingDir,
   ]);
 
+  const requestAttachmentFocus = useCallback(() => {
+    useDraftStore.getState().requestAttachmentFocus({ draftKey });
+  }, [draftKey]);
+
   return {
     textSource,
     editText,
@@ -355,6 +360,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     textReplacement,
     attachments,
     setAttachments,
+    requestAttachmentFocus,
     clear,
     isHydrated,
     attachmentFocusRequestId,
