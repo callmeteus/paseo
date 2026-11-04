@@ -4,6 +4,7 @@ import {
   isPlanningAgentMode,
   resolveForcedAgentModeId,
   resolveForcedLiveModeId,
+  resolveKnownAgentModeId,
   resolveNonPlanningModeId,
 } from "./policy";
 
@@ -95,5 +96,25 @@ describe("resolveForcedLiveModeId", () => {
         "plan",
       ),
     ).toBe("build");
+  });
+});
+
+describe("resolveKnownAgentModeId", () => {
+  const modes = [
+    { id: "agent", label: "Agent", colorTier: "moderate" },
+    { id: "plan", label: "Plan", colorTier: "planning" },
+    { id: "ask", label: "Ask", colorTier: "safe" },
+  ] satisfies AgentMode[];
+
+  it("keeps a mode the provider advertises", () => {
+    expect(resolveKnownAgentModeId(modes, "ask")).toBe("ask");
+  });
+
+  it("drops a mode saved under another provider", () => {
+    expect(resolveKnownAgentModeId(modes, "build")).toBeNull();
+  });
+
+  it("drops the mode when the provider mode list is unknown", () => {
+    expect(resolveKnownAgentModeId([], "build")).toBeNull();
   });
 });

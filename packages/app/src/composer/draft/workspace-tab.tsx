@@ -19,7 +19,7 @@ import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liv
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { appendSelectionToDraftText } from "@/assistant-selection-copy/quote";
-import { resolveForcedAgentModeId } from "@/agent-controls/policy";
+import { resolveForcedAgentModeId, resolveKnownAgentModeId } from "@/agent-controls/policy";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useDraftStore } from "@/stores/draft-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -98,20 +98,6 @@ function resolveAutoSubmitConfig(
   };
 }
 
-function resolveDraftModeIdOverride(input: {
-  autoSubmitConfig: AutoSubmitConfig | null;
-  effectiveModeId: string;
-}): { modeId: string } | Record<string, never> {
-  const { autoSubmitConfig, effectiveModeId } = input;
-  if (autoSubmitConfig?.modeId) {
-    return { modeId: autoSubmitConfig.modeId };
-  }
-  if (effectiveModeId !== "") {
-    return { modeId: effectiveModeId };
-  }
-  return {};
-}
-
 function resolveDraftCreateModeId(input: {
   workflowModeSource: WorkflowModeSource;
   autoSubmitConfig: AutoSubmitConfig | null;
@@ -121,31 +107,27 @@ function resolveDraftCreateModeId(input: {
     agentDefinition?: AgentProviderDefinition | null;
   };
 }): { modeId: string } | Record<string, never> {
-  if (input.workflowModeSource === "paseo") {
-    const forcedModeId = resolveForcedAgentModeId(
-      input.composerState.modeOptions,
-      input.composerState.agentDefinition?.defaultModeId ?? null,
-    );
-    return forcedModeId ? { modeId: forcedModeId } : {};
-  }
-  return resolveDraftModeIdOverride({
-    autoSubmitConfig: input.autoSubmitConfig,
-    effectiveModeId: input.composerState.effectiveModeId,
-  });
+  const requestedModeId =
+    input.workflowModeSource === "paseo"
+      ? resolveForcedAgentModeId(
+          input.composerState.modeOptions,
+          input.composerState.agentDefinition?.defaultModeId ?? null,
+        )
+      : (input.autoSubmitConfig?.modeId ?? input.composerState.effectiveModeId);
+  const modeId = resolveKnownAgentModeId(input.composerState.modeOptions, requestedModeId);
+  return modeId ? { modeId } : {};
 }
 
 function resolveDraftModeId(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   effectiveModeId: string;
+  modeOptions: readonly AgentMode[];
 }): string | null {
-  const { autoSubmitConfig, effectiveModeId } = input;
-  if (autoSubmitConfig?.modeId !== undefined) {
-    return autoSubmitConfig.modeId;
-  }
-  if (effectiveModeId !== "") {
-    return effectiveModeId;
-  }
-  return null;
+  const requestedModeId =
+    input.autoSubmitConfig?.modeId !== undefined
+      ? input.autoSubmitConfig.modeId
+      : input.effectiveModeId;
+  return resolveKnownAgentModeId(input.modeOptions, requestedModeId);
 }
 
 async function resolveDraftRouterTarget(
@@ -339,19 +321,19 @@ function buildDraftAgentSnapshot(input: {
   const model = autoSubmitConfig?.model ?? (composerState.effectiveModelId || null);
   const thinkingOptionId =
     autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || null);
-  const forcedModeId =
-    workflowModeSource === "paseo"
-      ? resolveForcedAgentModeId(
-          composerState.modeOptions,
-          composerState.agentDefinition?.defaultModeId ?? null,
-        )
-      : null;
   const modeId =
     workflowModeSource === "paseo"
-      ? forcedModeId
+      ? resolveKnownAgentModeId(
+          composerState.modeOptions,
+          resolveForcedAgentModeId(
+            composerState.modeOptions,
+            composerState.agentDefinition?.defaultModeId ?? null,
+          ),
+        )
       : resolveDraftModeId({
           autoSubmitConfig,
           effectiveModeId: composerState.effectiveModeId,
+          modeOptions: composerState.modeOptions,
         });
   const provider = autoSubmitConfig?.provider ?? composerState.selectedProvider;
   if (!provider) {

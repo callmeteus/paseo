@@ -58,3 +58,18 @@ export function resolveForcedLiveModeId(
   }
   return modes.find((mode) => !isPlanningAgentMode(mode))?.id ?? null;
 }
+
+/**
+ * Drops a mode the selected provider does not advertise. A draft or profile can
+ * carry a mode saved under another provider, and creating the agent with it
+ * fails with "Invalid mode". An unknown mode list also drops the value so the
+ * provider applies its own default instead of guessing.
+ */
+export function resolveKnownAgentModeId(
+  modes: readonly AgentMode[],
+  modeId: string | null | undefined,
+): string | null {
+  const candidate = modeId?.trim();
+  if (!candidate) return null;
+  return modes.some((mode) => mode.id === candidate) ? candidate : null;
+}

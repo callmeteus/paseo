@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { Composer } from "@/composer";
-import { resolveForcedAgentModeId } from "@/agent-controls/policy";
+import { resolveForcedAgentModeId, resolveKnownAgentModeId } from "@/agent-controls/policy";
 import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { ICON_SIZE } from "@/styles/theme";
@@ -152,9 +152,11 @@ function buildCreateAgentOptions({
         composerState.agentDefinition?.defaultModeId ?? null,
       )
     : null;
-  const modeId = usesPaseoWorkflowModes
-    ? (forcedModeId ?? undefined)
-    : composerState.effectiveModeId || undefined;
+  const modeId =
+    resolveKnownAgentModeId(
+      composerState.modeOptions,
+      usesPaseoWorkflowModes ? forcedModeId : composerState.effectiveModeId || undefined,
+    ) ?? undefined;
   return {
     provider,
     cwd: workspaceDirectory,
