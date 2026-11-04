@@ -134,8 +134,10 @@ export function WorkflowModeControl({
   const [optimisticModeId, setOptimisticModeId] = useState<string | null>(null);
 
   useEffect(() => {
-    setOptimisticModeId(null);
-  }, [selectedWorkflowModeId]);
+    if (optimisticModeId !== null && selectedWorkflowModeId === optimisticModeId) {
+      setOptimisticModeId(null);
+    }
+  }, [optimisticModeId, selectedWorkflowModeId]);
 
   const activeModeId = optimisticModeId ?? selectedWorkflowModeId;
   const selected = resolveWorkflowMode(activeModeId);
@@ -262,13 +264,16 @@ export function useLiveWorkflowModeControl(
   );
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const toast = useToast();
+  const requestSequence = useRef(0);
 
   const handleSelect = useCallback(
     (workflowModeId: string) => {
       if (!client) return;
+      const requestId = ++requestSequence.current;
       void client
         .setAgentWorkflowMode(agentId, workflowModeId)
         .then((applied) => {
+          if (requestId !== requestSequence.current) return;
           console.log("[WorkflowModeControl] setAgentWorkflowMode result:", applied);
           const next = applied ?? workflowModeId;
           useSessionStore.getState().setAgents(serverId, (current) => {
@@ -278,8 +283,10 @@ export function useLiveWorkflowModeControl(
             updated.set(agentId, { ...agent, workflowModeId: next });
             return updated;
           });
+          return applied;
         })
         .catch((error: unknown) => {
+          if (requestId !== requestSequence.current) return;
           console.warn("[WorkflowModeControl] setAgentWorkflowMode failed", error);
           toast.error(toErrorMessage(error));
         });
