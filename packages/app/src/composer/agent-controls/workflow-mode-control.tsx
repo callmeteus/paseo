@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -7,9 +7,15 @@ import { Bug, Layers, ListTodo, MessageCircle, Sparkles } from "lucide-react-nat
 import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Shortcut } from "@/components/ui/shortcut";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import type { AgentControlIcon } from "@/agent-controls/icons";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
+import { resolveNextWorkflowModeId } from "@/composer/agent-controls/mode";
+import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useSessionStore } from "@/stores/session-store";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
@@ -118,16 +124,51 @@ export function WorkflowModeControl({
 }: WorkflowModeControlValue & { surface?: "toolbar" | "sheet"; onClose?: () => void }) {
   const { t } = useTranslation();
   const { presentation } = useComposerControlLayout();
+  const { isActiveComposer } = useComposerKeyboardScope();
+  const cycleShortcutKeys = useShortcutKeys("cycle-agent-mode");
   const anchorRef = useRef<View>(null);
+  const keyboardHandlerIdRef = useRef(
+    `workflow-mode-control:${Math.random().toString(36).slice(2)}`,
+  );
   const [open, setOpen] = useState(false);
+  const [optimisticModeId, setOptimisticModeId] = useState<string | null>(null);
 
-  const selected = resolveWorkflowMode(selectedWorkflowModeId);
+  useEffect(() => {
+    setOptimisticModeId(null);
+  }, [selectedWorkflowModeId]);
+
+  const activeModeId = optimisticModeId ?? selectedWorkflowModeId;
+  const selected = resolveWorkflowMode(activeModeId);
   const Icon = selected.icon;
   const selectedLabel = t(selected.labelKey);
   const options = useMemo<ComboboxOption[]>(
     () => WORKFLOW_MODES.map((mode) => ({ id: mode.id, label: t(mode.labelKey) })),
     [t],
   );
+
+  const handleKeyboardAction = useCallback(
+    (action: KeyboardActionDefinition): boolean => {
+      if (action.id !== "message-input.mode-cycle") return false;
+      if (disabled) return false;
+      const nextModeId = resolveNextWorkflowModeId({
+        modeOptions: WORKFLOW_MODES,
+        selectedMode: activeModeId,
+      });
+      if (!nextModeId) return false;
+      setOptimisticModeId(nextModeId);
+      onSelectWorkflowMode(nextModeId);
+      return true;
+    },
+    [activeModeId, disabled, onSelectWorkflowMode],
+  );
+
+  useKeyboardActionHandler({
+    handlerId: keyboardHandlerIdRef.current,
+    actions: ["message-input.mode-cycle"],
+    enabled: isActiveComposer && !disabled && WORKFLOW_MODES.length > 1,
+    priority: 250,
+    handle: handleKeyboardAction,
+  });
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -139,6 +180,7 @@ export function WorkflowModeControl({
   const handlePress = useCallback(() => handleOpenChange(!open), [handleOpenChange, open]);
   const handleSelect = useCallback(
     (id: string) => {
+      setOptimisticModeId(id);
       onSelectWorkflowMode(id);
       handleOpenChange(false);
     },
@@ -185,6 +227,7 @@ export function WorkflowModeControl({
         <TooltipContent side="top" align="center" offset={8}>
           <View style={styles.tooltipRow}>
             <Text style={styles.tooltipText}>{t("agentControls.workflowMode.hint")}</Text>
+            {isActiveComposer && cycleShortcutKeys ? <Shortcut chord={cycleShortcutKeys} /> : null}
           </View>
         </TooltipContent>
       </Tooltip>
@@ -223,12 +266,25 @@ export function useLiveWorkflowModeControl(
   const handleSelect = useCallback(
     (workflowModeId: string) => {
       if (!client) return;
-      void client.setAgentWorkflowMode(agentId, workflowModeId).catch((error: unknown) => {
-        console.warn("[WorkflowModeControl] setAgentWorkflowMode failed", error);
-        toast.error(toErrorMessage(error));
-      });
+      void client
+        .setAgentWorkflowMode(agentId, workflowModeId)
+        .then((applied) => {
+          console.log("[WorkflowModeControl] setAgentWorkflowMode result:", applied);
+          const next = applied ?? workflowModeId;
+          useSessionStore.getState().setAgents(serverId, (current) => {
+            const agent = current.get(agentId);
+            if (!agent || agent.workflowModeId === next) return current;
+            const updated = new Map(current);
+            updated.set(agentId, { ...agent, workflowModeId: next });
+            return updated;
+          });
+        })
+        .catch((error: unknown) => {
+          console.warn("[WorkflowModeControl] setAgentWorkflowMode failed", error);
+          toast.error(toErrorMessage(error));
+        });
     },
-    [agentId, client, toast],
+    [agentId, client, serverId, toast],
   );
 
   return useMemo(() => {

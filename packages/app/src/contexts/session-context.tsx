@@ -543,6 +543,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
     const unsubPlanUpdate = client.on("plan_update", (message) => {
       if (message.type !== "plan_update") return;
+      console.info("[plan_update] received", message.payload);
       usePlanStore.getState().setPlan({
         serverId,
         workspaceId: message.payload.workspaceId,
