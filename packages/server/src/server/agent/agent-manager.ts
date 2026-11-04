@@ -109,10 +109,7 @@ import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import {
   composeWorkflowPrompt,
-  getWorkflowMode,
   isWorkflowModeId,
-  resolveDefaultWritableProviderMode,
-  resolveReadOnlyProviderMode,
   stripWorkflowInstruction,
 } from "./workflow-modes.js";
 import {
@@ -1149,8 +1146,6 @@ export class AgentManager {
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
-  /** Provider mode to restore when a read-only workflow mode is left. */
-  private readonly readOnlyWorkflowPreviousMode = new Map<string, string | null>();
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
@@ -2645,30 +2640,10 @@ export class AgentManager {
       if (currentWorkflowId === normalized) {
         return normalized;
       }
-      const currentWorkflow = getWorkflowMode(currentWorkflowId);
-      const nextWorkflow = getWorkflowMode(normalized);
-      if (nextWorkflow.readOnly) {
-        const readOnlyModeId = resolveReadOnlyProviderMode(liveAgent.provider);
-        if (!readOnlyModeId) {
-          throw new Error(
-            `Workflow mode '${nextWorkflow.id}' is read-only, but provider '${liveAgent.provider}' has no known read-only mode`,
-          );
-        }
-        if (!currentWorkflow.readOnly) {
-          this.readOnlyWorkflowPreviousMode.set(agentId, liveAgent.currentModeId);
-        }
-        // Switch the provider's own mode; a running turn keeps running, but its
-        // next edit request is rejected by the provider's read-only mode.
-        await this.setAgentMode(agentId, readOnlyModeId);
-      } else if (currentWorkflow.readOnly) {
-        const previousModeId =
-          this.readOnlyWorkflowPreviousMode.get(agentId) ??
-          resolveDefaultWritableProviderMode(liveAgent.provider);
-        this.readOnlyWorkflowPreviousMode.delete(agentId);
-        if (previousModeId) {
-          await this.setAgentMode(agentId, previousModeId);
-        }
-      }
+      // Paseo workflow modes are prompt-level roles. Do not switch the
+      // provider's own permission mode here: the app keeps it on Build, and
+      // switching to the provider's Plan mode reintroduces its native plan
+      // instructions and makes Shift+Tab oscillate between modes.
       liveAgent.config.workflowModeId = normalized ?? undefined;
       this.touchUpdatedAt(liveAgent);
       this.emitState(liveAgent);
@@ -6622,18 +6597,6 @@ export class AgentManager {
       env: options.env,
       purpose: options.purpose,
     });
-    const workflowMode = getWorkflowMode(storedConfig.workflowModeId);
-    if (workflowMode.readOnly) {
-      const readOnlyModeId = resolveReadOnlyProviderMode(storedConfig.provider);
-      if (!readOnlyModeId) {
-        throw new Error(
-          `Workflow mode '${workflowMode.id}' is read-only, but provider '${storedConfig.provider}' has no known read-only mode`,
-        );
-      }
-      // The provider mode is the enforcement; the workflow prompt only explains
-      // the role. Resuming a writable session in Plan/Ask would let it edit.
-      storedConfig = { ...storedConfig, modeId: readOnlyModeId };
-    }
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
