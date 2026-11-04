@@ -5,6 +5,7 @@ import {
   isWorkflowModeId,
   resolveDefaultWritableProviderMode,
   resolveReadOnlyProviderMode,
+  stripWorkflowInstruction,
   WORKFLOW_MODES,
 } from "./workflow-modes.js";
 
@@ -12,6 +13,18 @@ describe("workflow modes", () => {
   test("agent is the default and contributes no prompt", () => {
     expect(composeWorkflowPrompt(null, { agentId: "a", cwd: "/repo" })).toBe("");
     expect(composeWorkflowPrompt("unknown", { agentId: "a", cwd: "/repo" })).toBe("");
+  });
+
+  test("strips the workflow preamble providers echo back as a user message", () => {
+    expect(
+      stripWorkflowInstruction(
+        "<paseo-workflow>\nYou are in Ask mode.\n</paseo-workflow>\n\nMe lembre em 1h",
+      ),
+    ).toBe("Me lembre em 1h");
+    expect(stripWorkflowInstruction("Me lembre em 1h")).toBe("Me lembre em 1h");
+    expect(stripWorkflowInstruction("quote <paseo-workflow> mid-message")).toBe(
+      "quote <paseo-workflow> mid-message",
+    );
   });
 
   test("ask describes a read-only posture", () => {
@@ -39,7 +52,7 @@ describe("workflow modes", () => {
     const prompt = composeWorkflowPrompt("plan", { agentId: "a", cwd: "/repo" });
     expect(prompt).toContain("Plan mode");
     expect(prompt).toContain("implementation plan");
-    expect(prompt).toContain("Do NOT edit files");
+    expect(prompt).toContain("Do NOT edit project files");
     expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
   });
 

@@ -5956,6 +5956,44 @@ test("archive_workspace_request hides non-destructive workspace records", async 
   expect(response?.payload.error).toBeNull();
 });
 
+test("workspace.delete.request removes the workspace record permanently", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  const session = createSessionForWorkspaceTests();
+  const workspace = createPersistedWorkspaceRecord({
+    workspaceId: "ws-repo-delete",
+    projectId: "proj-repo-delete",
+    cwd: REPO_CWD,
+    kind: "directory",
+    displayName: "repo",
+    createdAt: "2026-03-01T12:00:00.000Z",
+    updatedAt: "2026-03-01T12:00:00.000Z",
+  });
+  let removedWorkspaceId: string | null = null;
+
+  session.emit = (message) => {
+    if (isSessionOutboundMessage(message)) emitted.push(message);
+  };
+  session.workspaceRegistry.get = async () => workspace;
+  session.workspaceRegistry.remove = async (workspaceId: string) => {
+    removedWorkspaceId = workspaceId;
+  };
+  session.agentStorage.listByWorkspace = async () => [];
+  session.agentManager.flush = async () => {};
+  session.terminalController.killTerminalsForWorkspace = async () => {};
+
+  await session.handleMessage({
+    type: "workspace.delete.request",
+    workspaceId: "ws-repo-delete",
+    requestId: "req-delete",
+  });
+
+  const response = emitted.find((message) => message.type === "workspace.delete.response") as
+    | { payload: Record<string, unknown> }
+    | undefined;
+  expect(response?.payload.error).toBeNull();
+  expect(removedWorkspaceId).toBe("ws-repo-delete");
+});
+
 test("archive_workspace_request archives a worktree-kind workspace and removes the directory on last reference", async () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "session-worktree-kind-archive-"));
   const repoDir = path.join(tempDir, "repo");

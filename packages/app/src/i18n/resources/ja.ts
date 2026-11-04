@@ -780,6 +780,7 @@ export const ja: TranslationResources = {
         moveToWorkspace: "ワークスペースへ移動",
         promoteToWorkspace: "ワークスペースへ昇格",
         openContainingDirectory: "格納フォルダーを開く",
+        deletePermanently: "チャットを完全に削除",
         moveWorkspace: {
           title: "ワークスペースをフォルダーへ移動",
           empty: "他に開いているフォルダーはありません。",
@@ -858,6 +859,7 @@ export const ja: TranslationResources = {
         reloadedAgent: "エージェントを再読み込みしました",
         failedToReloadAgent: "エージェントの再読み込みに失敗しました",
         failedToCloseAgent: "エージェントを閉じられませんでした",
+        failedToDeleteAgent: "チャットを削除できませんでした",
       },
       confirmations: {
         unsavedTitle: "未保存の変更",
@@ -873,6 +875,11 @@ export const ja: TranslationResources = {
         archiveRunningAgentTitle: "実行中のエージェントをアーカイブしますか？",
         archiveRunningAgentMessage:
           "このエージェントはまだ実行中です。アーカイブするとエージェントが停止してタブが閉じられます。",
+        deleteAgentTitle: "チャットを完全に削除しますか？",
+        deleteAgentMessage: "このチャットと履歴を完全に削除します。元に戻せません。",
+        deleteAgentRunningMessage:
+          "このチャットはまだ実行中です。削除するとエージェントを停止し、履歴を完全に消去します。元に戻せません。",
+        deletePermanently: "完全に削除",
         closeTabsLeftTitle: "左のタブを閉じますか？",
         closeTabsRightTitle: "右のタブを閉じますか？",
         closeOtherTabsTitle: "他のタブを閉じますか？",
@@ -1321,6 +1328,10 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "ホストでグループ化",
+      disable: "ホスト別のグループ化を解除",
+    },
     statusGroupAccessibility: "{{label}} グループ",
     statusBucket: {
       needsInput: "入力待ち",
@@ -1345,6 +1356,7 @@ export const ja: TranslationResources = {
         project: "プロジェクト",
         status: "ステータス",
         labels: "ラベル",
+        host: "ホスト",
       },
       titleSource: {
         label: "タイトル",
@@ -1513,6 +1525,7 @@ export const ja: TranslationResources = {
         moveToFolder: "ワークスペースをフォルダーへ移動…",
         archive: "アーカイブ",
         archiveWorkspace: "ワークスペースをアーカイブ",
+        deletePermanently: "完全に削除",
         hideFromSidebar: "サイドバーから非表示",
         archiving: "アーカイブ中...",
         hiding: "非表示にしています...",
@@ -1522,6 +1535,9 @@ export const ja: TranslationResources = {
         hideMessage:
           '"{{workspaceName}}"をサイドバーから非表示にしますか？\n\nディスク上のファイルは変更されません。',
         hideConfirm: "非表示",
+        deleteTitle: "ワークスペースを完全に削除しますか？",
+        deleteMessage: "「{{name}}」とそのすべてのチャットを完全に削除します。元に戻せません。",
+        deleteConfirm: "完全に削除",
         cancel: "キャンセル",
       },
       rename: {
@@ -1538,6 +1554,7 @@ export const ja: TranslationResources = {
         movedToFolder: "ワークスペースを {{path}} へ移動しました",
         moveToFolderFailed: "ワークスペースを移動できませんでした",
         archiveFailed: "ワークスペースのアーカイブに失敗しました",
+        deleteFailed: "ワークスペースを削除できませんでした",
       },
     },
   },
@@ -1821,6 +1838,10 @@ export const ja: TranslationResources = {
     failedToLoad: "読み込みに失敗しました",
     chooseProjectForCommands: "コマンドを表示するにはプロジェクトを選択してください",
     chooseModelForCommands: "コマンドを表示するにはモデルを選択してください",
+    untitledChat: "無題のチャット",
+    archivedChat: "アーカイブ済み",
+    attachChatFailed: "このチャットを添付できませんでした",
+    attachChatUnavailable: "このコンポーザーではチャットを添付できません",
   },
   loadOlderHistory: {
     failed: "古い履歴を読み込めませんでした",

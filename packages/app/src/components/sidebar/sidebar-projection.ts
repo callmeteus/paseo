@@ -19,11 +19,16 @@ import {
   type SidebarShortcutModel,
   type SidebarShortcutSection,
 } from "@/utils/sidebar-shortcuts";
-import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
+import { hostGroupKey, statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
 
 export interface SidebarProjection {
   pinnedGroups: PinnedSidebarGroups;
   workspaceGroups: SidebarWorkspaceGroup[];
+  /**
+   * Host sections for the optional host grouping. Each project keeps its header and fold state;
+   * only the workspaces that live on that host sit under it.
+   */
+  hostProjects: SidebarHostProjectGroup[];
   /**
    * The project icons this projection needs fetched, keyed by `projectViewKey` — one per project,
    * whatever the mode groups by. It sits here rather than beside `useProjectIcons` in the list
@@ -46,7 +51,15 @@ export interface SidebarProjectionInput {
   pinnedCollapsed: boolean;
   collapsedProjectKeys: ReadonlySet<string>;
   collapsedWorkspaceGroupKeys: ReadonlySet<string>;
+  hostById: ReadonlyMap<string, { label: string; isLocal: boolean }>;
   t: TFunction;
+}
+
+export interface SidebarHostProjectGroup {
+  key: string;
+  serverId: string;
+  label: string;
+  projects: SidebarProjectEntry[];
 }
 
 export function buildSidebarProjection(input: SidebarProjectionInput): SidebarProjection {
@@ -63,6 +76,10 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
   const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  const hostProjects =
+    input.groupMode === "host"
+      ? buildHostProjectGroups(pinnedGroups.unpinnedProjects, input.hostById)
+      : [];
 
   const sections: SidebarShortcutSection[] = [];
   if (!input.pinnedCollapsed) {
@@ -74,6 +91,17 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
         workspaces: project.workspaces,
         collapsed: input.collapsedProjectKeys.has(project.viewKey),
       })),
+    );
+  } else if (input.groupMode === "host") {
+    sections.push(
+      ...hostProjects.flatMap((host) =>
+        host.projects.map((project) => ({
+          workspaces: project.workspaces,
+          collapsed:
+            input.collapsedWorkspaceGroupKeys.has(host.key) ||
+            input.collapsedProjectKeys.has(project.viewKey),
+        })),
+      ),
     );
   } else {
     sections.push(
@@ -87,9 +115,52 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   return {
     pinnedGroups,
     workspaceGroups,
+    hostProjects,
     projectIconTargets: resolveSidebarProjectIconTargets(input.projects),
     shortcutModel: buildSidebarShortcutSections({ sections }),
   };
+}
+
+/**
+ * Nests projects under the host that owns each of their workspaces. A project spanning hosts
+ * appears once per host, carrying only that host's workspaces, so its header keeps working as a
+ * fold target inside each host section.
+ */
+function buildHostProjectGroups(
+  projects: readonly SidebarProjectEntry[],
+  hostById: ReadonlyMap<string, { label: string; isLocal: boolean }>,
+): SidebarHostProjectGroup[] {
+  const projectsByServerId = new Map<string, SidebarProjectEntry[]>();
+  for (const project of projects) {
+    const workspacesByServerId = new Map<string, SidebarProjectEntry["workspaces"]>();
+    for (const workspace of project.workspaces) {
+      const workspaces = workspacesByServerId.get(workspace.serverId);
+      if (workspaces) workspaces.push(workspace);
+      else workspacesByServerId.set(workspace.serverId, [workspace]);
+    }
+    for (const [serverId, workspaces] of workspacesByServerId) {
+      const list = projectsByServerId.get(serverId);
+      const entry = { ...project, workspaces };
+      if (list) list.push(entry);
+      else projectsByServerId.set(serverId, [entry]);
+    }
+  }
+
+  const groups = [...projectsByServerId.entries()].map(([serverId, hostProjectList]) => {
+    const host = hostById.get(serverId);
+    return {
+      key: hostGroupKey(serverId),
+      serverId,
+      label: host?.label ?? serverId,
+      projects: hostProjectList,
+      isLocal: host?.isLocal ?? false,
+    };
+  });
+  groups.sort(
+    (left, right) =>
+      Number(right.isLocal) - Number(left.isLocal) || left.label.localeCompare(right.label),
+  );
+  return groups.map(({ isLocal: _isLocal, ...group }) => group);
 }
 
 /** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
@@ -104,5 +175,7 @@ function buildWorkspaceGroups(
       return statusWorkspaceGroups(
         buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey, input.t),
       );
+    case "host":
+      return [];
   }
 }

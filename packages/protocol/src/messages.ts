@@ -2103,6 +2103,50 @@ export const AgentTimelineListPromptsRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const ChatSearchRequestMessageSchema = z.object({
+  type: z.literal("chat.search.request"),
+  requestId: z.string(),
+  query: z.string(),
+  /** Only chats working in this directory or below it. */
+  cwd: z.string().optional(),
+  includeArchived: z.boolean().optional(),
+  sinceHours: z.number().int().positive().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const ChatSearchMatchSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  role: z.enum(["user", "assistant"]),
+  snippet: z.string(),
+});
+
+export const ChatSearchResultSchema = z.object({
+  agentId: z.string(),
+  title: z.string().nullable(),
+  provider: z.string(),
+  status: AgentStatusSchema,
+  cwd: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().nullable(),
+  /** The query matched the chat title, not only message text. */
+  titleMatch: z.boolean(),
+  matches: z.array(ChatSearchMatchSchema),
+});
+
+export type ChatSearchResult = z.infer<typeof ChatSearchResultSchema>;
+
+export const ChatSearchResponseMessageSchema = z.object({
+  type: z.literal("chat.search.response"),
+  payload: z.object({
+    requestId: z.string(),
+    query: z.string(),
+    chats: z.array(ChatSearchResultSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export type ChatSearchPayload = z.infer<typeof ChatSearchResponseMessageSchema>["payload"];
+
 export const CursorImportListRequestMessageSchema = z.object({
   type: z.literal("agent.imports.cursor.list.request"),
   requestId: z.string(),
@@ -2948,6 +2992,17 @@ export const ArchiveWorkspaceRequestSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * Permanently removes a workspace and every agent that belongs to it. `deleteFiles` is opt-in and
+ * only ever removes a Paseo-owned worktree directory; a checkout the user opened stays on disk.
+ */
+export const WorkspaceDeleteRequestSchema = z.object({
+  type: z.literal("workspace.delete.request"),
+  workspaceId: z.string(),
+  requestId: z.string(),
+  deleteFiles: z.boolean().optional(),
+});
+
 // Create a new workspace record. Unlike open_project, this never deduplicates by
 // directory: it always produces a fresh workspace. The source discriminates
 // between an existing local directory and a newly created paseo worktree.
@@ -3643,6 +3698,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentTimelineRequestMessageSchema,
   AgentTimelineSearchRequestMessageSchema,
   AgentTimelineListPromptsRequestMessageSchema,
+  ChatSearchRequestMessageSchema,
   CursorImportListRequestMessageSchema,
   CursorImportRunRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
@@ -3705,6 +3761,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceGithubSearchRepositoriesRequestSchema,
   ProjectGithubCloneRequestSchema,
   ArchiveWorkspaceRequestSchema,
+  WorkspaceDeleteRequestSchema,
   WorkspaceCreateRequestSchema,
   AgentCreateRequestSchema,
   AgentSwapProviderRequestSchema,
@@ -3964,6 +4021,8 @@ export const ServerInfoStatusPayloadSchema = z
         directorySync: z.boolean().optional(),
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         workspaceLabels: z.boolean().optional(),
+        // COMPAT(workspaceDelete): added in v0.9.0, remove gate after 2027-11-04.
+        workspaceDelete: z.boolean().optional(),
         // COMPAT(workspaceSetupRun): added in v0.8.0, remove gate after 2027-09-02.
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
@@ -4062,6 +4121,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonSelfUpdate: z.boolean().optional(),
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: z.boolean().optional(),
+        // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
+        chatSearch: z.boolean().optional(),
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
         agentProviderSwap: z.boolean().optional(),
         // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.
@@ -5012,6 +5073,15 @@ export const ArchiveWorkspaceResponseMessageSchema = z.object({
     requestId: z.string(),
     workspaceId: z.string(),
     archivedAt: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const WorkspaceDeleteResponseMessageSchema = z.object({
+  type: z.literal("workspace.delete.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
     error: z.string().nullable(),
   }),
 });
@@ -7449,11 +7519,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
+  WorkspaceDeleteResponseMessageSchema,
   FetchAgentResponseMessageSchema,
   FetchAgentTimelineResponseMessageSchema,
   AgentTimelineReplacementMessageSchema,
   AgentTimelineSearchResponseMessageSchema,
   AgentTimelineListPromptsResponseMessageSchema,
+  ChatSearchResponseMessageSchema,
   CursorImportListResponseMessageSchema,
   CursorImportRunResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
@@ -7688,6 +7760,7 @@ export type LegacyOpenInEditorResponseMessage = z.infer<
   typeof LegacyOpenInEditorResponseMessageSchema
 >;
 export type ArchiveWorkspaceResponseMessage = z.infer<typeof ArchiveWorkspaceResponseMessageSchema>;
+export type WorkspaceDeleteResponseMessage = z.infer<typeof WorkspaceDeleteResponseMessageSchema>;
 export type FetchAgentResponseMessage = z.infer<typeof FetchAgentResponseMessageSchema>;
 export type FetchAgentTimelineResponseMessage = z.infer<
   typeof FetchAgentTimelineResponseMessageSchema
@@ -8006,6 +8079,7 @@ export type WorkspaceGithubSearchRepositoriesRequest = z.infer<
 export type ProjectGithubCloneRequest = z.infer<typeof ProjectGithubCloneRequestSchema>;
 export type ProjectGithubCloneProtocol = z.infer<typeof ProjectGithubCloneProtocolSchema>;
 export type ArchiveWorkspaceRequest = z.infer<typeof ArchiveWorkspaceRequestSchema>;
+export type WorkspaceDeleteRequest = z.infer<typeof WorkspaceDeleteRequestSchema>;
 export type WorkspaceClearAttentionRequest = z.infer<typeof WorkspaceClearAttentionRequestSchema>;
 export type WorkspaceMarkUnreadRequest = z.infer<typeof WorkspaceMarkUnreadRequestSchema>;
 export type WorkspaceRelocateRequest = z.infer<typeof WorkspaceRelocateRequestSchema>;

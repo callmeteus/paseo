@@ -28,6 +28,9 @@ import {
   findActiveFileMention,
   type FileMentionRange,
 } from "@/utils/file-mention-autocomplete";
+import { removeMentionToken, type ChatMentionCandidate } from "@/utils/chat-mention-autocomplete";
+import { useChatMentionSuggestions } from "./use-chat-mention-suggestions";
+import { useHostFeature } from "@/runtime/host-features";
 
 interface UseAgentAutocompleteInput {
   userInput: string;
@@ -40,6 +43,8 @@ interface UseAgentAutocompleteInput {
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
+  /** Selecting a chat attaches its history instead of inserting text. */
+  onChatSelected?: (chat: ChatMentionCandidate) => void | Promise<void>;
 }
 
 interface AgentAutocompleteKeyPressEvent {
@@ -64,7 +69,8 @@ type AgentAutocompleteOption =
       type: "workspace_entry";
       entryPath: string;
       mention: FileMentionRange;
-    });
+    })
+  | (AutocompleteOption & { type: "chat"; chat: ChatMentionCandidate });
 
 interface AgentAutocompleteResult {
   isVisible: boolean;
@@ -200,6 +206,7 @@ interface BuildAutocompleteOptionsInput {
   activeSlashCommand: SlashCommandRange | null;
   activeFileMention: FileMentionRange | null;
   fileSuggestions: DirectorySuggestionEntry[];
+  chatSuggestions: ChatMentionCandidate[];
   t: TFunction;
 }
 
@@ -242,15 +249,29 @@ function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
 
   const activeFileMention = input.activeFileMention;
   if (input.mode === "file" && activeFileMention) {
-    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
-    return orderedEntries.map((entry) => ({
-      type: "workspace_entry" as const,
-      id: `${entry.kind}:${entry.path}`,
-      label: entry.path,
-      kind: entry.kind,
-      entryPath: entry.path,
-      mention: activeFileMention,
+    // Chats are prepended so they sit closest to the input once the popover
+    // reverses the list, and so a file rename never outranks an explicit pick.
+    const chatOptions: AgentAutocompleteOption[] = input.chatSuggestions.map((chat) => ({
+      type: "chat" as const,
+      id: `chat:${chat.serverId}:${chat.agentId}`,
+      label: chat.title?.trim() || input.t("agentAutocomplete.untitledChat"),
+      kind: "chat",
+      description: chat.snippet ?? chat.cwd,
+      detail: chat.archived ? input.t("agentAutocomplete.archivedChat") : undefined,
+      chat,
     }));
+    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
+    return [
+      ...chatOptions,
+      ...orderedEntries.map((entry) => ({
+        type: "workspace_entry" as const,
+        id: `${entry.kind}:${entry.path}`,
+        label: entry.path,
+        kind: entry.kind,
+        entryPath: entry.path,
+        mention: activeFileMention,
+      })),
+    ];
   }
 
   return [];
@@ -282,6 +303,15 @@ function resolveAutocompleteIsVisible(args: {
     return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
   }
   return false;
+}
+
+// Selecting a chat attaches its history, so the picker needs the fork-context RPC
+// as well as the search itself.
+function resolveChatMentionSupport(args: {
+  chatSearch: boolean;
+  agentForkContext: boolean;
+}): boolean {
+  return args.chatSearch && args.agentForkContext;
 }
 
 function resolveCanLoadCommands(args: {
@@ -375,6 +405,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
+    onChatSelected,
   } = input;
 
   const activeSlashCommand = useMemo(
@@ -423,8 +454,13 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
+  const supportsChatMention = resolveChatMentionSupport({
+    chatSearch: useHostFeature(serverId, "chatSearch"),
+    agentForkContext: useHostFeature(serverId, "agentForkContext"),
+  });
 
   const mode = resolveAutocompleteMode({ showFileAutocomplete, showCommandAutocomplete });
+  const isMentionMode = mode === "file";
   const canShowAutocomplete = resolveAutocompleteIsVisible({
     mode,
     canLoadCommands,
@@ -479,6 +515,16 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     placeholderData: keepPreviousData,
   });
 
+  const chatSuggestions = useChatMentionSuggestions({
+    serverId,
+    agentId,
+    enabled: isMentionMode,
+    query: debouncedFileFilterQuery,
+    client,
+    isConnected,
+    supportsChatMention,
+  });
+
   const options = useMemo<AgentAutocompleteOption[]>(
     () =>
       buildCommandAutocompleteOptions({
@@ -488,6 +534,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         pluginCommands: pluginClientSlashCommands,
         activeSlashCommand,
         fileSuggestions: fileSuggestionsQuery.data ?? [],
+        chatSuggestions,
         isDraftContext,
         isVisible,
         mode,
@@ -500,6 +547,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       commands,
       pluginClientSlashCommands,
       fileSuggestionsQuery.data,
+      chatSuggestions,
       isDraftContext,
       isVisible,
       mode,
@@ -550,6 +598,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }
 
       if (!current.fileMention) return;
+
+      if (selected.type === "chat") {
+        setUserInput(removeMentionToken({ text: current.text, mention: current.fileMention }));
+        void onChatSelected?.(selected.chat);
+        onAutocompleteApplied?.();
+        return;
+      }
+
       const nextInput = applyFileMentionReplacement({
         text: current.text,
         mention: current.fileMention,
@@ -561,6 +617,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
+      onChatSelected,
       onClientSlashCommand,
       setUserInput,
       userInput,

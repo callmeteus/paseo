@@ -1962,6 +1962,8 @@ export class VoiceAssistantWebSocketServer {
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
+        // COMPAT(workspaceDelete): added in v0.9.0, remove gate after 2027-11-04.
+        workspaceDelete: true,
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,
         workspaceSetupObservation: true,
@@ -2058,6 +2060,8 @@ export class VoiceAssistantWebSocketServer {
         daemonSelfUpdate: this.daemonRuntimeConfig?.desktopManaged !== true,
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: true,
+        // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
+        chatSearch: true,
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
         agentProviderSwap: true,
         // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.

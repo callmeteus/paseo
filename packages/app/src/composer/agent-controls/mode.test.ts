@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMode } from "@getpaseo/protocol/agent-types";
-import { resolveAgentControlsMode, resolveNextAgentModeId } from "./mode";
+import {
+  resolveAgentControlsMode,
+  resolveNextAgentModeId,
+  resolveNextWorkflowModeId,
+} from "./mode";
 
 const PLAN_MODE = { id: "plan", label: "Plan" } satisfies AgentMode;
 
@@ -67,5 +71,46 @@ describe("resolveNextAgentModeId", () => {
   it("returns null when there are fewer than two modes", () => {
     expect(resolveNextAgentModeId({ modeOptions: [], selectedMode: "" })).toBeNull();
     expect(resolveNextAgentModeId({ modeOptions: [PLAN_MODE], selectedMode: "plan" })).toBeNull();
+  });
+});
+
+describe("resolveNextWorkflowModeId", () => {
+  const WORKFLOW_MODES = [
+    { id: "agent" },
+    { id: "plan" },
+    { id: "ask" },
+    { id: "debug" },
+    { id: "multitask" },
+  ];
+
+  it("cycles from the selected mode to the next mode", () => {
+    expect(resolveNextWorkflowModeId({ modeOptions: WORKFLOW_MODES, selectedMode: "plan" })).toBe(
+      "ask",
+    );
+  });
+
+  it("wraps from the last mode to the first mode", () => {
+    expect(
+      resolveNextWorkflowModeId({ modeOptions: WORKFLOW_MODES, selectedMode: "multitask" }),
+    ).toBe("agent");
+  });
+
+  it("treats an empty selection as the visible first mode", () => {
+    expect(resolveNextWorkflowModeId({ modeOptions: WORKFLOW_MODES, selectedMode: "" })).toBe(
+      "plan",
+    );
+  });
+
+  it("treats a stale selection as the visible first mode", () => {
+    expect(
+      resolveNextWorkflowModeId({ modeOptions: WORKFLOW_MODES, selectedMode: "deleted-mode" }),
+    ).toBe("plan");
+  });
+
+  it("returns null when there are fewer than two modes", () => {
+    expect(resolveNextWorkflowModeId({ modeOptions: [], selectedMode: "" })).toBeNull();
+    expect(
+      resolveNextWorkflowModeId({ modeOptions: [{ id: "agent" }], selectedMode: "agent" }),
+    ).toBeNull();
   });
 });

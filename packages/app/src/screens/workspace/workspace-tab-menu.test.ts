@@ -58,6 +58,39 @@ describe("buildWorkspaceTabMenuEntries", () => {
     ]);
   });
 
+  it("offers permanent chat deletion only when the action is wired", () => {
+    const onDeleteAgent = vi.fn();
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: createAgentTab(),
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-agent_123",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onDeleteAgent,
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const deleteEntry = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "delete-agent",
+    );
+    expect(deleteEntry).toMatchObject({
+      kind: "item",
+      destructive: true,
+      label: "Delete chat permanently",
+    });
+    if (deleteEntry?.kind === "item") deleteEntry.onSelect();
+    expect(onDeleteAgent).toHaveBeenCalledWith("agent-123");
+  });
+
   it("uses stacked ordering labels for mobile menus", () => {
     const entries = buildWorkspaceTabMenuEntries({
       surface: "mobile",

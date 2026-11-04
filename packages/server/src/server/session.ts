@@ -4,6 +4,8 @@ import { AgentDirectory } from "./agent/directory.js";
 import { ConnectedHostSession } from "./connected-hosts/index.js";
 import type { ConnectedHosts } from "./connected-hosts/index.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
+import { searchChatsAcrossChats } from "./agent/chat-search/cross-chat-search.js";
+import { isSameOrDescendantPath } from "./path-utils.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type {
@@ -340,6 +342,10 @@ function beginAgentDeleteIfSupported(agentStorage: AgentStorage, agentId: string
 }
 
 const FETCH_AGENTS_SORT_KEYS = ["status_priority", "created_at", "updated_at", "title"] as const;
+
+// Cross-chat search reads storage per candidate, so the scan window is bounded by
+// recency. The search module additionally stops at its own deadline.
+const CHAT_SEARCH_SCAN_LIMIT = 200;
 
 export function resolveWaitForFinishError(options: {
   status: "permission" | "error" | "idle";
@@ -2949,6 +2955,8 @@ export class Session {
         return this.handleAgentTimelineSearchRequest(msg, source);
       case "agent.timeline.list_prompts.request":
         return this.handleAgentTimelineListPromptsRequest(msg, source);
+      case "chat.search.request":
+        return this.handleChatSearchRequest(msg, source);
       case "agent.provider_subagents.list.request":
         return this.handleProviderSubagentListRequest(msg);
       case "agent.provider_subagents.timeline.get.request":
@@ -3238,6 +3246,8 @@ export class Session {
         return this.handleProjectGithubCloneRequest(msg);
       case "archive_workspace_request":
         return this.handleArchiveWorkspaceRequest(msg);
+      case "workspace.delete.request":
+        return this.handleWorkspaceDeleteRequest(msg);
       case "project.remove.request":
         return this.handleProjectRemoveRequest(msg);
       case "workspace.title.set.request":
@@ -8058,6 +8068,100 @@ export class Session {
     }
   }
 
+  private async handleWorkspaceDeleteRequest(
+    request: Extract<SessionInboundMessage, { type: "workspace.delete.request" }>,
+  ): Promise<void> {
+    try {
+      const existing = await this.workspaceRegistry.get(request.workspaceId);
+      if (!existing) {
+        throw new Error(`Workspace not found: ${request.workspaceId}`);
+      }
+
+      await this.workspaceSetupRuntime.stop(request.workspaceId).catch((error) => {
+        this.sessionLogger.warn(
+          { err: error, workspaceId: request.workspaceId },
+          "Failed to stop workspace setup during delete",
+        );
+      });
+      await this.terminalController
+        .killTerminalsForWorkspace(request.workspaceId)
+        .catch((error) => {
+          this.sessionLogger.warn(
+            { err: error, workspaceId: request.workspaceId },
+            "Failed to kill workspace terminals during delete",
+          );
+        });
+
+      const liveAgents = this.agentManager
+        .listAgents({ includeInternal: true })
+        .filter((agent) => agent.workspaceId === request.workspaceId);
+      let storedAgents: StoredAgentRecord[] = [];
+      try {
+        storedAgents = await this.agentStorage.listByWorkspace(request.workspaceId);
+      } catch (error) {
+        this.sessionLogger.warn(
+          { err: error, workspaceId: request.workspaceId },
+          "Failed to list stored agents during workspace delete",
+        );
+      }
+      const agentIds = new Set([
+        ...liveAgents.map((agent) => agent.id),
+        ...storedAgents.map((agent) => agent.id),
+      ]);
+
+      for (const agentId of agentIds) {
+        beginAgentDeleteIfSupported(this.agentStorage, agentId);
+        await closeAgentCommand({ agentManager: this.agentManager }, agentId).catch(() => {});
+      }
+      await this.agentManager.flush();
+      for (const agentId of agentIds) {
+        await this.agentStorage.remove(agentId).catch(() => {});
+        await this.agentManager.deleteAgentState(agentId).catch(() => {});
+      }
+
+      await this.workspaceRegistry.remove(request.workspaceId);
+      await this.emitWorkspaceUpdateForWorkspaceId(request.workspaceId);
+
+      // Only a Paseo-owned worktree is ours to remove. A checkout the user opened stays.
+      if (
+        request.deleteFiles === true &&
+        existing.kind === "worktree" &&
+        existing.isPaseoOwnedWorktree &&
+        existing.worktreeRoot
+      ) {
+        await rm(existing.worktreeRoot, { recursive: true, force: true }).catch((error) => {
+          this.sessionLogger.warn(
+            { err: error, workspaceId: request.workspaceId },
+            "Failed to remove workspace directory during delete",
+          );
+        });
+      }
+
+      this.emit({
+        type: "workspace.delete.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete workspace";
+      this.sessionLogger.error(
+        { err: error, workspaceId: request.workspaceId },
+        "Failed to delete workspace",
+      );
+      this.emit({
+        type: "workspace.delete.response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          error: message,
+        },
+      });
+    }
+  }
+
   private async handleWorkspaceClearAttentionRequest(
     request: Extract<SessionInboundMessage, { type: "workspace.clear_attention.request" }>,
   ): Promise<void> {
@@ -8591,6 +8695,103 @@ export class Session {
             epoch: "",
             locations: [],
             nextCursor: null,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        },
+        source,
+      );
+    }
+  }
+
+  /**
+   * Cross-chat search used by the composer's `@` picker.
+   *
+   * Titles come from every stored chat. Message text comes only from chats whose
+   * timeline is already in memory (live chats) or from an imported chat's stored
+   * transcript: resuming a provider session per keystroke costs more than the search
+   * and would wake archived chats the user never asked to reopen.
+   */
+  private async handleChatSearchRequest(
+    msg: Extract<SessionInboundMessage, { type: "chat.search.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      const query = msg.query.trim();
+      if (!query) {
+        this.emitForSource(
+          {
+            type: "chat.search.response",
+            payload: { requestId: msg.requestId, query: msg.query, chats: [], error: null },
+          },
+          source,
+        );
+        return;
+      }
+
+      const cwd = msg.cwd?.trim();
+      const includeArchived = msg.includeArchived === true;
+      const sinceMs = msg.sinceHours ? Date.now() - msg.sinceHours * 60 * 60 * 1000 : null;
+      const records = (await this.agentStorage.list())
+        .filter((record) => !record.internal)
+        .filter((record) => includeArchived || !record.archivedAt)
+        .filter((record) => !cwd || isSameOrDescendantPath(cwd, record.cwd))
+        .filter((record) => sinceMs === null || Date.parse(record.updatedAt) >= sinceMs)
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+        .slice(0, CHAT_SEARCH_SCAN_LIMIT);
+
+      const chats = await searchChatsAcrossChats({
+        query,
+        limit: msg.limit,
+        chats: records.map((record) => ({
+          agentId: record.id,
+          title: record.title ?? null,
+          provider: record.provider,
+          status: record.lastStatus,
+          cwd: record.cwd,
+          updatedAt: record.updatedAt,
+          archivedAt: record.archivedAt ?? null,
+        })),
+        loadEntries: async (agentId) => {
+          const rows = await this.agentManager.getSearchableTimelineRows(agentId);
+          if (rows.length > 0) {
+            return rows.map((row) => ({
+              seq: row.seq,
+              item: {
+                type: row.item.type,
+                ...("text" in row.item && typeof row.item.text === "string"
+                  ? { text: row.item.text }
+                  : {}),
+              },
+            }));
+          }
+          // Imported chats never load a provider session, so their stored transcript
+          // is the only text available; without this they would be title-only.
+          const record = await this.agentStorage.get(agentId);
+          return (record?.portedTimeline ?? []).map((row) => ({
+            seq: row.seq,
+            item: {
+              type: typeof row.item.type === "string" ? row.item.type : "",
+              ...(typeof row.item.text === "string" ? { text: row.item.text } : {}),
+            },
+          }));
+        },
+      });
+
+      this.emitForSource(
+        {
+          type: "chat.search.response",
+          payload: { requestId: msg.requestId, query: msg.query, chats, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "chat.search.response",
+          payload: {
+            requestId: msg.requestId,
+            query: msg.query,
+            chats: [],
             error: error instanceof Error ? error.message : String(error),
           },
         },

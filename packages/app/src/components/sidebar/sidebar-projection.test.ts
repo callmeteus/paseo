@@ -12,10 +12,11 @@ function makeWorkspace(
   statusBucket: SidebarWorkspaceEntry["statusBucket"] = "done",
   labels: string[] = [],
   projectViewKey = "project",
+  serverId = "srv",
 ) {
   const placement: SidebarWorkspacePlacement = {
-    workspaceKey: `srv:${id}`,
-    serverId: "srv",
+    workspaceKey: `${serverId}:${id}`,
+    serverId,
     workspaceId: id,
     projectViewKey,
     projectName: "Project",
@@ -65,7 +66,7 @@ function makeProject(
 }
 
 function projectionInput(options?: {
-  groupMode?: "project" | "status";
+  groupMode?: "project" | "status" | "host";
   pinnedCollapsed?: boolean;
 }) {
   const pinned = makeWorkspace("pinned", "running");
@@ -86,6 +87,7 @@ function projectionInput(options?: {
     pinnedCollapsed: options?.pinnedCollapsed ?? false,
     collapsedProjectKeys: new Set<string>(),
     collapsedWorkspaceGroupKeys: new Set<string>(),
+    hostById: new Map([["srv", { label: "Host", isLocal: true }]]),
     t: i18n.t,
   };
 }
@@ -94,7 +96,7 @@ function projectionInput(options?: {
  * Two projects, one workspace each, both labelled — so every grouping mode puts rows from more
  * than one project on screen, and a mode that asked for fewer icons than it renders would show it.
  */
-function twoProjectInput(groupMode: "project" | "status") {
+function twoProjectInput(groupMode: "project" | "status" | "host") {
   const first = makeWorkspace("first", "running", ["Urgent"], "project");
   const second = makeWorkspace("second", "needs_input", ["Backend"], "other-project");
   return {
@@ -115,7 +117,7 @@ function twoProjectInput(groupMode: "project" | "status") {
 describe("buildSidebarProjection", () => {
   // The rule that outlived the bug it was written for: a project icon is fetched per project, so
   // whatever a mode groups by, the rows it produces can only reference projects already covered.
-  for (const groupMode of ["project", "status"] as const) {
+  for (const groupMode of ["project", "status", "host"] as const) {
     it(`covers every row ${groupMode} grouping renders with a project icon target`, () => {
       const projection = buildSidebarProjection(twoProjectInput(groupMode));
       const covered = new Set(projection.projectIconTargets.map((target) => target.projectViewKey));
@@ -151,6 +153,33 @@ describe("buildSidebarProjection", () => {
       { serverId: "srv", workspaceId: "pinned" },
       { serverId: "srv", workspaceId: "unpinned" },
     ]);
+  });
+
+  it("groups unpinned workspaces by host, local first", () => {
+    const local = makeWorkspace("local-one", "done", [], "project", "local");
+    const remote = makeWorkspace("remote-one", "done", [], "project", "remote");
+    const input = projectionInput({ groupMode: "host" });
+    input.projects = [makeProject([local.placement, remote.placement])];
+    input.pinnedKeys = { pinnedWorkspaceKeys: [], pinnedAtByKey: {} };
+    input.workspaceEntriesByKey = new Map([
+      [local.entry.workspaceKey, local.entry],
+      [remote.entry.workspaceKey, remote.entry],
+    ]);
+    input.hostById = new Map([
+      ["local", { label: "This machine", isLocal: true }],
+      ["remote", { label: "Remote", isLocal: false }],
+    ]);
+
+    const projection = buildSidebarProjection(input);
+
+    expect(projection.hostProjects.map((host) => host.key)).toEqual(["host:local", "host:remote"]);
+    expect(projection.hostProjects.map((host) => host.label)).toEqual(["This machine", "Remote"]);
+    expect(
+      projection.hostProjects[0]?.projects[0]?.workspaces.map((entry) => entry.workspaceId),
+    ).toEqual(["local-one"]);
+    expect(
+      projection.hostProjects[1]?.projects[0]?.workspaces.map((entry) => entry.workspaceId),
+    ).toEqual(["remote-one"]);
   });
 
   it("keeps pinned chats above status groups and removes them from those groups", () => {

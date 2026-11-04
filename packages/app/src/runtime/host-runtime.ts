@@ -3025,6 +3025,10 @@ export class HostRuntimeStore {
     this.requireDirectory(serverId).archiveAgent(agentId, archivedAt);
   }
 
+  removeAgentSnapshot(serverId: string, agentId: string): void {
+    this.requireDirectory(serverId).removeAgent(agentId);
+  }
+
   restoreAgentSnapshot(serverId: string, agentId: string, agent: Agent | undefined): void {
     const directory = this.requireDirectory(serverId);
     if (agent) directory.acceptAgent(agent);

@@ -304,3 +304,7 @@ it("defaults to Created and persists the Last prompt choice across migration", (
 it("retains the manual sorting preference on reload", () => {
   expect(migrateSidebarViewState({ workspaceSort: "manual" }).workspaceSort).toBe("manual");
 });
+
+it("persists the optional host grouping mode", () => {
+  expect(migrateSidebarViewState({ groupMode: "host" }).groupMode).toBe("host");
+});

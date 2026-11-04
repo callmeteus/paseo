@@ -776,6 +776,7 @@ export const es: TranslationResources = {
         moveToWorkspace: "Mover a espacio de trabajo",
         promoteToWorkspace: "Promover a espacio de trabajo",
         openContainingDirectory: "Abrir carpeta contenedora",
+        deletePermanently: "Eliminar chat permanentemente",
         moveWorkspace: {
           title: "Mover espacio de trabajo a carpeta",
           empty: "No hay otras carpetas abiertas.",
@@ -854,6 +855,7 @@ export const es: TranslationResources = {
         reloadedAgent: "Agente recargado",
         failedToReloadAgent: "No se pudo recargar el agente",
         failedToCloseAgent: "No se pudo cerrar el agente",
+        failedToDeleteAgent: "No se pudo eliminar el chat",
       },
       confirmations: {
         unsavedTitle: "Cambios sin guardar",
@@ -872,6 +874,12 @@ export const es: TranslationResources = {
         archiveRunningAgentTitle: "¿Agente de ejecución de archivos?",
         archiveRunningAgentMessage:
           "Este agente todavía está ejecutándose. Archivarlo detendrá al agente y cerrará la pestaña.",
+        deleteAgentTitle: "¿Eliminar el chat permanentemente?",
+        deleteAgentMessage:
+          "Esto elimina permanentemente este chat y su historial. No se puede deshacer.",
+        deleteAgentRunningMessage:
+          "Este chat sigue en ejecución. Eliminarlo detiene el agente y borra su historial permanentemente. No se puede deshacer.",
+        deletePermanently: "Eliminar permanentemente",
         closeTabsLeftTitle: "¿Cerrar pestañas a la izquierda?",
         closeTabsRightTitle: "¿Cerrar pestañas a la derecha?",
         closeOtherTabsTitle: "¿Cerrar otras pestañas?",
@@ -1340,6 +1348,10 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "Agrupar por host",
+      disable: "Dejar de agrupar por host",
+    },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Necesita datos",
@@ -1364,6 +1376,7 @@ export const es: TranslationResources = {
         project: "Proyecto",
         status: "Estado",
         labels: "Etiquetas",
+        host: "Host",
       },
       titleSource: {
         label: "Título",
@@ -1530,6 +1543,7 @@ export const es: TranslationResources = {
         moveToFolder: "Mover espacio de trabajo a carpeta…",
         archive: "Archivo",
         archiveWorkspace: "Archivar espacio de trabajo",
+        deletePermanently: "Eliminar permanentemente",
         hideFromSidebar: "Ocultar de la barra lateral",
         archiving: "Archivando...",
         hiding: "Ocultación...",
@@ -1539,6 +1553,10 @@ export const es: TranslationResources = {
         hideMessage:
           '¿Ocultar "{{workspaceName}}" de la barra lateral?\n\nLos archivos en el disco no se cambiarán.',
         hideConfirm: "Esconder",
+        deleteTitle: "¿Eliminar el espacio de trabajo permanentemente?",
+        deleteMessage:
+          'Esto elimina permanentemente "{{name}}" y todos sus chats. No se puede deshacer.',
+        deleteConfirm: "Eliminar permanentemente",
         cancel: "Cancelar",
       },
       rename: {
@@ -1555,6 +1573,7 @@ export const es: TranslationResources = {
         movedToFolder: "Espacio de trabajo movido a {{path}}",
         moveToFolderFailed: "No se pudo mover el espacio de trabajo",
         archiveFailed: "No se pudo archivar el espacio de trabajo",
+        deleteFailed: "No se pudo eliminar el espacio de trabajo",
       },
     },
   },
@@ -1845,6 +1864,10 @@ export const es: TranslationResources = {
     failedToLoad: "No se pudo cargar",
     chooseProjectForCommands: "Elige un proyecto para ver los comandos",
     chooseModelForCommands: "Selecciona un modelo para ver los comandos",
+    untitledChat: "Chat sin título",
+    archivedChat: "Archivado",
+    attachChatFailed: "No se pudo adjuntar ese chat",
+    attachChatUnavailable: "Este compositor no puede adjuntar un chat aquí",
   },
   loadOlderHistory: {
     failed: "No se pudo cargar el historial anterior",

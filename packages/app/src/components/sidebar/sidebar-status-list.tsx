@@ -36,6 +36,8 @@ import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { useWorkspaceArchive } from "@/workspace/use-workspace-archive";
+import { useWorkspaceDelete } from "@/workspace/use-workspace-delete";
+import { useHostFeature } from "@/runtime/host-features";
 import { toWorktreeArchiveRisk } from "@/git/worktree-archive-warning";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -641,6 +643,18 @@ function StatusWorkspaceRowWithMenu({
     archiveController.archive();
   }, [archiveController, isArchiving]);
 
+  const supportsDelete = useHostFeature(workspace.serverId, "workspaceDelete");
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const deleteController = useWorkspaceDelete({
+    serverId: workspace.serverId,
+    workspaceId: workspace.workspaceId,
+    workspaceKind: workspace.workspaceKind,
+    name: workspace.name,
+    onDeleted: redirectAfterArchive,
+    onSetDeleting: setIsDeletingWorkspace,
+  });
+  const onDelete = supportsDelete ? deleteController.deleteWorkspace : undefined;
+
   const clipboard = useWorkspaceClipboardActions();
   const handleCopyPath = useCallback(() => {
     clipboard.copyPath(workspace);
@@ -697,11 +711,12 @@ function StatusWorkspaceRowWithMenu({
         shortcutNumber={shortcutNumber}
         showShortcutBadge={showShortcutBadge}
         onPress={onPress}
-        isArchiving={isArchiving}
+        isArchiving={isArchiving || isDeletingWorkspace}
         archiveLabel={t("sidebar.workspace.actions.archive")}
         archiveStatus={isArchiving ? "pending" : "idle"}
         archivePendingLabel={t("sidebar.workspace.actions.archiving")}
         onArchive={handleArchive}
+        onDelete={onDelete}
         onCopyBranchName={workspace.projectKind === "git" ? handleCopyBranchName : undefined}
         onCopyPath={handleCopyPath}
         onRename={handleOpenRename}
@@ -740,6 +755,7 @@ interface StatusWorkspaceRowInnerProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   onArchive?: () => void;
+  onDelete?: () => void;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
   onRename?: () => void;
@@ -787,6 +803,7 @@ function StatusWorkspaceRowInnerContent({
   archiveStatus = "idle",
   archivePendingLabel,
   onArchive,
+  onDelete,
   onCopyBranchName,
   onCopyPath,
   onRename,
@@ -896,6 +913,7 @@ function StatusWorkspaceRowInnerContent({
               onMarkAsRead={onMarkAsRead}
               onMarkAsUnread={onMarkAsUnread}
               onArchive={onArchive}
+              onDelete={onDelete}
               archiveLabel={archiveLabel}
               archiveStatus={archiveStatus}
               archivePendingLabel={archivePendingLabel}
@@ -944,6 +962,7 @@ function StatusWorkspaceRowInnerContent({
                     onMarkAsRead={onMarkAsRead}
                     onMarkAsUnread={onMarkAsUnread}
                     onArchive={onArchive}
+                    onDelete={onDelete}
                     archiveLabel={archiveLabel}
                     archiveStatus={archiveStatus}
                     archivePendingLabel={archivePendingLabel}
@@ -975,6 +994,7 @@ function StatusWorkspaceActionSlot({
   onMarkAsRead,
   onMarkAsUnread,
   onArchive,
+  onDelete,
   archiveLabel,
   archiveStatus,
   archivePendingLabel,
@@ -995,6 +1015,7 @@ function StatusWorkspaceActionSlot({
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   onArchive?: () => void;
+  onDelete?: () => void;
   archiveLabel?: string;
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
@@ -1023,6 +1044,7 @@ function StatusWorkspaceActionSlot({
             onMarkAsRead={onMarkAsRead}
             onMarkAsUnread={onMarkAsUnread}
             onArchive={onArchive}
+            onDelete={onDelete}
             archiveLabel={archiveLabel}
             archiveStatus={archiveStatus}
             archivePendingLabel={archivePendingLabel}

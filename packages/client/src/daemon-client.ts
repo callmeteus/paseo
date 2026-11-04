@@ -96,6 +96,7 @@ import type {
   ProjectGithubCloneProtocol,
   ProjectGithubCloneResponse,
   ArchiveWorkspaceResponseMessage,
+  WorkspaceDeleteResponseMessage,
   WorkspaceSetupStatusResponseMessage,
   ListCommandsResponse,
   ListProviderFeaturesResponseMessage,
@@ -709,6 +710,19 @@ export type AgentTimelineSearchPayload = Extract<
   { type: "agent.timeline.search.response" }
 >["payload"];
 
+export interface ChatSearchOptions {
+  query: string;
+  cwd?: string;
+  includeArchived?: boolean;
+  sinceHours?: number;
+  limit?: number;
+}
+
+export type ChatSearchPayload = Extract<
+  SessionOutboundMessage,
+  { type: "chat.search.response" }
+>["payload"];
+
 export type AgentTimelinePromptIndexPayload = Extract<
   SessionOutboundMessage,
   { type: "agent.timeline.list_prompts.response" }
@@ -940,6 +954,7 @@ export type WorkspaceGithubSearchRepositoriesPayload =
   WorkspaceGithubSearchRepositoriesResponse["payload"];
 type ProjectGithubClonePayload = ProjectGithubCloneResponse["payload"];
 type ArchiveWorkspacePayload = ArchiveWorkspaceResponseMessage["payload"];
+type WorkspaceDeletePayload = WorkspaceDeleteResponseMessage["payload"];
 type WorkspaceSetupStatusPayload = WorkspaceSetupStatusResponseMessage["payload"];
 
 export interface FetchAgentResult {
@@ -3077,6 +3092,21 @@ export class DaemonClient {
     });
   }
 
+  async deleteWorkspace(
+    workspaceId: string,
+    options?: { deleteFiles?: boolean; requestId?: string },
+  ): Promise<WorkspaceDeletePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "workspace.delete.request",
+        workspaceId,
+        ...(options?.deleteFiles ? { deleteFiles: true } : {}),
+      },
+      responseType: "workspace.delete.response",
+    });
+  }
+
   observeWorkspaceSetup(
     workspaceId: string,
     options?: { signal?: AbortSignal },
@@ -3788,6 +3818,31 @@ export class DaemonClient {
       requestId,
       message: { type: "agent.timeline.search.request", requestId, agentId, query, cursor },
       responseType: "agent.timeline.search.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  async searchChats({
+    query,
+    cwd,
+    includeArchived,
+    sinceHours,
+    limit,
+  }: ChatSearchOptions): Promise<ChatSearchPayload> {
+    const requestId = this.createRequestId();
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "chat.search.request",
+        requestId,
+        query,
+        ...(cwd ? { cwd } : {}),
+        ...(includeArchived === undefined ? {} : { includeArchived }),
+        ...(sinceHours === undefined ? {} : { sinceHours }),
+        ...(limit === undefined ? {} : { limit }),
+      },
+      responseType: "chat.search.response",
     });
     if (payload.error) throw new Error(payload.error);
     return payload;

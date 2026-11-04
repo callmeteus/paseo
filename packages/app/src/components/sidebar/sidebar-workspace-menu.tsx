@@ -19,6 +19,7 @@ import {
   Pin,
   PinOff,
   Tag,
+  Trash2,
 } from "lucide-react-native";
 import { isWeb } from "@/constants/platform";
 import { openMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
@@ -32,12 +33,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSubTrigger,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -62,6 +65,7 @@ const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedArchive = withUnistyles(Archive);
+const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedCircle = withUnistyles(Circle);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
@@ -79,6 +83,7 @@ const markAsReadLeadingIcon = (
 );
 const markAsUnreadLeadingIcon = <ThemedCircle size={14} uniProps={foregroundMutedColorMapping} />;
 const archiveLeadingIcon = <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />;
+const deleteLeadingIcon = <ThemedTrash2 size={14} uniProps={foregroundMutedColorMapping} />;
 const pinLeadingIcon = <ThemedPin size={14} uniProps={foregroundMutedColorMapping} />;
 const unpinLeadingIcon = <ThemedPinOff size={14} uniProps={foregroundMutedColorMapping} />;
 
@@ -106,6 +111,7 @@ export interface SidebarWorkspaceMenuProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  onDelete?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
   openInFileManagerPath?: string | null;
@@ -167,6 +173,10 @@ function MoveWorkspaceToFolderMenuItem({
   );
 }
 
+function WorkspaceMenuSeparator({ surface }: { surface: MenuSurface }): ReactNode {
+  return surface === "context" ? <ContextMenuSeparator /> : <DropdownMenuSeparator />;
+}
+
 function SidebarWorkspaceMenuItems({
   surface,
   workspaceKey,
@@ -182,6 +192,7 @@ function SidebarWorkspaceMenuItems({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  onDelete,
   isPinned,
   onTogglePin,
   openInFileManagerPath,
@@ -293,6 +304,20 @@ function SidebarWorkspaceMenuItems({
           {archiveLabel ?? t("sidebar.workspace.actions.archive")}
         </WorkspaceMenuItem>
       ) : null}
+      {onDelete ? (
+        <>
+          <WorkspaceMenuSeparator surface={surface} />
+          <WorkspaceMenuItem
+            surface={surface}
+            testID={`sidebar-workspace-menu-delete-${workspaceKey}`}
+            leading={deleteLeadingIcon}
+            destructive
+            onSelect={onDelete}
+          >
+            {t("sidebar.workspace.actions.deletePermanently")}
+          </WorkspaceMenuItem>
+        </>
+      ) : null}
     </>
   );
 }
@@ -312,6 +337,7 @@ export function SidebarWorkspaceMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  onDelete,
   isPinned,
   onTogglePin,
   openInFileManagerPath,
@@ -354,6 +380,7 @@ export function SidebarWorkspaceMenu({
           onMarkAsRead={onMarkAsRead}
           onMarkAsUnread={onMarkAsUnread}
           onArchive={onArchive}
+          onDelete={onDelete}
           archiveLabel={archiveLabel}
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
@@ -391,6 +418,7 @@ export function SidebarWorkspaceContextMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  onDelete,
   isPinned,
   onTogglePin,
   openInFileManagerPath,
@@ -468,6 +496,7 @@ export function SidebarWorkspaceContextMenu({
           onMarkAsRead={onMarkAsRead}
           onMarkAsUnread={onMarkAsUnread}
           onArchive={onArchive}
+          onDelete={onDelete}
           archiveLabel={archiveLabel}
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}

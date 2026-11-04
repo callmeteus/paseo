@@ -113,6 +113,7 @@ import {
   isWorkflowModeId,
   resolveDefaultWritableProviderMode,
   resolveReadOnlyProviderMode,
+  stripWorkflowInstruction,
 } from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
@@ -670,9 +671,22 @@ function attachManagedTurnIdentity(
 }
 
 function limitAgentStreamEventContent(event: AgentStreamEvent): AgentStreamEvent {
-  return event.type === "timeline"
-    ? { ...event, item: limitAgentTimelineItemContent(event.item) }
-    : event;
+  if (event.type !== "timeline") return event;
+  const item =
+    event.item.type === "user_message"
+      ? { ...event.item, text: stripWorkflowInstruction(event.item.text) }
+      : event.item;
+  return { ...event, item: limitAgentTimelineItemContent(item) };
+}
+
+function stripWorkflowFromTimelineItem(item: AgentTimelineItem): AgentTimelineItem {
+  return item.type === "user_message"
+    ? { ...item, text: stripWorkflowInstruction(item.text) }
+    : item;
+}
+
+function stripWorkflowFromTimelineRow(row: AgentTimelineRow): AgentTimelineRow {
+  return { ...row, item: stripWorkflowFromTimelineItem(row.item) };
 }
 
 interface WriteLabelsResult {
@@ -1608,7 +1622,26 @@ export class AgentManager {
 
   getTimeline(id: string): AgentTimelineItem[] {
     this.requireAgent(id);
-    return this.timelineStore.getItems(id);
+    return this.timelineStore.getItems(id).map(stripWorkflowFromTimelineItem);
+  }
+
+  /**
+   * Timeline rows for read-only scans such as cross-chat search.
+   *
+   * Unlike `getTimelineRows`, this never resumes a provider session to answer. Cross-chat
+   * search runs on every keystroke across many chats, and waking a provider just to read
+   * its transcript costs more than the search. An agent that is not live therefore
+   * contributes no rows here; callers that must include it load the chat explicitly,
+   * which is why the picker matches unloaded chats by title only.
+   */
+  async getSearchableTimelineRows(id: string): Promise<AgentTimelineRow[]> {
+    if (this.durableTimelineStore) {
+      const committed = await this.durableTimelineStore.getCommittedRows(id);
+      return projectTimelineRows({ rows: committed, mode: "projected" })
+        .map((entry) => Object.assign({ seq: entry.seqEnd }, entry))
+        .map(stripWorkflowFromTimelineRow);
+    }
+    return this.timelineStore.getRows(id).map(stripWorkflowFromTimelineRow);
   }
 
   async getTimelineRows(id: string): Promise<AgentTimelineRow[]> {
@@ -1619,9 +1652,11 @@ export class AgentManager {
       return projectTimelineRows({
         rows: repaired ?? committed,
         mode: "projected",
-      }).map((entry) => Object.assign({ seq: entry.seqEnd }, entry));
+      })
+        .map((entry) => Object.assign({ seq: entry.seqEnd }, entry))
+        .map(stripWorkflowFromTimelineRow);
     }
-    return this.timelineStore.getRows(id);
+    return this.timelineStore.getRows(id).map(stripWorkflowFromTimelineRow);
   }
 
   /**

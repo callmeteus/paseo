@@ -162,7 +162,11 @@ import type {
 import type { SelectedFile } from "@/attachments/selected-file";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
-import { useWorkspaceAttachmentsForScopes } from "@/attachments/workspace-attachments-store";
+import {
+  useWorkspaceAttachmentsForScopes,
+  useWorkspaceAttachmentsStore,
+} from "@/attachments/workspace-attachments-store";
+import { createChatMentionAttachment } from "@/composer/chat-history-attachment";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -2771,6 +2775,34 @@ function ComposerContentImpl({
     [agentState.goal, handleGoalEdit, handleGoalPause, handleGoalResume, handleGoalStop],
   );
 
+  const handleChatSelected = useCallback(
+    async (chat: { agentId: string; serverId: string }) => {
+      // Chats from another host would need that host's client to build the
+      // context; the picker only offers the current host, so this is a guard.
+      if (!client || chat.serverId !== serverId) return;
+      const scopeKey = attachmentScopeKeys[0];
+      if (!scopeKey) {
+        setSendError(t("agentAutocomplete.attachChatUnavailable"));
+        return;
+      }
+      try {
+        const attachment = await createChatMentionAttachment({
+          client,
+          serverId,
+          agentId: chat.agentId,
+          missingAttachmentMessage: t("agentAutocomplete.attachChatFailed"),
+        });
+        useWorkspaceAttachmentsStore.getState().addWorkspaceAttachment({ scopeKey, attachment });
+        setSendError(null);
+      } catch (error) {
+        setSendError(
+          error instanceof Error ? error.message : t("agentAutocomplete.attachChatFailed"),
+        );
+      }
+    },
+    [attachmentScopeKeys, client, serverId, t],
+  );
+
   const autocompleteConfiguration = useMemo(
     () => ({
       setUserInput: replaceUserInput,
@@ -2780,6 +2812,7 @@ function ComposerContentImpl({
       canExecuteClientSlashCommand: buildOutgoingAttachments(attachments).length === 0,
       onClientSlashCommand: runClientSlashCommand,
       pluginClientSlashCommands,
+      onChatSelected: handleChatSelected,
     }),
     [
       replaceUserInput,
@@ -2790,6 +2823,7 @@ function ComposerContentImpl({
       attachments,
       runClientSlashCommand,
       pluginClientSlashCommands,
+      handleChatSelected,
     ],
   );
   const messageInputContainerRef = useRef<View>(null);

@@ -779,6 +779,7 @@ export const ru: TranslationResources = {
         moveToWorkspace: "Переместить в рабочее пространство",
         promoteToWorkspace: "Повысить до рабочего пространства",
         openContainingDirectory: "Открыть содержащую папку",
+        deletePermanently: "Удалить чат навсегда",
         moveWorkspace: {
           title: "Переместить рабочее пространство в папку",
           empty: "Других открытых папок нет.",
@@ -856,6 +857,7 @@ export const ru: TranslationResources = {
         reloadedAgent: "Агент перезагружен",
         failedToReloadAgent: "Не удалось перезагрузить агента",
         failedToCloseAgent: "Не удалось закрыть агента",
+        failedToDeleteAgent: "Не удалось удалить чат",
       },
       confirmations: {
         unsavedTitle: "Несохранённые изменения",
@@ -874,6 +876,11 @@ export const ru: TranslationResources = {
         archiveRunningAgentTitle: "Архивировать работающего агента?",
         archiveRunningAgentMessage:
           "Этот агент всё ещё работает. При архивировании агент будет остановлен, а вкладка закрыта.",
+        deleteAgentTitle: "Удалить чат навсегда?",
+        deleteAgentMessage: "Это навсегда удалит этот чат и его историю. Отменить это нельзя.",
+        deleteAgentRunningMessage:
+          "Этот чат всё ещё выполняется. Удаление остановит агента и навсегда удалит его историю. Отменить это нельзя.",
+        deletePermanently: "Удалить навсегда",
         closeTabsLeftTitle: "Закрыть вкладки слева?",
         closeTabsRightTitle: "Закрыть вкладки справа?",
         closeOtherTabsTitle: "Закрыть другие вкладки?",
@@ -1323,6 +1330,10 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "Группировать по хосту",
+      disable: "Отменить группировку по хосту",
+    },
     statusGroupAccessibility: "Группа «{{label}}»",
     statusBucket: {
       needsInput: "Ожидает ввода",
@@ -1347,6 +1358,7 @@ export const ru: TranslationResources = {
         project: "Проект",
         status: "Статус",
         labels: "Метки",
+        host: "Хост",
       },
       titleSource: {
         label: "Заголовок",
@@ -1514,6 +1526,7 @@ export const ru: TranslationResources = {
         moveToFolder: "Переместить рабочее пространство в папку…",
         archive: "Архивировать",
         archiveWorkspace: "Архивировать рабочее пространство",
+        deletePermanently: "Удалить навсегда",
         hideFromSidebar: "Скрыть на боковой панели",
         archiving: "Архивирование...",
         hiding: "Скрытие...",
@@ -1523,6 +1536,9 @@ export const ru: TranslationResources = {
         hideMessage:
           "Скрыть «{{workspaceName}}» на боковой панели?\n\nФайлы на диске не будут изменены.",
         hideConfirm: "Скрыть",
+        deleteTitle: "Удалить рабочее пространство навсегда?",
+        deleteMessage: "Это навсегда удалит «{{name}}» и все его чаты. Отменить это нельзя.",
+        deleteConfirm: "Удалить навсегда",
         cancel: "Отмена",
       },
       rename: {
@@ -1539,6 +1555,7 @@ export const ru: TranslationResources = {
         movedToFolder: "Рабочее пространство перемещено в {{path}}",
         moveToFolderFailed: "Не удалось переместить рабочее пространство",
         archiveFailed: "Не удалось архивировать рабочее пространство",
+        deleteFailed: "Не удалось удалить рабочее пространство",
       },
     },
   },
@@ -1830,6 +1847,10 @@ export const ru: TranslationResources = {
     failedToLoad: "Не удалось загрузить",
     chooseProjectForCommands: "Выберите проект, чтобы увидеть команды",
     chooseModelForCommands: "Выберите модель, чтобы увидеть команды",
+    untitledChat: "Чат без названия",
+    archivedChat: "В архиве",
+    attachChatFailed: "Не удалось прикрепить этот чат",
+    attachChatUnavailable: "Этот редактор не может прикрепить чат здесь",
   },
   loadOlderHistory: {
     failed: "Не удалось загрузить старую историю.",

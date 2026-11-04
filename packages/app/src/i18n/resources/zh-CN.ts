@@ -768,6 +768,7 @@ export const zhCN: TranslationResources = {
         moveToWorkspace: "移动到工作区",
         promoteToWorkspace: "提升为工作区",
         openContainingDirectory: "打开所在文件夹",
+        deletePermanently: "永久删除聊天",
         moveWorkspace: {
           title: "将工作区移动到文件夹",
           empty: "没有其他已打开的文件夹。",
@@ -844,6 +845,7 @@ export const zhCN: TranslationResources = {
         reloadedAgent: "已重新加载 Agent",
         failedToReloadAgent: "重新加载 Agent 失败",
         failedToCloseAgent: "关闭 Agent 失败",
+        failedToDeleteAgent: "无法删除聊天",
       },
       confirmations: {
         unsavedTitle: "未保存的更改",
@@ -858,6 +860,11 @@ export const zhCN: TranslationResources = {
         closeTerminalMessage: "此 Terminal 中任何正在运行的进程都会立即停止。",
         archiveRunningAgentTitle: "归档正在运行的 Agent？",
         archiveRunningAgentMessage: "此 Agent 仍在运行。归档会停止该 Agent 并关闭标签。",
+        deleteAgentTitle: "永久删除聊天？",
+        deleteAgentMessage: "这会永久删除此聊天及其历史记录。此操作无法撤销。",
+        deleteAgentRunningMessage:
+          "此聊天仍在运行。删除会停止代理并永久清除其历史记录。此操作无法撤销。",
+        deletePermanently: "永久删除",
         closeTabsLeftTitle: "关闭左侧标签？",
         closeTabsRightTitle: "关闭右侧标签？",
         closeOtherTabsTitle: "关闭其他标签？",
@@ -1293,6 +1300,10 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "按主机分组",
+      disable: "取消按主机分组",
+    },
     statusGroupAccessibility: "{{label}} 分组",
     statusBucket: {
       needsInput: "需要输入",
@@ -1317,6 +1328,7 @@ export const zhCN: TranslationResources = {
         project: "项目",
         status: "状态",
         labels: "标签",
+        host: "主机",
       },
       titleSource: {
         label: "标题",
@@ -1480,6 +1492,7 @@ export const zhCN: TranslationResources = {
         moveToFolder: "将工作区移动到文件夹…",
         archive: "归档",
         archiveWorkspace: "归档工作区",
+        deletePermanently: "永久删除",
         hideFromSidebar: "从侧边栏隐藏",
         archiving: "正在归档...",
         hiding: "正在隐藏...",
@@ -1488,6 +1501,9 @@ export const zhCN: TranslationResources = {
         hideTitle: "隐藏 workspace？",
         hideMessage: "从侧边栏隐藏「{{workspaceName}}」？\n\n磁盘上的文件不会被更改。",
         hideConfirm: "隐藏",
+        deleteTitle: "永久删除工作区？",
+        deleteMessage: "这会永久删除“{{name}}”及其所有聊天。此操作无法撤销。",
+        deleteConfirm: "永久删除",
         cancel: "取消",
       },
       rename: {
@@ -1504,6 +1520,7 @@ export const zhCN: TranslationResources = {
         movedToFolder: "工作区已移动到 {{path}}",
         moveToFolderFailed: "无法移动工作区",
         archiveFailed: "归档工作区失败",
+        deleteFailed: "无法删除工作区",
       },
     },
   },
@@ -1778,6 +1795,10 @@ export const zhCN: TranslationResources = {
     failedToLoad: "加载失败",
     chooseProjectForCommands: "选择项目以查看命令",
     chooseModelForCommands: "选择模型以查看命令",
+    untitledChat: "未命名聊天",
+    archivedChat: "已归档",
+    attachChatFailed: "无法附加该聊天",
+    attachChatUnavailable: "此输入框无法在此附加聊天",
   },
   loadOlderHistory: {
     failed: "无法加载更早历史",
