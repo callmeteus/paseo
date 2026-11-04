@@ -4678,6 +4678,7 @@ export const PlanUpdateMessageSchema = z.object({
     /** Workspace-relative markdown path. */
     path: z.string(),
     title: z.string().optional(),
+    agentId: z.string(),
   }),
 });
 

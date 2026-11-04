@@ -2197,6 +2197,10 @@ export const es: TranslationResources = {
       failedToLoad: "No se pudo cargar el archivo",
       notFound: "No se encontró el archivo",
       failedToLoadPreview: "No se pudo cargar la vista previa del archivo",
+      plan: {
+        build: "Construir",
+        buildPrompt: "Ejecuta el plan en {{path}}. Lee el archivo primero y luego impleméntalo.",
+      },
       editor: {
         preview: "Vista previa",
         source: "Código fuente",

@@ -2146,6 +2146,10 @@ export const ar: TranslationResources = {
       failedToLoad: "فشل تحميل الملف",
       notFound: "الملف غير موجود",
       failedToLoadPreview: "فشل تحميل معاينة الملف",
+      plan: {
+        build: "تنفيذ",
+        buildPrompt: "نفّذ الخطة في {{path}}. اقرأ الملف أولاً ثم نفّذها.",
+      },
       editor: {
         preview: "معاينة",
         source: "المصدر",

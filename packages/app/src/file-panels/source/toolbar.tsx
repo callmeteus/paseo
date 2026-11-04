@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { PaneContentToolbar } from "@/components/ui/pane-content-toolbar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { PlanBuildButton } from "@/plans/build-button";
 import type { Theme } from "@/styles/theme";
 import { formatFileSize } from "@/utils/format-file-size";
 import { FileConflictAlert, type FileConflictAlertState } from "./conflict-alert";
@@ -27,6 +28,7 @@ export function TextFileToolbar({
   cursor,
   vimMode,
   conflict,
+  planPath,
 }: {
   size: number;
   lineCount: number;
@@ -36,6 +38,7 @@ export function TextFileToolbar({
   cursor?: { line: number; column: number };
   vimMode?: string | null;
   conflict?: FileConflictAlertState | null;
+  planPath?: string;
 }) {
   const { t } = useTranslation();
   const views = [
@@ -115,6 +118,7 @@ export function TextFileToolbar({
               options={views}
             />
           ) : null}
+          {planPath ? <PlanBuildButton path={planPath} /> : null}
         </View>
       </PaneContentToolbar>
       {conflict ? <FileConflictAlert state={conflict} /> : null}

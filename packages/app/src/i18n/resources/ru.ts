@@ -2183,6 +2183,10 @@ export const ru: TranslationResources = {
       failedToLoad: "Не удалось загрузить файл",
       notFound: "Файл не найден",
       failedToLoadPreview: "Не удалось загрузить предварительный просмотр файла.",
+      plan: {
+        build: "Собрать",
+        buildPrompt: "Выполни план в {{path}}. Сначала прочитай файл, затем реализуй его.",
+      },
       editor: {
         preview: "Предпросмотр",
         source: "Исходный текст",

@@ -2199,6 +2199,10 @@ export const fr: TranslationResources = {
       failedToLoad: "Impossible de charger le fichier",
       notFound: "Fichier introuvable",
       failedToLoadPreview: "Impossible de charger l’aperçu du fichier",
+      plan: {
+        build: "Construire",
+        buildPrompt: "Exécute le plan dans {{path}}. Lis le fichier d'abord, puis implémente-le.",
+      },
       editor: {
         preview: "Aperçu",
         source: "Source",

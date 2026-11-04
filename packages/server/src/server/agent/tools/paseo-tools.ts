@@ -166,7 +166,12 @@ export interface PaseoToolHostDependencies {
   paseoHome?: string;
   worktreesRoot?: string;
   /** Pushes a plan tab to connected clients after plan_create_update writes it. */
-  emitPlanUpdate?: (input: { workspaceId: string; path: string; title: string }) => void;
+  emitPlanUpdate?: (input: {
+    workspaceId: string;
+    path: string;
+    title: string;
+    agentId: string;
+  }) => void;
   /**
    * ID of the agent that is using this tool catalog.
    * Used for cwd/mode inheritance when agents spawn child agents.
@@ -2486,7 +2491,12 @@ function createToolCatalog(
       }
       const planPath = relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
       const planTitle = title?.trim() || basename(absolutePath, extname(absolutePath));
-      options.emitPlanUpdate?.({ workspaceId, path: planPath, title: planTitle });
+      options.emitPlanUpdate?.({
+        workspaceId,
+        path: planPath,
+        title: planTitle,
+        agentId: callerAgentId,
+      });
       return {
         content: [],
         structuredContent: ensureValidJson({ path: planPath, title: planTitle, created }),

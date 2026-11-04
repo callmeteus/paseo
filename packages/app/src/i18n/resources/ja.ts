@@ -2173,6 +2173,11 @@ export const ja: TranslationResources = {
       failedToLoad: "ファイルの読み込みに失敗しました",
       notFound: "ファイルが見つかりません",
       failedToLoadPreview: "ファイルプレビューの読み込みに失敗しました",
+      plan: {
+        build: "ビルド",
+        buildPrompt:
+          "{{path}} の計画を実行してください。まずファイルを読み、その後実装してください。",
+      },
       editor: {
         preview: "プレビュー",
         source: "ソース",

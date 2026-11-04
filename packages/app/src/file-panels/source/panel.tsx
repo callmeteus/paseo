@@ -138,6 +138,7 @@ function ReadonlyTextFile({
         lineCount={text.text.split("\n").length}
         view={Preview ? view : undefined}
         onViewChange={Preview ? setView : undefined}
+        planPath={params.path}
       />
       {showPreview ? (
         <Preview text={text.text} params={params} workspaceId={workspaceId} host={host} />
@@ -236,6 +237,7 @@ function EditableTextFile({
         cursor={showPreview ? undefined : cursor}
         vimMode={showPreview ? null : vimMode}
         conflict={conflict}
+        planPath={params.path}
       />
       {showPreview ? (
         <Preview text={snapshot.content} params={params} workspaceId={workspaceId} host={host} />

@@ -2123,6 +2123,10 @@ export const zhCN: TranslationResources = {
       failedToLoad: "加载文件失败",
       notFound: "找不到文件",
       failedToLoadPreview: "加载文件预览失败",
+      plan: {
+        build: "构建",
+        buildPrompt: "执行 {{path}} 中的计划。先读取文件，然后实施。",
+      },
       editor: {
         preview: "预览",
         source: "源代码",

@@ -2172,6 +2172,10 @@ export const en = {
       failedToLoad: "Failed to load file",
       notFound: "File not found",
       failedToLoadPreview: "Failed to load file preview",
+      plan: {
+        build: "Build",
+        buildPrompt: "Execute the plan at {{path}}. Read the file first, then implement it.",
+      },
       editor: {
         preview: "Preview",
         source: "Source",
