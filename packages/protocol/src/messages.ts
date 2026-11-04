@@ -1887,6 +1887,17 @@ export const CreateAgentRequestMessageSchema = z.object({
   internal: z.boolean().optional(),
   // Workspace creation intent, rejected when selecting an existing workspace.
   background: z.boolean().optional(),
+  /**
+   * How long this agent may go without provider activity before a turn fails.
+   * Comes from the automation `idle_timeout`. Absent keeps the provider default.
+   * A prompt does not carry it.
+   */
+  idleTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .max(24 * 60 * 60_000)
+    .optional(),
   labels: z.record(z.string(), z.string()).default({}),
   requestId: z.string(),
 });

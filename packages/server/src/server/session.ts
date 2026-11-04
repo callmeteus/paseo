@@ -4965,6 +4965,7 @@ export class Session {
           env,
           provisionalTitle,
           firstAgentContext,
+          idleTimeoutMs: msg.idleTimeoutMs,
         },
       );
       createdAgentId = snapshot.id;
@@ -8847,6 +8848,12 @@ export class Session {
     }
   }
 
+  private async automationIdleTimeoutMs(agentId: string): Promise<number | undefined> {
+    const live = this.agentManager.getAgent(agentId)?.idleTimeoutMs;
+    if (live !== undefined) return live;
+    return (await this.agentStorage.get(agentId))?.idleTimeoutMs;
+  }
+
   private async handleSendAgentMessageRequest(
     msg: Extract<SessionInboundMessage, { type: "send_agent_message_request" }>,
   ): Promise<void> {
@@ -8882,6 +8889,7 @@ export class Session {
         queued = acceptAdmission;
       });
       let deliveryStatus: "queued" | undefined;
+      const idleTimeoutMs = await this.automationIdleTimeoutMs(agentId);
       const send = async () => {
         if (msg.sourceAgentId) {
           const receipt = this.agentMessages.enqueue({
@@ -8914,6 +8922,7 @@ export class Session {
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           sessionMode: msg.sessionMode,
           clearPendingPermissions: true,
+          ...(idleTimeoutMs === undefined ? {} : { runOptions: { idleTimeoutMs } }),
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {

@@ -3139,6 +3139,41 @@ describe("ACPAgentSession", () => {
     }
   });
 
+  test("a caller can keep a quiet turn alive past the default idle limit", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("build", { idleTimeoutMs: 3_600_000 });
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "assistant-1",
+          content: { type: "text", text: "Working" },
+        } as SessionUpdate,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(3_600_000 - 120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("3600000"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("startTurn emits the submitted user message even when ACP does not echo it", async () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];

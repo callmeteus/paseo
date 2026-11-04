@@ -1,6 +1,7 @@
 import {
   AgentStreamEventPayloadSchema,
   AgentTimelineEntryPayloadSchema,
+  CreateAgentRequestMessageSchema,
   SendAgentMessageRequestSchema,
 } from "./messages";
 import { describe, expect, it } from "vitest";
@@ -26,6 +27,28 @@ describe("send_agent_message_request active-turn behavior", () => {
         text: "Keep the old behavior",
       }).activeTurnBehavior,
     ).toBeUndefined();
+
+    const prompt = SendAgentMessageRequestSchema.parse({
+      type: "send_agent_message_request",
+      requestId: "request-3",
+      agentId: "agent-1",
+      text: "Keep a long build",
+      idleTimeoutMs: 3_600_000,
+    });
+    expect(prompt).not.toHaveProperty("idleTimeoutMs");
+  });
+});
+
+describe("create_agent_request automation idle timeout", () => {
+  it("keeps the automation idle_timeout on the agent and drops it from a prompt", () => {
+    expect(
+      CreateAgentRequestMessageSchema.parse({
+        type: "create_agent_request",
+        requestId: "request-4",
+        config: { provider: "codex", cwd: "/tmp" },
+        idleTimeoutMs: 3_600_000,
+      }).idleTimeoutMs,
+    ).toBe(3_600_000);
   });
 });
 

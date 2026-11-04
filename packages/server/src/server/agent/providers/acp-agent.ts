@@ -326,9 +326,17 @@ const ACP_CLOSE_REQUEST_TIMEOUT_MS = 2_000;
 const ACP_IMPORT_HISTORY_LOAD_TIMEOUT_MS = 30_000;
 const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 // A provider that never answers `session/prompt` leaves the chat loading
-// forever. Two minutes without any session update (or while a permission is
-// pending) is a hung turn, not a slow one.
+// forever. Without a caller limit, two minutes without any session update
+// (or while a permission is pending) is a hung turn, not a slow one. A caller
+// can raise this for a turn whose tool stays quiet, such as a long build.
 const ACP_TURN_IDLE_TIMEOUT_MS = 120_000;
+
+function resolveTurnIdleLimitMs(options: AgentRunOptions | undefined): number {
+  const requested = options?.idleTimeoutMs;
+  return requested !== undefined && Number.isSafeInteger(requested) && requested > 0
+    ? requested
+    : ACP_TURN_IDLE_TIMEOUT_MS;
+}
 // A provider that never starts a turn usually needs authentication or is
 // otherwise broken. Fail early with an actionable message instead of leaving
 // the chat loading until the longer idle watchdog fires.
@@ -1783,6 +1791,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
   private turnIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+  private turnIdleLimitMs = ACP_TURN_IDLE_TIMEOUT_MS;
   private turnFirstActivityTimeout: ReturnType<typeof setTimeout> | null = null;
   private authMethods: NonNullable<InitializeResponse["authMethods"]> = [];
   private fallbackAssistantMessageId: string | null = null;
@@ -2009,6 +2018,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const turnId = randomUUID();
     const messageId = options?.clientMessageId ?? randomUUID();
     this.activeForegroundTurnId = turnId;
+    this.turnIdleLimitMs = resolveTurnIdleLimitMs(options);
     this.fallbackAssistantMessageId = null;
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
@@ -3514,7 +3524,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.armTurnIdleTimeout(turnId);
         return;
       }
-      const message = `${this.config.provider} stopped responding after ${ACP_TURN_IDLE_TIMEOUT_MS}ms without activity`;
+      const message = `${this.config.provider} stopped responding after ${this.turnIdleLimitMs}ms without activity`;
       if (this.connection && this.sessionId) {
         void this.connection.cancel({ sessionId: this.sessionId }).catch(() => undefined);
       }
@@ -3525,7 +3535,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         diagnostic: this.collectDiagnostic(message),
         turnId,
       });
-    }, ACP_TURN_IDLE_TIMEOUT_MS);
+    }, this.turnIdleLimitMs);
   }
 
   private armTurnFirstActivityTimeout(turnId: string): void {

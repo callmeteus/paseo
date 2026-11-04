@@ -202,6 +202,12 @@ export interface AgentRunOptions {
   maxThinkingTokens?: number;
   clientMessageId?: string;
   /**
+   * How long this agent may go without provider activity before a turn fails.
+   * The session copies it from the automation `idle_timeout` stored on the agent.
+   * Absent keeps the provider default.
+   */
+  idleTimeoutMs?: number;
+  /**
    * Daemon-internal: text to record in the timeline when the dispatched prompt
    * carries injected context (the `/goal` preamble). Providers ignore it.
    */

@@ -61,6 +61,8 @@ export interface CreateAgentFromSessionInput {
   env?: Record<string, string>;
   provisionalTitle: string | null;
   firstAgentContext: FirstAgentContext;
+  /** Silence budget from the automation `idle_timeout`. Prompts do not carry it. */
+  idleTimeoutMs?: number;
 }
 
 export interface CreateAgentFromMcpInput {
@@ -258,6 +260,7 @@ async function resolveSessionCreateAgent(
       ...(sessionConfig.internal ? { persistSession: false } : {}),
       workspaceId: requireResolvedWorkspaceId(workspaceId),
       modelRouterId: input.modelRouterId ?? null,
+      idleTimeoutMs: input.idleTimeoutMs,
     },
     prompt: hasPromptContent ? prompt : undefined,
     source: input.source,

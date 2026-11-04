@@ -110,6 +110,7 @@ export function toStoredAgentRecord(
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
     ...(agent.goal ? { goal: agent.goal } : {}),
+    ...(agent.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: agent.idleTimeoutMs }),
     ...(agent.portedTimeline
       ? { portedTimeline: agent.portedTimeline as StoredAgentRecord["portedTimeline"] }
       : {}),

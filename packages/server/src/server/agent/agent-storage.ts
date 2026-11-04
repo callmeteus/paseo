@@ -80,6 +80,16 @@ const STORED_AGENT_SCHEMA = z.object({
     .optional(),
   attentionTimestamp: z.string().nullable().optional(),
   internal: z.boolean().optional(),
+  /**
+   * Silence budget from the automation `idle_timeout`, stored when the agent
+   * is created. Prompts do not carry it.
+   */
+  idleTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .max(24 * 60 * 60_000)
+    .optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
   migratedTo: z

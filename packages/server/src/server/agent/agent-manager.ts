@@ -253,6 +253,14 @@ function buildStoredAgentConfig(record: StoredAgentRecord): AgentSessionConfig {
   return stripInternalPaseoMcpServer(config);
 }
 
+function automationIdleTimeoutField(
+  options: { idleTimeoutMs?: number } | undefined,
+): { idleTimeoutMs: number } | Record<string, never> {
+  const idleTimeoutMs = options?.idleTimeoutMs;
+  if (idleTimeoutMs === undefined) return {};
+  return { idleTimeoutMs };
+}
+
 export { AGENT_LIFECYCLE_STATUSES, type AgentLifecycleStatus };
 export type {
   AgentTimelineCursor,
@@ -395,6 +403,8 @@ export interface CreateAgentOptions {
   portedTimeline?: AgentTimelineRow[];
   /** Daemon-level goal restored with a recreated agent. */
   goal?: AgentGoal;
+  /** Silence budget from the automation that created this agent. */
+  idleTimeoutMs?: number;
 }
 
 export interface GoalTurnPlan {
@@ -562,6 +572,11 @@ interface ManagedAgentBase {
   portedTimeline?: AgentTimelineRow[];
   /** Daemon-level goal shared by every provider (`/goal`). */
   goal?: AgentGoal;
+  /**
+   * Silence budget from the automation `idle_timeout`. Set when the automation
+   * creates the agent. Turns read it from here, not from the prompt.
+   */
+  idleTimeoutMs?: number;
 }
 
 type ManagedAgentWithSession = ManagedAgentBase & {
@@ -1762,6 +1777,7 @@ export class AgentManager {
       migratedFrom: options.migratedFrom,
       migratedTo: options.migratedTo,
       goal: options.goal,
+      idleTimeoutMs: options.idleTimeoutMs,
       historyPrimed: true,
     });
     if (!agent.internal) {
@@ -1901,6 +1917,7 @@ export class AgentManager {
       ...options,
       persistence: handle,
       restoring: true,
+      idleTimeoutMs: record?.idleTimeoutMs,
     });
   }
 
@@ -2106,6 +2123,7 @@ export class AgentManager {
         migratedFrom: existing.migratedFrom,
         migratedTo: existing.migratedTo,
         goal: existing.goal,
+        idleTimeoutMs: existing.idleTimeoutMs,
         restoring: true,
       });
     } catch (error) {
@@ -4675,6 +4693,7 @@ export class AgentManager {
       migratedTo?: StoredAgentRecord["migratedTo"];
       portedTimeline?: AgentTimelineRow[];
       goal?: AgentGoal;
+      idleTimeoutMs?: number;
     },
   ): Promise<ManagedAgent> {
     let registered = false;
@@ -4870,6 +4889,7 @@ export class AgentManager {
           migratedTo?: StoredAgentRecord["migratedTo"];
           portedTimeline?: AgentTimelineRow[];
           goal?: AgentGoal;
+          idleTimeoutMs?: number;
         }
       | undefined;
   }): ActiveManagedAgent {
@@ -4911,6 +4931,7 @@ export class AgentManager {
       attention: resolveInitialAttention(options?.attention),
       internal: config.internal ?? false,
       labels: options?.labels ?? {},
+      ...automationIdleTimeoutField(options),
       ...buildPortedAgentState(options),
     } as ActiveManagedAgent;
   }
