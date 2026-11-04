@@ -8,6 +8,10 @@ import { PressHighlight } from "@/components/ui/press-highlight";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/contexts/toast-context";
+import {
+  requestSidebarReveal,
+  workspaceKeyForSidebarRow,
+} from "@/components/sidebar/sidebar-reveal";
 import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -148,6 +152,7 @@ export function MoveAgentToWorkspaceSheet() {
       setMovingTo(row.id);
       try {
         await client.setAgentWorkspace(agent.id, row.id);
+        requestSidebarReveal(workspaceKeyForSidebarRow({ serverId, workspaceId: row.id }));
         navigateToAgent({ serverId, agentId: agent.id });
         toast.show(t("workspace.tabs.menu.moveChat.moved", { workspace: row.name }), {
           variant: "info",

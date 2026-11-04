@@ -8,6 +8,10 @@ import { PressHighlight } from "@/components/ui/press-highlight";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/contexts/toast-context";
+import {
+  requestSidebarReveal,
+  workspaceKeyForSidebarRow,
+} from "@/components/sidebar/sidebar-reveal";
 import { getDesktopHost } from "@/desktop/host";
 import { pickDirectory } from "@/desktop/pick-directory";
 import { useSessionStore } from "@/stores/session-store";
@@ -167,6 +171,9 @@ export function MoveWorkspaceToFolderSheet() {
       setMovingTo(rowId);
       try {
         await client.relocateWorkspace(current.id, targetPath);
+        requestSidebarReveal(
+          workspaceKeyForSidebarRow({ serverId: request.serverId, workspaceId: current.id }),
+        );
         toast.show(t("workspace.tabs.menu.moveWorkspace.moved", { path: targetPath }), {
           variant: "info",
         });

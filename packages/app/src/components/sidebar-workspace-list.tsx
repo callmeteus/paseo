@@ -154,6 +154,15 @@ import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
+import {
+  clearSidebarReveal,
+  isSidebarRevealExpired,
+  registerSidebarRowNode,
+  registerSidebarScrollNode,
+  revealSidebarWorkspaceRow,
+  setSidebarScrollOffset,
+  useSidebarRevealRequest,
+} from "@/components/sidebar/sidebar-reveal";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
@@ -1112,6 +1121,13 @@ function WorkspaceRowInner({
   }, [interaction]);
 
   const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const setRowNode = useCallback(
+    (node: View | null) => {
+      registerSidebarRowNode(workspace.workspaceKey, node);
+      dragHandleProps?.setActivatorNodeRef?.(node);
+    },
+    [dragHandleProps, workspace.workspaceKey],
+  );
 
   return (
     <SidebarWorkspaceRowFrame workspace={workspace} isDragging={isDragging}>
@@ -1129,7 +1145,7 @@ function WorkspaceRowInner({
           <View
             {...dragAttributes}
             {...dragHandleProps?.listeners}
-            ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+            ref={setRowNode}
             style={styles.workspaceRowContainer}
             {...hoverHandlers}
           >
@@ -2002,6 +2018,84 @@ export function SidebarWorkspaceList({
   // reach the display menu to reveal their work again.
   const sidebarFilterEmpty = hasProjectsBeforeFilter && projects.length === 0;
 
+  const revealRequest = useSidebarRevealRequest();
+  const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
+    (state) => state.collapsedWorkspaceGroupKeys,
+  );
+  const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const togglePinnedCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.togglePinnedCollapsed,
+  );
+  const toggleWorkspaceGroupCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.toggleWorkspaceGroupCollapsed,
+  );
+  const setProjectCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.setProjectCollapsed,
+  );
+
+  // A moved workspace can land in a collapsed section, so open that section before measuring.
+  // The scroll repeats once after the directory update paints, because a relocate re-groups the row.
+  useEffect(() => {
+    if (!revealRequest) return;
+    const revealNonce = revealRequest.nonce;
+    if (isSidebarRevealExpired(revealRequest)) {
+      clearSidebarReveal(revealNonce);
+      return;
+    }
+    const workspaceKey = revealRequest.workspaceKey;
+    const revealOnce = () => revealSidebarWorkspaceRow(workspaceKey);
+    if (
+      pinnedCollapsed &&
+      pinnedGroups.pinnedChats.some((workspace) => workspace.workspaceKey === workspaceKey)
+    ) {
+      togglePinnedCollapsed();
+    }
+    if (groupMode === "project") {
+      const project = projects.find((candidate) =>
+        candidate.workspaces.some((workspace) => workspace.workspaceKey === workspaceKey),
+      );
+      if (project && collapsedProjectKeys.has(project.viewKey)) {
+        setProjectCollapsed(project.viewKey, false);
+      }
+    } else {
+      const group = workspaceGroups.find((candidate) =>
+        candidate.rows.some((workspace) => workspace.workspaceKey === workspaceKey),
+      );
+      if (group && collapsedWorkspaceGroupKeys.has(group.key)) {
+        toggleWorkspaceGroupCollapsed(group.key);
+      }
+    }
+    let cancelled = false;
+    let settle: ReturnType<typeof setTimeout> | null = null;
+    const revealAndSettle = async (): Promise<void> => {
+      if (!(await revealOnce()) || cancelled) return;
+      settle = setTimeout(() => {
+        settle = null;
+        void (async () => {
+          await revealOnce();
+          if (!cancelled) clearSidebarReveal(revealNonce);
+        })();
+      }, 300);
+    };
+    void revealAndSettle();
+    return () => {
+      cancelled = true;
+      if (settle !== null) clearTimeout(settle);
+    };
+  }, [
+    collapsedProjectKeys,
+    collapsedWorkspaceGroupKeys,
+    groupMode,
+    pinnedCollapsed,
+    pinnedGroups.pinnedChats,
+    projects,
+    revealRequest,
+    setProjectCollapsed,
+    togglePinnedCollapsed,
+    toggleWorkspaceGroupCollapsed,
+    workspaceGroups,
+  ]);
+
   // Project mode is the one that keeps its project headers; every other grouping mode is a flat
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
   // one's `else`.
@@ -2515,11 +2609,18 @@ function ProjectModeList({
     </>
   );
 
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    setSidebarScrollOffset(event.nativeEvent.contentOffset.y);
+  }, []);
+
   return (
     <View style={styles.container}>
       {platformIsNative ? (
         <NestableScrollContainer
           {...nativeScrollGestureProps}
+          ref={registerSidebarScrollNode}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -2529,6 +2630,9 @@ function ProjectModeList({
         </NestableScrollContainer>
       ) : (
         <ScrollView
+          ref={registerSidebarScrollNode}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

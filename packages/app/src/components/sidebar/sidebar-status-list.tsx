@@ -1,12 +1,4 @@
-import {
-  memo,
-  useCallback,
-  useMemo,
-  useState,
-  type MutableRefObject,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { memo, useCallback, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   View,
@@ -80,6 +72,11 @@ import type { ToggleSidebarWorkspacePin } from "@/hooks/use-sidebar-workspace-pi
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import type { DraggableListDragHandleProps } from "@/components/draggable-list.types";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
+import {
+  registerSidebarRowNode,
+  registerSidebarScrollNode,
+  setSidebarScrollOffset,
+} from "@/components/sidebar/sidebar-reveal";
 
 // Themed icon wrappers
 const mutedGroupIconProps = densityIconProps("sm", (theme) => ({
@@ -253,10 +250,17 @@ export function SidebarStatusWorkspaceList({
     </>
   );
 
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
+    setSidebarScrollOffset(event.nativeEvent.contentOffset.y);
+  }, []);
+
   return (
     <View style={styles.container}>
       {platformIsNative ? (
         <NestableScrollContainer
+          ref={registerSidebarScrollNode}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -266,6 +270,9 @@ export function SidebarStatusWorkspaceList({
         </NestableScrollContainer>
       ) : (
         <ScrollView
+          ref={registerSidebarScrollNode}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -811,6 +818,13 @@ function StatusWorkspaceRowInnerContent({
   const serviceSummary = isDesktop ? selectWorkspaceServiceSummary(workspace.scripts) : null;
 
   const accessibilityState = useMemo(() => ({ selected }), [selected]);
+  const setRowNode = useCallback(
+    (node: View | null) => {
+      registerSidebarRowNode(workspace.workspaceKey, node);
+      dragHandleProps?.setActivatorNodeRef?.(node);
+    },
+    [dragHandleProps, workspace.workspaceKey],
+  );
   const didLongPressRef = dragInteraction?.didLongPressRef;
   const startDragPress = dragInteraction?.handlePressIn;
   const moveDragPress = dragInteraction?.handleTouchMove;
@@ -864,7 +878,7 @@ function StatusWorkspaceRowInnerContent({
           <View
             {...dragAttributes}
             {...dragHandleProps?.listeners}
-            ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+            ref={setRowNode}
             style={styles.workspaceRowContainer}
             {...hoverHandlers}
           >
