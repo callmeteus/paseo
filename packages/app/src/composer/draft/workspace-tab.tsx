@@ -199,6 +199,44 @@ function buildDraftCreateOptions(input: {
   };
 }
 
+function isUnknownModelConfigOptionError(error: unknown): boolean {
+  return error instanceof Error && /unknown model config option/i.test(error.message);
+}
+
+function withoutThinkingOption(options: CreateAgentRequestOptions): CreateAgentRequestOptions {
+  const config = options.config;
+  if (!config?.thinkingOptionId) {
+    return options;
+  }
+  const { thinkingOptionId: _thinkingOptionId, ...rest } = config;
+  return { ...options, config: rest };
+}
+
+async function createAgentWithThinkingFallback(input: {
+  create: (request: CreateAgentRequestOptions) => Promise<AgentSnapshotPayload>;
+  options: CreateAgentRequestOptions;
+  draftId: string;
+}): Promise<AgentSnapshotPayload> {
+  try {
+    return await input.create(input.options);
+  } catch (error) {
+    if (!isUnknownModelConfigOptionError(error) || !input.options.config?.thinkingOptionId) {
+      throw error;
+    }
+    // Cursor exposes per-model thought-level options and can reject the one
+    // carried over from the previous model. Keep the agent creation instead of
+    // failing the whole request; the model's default level applies.
+    console.warn(
+      "[WorkspaceDraft] provider rejected the thinking option; retrying without it",
+      error,
+    );
+    return await input.create({
+      ...withoutThinkingOption(input.options),
+      idempotencyKey: `${input.draftId}:no-thinking`,
+    });
+  }
+}
+
 async function submitDraftCreateRequest(input: {
   draftId: string;
   attempt: { clientMessageId: string };
@@ -286,7 +324,11 @@ async function submitDraftCreateRequest(input: {
     attachments,
   });
   const creation = useWorkspaceDraftSubmissionStore.getState().creationByDraftId[input.draftId];
-  const result = creation ? await creation.retry(options) : await client.createAgent(options);
+  const result = await createAgentWithThinkingFallback({
+    create: (request) => (creation ? creation.retry(request) : client.createAgent(request)),
+    options,
+    draftId: input.draftId,
+  });
 
   return {
     agentId: result.id,
