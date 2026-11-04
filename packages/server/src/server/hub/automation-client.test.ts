@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   HubAutomationRequestError,
   listHubAutomations,
+  listHubSlackChannels,
+  readHubSlackMessages,
   saveHubAutomation,
   type HubAutomationAccess,
 } from "./automation-client.js";
@@ -82,6 +84,59 @@ describe("Hub automation client", () => {
       status: 422,
       message: "Correct the trigger YAML.",
     } satisfies Partial<HubAutomationRequestError>);
+  });
+
+  it("asks Hub for the Slack channel that matches a name", async () => {
+    const listed = await listHubSlackChannels(
+      access,
+      { query: "#tecnologia-triagem-teste" },
+      async (input, init) => {
+        expect(requestUrl(input)).toBe(
+          "http://127.0.0.1:25000/api/v1/slack/channels?query=%23tecnologia-triagem-teste",
+        );
+        expect(new Headers(init?.headers).get("x-paseo-daemon-id")).toBe("daemon-1");
+        return Response.json({
+          connection: "acme",
+          truncated: false,
+          channels: [{ id: "C2", name: "tecnologia-triagem-teste", isPrivate: false }],
+        });
+      },
+    );
+
+    expect(listed.channels).toEqual([
+      { id: "C2", name: "tecnologia-triagem-teste", isPrivate: false },
+    ]);
+  });
+
+  it("reads recent Slack messages and rejects a body that is not a message list", async () => {
+    const messages = await readHubSlackMessages(
+      access,
+      { channel: "tecnologia-triagem", limit: 5 },
+      async (input) => {
+        const url = new URL(requestUrl(input));
+        expect(url.searchParams.get("channel")).toBe("tecnologia-triagem");
+        expect(url.searchParams.get("limit")).toBe("5");
+        return Response.json({
+          connection: "acme",
+          channel: { id: "C1", name: "tecnologia-triagem" },
+          messages: [
+            {
+              ts: "1",
+              author: "U1",
+              text: "Preciso de acesso.",
+              threadTs: null,
+              isReply: false,
+            },
+          ],
+        });
+      },
+    );
+    expect(messages.channel.id).toBe("C1");
+    expect(messages.messages[0]?.text).toBe("Preciso de acesso.");
+
+    await expect(
+      readHubSlackMessages(access, { channel: "general" }, async () => Response.json({ ok: true })),
+    ).rejects.toBeInstanceOf(HubAutomationRequestError);
   });
 });
 

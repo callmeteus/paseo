@@ -830,12 +830,38 @@ export class ProviderSnapshotManager {
   private async getReadyProvider(
     input: ProviderSnapshotProviderOptions,
   ): Promise<ProviderSnapshotEntry> {
+    return this.readProviderForCreate(input, true);
+  }
+
+  /**
+   * Reads a provider that can create an agent.
+   *
+   * A failed catalogue probe used to stay in error until the next automatic
+   * refresh, so the next create failed immediately with that stale timeout.
+   * One forced refresh runs before the error is returned.
+   *
+   * @param input - Provider and workspace to read.
+   * @param retryFailedCatalog - When false, an error snapshot is returned as a failure.
+   * @returns The ready snapshot entry.
+   */
+  private async readProviderForCreate(
+    input: ProviderSnapshotProviderOptions,
+    retryFailedCatalog: boolean,
+  ): Promise<ProviderSnapshotEntry> {
     const entry = await this.getProvider(input);
     if (!entry.enabled) {
       throw new Error(`Provider '${entry.provider}' is disabled`);
     }
     if (entry.status === "ready") {
       return entry;
+    }
+    if (entry.status === "error" && retryFailedCatalog) {
+      await this.refreshSnapshotForCwd({
+        cwd: resolveSnapshotCwd(input.cwd),
+        providers: [input.provider],
+        keepLastGoodOnError: true,
+      });
+      return this.readProviderForCreate({ ...input, wait: true }, false);
     }
     if (entry.status === "error") {
       throw new Error(entry.error ?? `Failed to load provider '${entry.provider}'`);

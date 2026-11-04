@@ -1,4 +1,7 @@
 import { exec } from "node:child_process";
+import { constants } from "node:fs";
+import { access, stat } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 import {
   hashAccountKey,
@@ -177,15 +180,96 @@ function buildReport(source: LocalCliSource, totals: LocalUsageTotals): UsageRep
   return { status: "available", planLabel: "Local", windows: [], balances, details };
 }
 
-export function discover(source: LocalCliSource): UsageAccount[] {
+/**
+ * Reports whether a command name resolves to an executable file on PATH.
+ *
+ * @param command - Executable name, without arguments
+ * @param env - Environment whose PATH is searched. Defaults to the process environment
+ * @returns True when an executable file is found
+ */
+export async function commandOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  if (!command || command.includes("/") || command.includes("\\")) {
+    return executableFile(command);
+  }
+
+  const directories = (env.PATH ?? "").split(delimiter);
+  const extensions = env.PATHEXT ? env.PATHEXT.split(";") : [""];
+
+  for (const directory of directories) {
+    if (!directory) {
+      continue;
+    }
+
+    for (const extension of extensions) {
+      if (await executableFile(join(directory, `${command}${extension}`))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Finds the local CLI account when its command is installed.
+ *
+ * @param source - Local CLI whose stats command should run
+ * @param installed - Resolves whether a command name is on PATH. Tests pass a stub
+ * @returns The account, or an empty list when the command is missing
+ */
+export async function discover(
+  source: LocalCliSource,
+  installed: (command: string) => Promise<boolean> = commandOnPath,
+): Promise<UsageAccount[]> {
+  const command = SOURCE_COMMANDS[source].split(" ")[0];
+
+  if (!command) {
+    return [];
+  }
+
+  // A missing binary is not an account. Running it only produces a shell error.
+  if (!(await installed(command))) {
+    return [];
+  }
+
   return [
     {
       key: hashAccountKey(`local-cli:${source}`),
       label: SOURCE_LABELS[source],
       harness: source,
-      input: { source },
+      input: {
+        source,
+      },
     },
   ];
+}
+
+/**
+ * True when the path is an executable file.
+ *
+ * @param filePath - Candidate binary path
+ * @returns True for an executable file, false for directories and missing paths
+ */
+async function executableFile(filePath: string): Promise<boolean> {
+  try {
+    const info = await stat(filePath);
+
+    if (!info.isFile()) {
+      return false;
+    }
+
+    if (process.platform === "win32") {
+      return true;
+    }
+
+    await access(filePath, constants.X_OK);
+    return (info.mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchUsage(

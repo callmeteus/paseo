@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { decideBrowserWindowOpenRequest, PendingBrowserWindowOpenRequests } from ".";
+import {
+  decideBrowserWindowOpenRequest,
+  decideHubMainFrameNavigation,
+  PendingBrowserWindowOpenRequests,
+} from ".";
 
 describe("browser webview window-open requests", () => {
   it("routes foreground tabs to a Paseo workspace tab", () => {
@@ -181,6 +185,38 @@ describe("browser webview window-open requests", () => {
     });
 
     expect(result).toEqual({ kind: "deny" });
+  });
+});
+
+describe("embedded Hub main-frame navigation", () => {
+  const hub = "http://127.0.0.1:25000/o/acme/connections";
+
+  it("opens Connect GitHub in the system browser", () => {
+    expect(
+      decideHubMainFrameNavigation(hub, "https://github.com/login/oauth/authorize?client_id=abc"),
+    ).toEqual({
+      kind: "external",
+      url: "https://github.com/login/oauth/authorize?client_id=abc",
+    });
+  });
+
+  it("stays on Hub when the navigation is the same origin", () => {
+    expect(decideHubMainFrameNavigation(hub, "http://127.0.0.1:25000/o/acme/home")).toEqual({
+      kind: "allow",
+    });
+  });
+
+  it("blocks a non-http navigation", () => {
+    expect(decideHubMainFrameNavigation(hub, "file:///etc/passwd")).toEqual({ kind: "block" });
+    expect(decideHubMainFrameNavigation(hub, "javascript:alert(1)")).toEqual({ kind: "block" });
+  });
+
+  it("leaves about:blank and a page that has no origin alone", () => {
+    expect(decideHubMainFrameNavigation(hub, "about:blank")).toEqual({ kind: "allow" });
+    expect(decideHubMainFrameNavigation("about:blank", "https://github.com/")).toEqual({
+      kind: "allow",
+    });
+    expect(decideHubMainFrameNavigation(hub, undefined)).toEqual({ kind: "allow" });
   });
 });
 

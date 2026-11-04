@@ -18,9 +18,14 @@ export function isPaseoToolEnabled(
   if (toolName === "speak") {
     return true;
   }
-  // Hub automations stay callable when the rest of the catalog is off.
-  // A provider can still hide one of them with disabledTools.
-  if (toolName === "list_automations" || toolName === "save_automation") {
+  // Hub automations and the Slack reads they need stay callable when the
+  // rest of the catalog is off. A provider can still hide one with disabledTools.
+  if (
+    toolName === "list_automations" ||
+    toolName === "save_automation" ||
+    toolName === "list_slack_channels" ||
+    toolName === "read_slack_messages"
+  ) {
     return !policy?.disabledTools?.includes(toolName);
   }
   if (!isPaseoToolPolicyEnabled(policy)) {

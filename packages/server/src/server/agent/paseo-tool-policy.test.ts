@@ -27,6 +27,8 @@ describe("Paseo tool policy", () => {
     expect(isPaseoToolEnabled({ enabled: false }, "speak")).toBe(true);
     expect(isPaseoToolEnabled({ enabled: false }, "list_automations")).toBe(true);
     expect(isPaseoToolEnabled({ enabled: false }, "save_automation")).toBe(true);
+    expect(isPaseoToolEnabled({ enabled: false }, "list_slack_channels")).toBe(true);
+    expect(isPaseoToolEnabled({ enabled: false }, "read_slack_messages")).toBe(true);
     expect(
       isPaseoToolEnabled(
         { enabled: false, disabledTools: ["list_automations"] },

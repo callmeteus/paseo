@@ -154,6 +154,7 @@ interface ProviderContract {
 const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
   claude: { supportsExactMcpPreapproval: true },
   codex: { supportsExactMcpPreapproval: true },
+  cursor: { supportsExactMcpPreapproval: true },
   opencode: { supportsExactMcpPreapproval: true },
 };
 
@@ -161,11 +162,33 @@ const UNSUPPORTED_PROVIDER_CONTRACT: ProviderContract = {
   supportsExactMcpPreapproval: false,
 };
 
+/**
+ * The exact-grant contract for one configured ACP provider.
+ *
+ * Cursor is `extends: acp` in the daemon config, so it never appears in
+ * `AGENT_PROVIDER_DEFINITIONS`. Only that id may preapprove exact MCP tools.
+ * Every other custom ACP id stays fail-closed.
+ *
+ * @param providerId - The configured provider id.
+ * @returns The contract the registry uses when a tool policy is present.
+ */
+function derivedAcpContract(providerId: string): ProviderContract {
+  if (providerId === HUB_E2E_PROVIDER_ID) {
+    return HUB_E2E_PROVIDER_CONTRACT;
+  }
+
+  if (providerId === "cursor") {
+    return PROVIDER_CONTRACTS.cursor;
+  }
+
+  return UNSUPPORTED_PROVIDER_CONTRACT;
+}
+
 const HUB_E2E_PROVIDER_ID = "hub-e2e";
 const HUB_E2E_MCP_SERVER = "hub";
 const HUB_E2E_TOOL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
 // The cross-repository Hub harness owns this synthetic provider ID. It exercises the production
-// registry path without extending exact-preapproval support to user-defined ACP providers.
+// registry path. User-defined ACP providers stay fail-closed, except the configured Cursor provider.
 const HUB_E2E_PROVIDER_CONTRACT: ProviderContract = {
   supportsExactMcpPreapproval: true,
   applyToolPolicy: (provider, toolPolicy) => {
@@ -861,10 +884,7 @@ function addDerivedProviders(
           }
           return new GenericACPAgentClient(acpOptions);
         },
-        contract:
-          providerId === HUB_E2E_PROVIDER_ID
-            ? HUB_E2E_PROVIDER_CONTRACT
-            : UNSUPPORTED_PROVIDER_CONTRACT,
+        contract: derivedAcpContract(providerId),
       });
       continue;
     }

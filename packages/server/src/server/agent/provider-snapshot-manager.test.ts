@@ -2526,6 +2526,69 @@ describe("provider-owned catalogue identity", () => {
     }
   });
 
+  test("listModels probes a failed catalog once more before giving up", async () => {
+    let calls = 0;
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: { ...disabledProviders, codex: { enabled: true } },
+      extraClients: {
+        codex: createExtraClient("codex", {
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog() {
+            calls += 1;
+            if (calls === 1) {
+              throw new Error("Timed out refreshing Codex after 120000ms; pending: session/new");
+            }
+            return {
+              models: [{ provider: "codex", id: "gpt", label: "GPT" }],
+              modes: [],
+            };
+          },
+        }),
+      },
+    });
+    const cwd = resolveSnapshotCwd("/tmp/retry-catalog");
+    try {
+      const models = await manager.listModels({ provider: "codex", cwd, wait: true });
+      expect(models.map((model) => model.id)).toEqual(["gpt"]);
+      expect(calls).toBe(2);
+    } finally {
+      await manager.shutdown();
+      manager.destroy();
+    }
+  });
+
+  test("listModels throws the catalog error when the retry also fails", async () => {
+    let calls = 0;
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: { ...disabledProviders, codex: { enabled: true } },
+      extraClients: {
+        codex: createExtraClient("codex", {
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog() {
+            calls += 1;
+            throw new Error("Timed out refreshing Codex after 120000ms; pending: session/new");
+          },
+        }),
+      },
+    });
+    const cwd = resolveSnapshotCwd("/tmp/retry-catalog-fail");
+    try {
+      await expect(manager.listModels({ provider: "codex", cwd, wait: true })).rejects.toThrow(
+        "Timed out refreshing Codex after 120000ms; pending: session/new",
+      );
+      expect(calls).toBe(2);
+    } finally {
+      await manager.shutdown();
+      manager.destroy();
+    }
+  });
+
   test("key lookup failure detaches a view from its previous shared catalogue", async () => {
     let broken = false;
     let calls = 0;

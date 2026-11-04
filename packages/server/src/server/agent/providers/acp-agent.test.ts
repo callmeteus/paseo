@@ -35,7 +35,7 @@ import {
   resolveACPModelSelection,
   summarizeACPRequestError,
 } from "./acp-agent.js";
-import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "../tools/hub-automation-tools.js";
+import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import { createIdleRuntimeCleanup } from "../idle-runtime-cleanup/index.js";
 import type { ProcessTerminator, TreeKillTarget } from "../../../utils/tree-kill.js";
 import {
@@ -205,6 +205,7 @@ function createSessionWithConfig(
     modeId?: string | null;
     model?: string | null;
     featureValues?: Record<string, unknown>;
+    toolPolicy?: ToolPolicy;
   } = {},
   logger: ReturnType<typeof createTestLogger> = createTestLogger(),
 ): ACPAgentSession {
@@ -215,6 +216,7 @@ function createSessionWithConfig(
       modeId: config.modeId ?? undefined,
       model: config.model ?? undefined,
       featureValues: config.featureValues,
+      toolPolicy: config.toolPolicy,
     },
     {
       provider: config.provider ?? "claude-acp",
@@ -1491,6 +1493,77 @@ describe("ACPAgentSession Zed parity", () => {
     });
     expect(events).not.toContainEqual(expect.objectContaining({ type: "permission_requested" }));
     expect(session.getPendingPermissions()).toEqual([]);
+  });
+
+  test("preapproves one granted Hub MCP tool without asking", async () => {
+    const session = createSessionWithConfig({
+      provider: "cursor",
+      toolPolicy: {
+        preapproved: [{ kind: "mcp", server: "hub", tool: "finish_execution" }],
+      },
+    });
+    const events: Array<{ type: string }> = [];
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    session.subscribe((event) => events.push(event as { type: string }));
+
+    await expect(
+      session.requestPermission({
+        sessionId: "session-1",
+        toolCall: {
+          toolCallId: "tool-1",
+          title: "finish_execution: finish_execution",
+          kind: "other",
+          status: "pending",
+        },
+        options: [
+          { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+          { optionId: "allow-always", name: "Allow always", kind: "allow_always" },
+          { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+        ],
+      } satisfies RequestPermissionRequest),
+    ).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "allow-once" },
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "permission_requested" }));
+  });
+
+  test("still asks before a shell command when only Hub MCP tools are granted", async () => {
+    const session = createSessionWithConfig({
+      provider: "cursor",
+      toolPolicy: {
+        preapproved: [{ kind: "mcp", server: "hub", tool: "finish_execution" }],
+      },
+    });
+    const events: AgentStreamEvent[] = [];
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    session.subscribe((event) => events.push(event));
+
+    const permission = session.requestPermission({
+      sessionId: "session-1",
+      toolCall: {
+        toolCallId: "tool-1",
+        title: "`ls`",
+        kind: "execute",
+        status: "pending",
+      },
+      options: [
+        { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+        { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+      ],
+    } satisfies RequestPermissionRequest);
+    await Promise.resolve();
+
+    expect(events.some((event) => event.type === "permission_requested")).toBe(true);
+    const requested = events.find((event) => event.type === "permission_requested");
+    if (requested?.type !== "permission_requested") {
+      throw new Error("Expected permission request");
+    }
+    await session.respondToPermission(requested.request.id, { behavior: "deny" });
+    await expect(permission).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "reject-once" },
+    });
   });
 
   test("does not auto-accept ACP chooser requests", async () => {
@@ -3091,7 +3164,7 @@ describe("ACPAgentSession", () => {
     expect(prompt).toHaveBeenCalledWith({
       sessionId: "session-1",
       messageId: "msg-client-1",
-      prompt: [{ type: "text", text: `${HUB_AUTOMATION_CHAT_INSTRUCTION}\n\nhello` }],
+      prompt: [{ type: "text", text: "hello" }],
     });
     expect(
       events

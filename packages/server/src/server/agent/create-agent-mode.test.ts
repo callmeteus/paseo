@@ -4,6 +4,7 @@ import { resolveAndValidateCreateAgentMode } from "./create-agent-mode.js";
 const CLAUDE_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"];
 const OPENCODE_MODES = ["build", "plan"];
 const CODEX_MODES = ["auto", "full-access"];
+const CURSOR_MODES = ["agent", "plan", "ask"];
 
 function agentParent(provider: string, modeId: string | null, isUnattended = false) {
   return { provider, modeId, isUnattended };
@@ -19,6 +20,40 @@ describe("resolveAndValidateCreateAgentMode", () => {
       availableModes: OPENCODE_MODES,
     });
     expect(resolved).toBe("plan");
+  });
+
+  it("keeps Build when the provider advertises it", () => {
+    const resolved = resolveAndValidateCreateAgentMode({
+      requestedMode: "build",
+      targetProvider: "opencode",
+      parent: null,
+      unattended: false,
+      availableModes: OPENCODE_MODES,
+    });
+    expect(resolved).toBe("build");
+  });
+
+  it("uses Cursor's agent mode when the app asks for Build", () => {
+    const resolved = resolveAndValidateCreateAgentMode({
+      requestedMode: "build",
+      targetProvider: "cursor",
+      parent: null,
+      unattended: false,
+      availableModes: CURSOR_MODES,
+    });
+    expect(resolved).toBe("agent");
+  });
+
+  it("still rejects Build when the provider has no writable stand-in", () => {
+    expect(() =>
+      resolveAndValidateCreateAgentMode({
+        requestedMode: "build",
+        targetProvider: "pi",
+        parent: null,
+        unattended: false,
+        availableModes: ["plan"],
+      }),
+    ).toThrow("Invalid mode 'build' for provider 'pi'. Available modes: plan");
   });
 
   it("throws when the requested mode is invalid for the target provider", () => {

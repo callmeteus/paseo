@@ -135,6 +135,28 @@ describe("provider-owned option schemas", () => {
 });
 
 describe("exact MCP preapproval mappings", () => {
+  test("Cursor keeps an exact Hub MCP grant on the session", () => {
+    const registry = buildProviderRegistry(createTestLogger(), {
+      providerOverrides: {
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+        },
+      },
+    });
+    const config = {
+      provider: "cursor",
+      cwd: "/tmp",
+      mcpServers: { hub: { type: "http" as const, url: "http://127.0.0.1/hub" } },
+    };
+
+    expect(registry.cursor.applyToolPolicy(config, hubPolicy)).toEqual({
+      ...config,
+      toolPolicy: hubPolicy,
+    });
+  });
+
   test("unsupported providers fail closed with an unattended-execution error", () => {
     const registry = buildProviderRegistry(createTestLogger());
     expect(() =>

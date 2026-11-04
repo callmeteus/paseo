@@ -119,6 +119,62 @@ export function decideBrowserWindowOpenRequest(input: {
   return { kind: "workspace-tab", url: input.url };
 }
 
+export type HubMainFrameNavigationDecision =
+  | { kind: "allow" }
+  | { kind: "external"; url: string }
+  | { kind: "block" };
+
+/**
+ * Decides what the embedded Hub does with a main-frame navigation.
+ *
+ * Same-origin moves, including organization home, stay in the webview.
+ * Another http(s) origin opens in the system browser, so Connect GitHub,
+ * the billing portal, and a plain external link do not replace Hub.
+ * Unsafe protocols stay blocked. A blank page has no origin to compare,
+ * so the first real load is left alone.
+ *
+ * @param currentUrl - Page already loaded when the navigation starts.
+ * @param targetUrl - URL the main frame is about to load.
+ * @returns Whether to allow the navigation, open it outside, or block it.
+ */
+export function decideHubMainFrameNavigation(
+  currentUrl: string,
+  targetUrl: string | undefined,
+): HubMainFrameNavigationDecision {
+  if (!isAllowedBrowserWebviewUrl(targetUrl)) {
+    return { kind: "block" };
+  }
+  if (!targetUrl) {
+    return { kind: "allow" };
+  }
+
+  let target: URL;
+  try {
+    target = new URL(targetUrl);
+  } catch {
+    return { kind: "block" };
+  }
+  // about:blank is allowed and is not a page to hand to the system browser.
+  if (target.protocol !== "http:" && target.protocol !== "https:") {
+    return { kind: "allow" };
+  }
+
+  let current: URL;
+  try {
+    current = new URL(currentUrl);
+  } catch {
+    return { kind: "allow" };
+  }
+  if (current.protocol !== "http:" && current.protocol !== "https:") {
+    return { kind: "allow" };
+  }
+  if (current.origin === target.origin) {
+    return { kind: "allow" };
+  }
+
+  return { kind: "external", url: target.href };
+}
+
 function getBrowserWindowFeatureIntent(features: string): {
   requestsPopup: boolean;
   disownsOpener: boolean;

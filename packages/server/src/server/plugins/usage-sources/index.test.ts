@@ -828,3 +828,35 @@ test("failed discovery preserves history until discovery confirms account remova
   present = true;
   expect((await registry.listReports())[0]?.lastSuccessful).toBeUndefined();
 });
+
+test("skips usage sources whose provider is disabled", async () => {
+  let kiloDiscovered = false;
+  const registry = new UsageSourceRegistry(
+    Date.now,
+    300_000,
+    { warn: () => {} },
+    { hasAgent: () => false, usageSession: () => null },
+    20_000,
+    (sourceId) => sourceId !== "kilo-local",
+  );
+  registry.register(
+    source({
+      id: "kilo-local",
+      discover: async () => {
+        kiloDiscovered = true;
+        return [{ key: "kilo", input: { source: "kilo" } }];
+      },
+    }),
+  );
+  registry.register(
+    source({
+      id: "opencode-local",
+      discover: async () => [{ key: "opencode", input: { source: "opencode" } }],
+    }),
+  );
+
+  const reports = await registry.listReports();
+
+  expect(kiloDiscovered).toBe(false);
+  expect(reports.map((entry) => entry.sourceId)).toEqual(["opencode-local"]);
+});

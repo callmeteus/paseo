@@ -2,7 +2,7 @@ import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.g
 import type { Logger } from "pino";
 import { z } from "zod";
 
-import type { AgentModelDefinition } from "../agent-sdk-types.js";
+import type { AgentModelDefinition, FetchCatalogOptions } from "../agent-sdk-types.js";
 import {
   deriveSelectorOptions,
   type ACPCatalogModelResolverContext,
@@ -100,5 +100,12 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
       catalogModelResolver: resolveCursorCatalogModels,
     });
+  }
+
+  async getCatalogCacheKey(_options: FetchCatalogOptions): Promise<string> {
+    // Models and modes come from the signed-in account, not the project.
+    // One probe covers every workspace. Refreshing each cwd at once opened
+    // several session/new calls, and those probes stalled past the deadline.
+    return "cursor-host";
   }
 }

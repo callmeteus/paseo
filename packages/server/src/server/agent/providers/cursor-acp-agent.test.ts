@@ -397,6 +397,22 @@ describe("CursorACPAgentClient usage session", () => {
   });
 });
 
+test("catalog cache key is the same for every workspace", async () => {
+  const client = new CursorACPAgentClient({
+    logger: createTestLogger(),
+    command: ["cursor-agent", "acp"],
+  });
+  const home = await client.getCatalogCacheKey({ scope: "global", force: false });
+  const project = await client.getCatalogCacheKey({
+    scope: "workspace",
+    cwd: "/tmp/cursor-workspace",
+    force: false,
+  });
+
+  expect(home).toBe("cursor-host");
+  expect(project).toBe(home);
+});
+
 async function withFakeACPAgent(
   run: (command: [string, ...string[]], cwd: string) => Promise<void>,
 ): Promise<void> {

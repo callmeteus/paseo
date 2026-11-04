@@ -20,6 +20,32 @@ export interface SavedHubAutomation {
   active: true;
 }
 
+export interface HubSlackChannel {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+}
+
+export interface HubSlackChannelList {
+  connection: string;
+  channels: HubSlackChannel[];
+  truncated: boolean;
+}
+
+export interface HubSlackMessage {
+  ts: string;
+  author: string | null;
+  text: string;
+  threadTs: string | null;
+  isReply: boolean;
+}
+
+export interface HubSlackMessageList {
+  connection: string;
+  channel: { id: string; name: string };
+  messages: HubSlackMessage[];
+}
+
 /**
  * Lists the automations the connected daemon can see.
  *
@@ -76,6 +102,69 @@ export async function saveHubAutomation(
 }
 
 /**
+ * Lists Slack channels the connected Hub bot can see.
+ *
+ * @param access - Origin and daemon credential
+ * @param input - Optional connection slug and channel-name query
+ * @param request - HTTP client. Tests pass a fake
+ * @returns Channel ids a trigger can store
+ */
+export async function listHubSlackChannels(
+  access: HubAutomationAccess,
+  input: { connection?: string | undefined; query?: string | undefined },
+  request: typeof fetch = fetch,
+): Promise<HubSlackChannelList> {
+  const response = await request(
+    hubUrlWithQuery(access.origin, "/api/v1/slack/channels", {
+      connection: input.connection,
+      query: input.query,
+    }),
+    { headers: daemonHeaders(access) },
+  );
+  const body = await readJson(response);
+
+  if (!response.ok) {
+    throw new HubAutomationRequestError(response.status, problemMessage(body));
+  }
+
+  return readChannelList(body);
+}
+
+/**
+ * Reads recent messages in a Slack channel the Hub bot belongs to.
+ *
+ * @param access - Origin and daemon credential
+ * @param input - Channel name or id, optional connection, and page size
+ * @param request - HTTP client. Tests pass a fake
+ * @returns The resolved channel and the newest messages
+ */
+export async function readHubSlackMessages(
+  access: HubAutomationAccess,
+  input: {
+    channel: string;
+    connection?: string | undefined;
+    limit?: number | undefined;
+  },
+  request: typeof fetch = fetch,
+): Promise<HubSlackMessageList> {
+  const response = await request(
+    hubUrlWithQuery(access.origin, "/api/v1/slack/messages", {
+      connection: input.connection,
+      channel: input.channel,
+      limit: input.limit,
+    }),
+    { headers: daemonHeaders(access) },
+  );
+  const body = await readJson(response);
+
+  if (!response.ok) {
+    throw new HubAutomationRequestError(response.status, problemMessage(body));
+  }
+
+  return readMessageList(body);
+}
+
+/**
  * Hub refused or could not complete an automation request.
  */
 export class HubAutomationRequestError extends Error {
@@ -100,6 +189,36 @@ export class HubAutomationRequestError extends Error {
 function hubUrl(origin: string, path: string): string {
   const base = origin.endsWith("/") ? origin.slice(0, -1) : origin;
   return `${base}${path}`;
+}
+
+/**
+ * @param origin - Hub origin without a path
+ * @param path - Public API path
+ * @param query - Query fields. Blank values are omitted
+ * @returns Absolute URL
+ */
+function hubUrlWithQuery(
+  origin: string,
+  path: string,
+  query: Record<string, string | number | undefined>,
+): string {
+  const url = new URL(hubUrl(origin, path));
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    const text = typeof value === "number" ? value.toString() : value;
+
+    if (text.length === 0) {
+      continue;
+    }
+
+    url.searchParams.set(key, text);
+  }
+
+  return url.href;
 }
 
 /**
@@ -131,7 +250,7 @@ async function readJson(response: Response): Promise<unknown> {
  */
 function problemMessage(body: unknown): string {
   if (!isRecord(body)) {
-    return "Hub could not complete that automation request.";
+    return "Hub could not complete that request.";
   }
   const detail = body["detail"];
   if (typeof detail === "string" && detail.length > 0) {
@@ -141,7 +260,7 @@ function problemMessage(body: unknown): string {
   if (typeof title === "string" && title.length > 0) {
     return title;
   }
-  return "Hub could not complete that automation request.";
+  return "Hub could not complete that request.";
 }
 
 /**
@@ -200,4 +319,115 @@ function readSaved(value: unknown): SavedHubAutomation {
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * @param body - Channel list payload
+ * @returns The channels
+ */
+function readChannelList(body: unknown): HubSlackChannelList {
+  if (
+    !isRecord(body) ||
+    typeof body["connection"] !== "string" ||
+    !Array.isArray(body["channels"])
+  ) {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected channel list.");
+  }
+
+  if (typeof body["truncated"] !== "boolean") {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected channel list.");
+  }
+
+  return {
+    connection: body["connection"],
+    truncated: body["truncated"],
+    channels: body["channels"].map(readChannel),
+  };
+}
+
+/**
+ * @param value - One channel object
+ * @returns The channel
+ */
+function readChannel(value: unknown): HubSlackChannel {
+  if (
+    !isRecord(value) ||
+    typeof value["id"] !== "string" ||
+    typeof value["name"] !== "string" ||
+    typeof value["isPrivate"] !== "boolean"
+  ) {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected channel list.");
+  }
+
+  return {
+    id: value["id"],
+    name: value["name"],
+    isPrivate: value["isPrivate"],
+  };
+}
+
+/**
+ * @param body - Message list payload
+ * @returns The messages
+ */
+function readMessageList(body: unknown): HubSlackMessageList {
+  if (!isRecord(body) || typeof body["connection"] !== "string" || !isRecord(body["channel"])) {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  const channelId = body["channel"]["id"];
+  const channelName = body["channel"]["name"];
+
+  if (
+    typeof channelId !== "string" ||
+    typeof channelName !== "string" ||
+    !Array.isArray(body["messages"])
+  ) {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  return {
+    connection: body["connection"],
+    channel: {
+      id: channelId,
+      name: channelName,
+    },
+    messages: body["messages"].map(readMessage),
+  };
+}
+
+/**
+ * @param value - One message object
+ * @returns The message
+ */
+function readMessage(value: unknown): HubSlackMessage {
+  if (!isRecord(value)) {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  const ts = value["ts"];
+  const author = value["author"];
+  const text = value["text"];
+  const threadTs = value["threadTs"];
+  const isReply = value["isReply"];
+
+  if (typeof ts !== "string" || typeof text !== "string" || typeof isReply !== "boolean") {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  if (author !== null && typeof author !== "string") {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  if (threadTs !== null && typeof threadTs !== "string") {
+    throw new HubAutomationRequestError(200, "Hub returned an unexpected message list.");
+  }
+
+  return {
+    ts,
+    author,
+    text,
+    threadTs,
+    isReply,
+  };
 }

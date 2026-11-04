@@ -32,6 +32,7 @@ import {
   type ListUsageReportsOptions,
   UsageSourceRegistry,
 } from "./usage-sources/index.js";
+import { isUsageSourceEnabled } from "./usage-sources/visibility.js";
 import type { PluginUsageSourceMetadata } from "./plugin-process-protocol.js";
 
 const BUILTIN_PROVIDER_ID_SET: ReadonlySet<string> = new Set(BUILTIN_PROVIDER_IDS);
@@ -107,6 +108,8 @@ export class PluginService {
       300_000,
       this.logger,
       dependencies.usageAgents,
+      20_000,
+      (sourceId) => isUsageSourceEnabled(sourceId, this.configStore.get().providers),
     );
     this.runtime =
       dependencies.runtime ??

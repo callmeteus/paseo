@@ -8,7 +8,13 @@ export default function contribute(server: PluginServerContext) {
     label: "OpenCode (local)",
     icon: "icon.svg",
     input: OpencodeInputSchema,
-    discover: async (scope) => (scope.kind === "global" ? discover("opencode") : []),
+    discover: async (scope) => {
+      if (scope.kind !== "global") {
+        return [];
+      }
+
+      return discover("opencode");
+    },
     fetch: (input) => fetchUsage(input as { source: "opencode" }),
   });
   server.registerUsageSource({
@@ -16,7 +22,13 @@ export default function contribute(server: PluginServerContext) {
     label: "Kilo (local)",
     icon: "icon.svg",
     input: KiloInputSchema,
-    discover: async (scope) => (scope.kind === "global" ? discover("kilo") : []),
+    discover: async (scope) => {
+      if (scope.kind !== "global") {
+        return [];
+      }
+
+      return discover("kilo");
+    },
     fetch: (input) => fetchUsage(input as { source: "kilo" }),
   });
   server.registerUsageSource({
@@ -24,7 +36,13 @@ export default function contribute(server: PluginServerContext) {
     label: "Cline (local)",
     icon: "icon.svg",
     input: ClineInputSchema,
-    discover: async (scope) => (scope.kind === "global" ? discover("cline") : []),
+    discover: async (scope) => {
+      if (scope.kind !== "global") {
+        return [];
+      }
+
+      return discover("cline");
+    },
     fetch: (input) => fetchUsage(input as { source: "cline" }),
   });
   return () => {};

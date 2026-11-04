@@ -65,6 +65,7 @@ export class UsageSourceRegistry {
     private readonly logger: Pick<Logger, "warn"> = { warn: console.warn },
     private readonly agents: AgentUsageLookup = { hasAgent: () => false, usageSession: () => null },
     private readonly deadlineMs = 20_000,
+    private readonly sourceEnabled?: (sourceId: string) => boolean,
   ) {}
 
   register(source: UsageSource): void {
@@ -198,6 +199,10 @@ export class UsageSourceRegistry {
     const discovered = await Promise.all(
       [...this.sources.values()].map(async (source) => {
         const reports = new Map<string, KnownReport>();
+        // A disabled provider stays off the usage window, including a CLI that is installed.
+        if (this.sourceEnabled && !this.sourceEnabled(source.id)) {
+          return reports;
+        }
         try {
           const accounts = z
             .array(

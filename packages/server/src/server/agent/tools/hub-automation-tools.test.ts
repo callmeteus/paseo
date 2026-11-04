@@ -51,8 +51,74 @@ describe("Hub automation tools", () => {
     });
     expect(catalog.getTool("list_automations")?.title).toBe("List automations");
     expect(catalog.getTool("save_automation")?.title).toBe("Save automation");
+    expect(catalog.getTool("list_slack_channels")?.title).toBe("List Slack channels");
+    expect(catalog.getTool("read_slack_messages")?.title).toBe("Read Slack messages");
+  });
+
+  it("refuses to read Slack when no Hub is connected", async () => {
+    const read = handler("read_slack_messages", () => null);
+    await expect(read({ channel: "tecnologia-triagem" })).rejects.toBeInstanceOf(
+      PaseoToolInputError,
+    );
+  });
+
+  it("returns the channel id Hub resolved", async () => {
+    const list = handler("list_slack_channels", () => ({
+      origin: "http://127.0.0.1:25000",
+      daemonId: "daemon-1",
+      credential: "secret",
+    }));
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      expect(requestUrl(input)).toBe(
+        "http://127.0.0.1:25000/api/v1/slack/channels?query=tecnologia-triagem-teste",
+      );
+      return Response.json({
+        connection: "acme",
+        truncated: false,
+        channels: [{ id: "C01234567", name: "tecnologia-triagem-teste", isPrivate: false }],
+      });
+    };
+    try {
+      const result = await list({ query: "tecnologia-triagem-teste" });
+      expect(result.structuredContent).toMatchObject({
+        connection: "acme",
+        channels: [{ id: "C01234567", name: "tecnologia-triagem-teste" }],
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("surfaces Hub's refusal when the channel cannot be read", async () => {
+    const read = handler("read_slack_messages", () => ({
+      origin: "http://127.0.0.1:25000",
+      daemonId: "daemon-1",
+      credential: "secret",
+    }));
+    const original = globalThis.fetch;
+    globalThis.fetch = async () =>
+      Response.json(
+        { title: "Slack channel not found", detail: "No Slack channel matches that name." },
+        { status: 404 },
+      );
+    try {
+      await expect(read({ channel: "missing" })).rejects.toMatchObject({
+        message: "No Slack channel matches that name.",
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
+
+interface ToolInput {
+  yaml?: string;
+  connection?: string;
+  query?: string;
+  channel?: string;
+  limit?: number;
+}
 
 function handler(
   name: string,
@@ -61,8 +127,8 @@ function handler(
     daemonId: string;
     credential: string;
   } | null,
-): (input: { yaml?: string }) => Promise<PaseoToolResult> {
-  let found: ((input: { yaml?: string }) => Promise<PaseoToolResult>) | undefined;
+): (input: ToolInput) => Promise<PaseoToolResult> {
+  let found: ((input: ToolInput) => Promise<PaseoToolResult>) | undefined;
   registerHubAutomationTools({
     hubAutomations,
     registerTool: (toolName, _config, toolHandler) => {
@@ -75,4 +141,18 @@ function handler(
     throw new Error(`missing tool ${name}`);
   }
   return found;
+}
+
+/**
+ * @param input - Fetch target the tool built
+ * @returns The URL string
+ */
+function requestUrl(input: RequestInfo | URL): string {
+  if (input instanceof URL) {
+    return input.href;
+  }
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return input;
 }

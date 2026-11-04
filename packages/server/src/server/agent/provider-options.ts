@@ -30,7 +30,7 @@ export class ToolPolicyUnsupportedError extends Error {
   ) {
     super(
       reason ??
-        `Provider '${provider}' cannot preapprove exact MCP tools for unattended execution; select Claude, Codex, or OpenCode`,
+        `Provider '${provider}' cannot preapprove exact MCP tools for unattended execution; select Claude, Codex, Cursor, or OpenCode`,
     );
     this.name = "ToolPolicyUnsupportedError";
   }

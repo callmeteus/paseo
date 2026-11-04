@@ -1,6 +1,5 @@
+import { isPreapprovedAcpMcpTool } from "./acp-tool-policy.js";
 import { ACPProviderOptionsSchema } from "./acp-options.js";
-import { prependAcpPromptText } from "./acp-prompt.js";
-import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "../tools/hub-automation-tools.js";
 import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -2022,7 +2021,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       .prompt({
         sessionId: this.sessionId,
         messageId,
-        prompt: toACPContentBlocks(prependAcpPromptText(prompt, HUB_AUTOMATION_CHAT_INSTRUCTION)),
+        // Cursor stores session/prompt as the user message and resends that
+        // transcript on later turns. ACP has no system-prompt field, so the
+        // Hub note stays on the MCP server instructions instead of this text.
+        prompt: toACPContentBlocks(prompt),
       })
       .then((response) => {
         this.handlePromptResponse(response, turnId);
@@ -2663,6 +2665,25 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     this.clearTurnFirstActivityTimeout();
+    // Cursor asks over ACP. Allow once, so the user's Cursor allowlist is not
+    // rewritten, and only when the title is one granted Hub tool.
+    const preapprovedOption = isPreapprovedAcpMcpTool({
+      title: params.toolCall.title,
+      kind: params.toolCall.kind,
+      toolPolicy: this.config.toolPolicy,
+    })
+      ? selectPermissionOption(params.options, { behavior: "allow" })
+      : null;
+    if (preapprovedOption) {
+      this.logger.info(
+        { toolCallId: params.toolCall.toolCallId, optionId: preapprovedOption.optionId },
+        "Preapproving exact MCP tool",
+      );
+      return {
+        outcome: { outcome: "selected", optionId: preapprovedOption.optionId },
+      };
+    }
+
     const canAutoAccept =
       isACPAutoAcceptEnabled(this.config) && !isACPChooserRequest(params.options);
     if (canAutoAccept) {

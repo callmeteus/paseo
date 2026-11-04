@@ -1,5 +1,14 @@
+import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseClineHistory, parseKiloStats, parseOpencodeStats } from "./usage.js";
+import {
+  commandOnPath,
+  discover,
+  parseClineHistory,
+  parseKiloStats,
+  parseOpencodeStats,
+} from "./usage.js";
 
 describe("parseOpencodeStats", () => {
   it("maps sessions, tokens and cost", () => {
@@ -88,5 +97,56 @@ describe("parseClineHistory", () => {
 
   it("rejects non-array payloads", () => {
     expect(() => parseClineHistory({})).toThrow();
+  });
+});
+
+describe("discover", () => {
+  it("returns the OpenCode account when the command is installed", async () => {
+    await expect(discover("opencode", async () => true)).resolves.toMatchObject([
+      {
+        label: "OpenCode (local)",
+        input: {
+          source: "opencode",
+        },
+      },
+    ]);
+  });
+
+  it("returns nothing when the command is not installed", async () => {
+    await expect(discover("kilo", async () => false)).resolves.toEqual([]);
+    await expect(discover("cline", async () => false)).resolves.toEqual([]);
+  });
+});
+
+describe("commandOnPath", () => {
+  it("finds an executable and ignores a missing command", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "local-cli-path-"));
+
+    try {
+      const binary = join(directory, "opencode");
+      await writeFile(binary, "#!/bin/sh\n");
+      await chmod(binary, 0o755);
+
+      await expect(commandOnPath("opencode", { PATH: directory })).resolves.toBe(true);
+      await expect(commandOnPath("kilo", { PATH: directory })).resolves.toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores a directory and a file that cannot be executed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "local-cli-path-"));
+
+    try {
+      await mkdir(join(directory, "kilo"));
+      const binary = join(directory, "cline");
+      await writeFile(binary, "#!/bin/sh\n");
+      await chmod(binary, 0o644);
+
+      await expect(commandOnPath("kilo", { PATH: directory })).resolves.toBe(false);
+      await expect(commandOnPath("cline", { PATH: directory })).resolves.toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

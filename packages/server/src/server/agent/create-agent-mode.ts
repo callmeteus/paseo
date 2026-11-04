@@ -6,6 +6,7 @@ import type {
   ResolveAgentCreateConfigInput,
   ResolveAgentCreateConfigResult,
 } from "./agent-sdk-types.js";
+import { resolveDefaultWritableProviderMode } from "./workflow-modes.js";
 
 export interface ResolveCreateAgentModeInput {
   requestedMode: string | undefined;
@@ -40,10 +41,42 @@ function formatCreateConfigParentSource(parent: AgentCreateConfigParent): string
   return `caller (provider '${parent.provider}')`;
 }
 
+/**
+ * Turns the app's forced Build mode into a mode this provider actually has.
+ *
+ * Workflow mode hides the permission picker and sends "build" for every new
+ * chat. OpenCode has that mode. Cursor does not, and the create used to fail
+ * before the chat existed.
+ *
+ * @param input - The create request and the modes the provider advertised
+ * @returns The requested mode, or the provider's writable mode when Build is absent
+ */
+function resolveRequestedMode(input: ResolveCreateAgentModeInput): string | undefined {
+  const requestedMode = input.requestedMode;
+
+  if (requestedMode !== "build") {
+    return requestedMode;
+  }
+
+  // The catalogue is not loaded yet. Leave Build for the later check.
+  if (input.availableModes === undefined || input.availableModes.includes("build")) {
+    return requestedMode;
+  }
+
+  const writableMode = resolveDefaultWritableProviderMode(input.targetProvider);
+
+  if (writableMode && input.availableModes.includes(writableMode)) {
+    return writableMode;
+  }
+
+  return requestedMode;
+}
+
 export function resolveAndValidateCreateAgentMode(
   input: ResolveCreateAgentModeInput,
 ): string | undefined {
-  const { requestedMode, targetProvider, parent, availableModes } = input;
+  const requestedMode = resolveRequestedMode(input);
+  const { targetProvider, parent, availableModes } = input;
 
   if (requestedMode !== undefined) {
     if (availableModes !== undefined && !availableModes.includes(requestedMode)) {

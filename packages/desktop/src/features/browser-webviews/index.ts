@@ -1,8 +1,11 @@
-import { webContents as allWebContents, type WebContents } from "electron";
+import { session, shell, webContents as allWebContents, type WebContents } from "electron";
+import log from "electron-log/main";
 import { PASEO_BROWSER_PROFILE_PARTITION, PASEO_HUB_PARTITION } from "../browser-profile.js";
+import { createExternalUrlOpener } from "../opener.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
   decideBrowserWindowOpenRequest,
+  decideHubMainFrameNavigation,
   isAllowedBrowserWebviewUrl,
   PendingBrowserWindowOpenRequests,
 } from "./window-open.js";
@@ -11,6 +14,7 @@ import { PaseoBrowserWebviewRegistry } from "./registry.js";
 export {
   BROWSER_NEW_TAB_REQUEST_EVENT,
   decideBrowserWindowOpenRequest,
+  decideHubMainFrameNavigation,
   PendingBrowserWindowOpenRequests,
 };
 
@@ -193,14 +197,65 @@ function preventUnsafeBrowserWebviewNavigation(
   }
 }
 
+const HUB_EXTERNAL_OPEN_DEDUPE_MS = 1000;
+
+/**
+ * Keeps Hub inside its own origin.
+ *
+ * `will-navigate` and `will-frame-navigate` both fire for the main frame, so
+ * the same URL is opened at most once. A subframe can load another origin
+ * without sending the user to the system browser. The in-app browser is not
+ * Hub, and its navigations stay in the webview.
+ *
+ * @param contents - Guest that just attached.
+ * @returns Nothing.
+ */
 export function registerBrowserWebviewNavigationGuards(contents: WebContents): void {
+  const openHubExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
+  const embeddedHub = contents.session === session.fromPartition(PASEO_HUB_PARTITION);
+  let lastExternalUrl = "";
+  let lastExternalAt = 0;
+
+  const openExternalOnce = (url: string): void => {
+    const now = Date.now();
+    if (url === lastExternalUrl && now - lastExternalAt < HUB_EXTERNAL_OPEN_DEDUPE_MS) {
+      return;
+    }
+    lastExternalUrl = url;
+    lastExternalAt = now;
+    void openHubExternalUrl(url).catch((error: unknown) => {
+      log.error("failed to open Hub link: %O", error);
+    });
+  };
+
+  const handleNavigation = (
+    event: { preventDefault: () => void },
+    url: string | undefined,
+    isMainFrame: boolean,
+  ): void => {
+    if (!embeddedHub || !isMainFrame || contents.isDestroyed()) {
+      preventUnsafeBrowserWebviewNavigation(event, url);
+      return;
+    }
+
+    const decision = decideHubMainFrameNavigation(contents.getURL(), url);
+    if (decision.kind === "block") {
+      event.preventDefault();
+      return;
+    }
+    if (decision.kind === "external") {
+      event.preventDefault();
+      openExternalOnce(decision.url);
+    }
+  };
+
   contents.on("will-navigate", (event) => {
-    preventUnsafeBrowserWebviewNavigation(event, event.url);
+    handleNavigation(event, event.url, true);
   });
   contents.on("will-frame-navigate", (event) => {
-    preventUnsafeBrowserWebviewNavigation(event, event.url);
+    handleNavigation(event, event.url, event.isMainFrame);
   });
   contents.on("will-redirect", (event) => {
-    preventUnsafeBrowserWebviewNavigation(event, event.url);
+    handleNavigation(event, event.url, event.isMainFrame);
   });
 }

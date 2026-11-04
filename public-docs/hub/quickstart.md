@@ -60,13 +60,13 @@ paseo hub init
 
 Choose **Custom endpoint** and confirm `http://localhost:3000`. Setup reuses your login and daemon connection, then lists the app connections ready for this trigger. With one Slack workspace connected, it selects that connection automatically. With several usable connections, choose the **Trigger connection**. If none is ready, setup sends you to **Hub → Apps** and stops before selecting an agent or writing files.
 
-| Question                                | What it wants                                                                                 |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Starter agent provider, model, and mode | Claude, Codex, or OpenCode on your daemon. Suggested model and mode entries are its defaults. |
-| Your Slack member ID                    | `U01234567`, the only account allowed to trigger the bot.                                     |
-| Deploy now?                             | Yes, to activate this trigger in Hub.                                                         |
+| Question                                | What it wants                                                                                         |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Starter agent provider, model, and mode | Claude, Codex, Cursor, or OpenCode on your daemon. Suggested model and mode entries are its defaults. |
+| Your Slack member ID                    | `U01234567`, the only account allowed to trigger the bot.                                             |
+| Deploy now?                             | Yes, to activate this trigger in Hub.                                                                 |
 
-Providers must expose a selectable model and execution mode. If there is no default mode, choose the one the agent should use. Hub runs agents unattended, so it accepts only Claude, Codex, and OpenCode, and it checks the model, mode, and options against your daemon before deploying. Another provider, or a value the daemon does not offer, is refused here rather than at the first run.
+Providers must expose a selectable model and execution mode. If there is no default mode, choose the one the agent should use. Hub runs agents unattended, so it accepts only Claude, Codex, Cursor, and OpenCode, and it checks the model, mode, and options against your daemon before deploying. Another provider, or a value the daemon does not offer, is refused here rather than at the first run.
 
 [Find your Slack IDs](/docs/hub/triggers/slack#find-your-slack-ids) explains how to copy your member ID. The Slack workspace comes from the selected app connection.
 
