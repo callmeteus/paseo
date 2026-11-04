@@ -15,12 +15,15 @@ interface PlanStore {
   setPlan: (plan: PlanRecord) => void;
 }
 
-export function planKey(input: { serverId: string; workspaceId: string; path: string }): string {
-  const path = input.path
+function normalizePlanPath(path: string): string {
+  return path
     .trim()
     .replace(/\\/g, "/")
     .replace(/^\.?\//, "");
-  return `${input.serverId}:${input.workspaceId}:${path}`;
+}
+
+export function planKey(input: { serverId: string; workspaceId: string; path: string }): string {
+  return `${input.serverId}:${input.workspaceId}:${normalizePlanPath(input.path)}`;
 }
 
 export const usePlanStore = create<PlanStore>()(
@@ -48,5 +51,11 @@ export function usePlan(input: {
   workspaceId: string;
   path: string;
 }): PlanRecord | null {
-  return usePlanStore((state) => state.plans[planKey(input)] ?? null);
+  const path = normalizePlanPath(input.path);
+  return usePlanStore(
+    (state) =>
+      Object.values(state.plans).find(
+        (plan) => plan.serverId === input.serverId && normalizePlanPath(plan.path) === path,
+      ) ?? null,
+  );
 }

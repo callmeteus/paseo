@@ -17,6 +17,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { isWeb } from "@/constants/platform";
+import { PlanHeader } from "@/plans/plan-header";
 import { useAppSettings } from "@/hooks/use-settings";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { formatFileSize } from "@/utils/format-file-size";
@@ -133,12 +134,12 @@ function ReadonlyTextFile({
   const showPreview = Preview !== undefined && view === "preview";
   return (
     <View style={styles.container}>
+      <PlanHeader path={params.path} />
       <TextFileToolbar
         size={file.size}
         lineCount={text.text.split("\n").length}
         view={Preview ? view : undefined}
         onViewChange={Preview ? setView : undefined}
-        planPath={params.path}
       />
       {showPreview ? (
         <Preview text={text.text} params={params} workspaceId={workspaceId} host={host} />
@@ -228,6 +229,7 @@ function EditableTextFile({
   const showPreview = Preview !== undefined && view === "preview";
   return (
     <View style={styles.container}>
+      <PlanHeader path={params.path} />
       <TextFileToolbar
         size={file.size}
         lineCount={snapshot.content.split("\n").length}
@@ -237,7 +239,6 @@ function EditableTextFile({
         cursor={showPreview ? undefined : cursor}
         vimMode={showPreview ? null : vimMode}
         conflict={conflict}
-        planPath={params.path}
       />
       {showPreview ? (
         <Preview text={snapshot.content} params={params} workspaceId={workspaceId} host={host} />

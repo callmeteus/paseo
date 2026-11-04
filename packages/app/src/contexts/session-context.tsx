@@ -50,9 +50,7 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { resyncProviderSubagents, useProviderSubagentStore } from "@/subagents/provider-store";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
-import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { usePlanStore } from "@/plans/store";
 
 // Re-export types from session-store and draft-store for backward compatibility
@@ -552,19 +550,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         title: message.payload.title ?? message.payload.path,
         agentId: message.payload.agentId,
       });
-      const workspaceKey = buildWorkspaceTabPersistenceKey({
+      navigateToWorkspace({
         serverId,
         workspaceId: message.payload.workspaceId,
+        target: { kind: "file", path: message.payload.path },
       });
-      if (!workspaceKey) return;
-      const target = { kind: "file" as const, path: message.payload.path };
-      const layout = useWorkspaceLayoutStore.getState();
-      if (!useWorkspaceLayoutStore.persist.hasHydrated()) {
-        layout.deferOpenTab({ workspaceKey, target, intent: "reveal" });
-        return;
-      }
-      const tabId = layout.openTab({ workspaceKey, target, intent: "reveal" });
-      revealWorkspaceTab(workspaceKey, tabId);
     });
 
     const unsubPermissionRequest = onFeed("agent_permission_request", (message) => {
