@@ -92,10 +92,17 @@ describe("group label segments", () => {
     expect(label.text).toBe("Explored 8 files, 8 searches, 1 tool");
     expect(label.segments).toEqual([
       { text: "Explored" },
-      { text: " 8 files" },
+      { text: "\u00A08 files" },
       { text: ", 8 searches" },
       { text: ", 1 tool", icon: "tool" },
     ]);
+  });
+
+  it("keeps the first separator non-breaking so the action and count do not glue", () => {
+    const label = buildGroupSentence("Editei", [{ kind: "files", text: "2 arquivos" }], undefined);
+
+    expect(label.text).toBe("Editei 2 arquivos");
+    expect(label.segments[1]?.text).toBe("\u00A02 arquivos");
   });
 
   it("appends the diff totals with a space, as Cursor does", () => {
