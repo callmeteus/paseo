@@ -3,6 +3,9 @@ import {
   clearProviderSwitch,
   getProviderSwitch,
   requiresProviderPort,
+  resolveDisplayModelId,
+  resolveDisplayProvider,
+  resolveStagedRouterTarget,
   stageProviderSwitch,
   takeProviderSwitch,
 } from "./pending-provider-switch";
@@ -115,5 +118,93 @@ describe("pending provider switch store", () => {
     });
 
     expect(getProviderSwitch("srv_a", "agent_2")).toBeNull();
+  });
+});
+
+describe("staged router display", () => {
+  const fallbackRouter = {
+    id: "router_fallback",
+    name: "Fallback",
+    mode: "fallback" as const,
+    targets: [
+      { provider: "opencode", model: "deepseek-v4" },
+      { provider: "kilo", model: "kilo-max" },
+    ],
+  };
+  const distributionRouter = {
+    id: "router_distribution",
+    name: "Distribution",
+    mode: "distribution" as const,
+    targets: [
+      { provider: "opencode", model: "deepseek-v4" },
+      { provider: "kilo", model: "kilo-max" },
+    ],
+  };
+  const routers = [fallbackRouter, distributionRouter];
+
+  it("resolves a fallback router to its first target", () => {
+    const pending = {
+      kind: "router" as const,
+      targetServerId: "srv_a",
+      routerId: "router_fallback",
+    };
+
+    expect(resolveStagedRouterTarget(pending, routers)).toEqual({
+      provider: "opencode",
+      model: "deepseek-v4",
+    });
+  });
+
+  it("does not resolve a distribution router, which binds without changing the model", () => {
+    const pending = {
+      kind: "router" as const,
+      targetServerId: "srv_a",
+      routerId: "router_distribution",
+    };
+
+    expect(resolveStagedRouterTarget(pending, routers)).toBeNull();
+  });
+
+  it("returns null for a non-router pending target or an unknown router", () => {
+    const modelPending = {
+      kind: "model" as const,
+      targetServerId: "srv_a",
+      provider: "opencode",
+      modelId: "deepseek-v4",
+      clearRouter: false,
+    };
+    const unknownPending = {
+      kind: "router" as const,
+      targetServerId: "srv_a",
+      routerId: "missing",
+    };
+
+    expect(resolveStagedRouterTarget(modelPending, routers)).toBeNull();
+    expect(resolveStagedRouterTarget(unknownPending, routers)).toBeNull();
+    expect(resolveStagedRouterTarget(null, routers)).toBeNull();
+  });
+
+  it("shows the router's target model and provider while a fallback router is staged", () => {
+    const pending = {
+      kind: "router" as const,
+      targetServerId: "srv_a",
+      routerId: "router_fallback",
+    };
+    const target = resolveStagedRouterTarget(pending, routers);
+
+    expect(resolveDisplayProvider(pending, "cline", target)).toBe("opencode");
+    expect(resolveDisplayModelId(pending, "cline-pro", target)).toBe("deepseek-v4");
+  });
+
+  it("keeps the running model when a distribution router is staged", () => {
+    const pending = {
+      kind: "router" as const,
+      targetServerId: "srv_a",
+      routerId: "router_distribution",
+    };
+    const target = resolveStagedRouterTarget(pending, routers);
+
+    expect(resolveDisplayProvider(pending, "cline", target)).toBe("cline");
+    expect(resolveDisplayModelId(pending, "cline-pro", target)).toBe("cline-pro");
   });
 });

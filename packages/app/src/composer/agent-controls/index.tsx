@@ -111,6 +111,7 @@ import {
   type DraftAgentProfileControls,
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { useStagedRouterTarget } from "@/model-routers/use-staged-router-target";
 
 interface AgentControlOption {
   id: string;
@@ -1736,6 +1737,7 @@ export const AgentControls = memo(function AgentControls({
   const toast = useToast();
   const { t } = useTranslation();
   const pendingProviderSwitch = usePendingProviderSwitch(serverId, agentId);
+  const stagedRouterTarget = useStagedRouterTarget(serverId, pendingProviderSwitch);
   const supportsProviderSwap = useHostFeature(serverId, "agentProviderSwap");
   const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
   const hosts = useHosts();
@@ -2082,10 +2084,14 @@ export const AgentControls = memo(function AgentControls({
       {commandCenterRegistration}
       {profileEditor.element}
       <ControlledAgentControls
-        provider={resolveDisplayProvider(pendingProviderSwitch, agent.provider)}
+        provider={resolveDisplayProvider(pendingProviderSwitch, agent.provider, stagedRouterTarget)}
         modelSelectorProviders={agentModelSelectorProviders}
         modelOptions={modelOptions}
-        selectedModelId={resolveDisplayModelId(pendingProviderSwitch, modelSelection.activeModelId)}
+        selectedModelId={resolveDisplayModelId(
+          pendingProviderSwitch,
+          modelSelection.activeModelId,
+          stagedRouterTarget,
+        )}
         activeRouterId={resolveDisplayRouterId(pendingProviderSwitch, agent.modelRouterId)}
         onSelectModel={handleSelectModelFromPicker}
         onSelectProviderAndModel={handleSelectProviderAndModel}

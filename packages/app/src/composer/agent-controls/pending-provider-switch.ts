@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { ModelRouter } from "@getpaseo/protocol/model-router";
 
 /**
  * A target the user picked in an existing chat but has not committed yet.
@@ -132,21 +133,55 @@ export function resolveDisplayRouterId(
   return boundRouterId ?? null;
 }
 
+/**
+ * The provider+model a staged router pick will land on, or null when it does
+ * not change the running model. A fallback router ports the chat to its first
+ * target; a distribution router only binds it, so there is nothing to show.
+ */
+export function resolveStagedRouterTarget(
+  pending: PendingProviderSwitch | null,
+  routers: readonly ModelRouter[] | undefined,
+): { provider: string; model: string | null } | null {
+  if (pending?.kind !== "router") {
+    return null;
+  }
+  const router = routers?.find((entry) => entry.id === pending.routerId);
+  if (!router || router.mode !== "fallback") {
+    return null;
+  }
+  const first = router.targets[0];
+  if (!first) {
+    return null;
+  }
+  return { provider: first.provider, model: first.model ?? null };
+}
+
 /** Provider shown in the picker: the staged target, or the running agent's. */
 export function resolveDisplayProvider(
   pending: PendingProviderSwitch | null,
   currentProvider: string,
+  stagedRouterTarget: { provider: string } | null | undefined = undefined,
 ): string {
-  return pending?.kind === "model" ? pending.provider : currentProvider;
+  if (pending?.kind === "model") {
+    return pending.provider;
+  }
+  if (pending?.kind === "router" && stagedRouterTarget) {
+    return stagedRouterTarget.provider;
+  }
+  return currentProvider;
 }
 
 /** Model shown in the picker: the staged target, or the active model. */
 export function resolveDisplayModelId(
   pending: PendingProviderSwitch | null,
   activeModelId: string | null | undefined,
+  stagedRouterTarget: { model: string | null } | null | undefined = undefined,
 ): string | undefined {
   if (pending?.kind === "model" && pending.modelId) {
     return pending.modelId;
+  }
+  if (pending?.kind === "router" && stagedRouterTarget?.model) {
+    return stagedRouterTarget.model;
   }
   return activeModelId ?? undefined;
 }
