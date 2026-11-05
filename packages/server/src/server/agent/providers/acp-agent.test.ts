@@ -657,10 +657,18 @@ describe("startKiloStdinKeepalive", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  test("does not touch other providers or other platforms", () => {
+  test("matches the launch command, not the internal provider id", () => {
     Object.defineProperty(process, "platform", { value: "win32", configurable: true });
     const { write, child } = createChildStub();
+    // Generic ACP providers run with the internal provider id "acp"; the
+    // keepalive must still recognize the Kilo binary or the git-stdin hang
+    // returns. See GenericACPAgentClient passing `provider: "acp"`.
+    expect(startKiloStdinKeepalive("acp", child)).toBeNull();
     expect(startKiloStdinKeepalive("cline", child)).toBeNull();
+    expect(startKiloStdinKeepalive("kilo", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("kilocode", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("kilo.cmd", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("C:\\tools\\kilo.exe", child)).not.toBeNull();
 
     Object.defineProperty(process, "platform", { value: "linux", configurable: true });
     expect(startKiloStdinKeepalive("kilo", child)).toBeNull();

@@ -371,11 +371,25 @@ const ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS = 45_000;
 // https://github.com/Kilo-Org/kilocode/pull/15374.
 const KILO_STDIN_KEEPALIVE_INTERVAL_MS = 2_000;
 
+// Generic ACP providers (Kilo, Cline, Cursor, ...) all run with the internal
+// provider id "acp", so the launch command is the only reliable signal that the
+// process is Kilo. Match the binary name, ignoring a Windows extension and the
+// directory it lives in.
+const KILO_BINARY_NAMES = new Set(["kilo", "kilocode"]);
+
+function isKiloLaunchCommand(command: string): boolean {
+  const base = path
+    .basename(command)
+    .replace(/\.(exe|cmd|bat|ps1|com)$/i, "")
+    .toLowerCase();
+  return KILO_BINARY_NAMES.has(base);
+}
+
 export function startKiloStdinKeepalive(
-  provider: string,
+  command: string,
   child: ChildProcessWithoutNullStreams,
 ): (() => void) | null {
-  if (process.platform !== "win32" || provider !== "kilo") {
+  if (process.platform !== "win32" || !isKiloLaunchCommand(command)) {
     return null;
   }
   const timer = setInterval(() => {
@@ -1500,7 +1514,7 @@ export class ACPAgentClient implements AgentClient {
     });
     assertChildWithPipes(child);
 
-    startKiloStdinKeepalive(this.provider, child);
+    startKiloStdinKeepalive(command, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -3119,7 +3133,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
     assertChildWithPipes(child);
 
-    startKiloStdinKeepalive(this.provider, child);
+    startKiloStdinKeepalive(command, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
