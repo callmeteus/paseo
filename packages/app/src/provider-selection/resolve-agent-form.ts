@@ -69,6 +69,8 @@ export const RESOLVABLE_PROVIDER_STATUSES = new Set<ProviderSnapshotEntry["statu
 ]);
 export const SELECTABLE_PROVIDER_STATUSES = new Set<ProviderSnapshotEntry["status"]>(["ready"]);
 
+const EMPTY_PROVIDER_SET: ReadonlySet<AgentProvider> = new Set<AgentProvider>();
+
 interface AgentFormInputs {
   type: "INPUTS_CHANGED";
   serverId: string | null;
@@ -80,6 +82,7 @@ interface AgentFormInputs {
   preferences: FormPreferences | null;
   providerModelsByProvider: ProviderModelsByProvider;
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+  unavailableProviders?: ReadonlySet<AgentProvider>;
 }
 
 export type AgentFormAction =
@@ -91,6 +94,7 @@ export type AgentFormAction =
       preferences: FormPreferences | null;
       providerModelsByProvider: ProviderModelsByProvider;
       allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+      unavailableProviders?: ReadonlySet<AgentProvider>;
     }
   | {
       type: "SET_PROVIDER_AND_MODEL_FROM_USER";
@@ -264,16 +268,59 @@ export function buildProviderDefinitionMapForStatuses(args: {
   );
 }
 
+/**
+ * A broken remembered provider must not be preselected on a new chat. Pick the
+ * most recently used provider that can actually run, then any usable provider.
+ * `allowedProviderMap` already contains only ready/loading providers.
+ */
+function resolveFallbackProvider(input: {
+  preferences: FormPreferences | null;
+  allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+  unavailableProviders: ReadonlySet<AgentProvider>;
+}): AgentProvider | null {
+  const usable = (provider: AgentProvider): boolean =>
+    input.allowedProviderMap.has(provider) && !input.unavailableProviders.has(provider);
+  // `mergeProviderPreferences` moves the written provider to the end, so the
+  // reversed key order is most-recent-first.
+  const usedProviders = Object.keys(input.preferences?.providerPreferences ?? {});
+  for (let index = usedProviders.length - 1; index >= 0; index -= 1) {
+    const provider = usedProviders[index];
+    if (provider !== undefined && usable(provider)) return provider;
+  }
+  for (const provider of input.allowedProviderMap.keys()) {
+    if (usable(provider)) return provider;
+  }
+  return null;
+}
+
 function resolveProvider(input: {
   currentProvider: AgentProvider | null;
   userModified: boolean;
   initialValues: FormInitialValues | undefined;
   preferences: FormPreferences | null;
+  allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>;
+  unavailableProviders: ReadonlySet<AgentProvider>;
 }): AgentProvider | null {
-  const { currentProvider, userModified, initialValues, preferences } = input;
-  // Discovery readiness does not change the user's saved or explicit choice.
+  const {
+    currentProvider,
+    userModified,
+    initialValues,
+    preferences,
+    allowedProviderMap,
+    unavailableProviders,
+  } = input;
+  // Discovery readiness does not change the user's saved or explicit choice...
   if (userModified) return currentProvider;
-  return initialValues?.provider ?? preferences?.provider ?? currentProvider;
+  const requested = initialValues?.provider ?? preferences?.provider ?? currentProvider;
+  if (!requested) return requested ?? null;
+  // ...except when the provider is known to be broken and another one can run.
+  if (unavailableProviders.has(requested) && allowedProviderMap.size > 0) {
+    return (
+      resolveFallbackProvider({ preferences, allowedProviderMap, unavailableProviders }) ??
+      requested
+    );
+  }
+  return requested;
 }
 
 function resolveModeId(input: {
@@ -387,6 +434,7 @@ export function resolveFormState(
   userModified: UserModifiedFields,
   currentState: FormState,
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>,
+  unavailableProviders: ReadonlySet<AgentProvider> = EMPTY_PROVIDER_SET,
 ): FormState {
   const result = { ...currentState };
 
@@ -395,6 +443,8 @@ export function resolveFormState(
     userModified: userModified.provider,
     initialValues,
     preferences,
+    allowedProviderMap,
+    unavailableProviders,
   });
 
   const providerDef = result.provider ? allowedProviderMap.get(result.provider) : undefined;
@@ -454,6 +504,7 @@ export function resolveFormStateFromProviderModels(
   userModified: UserModifiedFields,
   currentState: FormState,
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>,
+  unavailableProviders: ReadonlySet<AgentProvider> = EMPTY_PROVIDER_SET,
 ): FormState {
   const providerResolved = resolveFormState(
     initialValues,
@@ -462,6 +513,7 @@ export function resolveFormStateFromProviderModels(
     userModified,
     currentState,
     allowedProviderMap,
+    unavailableProviders,
   );
   const availableModels = providerResolved.provider
     ? (providerModelsByProvider.get(providerResolved.provider) ?? null)
@@ -474,6 +526,7 @@ export function resolveFormStateFromProviderModels(
     userModified,
     currentState,
     allowedProviderMap,
+    unavailableProviders,
   );
 }
 
@@ -559,6 +612,7 @@ function completeResolution(
     state.userModified,
     state.form,
     action.allowedProviderMap,
+    action.unavailableProviders,
   );
   const nextState = { ...state, resolution: { status: "completed" } as const };
   if (!hasFormStateChanged(state.form, resolved)) return nextState;

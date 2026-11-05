@@ -145,7 +145,7 @@ describe("combined model selector data", () => {
     ).toEqual([]);
   });
 
-  it("surfaces non-ready providers with their state-specific selection", () => {
+  it("hides broken providers while keeping providers that are still loading", () => {
     expect(
       buildSelectableProviderSelectorProviders([
         snapshotEntry({ provider: "loading-provider", status: "loading", models: [] }),
@@ -153,7 +153,7 @@ describe("combined model selector data", () => {
           provider: "error-provider",
           status: "error",
           error: "boom",
-          models: [],
+          models: [codexModel],
         }),
         snapshotEntry({
           provider: "unavailable-provider",
@@ -166,16 +166,6 @@ describe("combined model selector data", () => {
         id: "loading-provider",
         label: "loading-provider",
         modelSelection: { kind: "loading" },
-      },
-      {
-        id: "error-provider",
-        label: "error-provider",
-        modelSelection: { kind: "error", message: "boom" },
-      },
-      {
-        id: "unavailable-provider",
-        label: "unavailable-provider",
-        modelSelection: { kind: "error", message: "Unavailable" },
       },
     ]);
   });
@@ -347,7 +337,7 @@ describe("combined model selector data", () => {
     ).toBe("gpt-5.3");
   });
 
-  it("keeps provider snapshot errors visible in the selected trigger label", () => {
+  it("leaves a broken provider out of the selector instead of labeling it as the selection", () => {
     const providers = buildSelectableProviderSelectorProviders([
       snapshotEntry({
         provider: "opencode",
@@ -358,6 +348,7 @@ describe("combined model selector data", () => {
       }),
     ]);
 
+    expect(providers).toEqual([]);
     expect(
       resolveSelectedModelLabel({
         providers,
@@ -365,7 +356,7 @@ describe("combined model selector data", () => {
         selectedModel: "",
         isLoading: false,
       }),
-    ).toBe("Error");
+    ).toBe("Select model");
   });
 
   it("returns observable submission readiness reasons", () => {
@@ -424,10 +415,7 @@ describe("combined model selector data", () => {
       ]);
 
       expect(getAllModelLabels(providers)).toContain("默认");
-      expect(providers[1]?.modelSelection).toEqual({
-        kind: "error",
-        message: "不可用",
-      });
+      expect(providers).toHaveLength(1);
       expect(
         resolveSubmissionReadiness({
           text: "",

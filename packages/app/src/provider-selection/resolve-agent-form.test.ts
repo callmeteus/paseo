@@ -787,9 +787,52 @@ describe("resolveFormState", () => {
       makeState({ provider: "codex" }).form,
 
       new Map<AgentProvider, AgentProviderDefinition>(),
+      new Set(["codex"]),
     );
 
     expect(resolved.provider).toBe("codex");
+  });
+
+  it("falls back to the most recently used working provider when the remembered one is broken", () => {
+    const claudeModels: AgentModelDefinition[] = [
+      { provider: "claude", id: "opus-5", label: "Opus 5", isDefault: true },
+    ];
+    const resolved = resolveFormState(
+      undefined,
+      {
+        provider: "codex",
+        // Insertion order is least-recent first; pi is the latest used provider
+        // but still loading, so claude is the most recent usable one.
+        providerPreferences: {
+          claude: { model: "opus-5" },
+          codex: { model: "gpt-5.3-codex" },
+          pi: { model: "pi-default" },
+        },
+      },
+      claudeModels,
+      INITIAL_USER_MODIFIED,
+      makeState({ provider: "codex", model: "gpt-5.3-codex" }).form,
+      makeProviderMap(TEST_CODEX_DEFINITION, TEST_CLAUDE_DEFINITION),
+      new Set(["codex"]),
+    );
+
+    expect(resolved.provider).toBe("claude");
+    expect(resolved.model).toBe("opus-5");
+  });
+
+  it("falls back to any working provider when the remembered one was never used elsewhere", () => {
+    const resolved = resolveFormState(
+      undefined,
+      { provider: "codex" },
+      CODEX_MODELS,
+      INITIAL_USER_MODIFIED,
+      makeState({ provider: "codex" }).form,
+      bothProviderMap,
+      new Set(["codex"]),
+    );
+
+    expect(resolved.provider).toBe("claude");
+    expect(resolved.model).toBe("");
   });
 
   it("adopts the initial workflow mode until the user overrides it", () => {

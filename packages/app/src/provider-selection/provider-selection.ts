@@ -165,17 +165,24 @@ export function buildSelectableProviderSelectorProviders(
   isConnected = true,
   serverId?: string | null,
 ): ProviderSelectorProvider[] {
-  return (entries ?? [])
-    .filter((entry) => entry.enabled)
-    .map((entry) => {
-      const label = entry.label ?? entry.provider;
-      return {
-        id: entry.provider,
-        label,
-        serverId,
-        modelSelection: buildEntryModelSelection(entry, label, isConnected, serverId),
-      };
-    });
+  return (
+    (entries ?? [])
+      // Broken providers are not choices: keep them out of the model list and out
+      // of cross-provider search. They stay visible in Settings, where the error
+      // and its diagnostics belong.
+      .filter(
+        (entry) => entry.enabled && entry.status !== "error" && entry.status !== "unavailable",
+      )
+      .map((entry) => {
+        const label = entry.label ?? entry.provider;
+        return {
+          id: entry.provider,
+          label,
+          serverId,
+          modelSelection: buildEntryModelSelection(entry, label, isConnected, serverId),
+        };
+      })
+  );
 }
 
 export function getProviderModelRows(

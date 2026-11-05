@@ -144,12 +144,16 @@ export function mergeProviderPreferences(args: {
   const { preferences, provider, updates } = args;
   const existingProviderPreferences = preferences.providerPreferences ?? {};
   const existing = existingProviderPreferences[provider] ?? {};
+  // Re-add the provider so the record's key order stays most-recently-used
+  // last. New-chat defaults use that order to fall back to a working provider
+  // when the remembered one is broken.
+  const { [provider]: _previous, ...otherProviderPreferences } = existingProviderPreferences;
 
   return {
     ...preferences,
     provider,
     providerPreferences: {
-      ...existingProviderPreferences,
+      ...otherProviderPreferences,
       [provider]: applyProviderPreferenceUpdates(existing, updates),
     },
   };
