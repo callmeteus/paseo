@@ -1,6 +1,25 @@
 export type MobilePanelGestureDirection = -1 | 1;
 export type MobilePanelGestureIntent = "activate" | "fail" | "wait";
 
+/**
+ * The left-edge gate exists so a mouse drag on the web can still select a paragraph
+ * instead of opening a panel. A finger has no such conflict, so on touch devices the
+ * swipe may start anywhere — which is the only way to reach the drawer from the middle
+ * of a chat.
+ */
+export function isOutsideOpenGestureEdge(input: {
+  isWeb: boolean;
+  isTouchPointer: boolean;
+  touchStartX: number;
+  edgeWidth: number;
+}): boolean {
+  "worklet";
+  if (!input.isWeb || input.isTouchPointer) {
+    return false;
+  }
+  return input.touchStartX > input.edgeWidth;
+}
+
 export function resolveMobilePanelGestureIntent(input: {
   deltaX: number;
   deltaY: number;
