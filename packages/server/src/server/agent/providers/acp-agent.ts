@@ -330,12 +330,17 @@ const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 // (or while a permission is pending) is a hung turn, not a slow one. A caller
 // can raise this for a turn whose tool stays quiet, such as a long build.
 const ACP_TURN_IDLE_TIMEOUT_MS = 120_000;
+// Cursor's Harness can think for minutes before emitting its next update, and
+// Grok's high reasoning routinely goes quiet past the generic limit. Keep the
+// hung-process guard, but give the provider room to finish.
+const ACP_CURSOR_TURN_IDLE_TIMEOUT_MS = 10 * 60_000;
 
-function resolveTurnIdleLimitMs(options: AgentRunOptions | undefined): number {
+function resolveTurnIdleLimitMs(provider: string, options: AgentRunOptions | undefined): number {
   const requested = options?.idleTimeoutMs;
-  return requested !== undefined && Number.isSafeInteger(requested) && requested > 0
-    ? requested
-    : ACP_TURN_IDLE_TIMEOUT_MS;
+  if (requested !== undefined && Number.isSafeInteger(requested) && requested > 0) {
+    return requested;
+  }
+  return provider === "cursor" ? ACP_CURSOR_TURN_IDLE_TIMEOUT_MS : ACP_TURN_IDLE_TIMEOUT_MS;
 }
 // A provider that never starts a turn usually needs authentication or is
 // otherwise broken. Fail early with an actionable message instead of leaving
@@ -2051,7 +2056,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const turnId = randomUUID();
     const messageId = options?.clientMessageId ?? randomUUID();
     this.activeForegroundTurnId = turnId;
-    this.turnIdleLimitMs = resolveTurnIdleLimitMs(options);
+    this.turnIdleLimitMs = resolveTurnIdleLimitMs(this.provider, options);
     this.fallbackAssistantMessageId = null;
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
@@ -3548,14 +3553,25 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
+  private hasActiveToolCall(): boolean {
+    for (const toolCall of this.toolCalls.values()) {
+      if (toolCall.status === "pending" || toolCall.status === "in_progress") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private armTurnIdleTimeout(turnId: string): void {
     this.clearTurnIdleTimeout();
     this.turnIdleTimeout = setTimeout(() => {
       this.turnIdleTimeout = null;
       if (this.activeForegroundTurnId !== turnId) return;
       // A pending permission blocks the provider on purpose; keep waiting.
-      // A running tool that stopped producing updates is a hung turn.
-      if (this.pendingPermissions.size > 0) {
+      // A running tool that stopped producing updates is a hung turn, unless
+      // the tool is still in progress: builds and test suites can be silent for
+      // minutes and their completion is the next real activity boundary.
+      if (this.pendingPermissions.size > 0 || this.hasActiveToolCall()) {
         this.armTurnIdleTimeout(turnId);
         return;
       }

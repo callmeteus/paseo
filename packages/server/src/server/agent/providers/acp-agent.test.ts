@@ -146,18 +146,19 @@ interface ACPConfiguredOverrideInternals {
 
 function createSession(
   options: {
+    provider?: "cursor" | "claude-acp";
     terminateProcess?: ProcessTerminator;
     launchEnv?: Record<string, string>;
   } = {},
 ): ACPAgentSession {
-  const { terminateProcess, launchEnv } = options;
+  const { provider = "claude-acp", terminateProcess, launchEnv } = options;
   return new ACPAgentSession(
     {
-      provider: "claude-acp",
+      provider,
       cwd: "/tmp/paseo-acp-test",
     },
     {
-      provider: "claude-acp",
+      provider,
       logger: createTestLogger(),
       defaultCommand: ["claude", "--acp"],
       defaultModes: [],
@@ -3234,6 +3235,87 @@ describe("ACPAgentSession", () => {
         type: "turn_failed",
         turnId,
         error: expect.stringContaining("3600000"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("Cursor gets a longer idle limit for long reasoning turns", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("investigate");
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "assistant-1",
+          content: { type: "text", text: "Working" },
+        } as SessionUpdate,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000 - 120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("600000"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps a turn alive while an ACP tool call is in progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("run the tests");
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-1",
+          title: "Run tests",
+          kind: "execute",
+          status: "in_progress",
+        } as SessionUpdate,
+      });
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-1",
+          status: "completed",
+        } as SessionUpdate,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("stopped responding"),
       });
     } finally {
       vi.useRealTimers();
