@@ -1,5 +1,9 @@
 import { getStreamItemMessageId, type StreamItem, type ToolCallItem } from "@/types/stream";
-import { summarizeToolCalls, type OverviewSummary } from "@/tool-calls/detail-level/overview/model";
+import {
+  countSummarizedToolCalls,
+  summarizeSteps,
+  type OverviewSummary,
+} from "@/tool-calls/detail-level/overview/model";
 
 export interface TurnSummary {
   messageCount: number;
@@ -45,11 +49,11 @@ function summarizeTurn(
     if (item.kind === "assistant_message") messageCount += 1;
     else if (item.kind === "tool_call") calls.push(...(getGroupedCalls(item.id) ?? [item]));
   }
-  return { messageCount, tools: summarizeToolCalls(calls) };
+  return { messageCount, tools: summarizeSteps(calls) };
 }
 
 function hasWork(summary: TurnSummary): boolean {
-  return summary.messageCount > 0 || Object.values(summary.tools).some((count) => count > 0);
+  return summary.messageCount > 0 || countSummarizedToolCalls(summary.tools) > 0;
 }
 
 function findLastAssistantIndex(tail: StreamItem[], start: number, end: number): number {

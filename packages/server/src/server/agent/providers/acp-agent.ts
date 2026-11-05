@@ -341,11 +341,19 @@ const ACP_CURSOR_TURN_IDLE_TIMEOUT_MS = 10 * 60_000;
 // pass, and give up after the last delay.
 export const ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const;
 
-export function isRetriableProviderLoadError(message: string): boolean {
+export function isRetriableProviderError(message: string): boolean {
   const normalized = message.toLowerCase();
+  // Cursor's RetriableError class already says the provider wants another
+  // attempt. Include it so `[unavailable] PING timed out` and similar transport
+  // failures take the same backoff path as resource exhaustion.
   return (
+    normalized.includes("retriableerror") ||
     normalized.includes("resource_exhausted") ||
     normalized.includes("resource exhausted") ||
+    normalized.includes("ping timed out") ||
+    normalized.includes("connection stalled") ||
+    normalized.includes("deadline_exceeded") ||
+    normalized.includes("[unavailable]") ||
     normalized.includes("high load")
   );
 }
@@ -549,6 +557,8 @@ export interface ExternalMcpConfigBridge {
 
 interface ACPAgentClientOptions {
   provider: string;
+  /** Configured provider id when the ACP transport uses a generic "acp" id. */
+  providerId?: string;
   // Provider id usage sources match a session against; ACP sessions without one report no usage.
   usageProvider?: string;
   logger: Logger;
@@ -590,6 +600,7 @@ interface ACPAgentClientOptions {
 
 interface ACPAgentSessionOptions {
   provider: string;
+  providerId?: string;
   usageProvider?: string;
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
@@ -1078,6 +1089,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private readonly importPromptCache = new Map<string, ACPImportPromptCacheEntry>();
   private readonly now: () => number;
+  private readonly providerId: string;
   private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
   protected readonly terminateProcess: ProcessTerminator;
 
@@ -1110,6 +1122,7 @@ export class ACPAgentClient implements AgentClient {
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
     this.now = options.now ?? Date.now;
+    this.providerId = options.providerId ?? options.provider;
     this.mcpConfigBridge = options.mcpConfigBridge;
   }
 
@@ -1124,6 +1137,7 @@ export class ACPAgentClient implements AgentClient {
       { ...config, provider: this.provider },
       {
         provider: this.provider,
+        providerId: this.providerId,
         usageProvider: this.usageProvider,
         logger: this.logger,
         runtimeSettings: this.runtimeSettings,
@@ -1184,6 +1198,7 @@ export class ACPAgentClient implements AgentClient {
     const providerOptions = ACPProviderOptionsSchema.parse(mergedConfig.providerOptions ?? {});
     const session = new ACPAgentSession(mergedConfig, {
       provider: this.provider,
+      providerId: this.providerId,
       usageProvider: this.usageProvider,
       logger: this.logger,
       runtimeSettings: this.runtimeSettings,
@@ -1893,6 +1908,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private initialCommandsWaitTimeoutMs: number;
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private currentTurnUsage: AgentUsage | undefined;
+  private readonly providerId: string;
   private activeForegroundTurnId: string | null = null;
   private turnCancelRequested = false;
   private wakePromptRetryWait: (() => void) | null = null;
@@ -1911,6 +1927,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   constructor(config: AgentSessionConfig, options: ACPAgentSessionOptions) {
     this.provider = options.provider;
+    this.providerId = options.providerId ?? options.provider;
     this.terminateProcess = options.terminateProcess ?? terminateWithTreeKill;
     this.capabilities = options.capabilities;
     this.logger = options.logger.child({ module: "agent", provider: options.provider });
@@ -2139,7 +2156,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const messageId = options?.clientMessageId ?? randomUUID();
     this.activeForegroundTurnId = turnId;
     this.turnCancelRequested = false;
-    this.turnIdleLimitMs = resolveTurnIdleLimitMs(this.provider, options);
+    this.turnIdleLimitMs = resolveTurnIdleLimitMs(this.providerId, options);
     this.fallbackAssistantMessageId = null;
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
@@ -2191,7 +2208,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
           retryDelayMs !== undefined &&
           !this.closed &&
           !this.turnCancelRequested &&
-          isRetriableProviderLoadError(summary.message);
+          isRetriableProviderError(summary.message);
         if (!shouldRetry) {
           this.finishTurn({
             type: "turn_failed",
@@ -2213,7 +2230,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
           turnId: input.turnId,
           item: {
             type: "error",
-            message: `${this.provider} is under high load; retrying in ${Math.round(
+            message: `${this.providerId} is temporarily unavailable; retrying in ${Math.round(
               retryDelayMs / 1000,
             )}s (attempt ${retryNumber + 1}/${totalAttempts})`,
           },

@@ -185,7 +185,7 @@ describe("loadAppSettingsFromStorage", () => {
 
     expect(result).toEqual(DEFAULT_CLIENT_SETTINGS);
     expect(DEFAULT_CLIENT_SETTINGS.language).toBe("system");
-    expect(DEFAULT_CLIENT_SETTINGS.chatDisplay).toBe("collapseTurns");
+    expect(DEFAULT_CLIENT_SETTINGS.chatDisplay).toBe("collapseToolCalls");
     expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toEqual(
       DEFAULT_CLIENT_SETTINGS,
     );

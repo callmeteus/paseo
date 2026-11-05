@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, type RefObject, useCallback, useMemo } from "react";
-import { Gesture, type GestureType } from "react-native-gesture-handler";
+import { Gesture, PointerType, type GestureType } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { isWeb } from "@/constants/platform";
@@ -7,7 +7,7 @@ import { useHorizontalScrollOptional } from "@/contexts/horizontal-scroll-contex
 import { usePanelStore } from "@/stores/panel-store";
 import { canBeginMobilePanelGesture, isMobilePanelGestureCurrent } from "./model";
 import { useMobilePanelsRuntime } from "./provider";
-import { resolveMobilePanelGestureIntent } from "./gesture-intent";
+import { isOutsideOpenGestureEdge, resolveMobilePanelGestureIntent } from "./gesture-intent";
 
 const MOBILE_WEB_EDGE_SWIPE_WIDTH = 32;
 
@@ -20,6 +20,8 @@ function useGestureState() {
     startedRevision: useSharedValue(-1),
     touchStartX: useSharedValue(0),
     touchStartY: useSharedValue(0),
+    /** Fingers may open a panel from anywhere; the edge gate only exists for mouse drags. */
+    isTouchPointer: useSharedValue(false),
   };
 }
 
@@ -46,7 +48,7 @@ export function useOpenAgentListGesture(enabled: boolean) {
     windowWidth,
   } = useMobilePanelsRuntime();
   const horizontalScroll = useHorizontalScrollOptional();
-  const { startedRevision, touchStartX, touchStartY } = useGestureState();
+  const { startedRevision, touchStartX, touchStartY, isTouchPointer } = useGestureState();
   const showMobileAgentList = usePanelStore((state) => state.showMobileAgentList);
   const commit = useRevisionCommit(showMobileAgentList);
 
@@ -62,6 +64,7 @@ export function useOpenAgentListGesture(enabled: boolean) {
             touchStartX.value = touch.absoluteX;
             touchStartY.value = touch.absoluteY;
           }
+          isTouchPointer.value = event.pointerType === PointerType.TOUCH;
         })
         .onTouchesMove((event, stateManager) => {
           const touch = event.changedTouches[0];
@@ -84,7 +87,12 @@ export function useOpenAgentListGesture(enabled: boolean) {
           if (
             !canBeginMobilePanelGesture(motionState.value, "agent", position.value) ||
             horizontalScroll?.isAnyScrolledRight.value ||
-            (isWeb && touchStartX.value > MOBILE_WEB_EDGE_SWIPE_WIDTH) ||
+            isOutsideOpenGestureEdge({
+              isWeb,
+              isTouchPointer: isTouchPointer.value,
+              touchStartX: touchStartX.value,
+              edgeWidth: MOBILE_WEB_EDGE_SWIPE_WIDTH,
+            }) ||
             panIntent === "fail"
           ) {
             stateManager.fail();
@@ -117,6 +125,7 @@ export function useOpenAgentListGesture(enabled: boolean) {
       beginGesture,
       finishGesture,
       horizontalScroll?.isAnyScrolledRight,
+      isTouchPointer,
       leftOpenGestureRef,
       motionState,
       openGesturesBlocked,

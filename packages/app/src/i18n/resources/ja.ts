@@ -1884,6 +1884,7 @@ export const ja: TranslationResources = {
     defaultModel: "デフォルト",
     profiles: "プロファイル",
     routers: "ルーター",
+    searchRouters: "ルーターを検索",
     providers: "プロバイダー",
     model: "モデル",
     editProfiles: "編集",
@@ -2261,6 +2262,43 @@ export const ja: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "調査",
+      edited: "編集",
+      ran: "実行",
+      skipped: "スキップ",
+    },
+    parts: {
+      files: {
+        one: "{{count}} 個のファイル",
+        other: "{{count}} 個のファイル",
+      },
+      exploredFiles: {
+        one: "{{count}} 個のファイルを調査",
+        other: "{{count}} 個のファイルを調査",
+      },
+      searches: {
+        one: "{{count}} 件の検索",
+        other: "{{count}} 件の検索",
+      },
+      fetches: {
+        one: "{{count}} 件の取得",
+        other: "{{count}} 件の取得",
+      },
+      commands: {
+        one: "{{count}} 件のコマンドを実行",
+        other: "{{count}} 件のコマンドを実行",
+      },
+      tools: {
+        one: "{{count}} 個のツール",
+        other: "{{count}} 個のツール",
+      },
+      agents: {
+        one: "{{count}} 個のエージェント",
+        other: "{{count}} 個のエージェント",
+      },
+    },
+    thought: "思考",
     editedFiles: {
       one: "{{count}}個のファイルを編集",
       other: "{{count}}個のファイルを編集",

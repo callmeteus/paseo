@@ -1898,6 +1898,7 @@ export const ptBR: TranslationResources = {
     defaultModel: "Padrão",
     profiles: "Perfis",
     routers: "Roteadores",
+    searchRouters: "Buscar roteadores",
     providers: "Provedores",
     model: "Modelo",
     editProfiles: "Editar",
@@ -2273,6 +2274,43 @@ export const ptBR: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "Explorei",
+      edited: "Editei",
+      ran: "Rodei",
+      skipped: "Pulei",
+    },
+    parts: {
+      files: {
+        one: "{{count}} arquivo",
+        other: "{{count}} arquivos",
+      },
+      exploredFiles: {
+        one: "explorei {{count}} arquivo",
+        other: "explorei {{count}} arquivos",
+      },
+      searches: {
+        one: "{{count}} busca",
+        other: "{{count}} buscas",
+      },
+      fetches: {
+        one: "{{count}} requisição",
+        other: "{{count}} requisições",
+      },
+      commands: {
+        one: "rodei {{count}} comando",
+        other: "rodei {{count}} comandos",
+      },
+      tools: {
+        one: "{{count}} ferramenta",
+        other: "{{count}} ferramentas",
+      },
+      agents: {
+        one: "{{count}} agente",
+        other: "{{count}} agentes",
+      },
+    },
+    thought: "Pensei",
     editedFiles: {
       one: "editou {{count}} arquivo",
       other: "editou {{count}} arquivos",

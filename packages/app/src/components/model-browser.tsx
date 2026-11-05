@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Pencil,
   Plus,
+  Route,
   Search,
   Settings,
 } from "lucide-react-native";
@@ -74,6 +75,7 @@ const ThemedChevronRight = withUnistyles(ChevronRight);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
+const ThemedRoute = withUnistyles(Route);
 const ThemedSearch = withUnistyles(Search);
 const ThemedSettings = withUnistyles(Settings);
 
@@ -170,9 +172,10 @@ export interface ModelBrowserState {
   selectedModelLabel: string;
   triggerLabel: string;
   desktopFixedHeight: number | undefined;
-  isProviderView: boolean;
+  isDrillDownView: boolean;
   prepareToOpen: () => void;
   showAll: () => void;
+  showRouters: () => void;
   reset: () => void;
   drillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
 }
@@ -214,6 +217,7 @@ interface ModelBrowserContentProps extends Omit<ModelBrowserProps, "state" | "sc
   isSearchFocused: boolean;
   profiles: AgentProfilePicker | null;
   onDrillDown: (providerId: string, providerLabel: string, serverId?: string | null) => void;
+  onShowRouters: () => void;
   scrolling: "sheet" | "independent";
   searchAllOnFocus: boolean;
   rootBrowseContent?: React.ReactNode;
@@ -255,6 +259,9 @@ function countModelsInView(view: ModelBrowserView, providers: ProviderSelectorPr
   if (view.kind === "all") {
     return getAllProviderModelRows(providers).length;
   }
+  if (view.kind === "routers") {
+    return 0;
+  }
   const provider = providers.find((entry) => entry.id === view.providerId);
   return provider?.modelSelection.kind === "models" ? getProviderModelRows(provider).length : 0;
 }
@@ -263,6 +270,7 @@ function resolveDesktopFixedHeight(
   view: ModelBrowserView,
   providers: ProviderSelectorProvider[],
 ): number {
+  if (view.kind === "routers") return DESKTOP_PROVIDER_VIEW_MAX_HEIGHT;
   const modelCount = countModelsInView(view, providers);
   return Math.min(
     Math.max(
@@ -315,6 +323,11 @@ export function useModelBrowser({
     reset();
   }, [reset]);
 
+  const showRouters = useCallback(() => {
+    setView({ kind: "routers" });
+    reset();
+  }, [reset]);
+
   const drillDown = useCallback(
     (providerId: string, providerLabel: string, targetServerId?: string | null) => {
       setView({ kind: "provider", providerId, providerLabel, serverId: targetServerId });
@@ -339,6 +352,21 @@ export function useModelBrowser({
           placeholder: t("modelSelector.searchAllPlaceholder"),
           autoFocus: autoFocusSearch,
           testID: "model-search-all-input",
+        },
+      };
+    }
+    if (view.kind === "routers") {
+      return {
+        title: t("modelSelector.routers"),
+        back: { onPress: showAll },
+        search: {
+          onChange: handleSearchQueryChange,
+          onFocus: () => setIsSearchFocused(true),
+          onBlur: () => setIsSearchFocused(false),
+          resetKey: `routers:${searchResetKey}`,
+          placeholder: t("modelSelector.searchRouters"),
+          autoFocus: autoFocusSearch,
+          testID: "model-router-search-input",
         },
       };
     }
@@ -415,9 +443,10 @@ export function useModelBrowser({
     selectedModelLabel,
     triggerLabel,
     desktopFixedHeight,
-    isProviderView: view.kind === "provider",
+    isDrillDownView: view.kind !== "all",
     prepareToOpen,
     showAll,
+    showRouters,
     reset,
     drillDown,
   };
@@ -998,7 +1027,30 @@ function RouterPickerRowView({
   );
 }
 
-function RoutersPickerSection({
+function RouterPickerButton({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation();
+  const leadingSlot = useMemo(
+    () => <ThemedRoute size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />,
+    [],
+  );
+  const trailingSlot = useMemo(
+    () => <ThemedChevronRight size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />,
+    [],
+  );
+  return (
+    <ModelBrowserRow
+      label={t("modelSelector.routers")}
+      leadingSlot={leadingSlot}
+      trailingSlot={trailingSlot}
+      tone="drillDown"
+      spacing="provider"
+      onPress={onPress}
+      testID="model-router-picker-button"
+    />
+  );
+}
+
+function RoutersPickerList({
   rows,
   selectedRouterId,
   onSelect,
@@ -1007,12 +1059,8 @@ function RoutersPickerSection({
   selectedRouterId: string | null;
   onSelect: (routerId: string | null) => void;
 }) {
-  const { t } = useTranslation();
   return (
-    <View style={styles.routersContainer}>
-      <View style={styles.sectionHeading}>
-        <Text style={styles.sectionHeadingText}>{t("modelSelector.routers")}</Text>
-      </View>
+    <View>
       {rows.map((row) => (
         <RouterPickerRowView
           key={row.id}
@@ -1171,7 +1219,13 @@ function getModelRowKey(row: ProviderSelectionModelRow): string {
   return row.favoriteKey;
 }
 
-function IndependentProviderList({ children }: { children: React.ReactNode }) {
+function IndependentProviderList({
+  children,
+  testID = "compact-provider-list",
+}: {
+  children: React.ReactNode;
+  testID?: string;
+}) {
   return (
     <IndependentScrollBoundary>
       <ScrollView
@@ -1184,11 +1238,40 @@ function IndependentProviderList({ children }: { children: React.ReactNode }) {
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
-        testID="compact-provider-list"
+        testID={testID}
       >
         {children}
       </ScrollView>
     </IndependentScrollBoundary>
+  );
+}
+
+function ModelBrowserScrollArea({
+  scrolling,
+  testID = "compact-provider-list",
+  children,
+}: {
+  scrolling: "sheet" | "independent";
+  testID?: string;
+  children: React.ReactNode;
+}) {
+  if (scrolling === "independent") {
+    return <IndependentProviderList testID={testID}>{children}</IndependentProviderList>;
+  }
+  return (
+    <SheetScrollView
+      style={styles.virtualizedModelList}
+      contentContainerStyle={[
+        styles.virtualizedModelListContent,
+        styles.virtualizedProviderListContent,
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
+      testID={testID}
+    >
+      {children}
+    </SheetScrollView>
   );
 }
 
@@ -1441,6 +1524,7 @@ function ModelBrowserContent({
   onCreateProfile,
   onEditProfile,
   onDrillDown,
+  onShowRouters,
   onRetryProvider,
   isRetryingProvider = false,
   scrolling,
@@ -1465,6 +1549,21 @@ function ModelBrowserContent({
     [onRouterPicked, routerPicker],
   );
   const normalizedQuery = useMemo(() => normalizeSearchQuery(searchQuery), [searchQuery]);
+  const filteredRouterRows = useMemo(() => {
+    if (!normalizedQuery) return routerPicker.rows;
+    return routerPicker.rows.filter((row) =>
+      normalizeSearchQuery(`${row.name} ${row.description}`).includes(normalizedQuery),
+    );
+  }, [normalizedQuery, routerPicker.rows]);
+  const routerButton = useMemo(
+    () =>
+      routerPicker.rows.length > 0 ? <RouterPickerButton onPress={onShowRouters} /> : undefined,
+    [onShowRouters, routerPicker.rows.length],
+  );
+  const routerHeader = useMemo(
+    () => (normalizedQuery.length === 0 ? routerButton : undefined),
+    [normalizedQuery, routerButton],
+  );
   const profiledLookup = useMemo(
     () => groupProfilesByProviderModel(profiles?.rows ?? []),
     [profiles],
@@ -1488,7 +1587,14 @@ function ModelBrowserContent({
       }),
     [isSearchFocused, normalizedQuery, providers, searchAllOnFocus],
   );
-  const hasResults = profiles !== null || providers.length > 0 || rootBrowseContent != null;
+  const hasResults = useMemo(
+    () =>
+      profiles !== null ||
+      providers.length > 0 ||
+      rootBrowseContent != null ||
+      routerPicker.rows.length > 0,
+    [profiles, providers.length, rootBrowseContent, routerPicker.rows.length],
+  );
 
   if (view.kind === "provider") {
     return (
@@ -1514,6 +1620,22 @@ function ModelBrowserContent({
     );
   }
 
+  if (view.kind === "routers") {
+    return (
+      <ModelBrowserScrollArea scrolling={scrolling} testID="compact-router-list">
+        {filteredRouterRows.length === 0 ? (
+          <ModelSearchEmptyState />
+        ) : (
+          <RoutersPickerList
+            rows={filteredRouterRows}
+            selectedRouterId={highlightedRouterId}
+            onSelect={handleRouterSelect}
+          />
+        )}
+      </ModelBrowserScrollArea>
+    );
+  }
+
   if (allView.kind === "noSearchMatches") {
     return (
       <View style={styles.emptyState} testID="model-search-empty">
@@ -1534,6 +1656,7 @@ function ModelBrowserContent({
         selectedModel={selectedModel}
         onSelect={onSelect}
         showProviderLabel
+        header={routerHeader}
         scrolling={scrolling}
         profiledLookup={profiledLookup}
         onCreateProfile={onCreateProfile}
@@ -1552,13 +1675,7 @@ function ModelBrowserContent({
           onEditProfiles={onEditProfiles}
         />
       ) : null}
-      {routerPicker.rows.length > 0 ? (
-        <RoutersPickerSection
-          rows={routerPicker.rows}
-          selectedRouterId={highlightedRouterId}
-          onSelect={handleRouterSelect}
-        />
-      ) : null}
+      {routerButton}
       {rootBrowseContent ??
         (providers.length > 0 ? (
           <View>
@@ -1578,22 +1695,10 @@ function ModelBrowserContent({
     </View>
   );
 
-  return scrolling === "independent" ? (
-    <IndependentProviderList>{allProvidersContent}</IndependentProviderList>
-  ) : (
-    <SheetScrollView
-      style={styles.virtualizedModelList}
-      contentContainerStyle={[
-        styles.virtualizedModelListContent,
-        styles.virtualizedProviderListContent,
-      ]}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      showsVerticalScrollIndicator={false}
-      testID="compact-provider-list"
-    >
+  return (
+    <ModelBrowserScrollArea scrolling={scrolling} testID="compact-provider-list">
       {allProvidersContent}
-    </SheetScrollView>
+    </ModelBrowserScrollArea>
   );
 }
 
@@ -1629,6 +1734,7 @@ export function ModelBrowser({
       onCreateProfile={onCreateProfile}
       onEditProfile={onEditProfile}
       onDrillDown={state.drillDown}
+      onShowRouters={state.showRouters}
       onRetryProvider={onRetryProvider}
       isRetryingProvider={isRetryingProvider}
       scrolling={scrolling}
@@ -1651,12 +1757,6 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
-  },
-  routersContainer: {
-    backgroundColor: theme.colors.surface1,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingBottom: theme.spacing[1],
   },
   separator: {
     height: 1,

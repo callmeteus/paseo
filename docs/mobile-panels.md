@@ -80,6 +80,10 @@ definition, no longer eligible to begin.
 
 - Callers request semantic targets through `panel-store`; they never write shared values.
 - Gesture behavior comes from the four explicit hooks in `mobile-panels/gestures.ts`.
+- The open-gesture edge gate on the web is for the mouse: it keeps a drag able to select a
+  paragraph instead of opening a panel. Do not apply it to `PointerType.TOUCH`; a finger
+  must be able to start the swipe anywhere in the chat, which is the only practical way to
+  reach the drawer from the middle of a conversation.
 - A focused interactive surface may block panel-opening gestures through
   `useBlockMobilePanelOpenGestures`. Register only while the conflicting interaction is active and
   unregister when the surface is hidden or unfocused. The blocker never disables gestures that close

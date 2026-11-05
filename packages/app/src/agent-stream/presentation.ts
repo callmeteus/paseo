@@ -20,6 +20,8 @@ interface PresentationInput {
   /** User messages whose collapsed turn the reader opened. */
   expandedTurnHostIds: ReadonlySet<string>;
   isTurnActive: boolean;
+  /** Reasoning keeps its own always-visible row when the reader turned on auto-expand. */
+  groupReasoning?: boolean;
 }
 
 export interface StreamPresentation extends ToolCallDetailProjection {
@@ -63,6 +65,7 @@ export function createStreamPresentation() {
   let historyRows: StreamItem[] = [];
   let preparedTail: StreamItem[] | undefined;
   let preparedLevel: ToolCallDetailLevel | undefined;
+  let preparedGroupReasoning: boolean | undefined;
   let preparedHistory: PreparedToolCallHistory | null = null;
   let collapsedSource: StreamItem[] | undefined;
   let collapsedIsLatestTurnOpen = false;
@@ -135,10 +138,16 @@ export function createStreamPresentation() {
       const blocks = presentRows(item);
       head.push(...blocks);
     }
-    if (preparedTail !== historyRows || preparedLevel !== level) {
-      preparedHistory = prepareToolCallHistory(level, historyRows);
+    const groupReasoning = input.groupReasoning ?? true;
+    if (
+      preparedTail !== historyRows ||
+      preparedLevel !== level ||
+      preparedGroupReasoning !== groupReasoning
+    ) {
+      preparedHistory = prepareToolCallHistory(level, historyRows, groupReasoning, true);
       preparedTail = historyRows;
       preparedLevel = level;
+      preparedGroupReasoning = groupReasoning;
     }
     return collapse(
       projectToolCallDetailLevel({
@@ -147,6 +156,7 @@ export function createStreamPresentation() {
         head,
         preparedHistory,
         isTurnActive: input.isTurnActive,
+        includeThought: groupReasoning,
       }),
       input,
     );

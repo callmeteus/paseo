@@ -1912,6 +1912,7 @@ export const fr: TranslationResources = {
     defaultModel: "Par défaut",
     profiles: "Profils",
     routers: "Routeurs",
+    searchRouters: "Rechercher des routeurs",
     providers: "Fournisseurs",
     model: "Modèle",
     editProfiles: "Modifier",
@@ -2288,6 +2289,43 @@ export const fr: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "Exploré",
+      edited: "Modifié",
+      ran: "Exécuté",
+      skipped: "Ignoré",
+    },
+    parts: {
+      files: {
+        one: "{{count}} fichier",
+        other: "{{count}} fichiers",
+      },
+      exploredFiles: {
+        one: "exploré {{count}} fichier",
+        other: "exploré {{count}} fichiers",
+      },
+      searches: {
+        one: "{{count}} recherche",
+        other: "{{count}} recherches",
+      },
+      fetches: {
+        one: "{{count}} requête",
+        other: "{{count}} requêtes",
+      },
+      commands: {
+        one: "exécuté {{count}} commande",
+        other: "exécuté {{count}} commandes",
+      },
+      tools: {
+        one: "{{count}} outil",
+        other: "{{count}} outils",
+      },
+      agents: {
+        one: "{{count}} agent",
+        other: "{{count}} agents",
+      },
+    },
+    thought: "Réflexion",
     editedFiles: {
       one: "{{count}} fichier modifié",
       other: "{{count}} fichiers modifiés",

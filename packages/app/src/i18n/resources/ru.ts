@@ -1893,6 +1893,7 @@ export const ru: TranslationResources = {
     defaultModel: "По умолчанию",
     profiles: "Профили",
     routers: "Роутеры",
+    searchRouters: "Поиск роутеров",
     providers: "Провайдеры",
     model: "Модель",
     editProfiles: "Изменить",
@@ -2270,6 +2271,43 @@ export const ru: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "Изучено",
+      edited: "Изменено",
+      ran: "Выполнено",
+      skipped: "Пропущено",
+    },
+    parts: {
+      files: {
+        one: "{{count}} файл",
+        other: "{{count}} файлов",
+      },
+      exploredFiles: {
+        one: "изучен {{count}} файл",
+        other: "изучено {{count}} файлов",
+      },
+      searches: {
+        one: "{{count}} поиск",
+        other: "{{count}} поисков",
+      },
+      fetches: {
+        one: "{{count}} запрос",
+        other: "{{count}} запросов",
+      },
+      commands: {
+        one: "выполнена {{count}} команда",
+        other: "выполнено {{count}} команд",
+      },
+      tools: {
+        one: "{{count}} инструмент",
+        other: "{{count}} инструментов",
+      },
+      agents: {
+        one: "{{count}} агент",
+        other: "{{count}} агентов",
+      },
+    },
+    thought: "Размышление",
     editedFiles: {
       one: "изменён {{count}} файл",
       other: "изменены файлы ({{count}})",

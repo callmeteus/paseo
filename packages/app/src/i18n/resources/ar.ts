@@ -1859,6 +1859,7 @@ export const ar: TranslationResources = {
     defaultModel: "تقصير",
     profiles: "الملفات الشخصية",
     routers: "الموجّهات",
+    searchRouters: "البحث في الموجهات",
     providers: "المزودون",
     model: "النموذج",
     editProfiles: "تحرير",
@@ -2232,6 +2233,43 @@ export const ar: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "استكشفت",
+      edited: "عدّلت",
+      ran: "شغّلت",
+      skipped: "تخطّيت",
+    },
+    parts: {
+      files: {
+        one: "{{count}} ملف",
+        other: "{{count}} ملفات",
+      },
+      exploredFiles: {
+        one: "استكشفت {{count}} ملف",
+        other: "استكشفت {{count}} ملفات",
+      },
+      searches: {
+        one: "{{count}} بحث",
+        other: "{{count}} عمليات بحث",
+      },
+      fetches: {
+        one: "{{count}} جلب",
+        other: "{{count}} عمليات جلب",
+      },
+      commands: {
+        one: "شغّلت {{count}} أمر",
+        other: "شغّلت {{count}} أوامر",
+      },
+      tools: {
+        one: "{{count}} أداة",
+        other: "{{count}} أدوات",
+      },
+      agents: {
+        one: "{{count}} وكيل",
+        other: "{{count}} وكلاء",
+      },
+    },
+    thought: "تفكير",
     editedFiles: {
       one: "حرّر {{count}} ملفًا",
       other: "حرّر {{count}} ملفات",

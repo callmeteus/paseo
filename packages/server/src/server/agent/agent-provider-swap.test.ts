@@ -8,6 +8,7 @@ import { AgentStorage } from "./agent-storage.js";
 import {
   buildPortedTimelineRows,
   buildPortingTranscript,
+  MAX_PORTED_TRANSCRIPT_CHARS,
   swapAgentProvider,
   SwapProviderError,
 } from "./agent-provider-swap.js";
@@ -258,6 +259,39 @@ describe("buildPortingTranscript", () => {
     ]);
 
     expect(transcript).toBe("Assistant used tool search (completed)");
+  });
+
+  it("collapses a run of tool calls instead of spending a line on each", () => {
+    const transcript = buildPortingTranscript([
+      { type: "user_message", text: "Build the router" },
+      { type: "tool_call", callId: "1", name: "execute", status: "completed" },
+      { type: "tool_call", callId: "2", name: "execute", status: "completed" },
+      { type: "tool_call", callId: "3", name: "read", status: "completed" },
+      { type: "assistant_message", text: "Done" },
+    ]);
+
+    expect(transcript).toBe(
+      "User: Build the router\n\nAssistant used 3 tools (execute×2, read×1)\n\nAssistant: Done",
+    );
+  });
+
+  it("keeps the opening request and starts on a message boundary when it has to trim", () => {
+    const items: AgentTimelineItem[] = [
+      { type: "user_message", text: "Crie um roteador DeepSeek" },
+    ];
+    for (let turn = 0; turn < 400; turn += 1) {
+      items.push({ type: "assistant_message", text: `Turn ${turn} summary ${"x".repeat(200)}` });
+      items.push({ type: "tool_call", callId: `c${turn}`, name: "execute", status: "completed" });
+    }
+
+    const transcript = buildPortingTranscript(items);
+
+    expect(transcript.length).toBeLessThanOrEqual(MAX_PORTED_TRANSCRIPT_CHARS + 200);
+    expect(transcript.startsWith("User: Crie um roteador DeepSeek")).toBe(true);
+    expect(transcript).toContain("[... earlier turns omitted when porting ...]");
+    // Every line is a whole entry: no entry may be cut mid-word.
+    expect(transcript).not.toMatch(/^xecute/m);
+    expect(transcript.endsWith("Assistant used tool execute (completed)")).toBe(true);
   });
 });
 

@@ -730,6 +730,10 @@ export interface ThoughtItem {
   text: string;
   timestamp: Date;
   status: ThoughtStatus;
+  /** When the first chunk arrived. `timestamp` moves with every chunk, so it cannot measure the block. */
+  startedAt?: Date;
+  /** Filled when the thought finishes streaming; a group label shows this instead of recomputing. */
+  thinkingDurationMs?: number;
 }
 
 export type OrchestratorToolCallStatus = "executing" | "completed" | "failed";
@@ -943,9 +947,13 @@ function markThoughtReady(item: ThoughtItem): ThoughtItem {
   if (item.status === "ready") {
     return item;
   }
+  const elapsedMs = item.startedAt
+    ? item.timestamp.getTime() - item.startedAt.getTime()
+    : undefined;
   return {
     ...item,
     status: "ready",
+    ...(elapsedMs !== undefined && elapsedMs > 0 ? { thinkingDurationMs: elapsedMs } : {}),
   };
 }
 
@@ -1088,6 +1096,7 @@ function appendThought(
     ...(timelineCursor ? { timelineCursor } : {}),
     text: chunk,
     timestamp,
+    startedAt: timestamp,
     status: "loading",
   };
   return [...state, item];

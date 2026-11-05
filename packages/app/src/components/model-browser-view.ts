@@ -7,6 +7,7 @@ import {
 
 export type ModelBrowserView =
   | { kind: "all" }
+  | { kind: "routers" }
   | { kind: "provider"; providerId: string; providerLabel: string; serverId?: string | null };
 
 export function resolveModelBrowserScrolling({

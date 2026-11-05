@@ -38,13 +38,14 @@ interface GenericACPAgentClientOptions {
 
 export class GenericACPAgentClient extends ACPAgentClient {
   private readonly command: [string, ...string[]];
-  private readonly providerId?: string;
+  private readonly configuredProviderId?: string;
   private readonly label?: string;
   private readonly diagnosticPhaseTimeoutMs?: number;
 
   constructor(options: GenericACPAgentClientOptions) {
     super({
       provider: "acp",
+      providerId: options.providerId,
       usageProvider: options.usageProvider,
       logger: options.logger,
       runtimeSettings: {
@@ -66,7 +67,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
     });
 
     this.command = options.command;
-    this.providerId = options.providerId;
+    this.configuredProviderId = options.providerId;
     this.label = options.label;
     this.diagnosticPhaseTimeoutMs = options.diagnosticPhaseTimeoutMs;
   }
@@ -85,9 +86,9 @@ export class GenericACPAgentClient extends ACPAgentClient {
   }
 
   async getDiagnostic(): Promise<{ diagnostic: string }> {
-    const providerName = formatProviderName(this.label, this.providerId);
+    const providerName = formatProviderName(this.label, this.configuredProviderId);
     const entries: DiagnosticEntry[] = [
-      { label: "Provider ID", value: this.providerId ?? "unknown" },
+      { label: "Provider ID", value: this.configuredProviderId ?? "unknown" },
       { label: "Configured command", value: this.command.join(" ") },
     ];
     const versionProbe = buildVersionProbeCommand(this.command);

@@ -10,6 +10,38 @@ com `Thought 2s` como linha própria de raciocínio e o detalhe expandido em rai
 O Paseo já tem a mecânica de agrupar tool calls consecutivas; falta fundir o thinking,
 enriquecer o vocabulário do resumo e melhorar a linha de raciocínio.
 
+**Decisão travada: opção B.** O modo `collapseToolCalls` recebe o comportamento novo e
+passa a ser o padrão (`DEFAULT_CLIENT_SETTINGS.chatDisplay`). O passo 9 (texto curto) está
+incluído.
+
+## Status
+
+Todas as etapas 1–9 implementadas e verificadas: `tsgo --noEmit` limpo, `oxlint` limpo,
+178 testes verdes nos suites afetados (detail-level, layout, presentation, turn-collapse,
+stream, i18n).
+
+Regras que o Cursor tem e foram preservadas:
+
+- a última mensagem de um turno concluído **nunca** dobra (seria a resposta do agente
+  escondida atrás de um grupo colapsado);
+- nada em `head` (streaming) dobra — o texto apareceria só ao abrir o grupo;
+- um trecho só de texto **não** forma grupo, senão o rótulo sairia "Explored" sem trabalho;
+- com `autoExpandReasoning` ligado, o thinking não entra no grupo.
+
+Desvio do plano: com `autoExpandReasoning`, `groupReasoning: false` mantém a linha própria
+do thinking. Ver `agent-stream/presentation.ts` e o teste "keeps reasoning on its own row".
+
+Ícones nas partes: `ExpandableBadge` ganhou `renderLabel`, um render prop que recebe o
+estilo do badge. O resumo é montado em segmentos (`useOverviewSummaryDisplay`) e a parte de
+tools leva um glifo. `Plug`, não `Wrench`: o badge do grupo já usa `Wrench` como ícone
+principal, e dois iguais na mesma linha parecem defeito.
+
+Shimmer com segmentos: o badge chama `renderLabel` em até três passagens — rótulo visível,
+camada de shimmer do web e máscara do shimmer nativo. No web cada segmento aplica a mesma
+animação deslocada pela sua própria posição no fluxo (`buildSegmentShimmer`), então o brilho
+atravessa a frase inteira em vez de reiniciar em cada parte. Na máscara nativa o ícone vira
+um bloco de 11×11, porque `MaskedView` não recebe `Svg`.
+
 ## Origem: o que o Cursor faz
 
 Extraído do bundle instalado (`C:\Users\Gio\AppData\Local\Programs\cursor\resources\app`),
@@ -26,7 +58,7 @@ minGroupSize: 1       separateShellGroups: false
 ```
 
 Texto do assistente só entra no grupo se passar em `Tff`: ≤ 100 chars, ≤ 2 linhas, e sem
-` ` ```, heading, item de lista ou tabela.
+bloco de código, heading, item de lista ou tabela.
 
 Whitelist de tools agrupáveis (`xff`): read, grep, glob, ls, semSearch,
 searchConversations, readLints, readTodos, fetch, webFetch, webSearch, getMcpTools,
@@ -114,23 +146,13 @@ Lacunas:
 5. `ExpandableBadge` aceita só 1 ícone; o Cursor põe partes com ícones inline.
 6. `ThoughtItem` não guarda início, então não há como medir duração.
 
-## Decisão pendente
-
-Qual `ChatDisplay` recebe isso:
-
-- **A** — enriquece `collapseToolCalls`, padrão continua `collapseTurns`.
-- **B** — enriquece `collapseToolCalls` e troca o padrão para ele (visual Cursor por padrão).
-- **C** — quarta opção no menu, as três atuais intactas.
-
-O plano abaixo assume o modo `collapseToolCalls`; só o passo 8 muda entre A/B/C.
-
 ## Etapas
 
 ### 1. Modelo do run (`tool-calls/detail-level/grouping.ts`)
 
 Renomear `ToolCallRun` para `StepRun` com `steps: readonly GroupableStep[]`, onde
-`GroupableStep = ToolCallItem | ThoughtItem`. Manter `calls` como campo derivado só com
-tool calls, para `turn-collapse` e o sheet continuarem funcionando. Trocar
+`GroupableStep = ToolCallItem | ThoughtItem | ShortTextItem`. Manter `calls` como campo
+derivado só com tool calls, para `turn-collapse` e o sheet continuarem funcionando. Trocar
 `isGroupableToolCall` por `isGroupableStep` preservando a exclusão de `plan` e `speak`.
 
 ### 2. Duração de thinking (`types/stream.ts`)
@@ -162,8 +184,8 @@ toolCallGroup.thought / thoughtBriefly / thoughtFor
 ### 5. Linha com partes (`components/message.tsx`)
 
 Novo prop opcional `parts?: ReactNode` em `ExpandableBadge`, mantendo
-`label`/`secondaryLabel` para os outros 34 usos. É o que permite `⚙ 1 tool` inline. Se
-mexer no badge parecer arriscado, criar `StepGroupBadge` ao lado e usar só no grupo.
+`label`/`secondaryLabel` para os outros usos. É o que permite `⚙ 1 tool` inline. Se mexer
+no badge parecer arriscado, criar `StepGroupBadge` ao lado e usar só no grupo.
 
 ### 6. Header de thinking (novo `utils/thought-header.ts`)
 
@@ -173,20 +195,25 @@ mexer no badge parecer arriscado, criar `StepGroupBadge` ao lado e usar só no g
 
 ### 7. Fiação (`agent-stream/presentation.ts`, `agent-stream/view.tsx`)
 
-`prepareToolCallHistory` e `projectToolCallDetailLevel` passam a levar thought junto do
-run. Em `renderToolCallItem`, o `children` do `IndentRail` itera `group.run.steps` e
-renderiza thought com `renderThoughtItem` em vez de só `group.run.calls`.
+`prepareToolCallHistory` e `projectToolCallDetailLevel` passam a levar thought e texto
+curto junto do run. Em `renderToolCallItem`, o `children` do `IndentRail` itera
+`group.run.steps` e renderiza thought com `renderThoughtItem` em vez de só
+`group.run.calls`.
 
 ### 8. Modo (`hooks/use-settings/storage.ts`)
 
-- **A**: nada muda; só o comportamento de `collapseToolCalls` melhora.
-- **B**: `chatDisplay: "collapseTurns"` → `"collapseToolCalls"` em `DEFAULT_CLIENT_SETTINGS`.
-- **C**: estender a union e o enum do zod, mais uma opção no menu de Settings.
+`DEFAULT_CLIENT_SETTINGS.chatDisplay` de `"collapseTurns"` para `"collapseToolCalls"`.
+Nenhuma migração: é só o default de instalações novas e de quem nunca tocou na opção.
 
-### 9. Texto curto (opcional, depois do resto)
+### 9. Texto curto (FEITO)
 
-`foldShortText(text)` com as regras do `Tff`. Só vale se você quiser o comportamento
-completo do Cursor; sem isso o resultado já fica bem próximo do print.
+`isFoldableText(text)` com as regras do `Tff`: ≤ 100 chars, ≤ 2 linhas, sem bloco de
+código, heading, lista ou tabela. Texto que passa entra no run como `ShortTextItem` e é
+renderizado dentro do grupo; texto que não passa continua solto e quebra o run.
+
+Guarda obrigatória, copiada do `hAb` do Cursor: a última mensagem de um turno concluído
+nunca dobra, senão a resposta final do agente some atrás de um grupo colapsado. Também não
+dobrar nada que ainda está em `head` (streaming), pelo mesmo motivo.
 
 ## Riscos e casos de borda
 
@@ -195,13 +222,20 @@ completo do Cursor; sem isso o resultado já fica bem próximo do print.
   `steps` é campo separado.
 - **Perf.** `groupLiveToolCalls` roda a cada tick e o texto do thought muda a cada chunk.
   Memoizar por texto do último thought e por duração, senão `stream-tick.bench.ts` regride.
+- **Perda de conteúdo.** Ao dobrar texto curto, ele some do fluxo principal. Garantir que
+  o texto expandido dentro do grupo seja legível e que a busca do chat (`ChatFindExpansion`)
+  ainda o encontre.
 - **i18n.** Plural e concordância não cabem num `one/other` genérico em pt/ru/ar. Usar
   chaves separadas por parte e testar `pt-BR`, `ru`, `ar`.
 - **`displayName: "Thinking"`** vem de `packages/protocol/src/tool-call-display.ts:138` e é
-  usado também pelo `tool-call-sheet`. Avaliar se a mudança fica no app ou no protocolo.
+  usado também pelo `tool-call-sheet`. A mudança de rótulo deve ficar no app, não no
+  protocolo.
 - **Compacto.** A linha com partes precisa truncar em 1 linha no mobile; o sheet já existe.
 - **Grupos de 1 item.** Com `minGroupSize: 1` um único read vira grupo de 1, igual ao
   Cursor. Confirmar que isso não deixa o chat mais verboso do que hoje no modo `full`.
+- **Mudar o default afeta quem já usa o app.** Quem estava em `collapseTurns` e nunca
+  escolheu explicitamente vai ver mais linhas no chat depois do update. Se isso incomodar,
+  voltar para a opção A é uma linha de diff.
 
 ## Verificação
 

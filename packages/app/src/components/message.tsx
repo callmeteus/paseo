@@ -1019,6 +1019,7 @@ interface NativeExpandableBadgeShimmerProps {
   peakWidth: number;
   durationSeconds: number;
   gradientId: string;
+  renderLabel?: (context: ExpandableBadgeLabelContext) => ReactNode;
 }
 
 const NativeExpandableBadgeShimmer = memo(function NativeExpandableBadgeShimmer({
@@ -1029,6 +1030,7 @@ const NativeExpandableBadgeShimmer = memo(function NativeExpandableBadgeShimmer(
   peakWidth,
   durationSeconds,
   gradientId,
+  renderLabel,
 }: NativeExpandableBadgeShimmerProps) {
   const isPanelActive = useRetainedPanelActive();
   const shimmerTranslateX = useSharedValue(0);
@@ -1090,9 +1092,13 @@ const NativeExpandableBadgeShimmer = memo(function NativeExpandableBadgeShimmer(
   const maskElement = useMemo(
     () => (
       <View pointerEvents="none" style={nativeShimmerMaskStyle}>
-        <Text style={nativeLabelMaskStyle} numberOfLines={1}>
-          {label}
-        </Text>
+        {renderLabel ? (
+          renderLabel({ pass: "mask", textStyle: nativeLabelMaskStyle })
+        ) : (
+          <Text style={nativeLabelMaskStyle} numberOfLines={1}>
+            {label}
+          </Text>
+        )}
         {secondaryLabel ? (
           <Text style={nativeSecondaryMaskStyle} numberOfLines={1}>
             {secondaryLabel}
@@ -1102,7 +1108,14 @@ const NativeExpandableBadgeShimmer = memo(function NativeExpandableBadgeShimmer(
         )}
       </View>
     ),
-    [nativeShimmerMaskStyle, nativeLabelMaskStyle, nativeSecondaryMaskStyle, label, secondaryLabel],
+    [
+      nativeShimmerMaskStyle,
+      nativeLabelMaskStyle,
+      nativeSecondaryMaskStyle,
+      label,
+      renderLabel,
+      secondaryLabel,
+    ],
   );
 
   return (
@@ -1530,10 +1543,36 @@ export const TodoListCard = memo(function TodoListCard({
   );
 });
 
+export interface ExpandableBadgeLabelContext {
+  /** Which layer is being drawn. The native mask needs plain shapes, not icons. */
+  pass: "label" | "shimmer" | "mask";
+  /** Text style for one segment. Different on each pass: visible, shimmer, or mask. */
+  textStyle: StyleProp<TextStyle>;
+  /**
+   * Attach to the container that holds every segment, so the web shine is measured across
+   * the whole label rather than restarting inside each part.
+   */
+  onFlowLayout?: (event: LayoutChangeEvent) => void;
+  /**
+   * Web shimmer layer only. Returns the gradient style for a segment whose left edge sits
+   * `offsetX` into the flow. Use it together with `onFlowLayout` measurements.
+   */
+  buildSegmentShimmer?: (offsetX: number) => object | null;
+}
+
 interface ExpandableBadgeProps {
   label: string;
   secondaryLabel?: string;
   icon?: ComponentType<{ size?: number; color?: string }>;
+  /**
+   * Renders the label instead of the plain string. Group badges use it to interleave a
+   * small icon between the parts of a summary.
+   *
+   * The badge calls this up to three times per label: once for the visible label, once for
+   * the web shimmer layer, and once for the native shimmer mask. Segment the text the same
+   * way every time so the layers stay aligned.
+   */
+  renderLabel?: (context: ExpandableBadgeLabelContext) => ReactNode;
   isExpanded: boolean;
   style?: StyleProp<ViewStyle>;
   onToggle?: () => void;
@@ -1581,6 +1620,9 @@ interface ExpandableBadgeWebShimmerOverlayProps {
   shimmerLabelTextStyle: StyleProp<TextStyle>;
   shimmerSecondaryTextStyle: StyleProp<TextStyle>;
   showOpenFileButton: boolean;
+  renderLabel?: (context: ExpandableBadgeLabelContext) => ReactNode;
+  buildSegmentShimmer?: (offsetX: number) => object | null;
+  shimmerSegmentTextStyle?: StyleProp<TextStyle>;
 }
 
 function ExpandableBadgeWebShimmerOverlay({
@@ -1589,12 +1631,23 @@ function ExpandableBadgeWebShimmerOverlay({
   shimmerLabelTextStyle,
   shimmerSecondaryTextStyle,
   showOpenFileButton,
+  renderLabel,
+  buildSegmentShimmer,
+  shimmerSegmentTextStyle,
 }: ExpandableBadgeWebShimmerOverlayProps) {
   return (
     <View style={expandableBadgeStylesheet.shimmerOverlay} pointerEvents="none">
-      <Text style={shimmerLabelTextStyle} numberOfLines={1}>
-        {label}
-      </Text>
+      {renderLabel ? (
+        renderLabel({
+          pass: "shimmer",
+          textStyle: shimmerSegmentTextStyle ?? shimmerLabelTextStyle,
+          ...(buildSegmentShimmer ? { buildSegmentShimmer } : {}),
+        })
+      ) : (
+        <Text style={shimmerLabelTextStyle} numberOfLines={1}>
+          {label}
+        </Text>
+      )}
       {secondaryLabel ? (
         <Text style={shimmerSecondaryTextStyle} numberOfLines={1}>
           {secondaryLabel}
@@ -1631,6 +1684,9 @@ interface ExpandableBadgeLabelRowProps {
   onLabelRowLayout: (event: LayoutChangeEvent) => void;
   onLabelLayout: (event: LayoutChangeEvent) => void;
   onSecondaryLayout: (event: LayoutChangeEvent) => void;
+  renderLabel?: (context: ExpandableBadgeLabelContext) => ReactNode;
+  buildSegmentShimmer?: (offsetX: number) => object | null;
+  shimmerSegmentTextStyle?: StyleProp<TextStyle>;
   showOpenFileButton: boolean;
   isOpenFileHovered: boolean;
   onOpenFilePress: (event: GestureResponderEvent) => void;
@@ -1641,6 +1697,7 @@ interface ExpandableBadgeLabelRowProps {
 function ExpandableBadgeLabelRow({
   label,
   labelStyle,
+  renderLabel,
   secondaryLabel,
   secondaryLabelStyle,
   shouldMeasureWebShimmer,
@@ -1657,6 +1714,8 @@ function ExpandableBadgeLabelRow({
   onLabelRowLayout,
   onLabelLayout,
   onSecondaryLayout,
+  buildSegmentShimmer,
+  shimmerSegmentTextStyle,
   showOpenFileButton,
   isOpenFileHovered,
   onOpenFilePress,
@@ -1669,13 +1728,21 @@ function ExpandableBadgeLabelRow({
       style={expandableBadgeStylesheet.labelRow}
       onLayout={shouldMeasureNativeShimmer ? onLabelRowLayout : undefined}
     >
-      <Text
-        style={labelStyle}
-        numberOfLines={1}
-        onLayout={shouldMeasureWebShimmer ? onLabelLayout : undefined}
-      >
-        {label}
-      </Text>
+      {renderLabel ? (
+        renderLabel({
+          pass: "label",
+          textStyle: labelStyle,
+          ...(shouldMeasureWebShimmer ? { onFlowLayout: onLabelLayout } : {}),
+        })
+      ) : (
+        <Text
+          style={labelStyle}
+          numberOfLines={1}
+          onLayout={shouldMeasureWebShimmer ? onLabelLayout : undefined}
+        >
+          {label}
+        </Text>
+      )}
       <ExpandableBadgeSecondaryLabel
         secondaryLabel={secondaryLabel}
         secondaryLabelStyle={secondaryLabelStyle}
@@ -1706,6 +1773,9 @@ function ExpandableBadgeLabelRow({
           shimmerLabelTextStyle={shimmerLabelTextStyle}
           shimmerSecondaryTextStyle={shimmerSecondaryTextStyle}
           showOpenFileButton={showOpenFileButton}
+          renderLabel={renderLabel}
+          buildSegmentShimmer={buildSegmentShimmer}
+          shimmerSegmentTextStyle={shimmerSegmentTextStyle}
         />
       ) : null}
       {isNativeShimmer ? (
@@ -1717,6 +1787,7 @@ function ExpandableBadgeLabelRow({
           peakWidth={nativeShimmerPeakWidth}
           durationSeconds={shimmerDuration}
           gradientId={nativeGradientId}
+          renderLabel={renderLabel}
         />
       ) : null}
     </View>
@@ -1898,6 +1969,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   style,
   secondaryLabel,
   icon,
+  renderLabel,
   isExpanded,
   onToggle,
   onOpenFile,
@@ -2137,6 +2209,37 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     [shimmerSecondaryStyle],
   );
 
+  // Segmented labels need one gradient per segment, each shifted by its own position in
+  // the flow, so the shine crosses the row instead of restarting inside every part.
+  const buildSegmentShimmer = useCallback(
+    (offsetX: number) =>
+      buildShimmerTextStyle({
+        isWebShimmer,
+        webShimmerPeakWidth,
+        shimmerDuration,
+        webShimmerTrackStart,
+        webShimmerTrackEnd,
+        offsetX: labelOffsetX + offsetX,
+      }),
+    [
+      isWebShimmer,
+      labelOffsetX,
+      shimmerDuration,
+      webShimmerPeakWidth,
+      webShimmerTrackEnd,
+      webShimmerTrackStart,
+    ],
+  );
+
+  const shimmerSegmentTextStyle = useMemo(
+    () => [
+      expandableBadgeStylesheet.label,
+      isLoading && expandableBadgeStylesheet.labelLoading,
+      expandableBadgeStylesheet.shimmerText,
+    ],
+    [isLoading],
+  );
+
   const chevronStyle = useMemo(
     () => [
       expandableBadgeStylesheet.chevron,
@@ -2183,6 +2286,9 @@ export const ExpandableBadge = memo(function ExpandableBadge({
           <ExpandableBadgeLabelRow
             label={label}
             labelStyle={labelStyle}
+            renderLabel={renderLabel}
+            buildSegmentShimmer={buildSegmentShimmer}
+            shimmerSegmentTextStyle={shimmerSegmentTextStyle}
             secondaryLabel={secondaryLabel}
             secondaryLabelStyle={secondaryLabelStyle}
             shouldMeasureWebShimmer={shouldMeasureWebShimmer}
@@ -2224,6 +2330,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
 function areExpandableBadgePropsEqual(previous: ExpandableBadgeProps, next: ExpandableBadgeProps) {
   if (previous.label !== next.label) return false;
   if (previous.secondaryLabel !== next.secondaryLabel) return false;
+  if (previous.renderLabel !== next.renderLabel) return false;
   if (previous.icon !== next.icon) return false;
   if (previous.isExpanded !== next.isExpanded) return false;
   if (previous.style !== next.style) return false;
@@ -2259,6 +2366,10 @@ interface ToolCallProps {
   defaultExpanded?: boolean;
   forceInline?: boolean;
   maxDetailHeight?: number;
+  /** Replaces the derived label. Reasoning badges use it to show their own title. */
+  labelOverride?: string;
+  /** Replaces the derived summary, such as a reasoning block's duration. */
+  secondaryLabelOverride?: string;
 }
 
 export const ToolCall = memo(function ToolCall({
@@ -2280,6 +2391,8 @@ export const ToolCall = memo(function ToolCall({
   defaultExpanded,
   forceInline = false,
   maxDetailHeight = 400,
+  labelOverride,
+  secondaryLabelOverride,
 }: ToolCallProps) {
   const { openToolCall } = useToolCallSheet();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
@@ -2413,8 +2526,8 @@ export const ToolCall = memo(function ToolCall({
   return (
     <ExpandableBadge
       testID="tool-call-badge"
-      label={presentation.displayName}
-      secondaryLabel={presentation.summary}
+      label={labelOverride ?? presentation.displayName}
+      secondaryLabel={secondaryLabelOverride ?? presentation.summary}
       icon={presentation.icon}
       isExpanded={shouldRenderInline && isExpanded}
       onToggle={presentation.canOpenDetails ? handleToggle : undefined}
@@ -2446,5 +2559,7 @@ function areToolCallPropsEqual(previous: ToolCallProps, next: ToolCallProps) {
   if (previous.defaultExpanded !== next.defaultExpanded) return false;
   if (previous.forceInline !== next.forceInline) return false;
   if (previous.maxDetailHeight !== next.maxDetailHeight) return false;
+  if (previous.labelOverride !== next.labelOverride) return false;
+  if (previous.secondaryLabelOverride !== next.secondaryLabelOverride) return false;
   return true;
 }
