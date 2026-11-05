@@ -211,6 +211,7 @@ class TestAgentClient implements AgentClient {
   readonly capabilities = TEST_CAPABILITIES;
   readonly createdConfigs: AgentSessionConfig[] = [];
   readonly resumeOverrides: Array<Partial<AgentSessionConfig> | undefined> = [];
+  readonly sessions: TestAgentSession[] = [];
 
   constructor(provider: AgentProvider = "codex") {
     this.provider = provider;
@@ -222,7 +223,9 @@ class TestAgentClient implements AgentClient {
 
   async createSession(config: AgentSessionConfig): Promise<AgentSession> {
     this.createdConfigs.push(config);
-    return new TestAgentSession(config);
+    const session = new TestAgentSession(config);
+    this.sessions.push(session);
+    return session;
   }
 
   async fetchCatalog() {
@@ -450,6 +453,8 @@ class TestAgentSession implements AgentSession {
   readonly provider = "codex" as const;
   readonly capabilities = TEST_CAPABILITIES;
   readonly id = randomUUID();
+  readonly systemPromptUpdates: Array<{ prompt: string | null; workflowModeId?: string | null }> =
+    [];
   private runtimeModel: string | null = null;
   private subscribers = new Set<(event: AgentStreamEvent) => void>();
   private turnIdCounter = 0;
@@ -515,6 +520,15 @@ class TestAgentSession implements AgentSession {
 
   async setMode(): Promise<void> {}
 
+  async setDaemonAppendSystemPrompt(
+    prompt: string | null,
+    workflowModeId?: string | null,
+  ): Promise<void> {
+    this.systemPromptUpdates.push({ prompt, workflowModeId });
+    this.config.daemonAppendSystemPrompt = prompt ?? undefined;
+    this.config.workflowModeId = workflowModeId ?? undefined;
+  }
+
   getPendingPermissions() {
     return [];
   }
@@ -525,6 +539,7 @@ class TestAgentSession implements AgentSession {
     return {
       provider: this.provider,
       sessionId: this.id,
+      metadata: { ...this.config },
     };
   }
 
@@ -12974,13 +12989,30 @@ test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch
   expect(client.createdConfigs[0]?.daemonAppendSystemPrompt).toContain("Ask mode");
 
   await expect(manager.setAgentWorkflowMode(snapshot.id, "debug")).resolves.toBe("debug");
-  expect(manager.getAgent(snapshot.id)?.config.workflowModeId).toBe("debug");
-
-  await expect(manager.setAgentWorkflowMode(snapshot.id, "unknown")).rejects.toThrow(
-    "Unknown workflow mode",
-  );
+  const live = manager.getAgent(snapshot.id);
+  const liveMetadata = live?.persistence?.metadata;
+  const sessionMetadata = live?.session?.describePersistence()?.metadata;
+  expect(live?.config.workflowModeId).toBe("debug");
+  expect(client.sessions[0]?.systemPromptUpdates.at(-1)).toMatchObject({
+    workflowModeId: "debug",
+  });
+  expect(client.sessions[0]?.describePersistence()?.metadata?.workflowModeId).toBe("debug");
+  expect(sessionMetadata?.workflowModeId).toBe("debug");
+  expect(liveMetadata).toMatchObject({ workflowModeId: "debug" });
+  expect(liveMetadata?.daemonAppendSystemPrompt).toContain("Debug mode");
 
   const reloaded = await manager.reloadAgentSession(snapshot.id);
   expect(reloaded.config.workflowModeId).toBe("debug");
   expect(client.resumeOverrides.at(-1)?.daemonAppendSystemPrompt).toContain("Debug mode");
+
+  await expect(manager.setAgentWorkflowMode(snapshot.id, "agent")).resolves.toBe("agent");
+  const agentLive = manager.getAgent(snapshot.id);
+  const agentMetadata = agentLive?.persistence?.metadata;
+  expect(agentLive?.config.workflowModeId).toBe("agent");
+  expect(agentMetadata?.workflowModeId).toBe("agent");
+  expect(agentMetadata?.daemonAppendSystemPrompt).not.toContain("Debug mode");
+
+  await expect(manager.setAgentWorkflowMode(snapshot.id, "unknown")).rejects.toThrow(
+    "Unknown workflow mode",
+  );
 });

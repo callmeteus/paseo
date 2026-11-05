@@ -40,8 +40,9 @@ export const CURSOR_FAST_FEATURE_OPTION: ACPConfigFeatureOption = {
   configId: "fast",
   label: "Fast",
   description: "Cursor fast mode",
-  tooltip: "Select Cursor fast mode",
+  tooltip: "Toggle Cursor fast mode",
   icon: "zap",
+  toggle: true,
 };
 
 const CursorModelCatalogSchema = z.object({

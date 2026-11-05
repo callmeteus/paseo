@@ -21,6 +21,38 @@ function terminalEvents(events: AgentStreamEvent[]) {
 }
 
 describe("OpenCode v2 session lifecycle", () => {
+  test("updates the live session instructions when the workflow prompt changes", async () => {
+    const harness = new V2Harness();
+    const updates: Array<{ key: string; value: string }> = [];
+    let removed = 0;
+    harness.api.session.instructions.entry.put = async (input) => {
+      updates.push(input);
+    };
+    harness.api.session.instructions.entry.remove = async () => {
+      removed += 1;
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({
+      provider: "opencode",
+      cwd: "/tmp/project",
+      daemonAppendSystemPrompt: "You are in Plan mode.",
+    });
+    try {
+      await session.setDaemonAppendSystemPrompt?.("You are in Agent mode.", "agent");
+      expect(updates.at(-1)).toMatchObject({
+        key: "paseo",
+        value: "You are in Agent mode.",
+      });
+      await session.setDaemonAppendSystemPrompt?.(null, "agent");
+      expect(removed).toBe(1);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("forwards provider retry status as a transient timeline row", async () => {
     const harness = new V2Harness();
     const client = new OpenCodeV2AgentClient({

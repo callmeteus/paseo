@@ -733,6 +733,15 @@ export interface AgentSession {
   close(): Promise<void>;
   listCommands?(): Promise<AgentSlashCommand[]>;
   setModel?(modelId: string | null): Promise<void>;
+  /**
+   * Replace the daemon-appended system prompt on the live provider session.
+   * Providers that can update the prompt in place implement this so a workflow
+   * mode switch takes effect on the next turn without reloading the session.
+   */
+  setDaemonAppendSystemPrompt?(
+    prompt: string | null,
+    workflowModeId?: string | null,
+  ): Promise<void>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;
   revertConversation?(input: { messageId: string }): Promise<void>;

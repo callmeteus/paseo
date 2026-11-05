@@ -496,6 +496,7 @@ export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession
     canStopRuntime: inner.canStopRuntime?.bind(inner),
     listCommands: inner.listCommands?.bind(inner),
     setModel: inner.setModel?.bind(inner),
+    setDaemonAppendSystemPrompt: inner.setDaemonAppendSystemPrompt?.bind(inner),
     setThinkingOption: inner.setThinkingOption?.bind(inner),
     setFeature: inner.setFeature?.bind(inner),
     revertConversation: inner.revertConversation?.bind(inner),
@@ -634,6 +635,8 @@ function wrapClientProvider(
     getCatalogCacheKey: inner.getCatalogCacheKey?.bind(inner),
     isAvailable: (signal, options) => inner.isAvailable(signal, options),
     getDiagnostic: inner.getDiagnostic?.bind(inner),
+    listMcpServers: inner.listMcpServers?.bind(inner),
+    loginMcpServer: inner.loginMcpServer?.bind(inner),
   };
 }
 
