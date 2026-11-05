@@ -2087,8 +2087,9 @@ export class AgentManager {
       launchConfig: preparedLaunchConfig,
       paseoToolPolicy,
     } = await this.prepareSessionConfig(refreshConfig, agentId);
+    const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
     const launchConfig = this.appendSystemPromptText(
-      preparedLaunchConfig,
+      this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
       HUB_AUTOMATION_CHAT_INSTRUCTION,
     );
     const hadPreviousPaseoToolPolicy = this.paseoToolPolicies.has(agentId);
@@ -2634,19 +2635,9 @@ export class AgentManager {
       throw new Error(`Unknown workflow mode: ${normalized}`);
     }
 
-    const liveAgent = this.getAgent(agentId);
-    if (liveAgent) {
-      const currentWorkflowId = liveAgent.config.workflowModeId ?? null;
-      if (currentWorkflowId === normalized) {
-        return normalized;
-      }
-      // Paseo workflow modes are prompt-level roles. Do not switch the
-      // provider's own permission mode here: the app keeps it on Build, and
-      // switching to the provider's Plan mode reintroduces its native plan
-      // instructions and makes Shift+Tab oscillate between modes.
-      liveAgent.config.workflowModeId = normalized ?? undefined;
-      this.touchUpdatedAt(liveAgent);
-      this.emitState(liveAgent);
+    const liveAgent = this.agents.get(agentId);
+    if (liveAgent?.session) {
+      await this.applyLiveWorkflowMode(liveAgent, normalized);
       return normalized;
     }
 
@@ -2660,6 +2651,35 @@ export class AgentManager {
       updatedAt: new Date().toISOString(),
     });
     return normalized;
+  }
+
+  private async applyLiveWorkflowMode(
+    agent: LiveManagedAgent,
+    normalized: string | null,
+  ): Promise<void> {
+    const currentWorkflowId = agent.config.workflowModeId ?? null;
+    if (currentWorkflowId === normalized) {
+      return;
+    }
+    const nextConfig = { ...agent.config, workflowModeId: normalized ?? undefined };
+    if (agent.session.setDaemonAppendSystemPrompt) {
+      const prompt = await this.buildLaunchSystemPrompt(nextConfig, agent.id);
+      await agent.session.setDaemonAppendSystemPrompt(prompt ?? null, normalized);
+      agent.config.workflowModeId = normalized ?? undefined;
+      this.refreshSessionPersistence(agent);
+      this.touchUpdatedAt(agent);
+      this.emitState(agent);
+      return;
+    }
+    // Providers that cannot replace the prompt in place need a reload so the
+    // next turn does not keep running on the previous workflow instructions.
+    if (!this.hasInFlightRun(agent.id)) {
+      await this.reloadAgentSession(agent.id, { workflowModeId: normalized ?? undefined });
+      return;
+    }
+    agent.config.workflowModeId = normalized ?? undefined;
+    this.touchUpdatedAt(agent);
+    this.emitState(agent);
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
@@ -6586,6 +6606,20 @@ export class AgentManager {
       // Provider may not support model listing â€” leave model undefined.
       return undefined;
     }
+  }
+
+  private async buildLaunchSystemPrompt(
+    storedConfig: AgentSessionConfig,
+    agentId: string,
+  ): Promise<string | undefined> {
+    const { launchConfig } = await this.prepareSessionConfig(storedConfig, agentId);
+    const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
+    const withProjectInstructions = this.appendSystemPromptText(launchConfig, projectInstructions);
+    const withHubInstructions = this.appendSystemPromptText(
+      withProjectInstructions,
+      HUB_AUTOMATION_CHAT_INSTRUCTION,
+    );
+    return withHubInstructions.daemonAppendSystemPrompt;
   }
 
   private async prepareSessionConfig(

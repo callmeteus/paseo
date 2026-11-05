@@ -4975,6 +4975,14 @@ class OpenCodeAgentSession implements AgentSession {
     this.config.modeId = normalizedModeId ?? undefined;
   }
 
+  async setDaemonAppendSystemPrompt(
+    prompt: string | null,
+    workflowModeId?: string | null,
+  ): Promise<void> {
+    this.config.daemonAppendSystemPrompt = prompt ?? undefined;
+    this.config.workflowModeId = workflowModeId ?? undefined;
+  }
+
   async setFeature(featureId: string, value: unknown): Promise<void> {
     if (featureId !== OPENCODE_AUTO_ACCEPT_FEATURE_ID) {
       throw new Error(`Unsupported OpenCode feature '${featureId}'`);

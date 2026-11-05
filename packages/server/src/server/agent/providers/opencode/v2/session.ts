@@ -292,6 +292,30 @@ export class OpenCodeV2Session implements AgentSession {
       availableModes: this.modes,
     });
   }
+  async setDaemonAppendSystemPrompt(
+    prompt: string | null,
+    workflowModeId?: string | null,
+  ): Promise<void> {
+    await this.reconnectIfExited();
+    this.config.daemonAppendSystemPrompt = prompt ?? undefined;
+    this.config.workflowModeId = workflowModeId ?? undefined;
+    const system = composeSystemPromptParts(
+      this.config.systemPrompt,
+      this.config.daemonAppendSystemPrompt,
+    );
+    if (system) {
+      await this.client.session.instructions.entry.put({
+        sessionID: this.id,
+        key: "paseo",
+        value: system,
+      });
+    } else {
+      await this.client.session.instructions.entry.remove({
+        sessionID: this.id,
+        key: "paseo",
+      });
+    }
+  }
   async setModel(model: string | null) {
     await this.reconnectIfExited();
     const location = { directory: this.config.cwd };
