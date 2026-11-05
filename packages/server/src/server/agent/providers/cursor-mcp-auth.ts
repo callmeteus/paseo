@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
+import { delimiter, join } from "node:path";
 import stripAnsi from "strip-ansi";
 import type {
   ProviderMcpLoginResult,
@@ -36,12 +37,29 @@ export async function listCursorMcpServers(input: {
     [...input.command.slice(1), "mcp", "list"],
     {
       cwd: homedir(),
-      env: input.env,
+      env: cursorCliEnv(input.env),
       timeout: MCP_LIST_TIMEOUT_MS,
       maxBuffer: 2 * 1024 * 1024,
     },
   );
   return parseCursorMcpList(stdout);
+}
+
+/**
+ * Desktop launches (and Paseo's own supervisor relaunch) can miss the user's
+ * login-shell PATH. Cursor installs its CLI in `~/.local/bin`, so add the usual
+ * user-bin directories before resolving `cursor-agent`.
+ */
+export function cursorCliEnv(env?: Record<string, string>): Record<string, string> {
+  const base = { ...process.env, ...env } as Record<string, string>;
+  let pathKey = "PATH";
+  if (base.PATH === undefined && base.Path !== undefined) pathKey = "Path";
+  const current = base[pathKey] ?? base.PATH ?? base.Path ?? "";
+  const extra = [join(homedir(), ".local", "bin"), join(homedir(), ".npm-global", "bin")];
+  const entries = [...extra, ...current.split(delimiter)].filter(Boolean);
+  base[pathKey] = [...new Set(entries)].join(delimiter);
+  if (pathKey !== "PATH") base.PATH = base[pathKey];
+  return base;
 }
 
 export function parseCursorMcpList(output: string): ProviderMcpServerInfo[] {
@@ -101,7 +119,7 @@ export async function loginCursorMcpServer(input: {
     [...input.command.slice(1), "mcp", "login", input.server],
     {
       cwd: homedir(),
-      env: input.env,
+      env: cursorCliEnv(input.env),
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -151,7 +169,7 @@ export async function loginCursorMcpServer(input: {
   child.once("exit", (code) => {
     activeLogins.delete(loginKey);
     const text = tail(output);
-    if (code === 0 && !/✗|failed|error:/iu.test(text)) {
+    if (code === 0 && !/âœ—|failed|error:/iu.test(text)) {
       settle({ status: "authenticated", message: text || null });
     } else {
       settle({
@@ -197,7 +215,7 @@ export async function runCursorCli(
   try {
     const result = await execCommand(input.command[0], [...input.command.slice(1), ...args], {
       cwd: homedir(),
-      env: input.env,
+      env: cursorCliEnv(input.env),
       timeout,
       maxBuffer: 2 * 1024 * 1024,
     });
