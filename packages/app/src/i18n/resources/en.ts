@@ -1836,7 +1836,7 @@ export const en = {
   agentAutocomplete: {
     searchingWorkspace: "Searching workspace...",
     loadingCommands: "Loading commands...",
-    noFiles: "No files or directories found",
+    noFiles: "No files, chats, or workspaces found",
     noCommands: "No commands found",
     failedToLoad: "Failed to load",
     chooseProjectForCommands: "Choose a project to see commands",

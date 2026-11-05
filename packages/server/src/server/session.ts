@@ -8731,6 +8731,14 @@ export class Session {
       const cwd = msg.cwd?.trim();
       const includeArchived = msg.includeArchived === true;
       const sinceMs = msg.sinceHours ? Date.now() - msg.sinceHours * 60 * 60 * 1000 : null;
+      // People remember a chat by its workspace ("@plano de busca"), so the
+      // workspace display name is a search field next to the chat title.
+      const workspaceNames = new Map(
+        (await this.workspaceRegistry.list()).map((workspace) => [
+          workspace.workspaceId,
+          resolveWorkspaceDisplayName(workspace),
+        ]),
+      );
       const records = (await this.agentStorage.list())
         .filter((record) => !record.internal)
         .filter((record) => includeArchived || !record.archivedAt)
@@ -8750,6 +8758,9 @@ export class Session {
           cwd: record.cwd,
           updatedAt: record.updatedAt,
           archivedAt: record.archivedAt ?? null,
+          workspaceName: record.workspaceId
+            ? (workspaceNames.get(record.workspaceId) ?? null)
+            : null,
         })),
         loadEntries: async (agentId) => {
           const rows = await this.agentManager.getSearchableTimelineRows(agentId);

@@ -9,6 +9,8 @@ export interface ChatSearchCandidate {
   cwd: string;
   updatedAt: string;
   archivedAt: string | null;
+  /** Workspace display name, matched alongside the chat title. */
+  workspaceName?: string | null;
 }
 
 export interface ChatSearchEntry {
@@ -79,9 +81,9 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function titleMatches(title: string | null, normalizedQuery: string): boolean {
-  if (!title) return false;
-  return normalizeText(title).includes(normalizedQuery);
+function nameMatches(chat: ChatSearchCandidate, normalizedQuery: string): boolean {
+  if (chat.title && normalizeText(chat.title).includes(normalizedQuery)) return true;
+  return chat.workspaceName ? normalizeText(chat.workspaceName).includes(normalizedQuery) : false;
 }
 
 /**
@@ -105,7 +107,7 @@ export async function searchChatsAcrossChats(
   const hits: Array<ChatSearchHit & { rank: number }> = [];
 
   for (const [index, chat] of input.chats.entries()) {
-    const isTitleMatch = titleMatches(chat.title, normalizedQuery);
+    const isTitleMatch = nameMatches(chat, normalizedQuery);
     const cached = readCachedEntries(chat.agentId, chat.updatedAt);
     if (!cached && now() > deadline) break;
     let entries: readonly ChatSearchEntry[];

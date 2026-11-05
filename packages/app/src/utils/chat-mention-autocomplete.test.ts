@@ -42,6 +42,31 @@ describe("filterAndRankChatMentions", () => {
     expect(result.map((entry) => entry.agentId)).toEqual(["title", "body"]);
   });
 
+  it("finds a chat by its workspace name", () => {
+    const result = filterAndRankChatMentions({
+      chats: [
+        chat({ agentId: "ws", title: "Fix the crash", workspaceName: "plano de busca" }),
+        chat({ agentId: "other", title: "Unrelated" }),
+      ],
+      query: "plano de busca",
+    });
+
+    expect(result.map((entry) => entry.agentId)).toEqual(["ws"]);
+  });
+
+  it("ranks a title match above a workspace match and both above content", () => {
+    const result = filterAndRankChatMentions({
+      chats: [
+        chat({ agentId: "content", title: "Other", snippet: "plano de busca mentioned" }),
+        chat({ agentId: "workspace", title: "Other", workspaceName: "plano de busca" }),
+        chat({ agentId: "title", title: "plano de busca notes" }),
+      ],
+      query: "plano de busca",
+    });
+
+    expect(result.map((entry) => entry.agentId)).toEqual(["title", "workspace", "content"]);
+  });
+
   it("drops chats that match neither title nor snippet", () => {
     const result = filterAndRankChatMentions({
       chats: [chat({ agentId: "nope", title: "Other" })],

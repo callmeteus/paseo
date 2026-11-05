@@ -1847,7 +1847,7 @@ export const ptBR: TranslationResources = {
   agentAutocomplete: {
     searchingWorkspace: "Buscando workspace...",
     loadingCommands: "Carregando comandos...",
-    noFiles: "Nenhum arquivo ou diretório encontrado",
+    noFiles: "Nenhum arquivo, chat ou workspace encontrado",
     noCommands: "Nenhum comando encontrado",
     failedToLoad: "Falha ao carregar",
     chooseProjectForCommands: "Escolha um projeto para ver os comandos",

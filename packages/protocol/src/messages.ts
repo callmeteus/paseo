@@ -2128,7 +2128,9 @@ export const ChatSearchResultSchema = z.object({
   cwd: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
-  /** The query matched the chat title, not only message text. */
+  /** Display name of the workspace the chat lives in, when the daemon knows it. */
+  workspaceName: z.string().nullable().optional(),
+  /** The query matched the chat title or its workspace name, not only message text. */
   titleMatch: z.boolean(),
   matches: z.array(ChatSearchMatchSchema),
 });

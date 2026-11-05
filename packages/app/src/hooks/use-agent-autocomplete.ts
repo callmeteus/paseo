@@ -269,7 +269,7 @@ function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
       id: `chat:${chat.serverId}:${chat.agentId}`,
       label: chat.title?.trim() || input.t("agentAutocomplete.untitledChat"),
       kind: "chat",
-      description: chat.snippet ?? chat.cwd,
+      description: chat.snippet ?? chat.workspaceName ?? chat.cwd,
       detail: chat.archived ? input.t("agentAutocomplete.archivedChat") : undefined,
       chat,
     }));

@@ -4,6 +4,8 @@ export interface ChatMentionCandidate {
   serverId: string;
   agentId: string;
   title: string | null;
+  /** Workspace display name; people often remember the workspace, not the title. */
+  workspaceName?: string | null;
   cwd: string;
   /** Set when the chat is archived; archived chats still match but rank after live ones. */
   archived: boolean;
@@ -32,17 +34,27 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function rankByTitle(title: string | null, query: string): 0 | 1 | 2 {
+const TITLE_PREFIX_RANK = 3;
+const TITLE_CONTAINS_RANK = 2;
+const WORKSPACE_CONTAINS_RANK = 1;
+
+function rankByTitle(title: string | null, query: string): number {
   if (!title || !query) return 0;
   const normalizedTitle = normalize(title);
-  if (normalizedTitle.startsWith(query)) return 2;
-  if (normalizedTitle.includes(query)) return 1;
+  if (normalizedTitle.startsWith(query)) return TITLE_PREFIX_RANK;
+  if (normalizedTitle.includes(query)) return TITLE_CONTAINS_RANK;
   return 0;
+}
+
+function rankByWorkspace(workspaceName: string | null | undefined, query: string): number {
+  if (!workspaceName || !query) return 0;
+  return normalize(workspaceName).includes(query) ? WORKSPACE_CONTAINS_RANK : 0;
 }
 
 /**
  * Chat rows for the `@` picker. With an empty query this is the recent-chat list;
- * with a query, title matches rank above content-only matches.
+ * with a query, name matches (chat title, then workspace) rank above content-only
+ * matches.
  */
 export function filterAndRankChatMentions(
   input: FilterAndRankChatMentionsInput,
@@ -57,12 +69,15 @@ export function filterAndRankChatMentions(
     if (chat.agentId === excludeAgentId) continue;
     const key = `${chat.serverId}:${chat.agentId}`;
     if (seen.has(key)) continue;
-    const titleRank = rankByTitle(chat.title, query);
-    if (query && titleRank === 0 && !chat.snippet) continue;
+    const nameRank = Math.max(
+      rankByTitle(chat.title, query),
+      rankByWorkspace(chat.workspaceName, query),
+    );
+    if (query && nameRank === 0 && !chat.snippet) continue;
     seen.add(key);
     ranked.push({
       chat,
-      score: (titleRank > 0 ? 10 : 0) + (chat.archived ? 0 : 1),
+      score: nameRank * 10 + (chat.archived ? 0 : 1),
     });
   }
 
