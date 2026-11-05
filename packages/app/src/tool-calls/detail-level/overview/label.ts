@@ -154,6 +154,11 @@ export function useOverviewSummaryDisplay(
   }, [leadingParts, summary, t]);
 }
 
+// React Native trims leading whitespace in a standalone <Text> node, and each
+// label segment renders as its own node. A non-breaking space keeps the first
+// separator visible; the plain accessibility text puts regular spaces back.
+const SEGMENT_SPACE = "\u00A0";
+
 export function buildGroupSentence(
   action: string,
   parts: readonly { kind: CountedPart["key"]; text: string }[],
@@ -161,16 +166,22 @@ export function buildGroupSentence(
 ): OverviewLabel {
   const segments: OverviewLabelSegment[] = [{ text: action }];
   parts.forEach((part, index) => {
-    const separator = index === 0 ? " " : ", ";
+    const separator = index === 0 ? SEGMENT_SPACE : ", ";
     segments.push({
       text: `${separator}${part.text}`,
       ...(part.kind === "tools" ? { icon: "tool" as const } : {}),
     });
   });
   if (fileChangeStats) {
-    segments.push({ text: ` ${fileChangeStats}` });
+    segments.push({ text: `${SEGMENT_SPACE}${fileChangeStats}` });
   }
-  return { text: segments.map((segment) => segment.text).join(""), segments };
+  return {
+    text: segments
+      .map((segment) => segment.text)
+      .join("")
+      .replaceAll(SEGMENT_SPACE, " "),
+    segments,
+  };
 }
 
 /** One line describing a stretch of agent work, as a plain string. */
