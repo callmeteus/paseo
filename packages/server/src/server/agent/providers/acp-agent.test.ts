@@ -149,12 +149,19 @@ interface ACPConfiguredOverrideInternals {
 function createSession(
   options: {
     provider?: "cursor" | "claude-acp";
+    providerId?: string;
     terminateProcess?: ProcessTerminator;
     launchEnv?: Record<string, string>;
     mcpConfigBridge?: { acquire: () => Promise<void> };
   } = {},
 ): ACPAgentSession {
-  const { provider = "claude-acp", terminateProcess, launchEnv, mcpConfigBridge } = options;
+  const {
+    provider = "claude-acp",
+    providerId,
+    terminateProcess,
+    launchEnv,
+    mcpConfigBridge,
+  } = options;
   return new ACPAgentSession(
     {
       provider,
@@ -162,6 +169,7 @@ function createSession(
     },
     {
       provider,
+      ...(providerId ? { providerId } : {}),
       logger: createTestLogger(),
       defaultCommand: ["claude", "--acp"],
       defaultModes: [],
@@ -3286,7 +3294,9 @@ describe("ACPAgentSession", () => {
   test("Cursor gets a longer idle limit for long reasoning turns", async () => {
     vi.useFakeTimers();
     try {
-      const session = createSession({ provider: "cursor" });
+      // The built-in Cursor client runs through the generic "acp" transport;
+      // the configured provider id is what identifies Cursor.
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
       const events: AgentStreamEvent[] = [];
       asInternals<ACPSessionInternals>(session).sessionId = "session-1";
       asInternals<ACPSessionInternals>(session).connection = {
@@ -3747,7 +3757,7 @@ describe("ACPAgentSession", () => {
       ).toMatchObject({
         type: "timeline",
         provider: "cursor",
-        item: { type: "error", message: expect.stringContaining("high load") },
+        item: { type: "error", message: expect.stringContaining("temporarily unavailable") },
       });
 
       await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
@@ -3762,6 +3772,45 @@ describe("ACPAgentSession", () => {
         type: "turn_completed",
         turnId,
       });
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("retries a Cursor prompt when the provider transport pings out", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      let attempts = 0;
+      const prompt = vi.fn(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Promise.reject(new Error("RetriableError: [unavailable] PING timed out"));
+        }
+        return Promise.resolve({ stopReason: "end_turn" } as PromptResponse);
+      });
+      const cancel = vi.fn(async () => {});
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel };
+      session.subscribe((event) => events.push(event));
+
+      await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(
+        events.find((event) => event.type === "timeline" && event.transient === true),
+      ).toMatchObject({
+        item: { type: "error", message: expect.stringContaining("temporarily unavailable") },
+      });
+
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(2);
+      expect(events.find((event) => event.type === "turn_completed")).toBeDefined();
       expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
     } finally {
       vi.useRealTimers();
