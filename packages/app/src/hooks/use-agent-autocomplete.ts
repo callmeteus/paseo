@@ -31,6 +31,14 @@ import {
 import { removeMentionToken, type ChatMentionCandidate } from "@/utils/chat-mention-autocomplete";
 import { useChatMentionSuggestions } from "./use-chat-mention-suggestions";
 import { useHostFeature } from "@/runtime/host-features";
+import { useIsCompactFormFactor } from "@/constants/layout";
+
+/** Compact layouts close the picker here: it would otherwise cover the conversation. */
+const COMPACT_MENTION_MAX_WORDS = 4;
+
+function resolveMentionWordLimit(isCompactFormFactor: boolean): number | undefined {
+  return isCompactFormFactor ? COMPACT_MENTION_MAX_WORDS : undefined;
+}
 
 interface UseAgentAutocompleteInput {
   userInput: string;
@@ -96,6 +104,7 @@ function resolveAgentAutocompleteSnapshot(input: {
   cursorIndex: number;
   activeSlashCommand: SlashCommandRange | null;
   activeFileMention: FileMentionRange | null;
+  mentionWordLimit?: number;
 }): AgentAutocompleteSnapshot {
   if (!input.input) {
     return {
@@ -110,7 +119,11 @@ function resolveAgentAutocompleteSnapshot(input: {
   return {
     text,
     slashCommand: findActiveSlashCommand({ text, cursorIndex }),
-    fileMention: findActiveFileMention({ text, cursorIndex }),
+    fileMention: findActiveFileMention({
+      text,
+      cursorIndex,
+      maxWords: input.mentionWordLimit,
+    }),
   };
 }
 
@@ -436,13 +449,15 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const showCommandAutocomplete = activeSlashCommand !== null;
   const commandFilterQuery = activeSlashCommand?.query ?? "";
 
+  const mentionWordLimit = resolveMentionWordLimit(useIsCompactFormFactor());
   const activeFileMention = useMemo(
     () =>
       findActiveFileMention({
         text: userInput,
         cursorIndex,
+        maxWords: mentionWordLimit,
       }),
-    [cursorIndex, userInput],
+    [cursorIndex, mentionWordLimit, userInput],
   );
   // Escape closes the picker for the token it was pressed on. Tracking the start
   // index keeps it closed while the user keeps typing that same mention, and
@@ -593,6 +608,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         cursorIndex,
         activeSlashCommand,
         activeFileMention: fileMention,
+        mentionWordLimit,
       });
       const selectedIsCommand =
         selected.type === "client_command" ||
@@ -653,6 +669,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       cursorIndex,
       fileMention,
       activeSlashCommand,
+      mentionWordLimit,
     ],
   );
 

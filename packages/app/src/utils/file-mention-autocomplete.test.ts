@@ -45,6 +45,39 @@ describe("findActiveFileMention", () => {
     });
   });
 
+  it("keeps a four-word query open when a word limit is set", () => {
+    const text = "@add chat search here";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+      maxWords: 4,
+    });
+    expect(mention).toEqual({
+      start: 0,
+      end: text.length,
+      query: "add chat search here",
+    });
+  });
+
+  it("closes once the query passes the word limit", () => {
+    const text = "@add chat search here please";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+      maxWords: 4,
+    });
+    expect(mention).toBeNull();
+  });
+
+  it("keeps unlimited words when no limit is set", () => {
+    const text = "@one two three four five six";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+    });
+    expect(mention?.query).toBe("one two three four five six");
+  });
+
   it("still ends the token at a quote inserted by a picked path", () => {
     const text = 'open @"src/components/chat.tsx" next';
     const mention = findActiveFileMention({
