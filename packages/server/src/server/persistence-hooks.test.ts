@@ -94,6 +94,36 @@ describe("persistence hooks", () => {
     });
   });
 
+  test("buildConfigOverrides enables auto-accept for imported Cursor chats", () => {
+    const record = createRecord({
+      provider: "cursor",
+      labels: { "paseo.import.source": "cursor" },
+      config: { model: "grok-4.7" },
+    });
+
+    expect(buildConfigOverrides(record).featureValues).toEqual({ auto_accept: true });
+  });
+
+  test("buildConfigOverrides preserves an explicit auto-accept choice", () => {
+    const record = createRecord({
+      provider: "cursor",
+      labels: { "paseo.import.source": "cursor" },
+      config: { model: "grok-4.7", featureValues: { auto_accept: false } },
+    });
+
+    expect(buildConfigOverrides(record).featureValues).toEqual({ auto_accept: false });
+  });
+
+  test("buildConfigOverrides leaves non-imported Cursor chats alone", () => {
+    const record = createRecord({
+      provider: "cursor",
+      labels: {},
+      config: { model: "grok-4.7" },
+    });
+
+    expect(buildConfigOverrides(record).featureValues).toBeUndefined();
+  });
+
   test("buildSessionConfig keeps an omitted mode omitted on resume", () => {
     const record = createRecord({
       provider: "codex",

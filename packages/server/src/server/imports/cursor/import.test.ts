@@ -113,6 +113,10 @@ describe("importCursorChats", () => {
       cwd: "C:\\Users\\Gio\\Documents\\Projetos\\Pacotes\\artdirector",
       lastStatus: "closed",
       persistence: null,
+      config: {
+        model: "composer-2.5",
+        featureValues: { auto_accept: true },
+      },
       workspaceId: "wks_cursor_0",
       title: "ArtDirector graphic design system",
       labels: {
