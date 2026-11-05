@@ -27,9 +27,13 @@
     },
     "typecheck": {
       "command": "npm run typecheck"
+    },
+    "reinstall": {
+      "type": "script",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/reinstall-desktop.ps1"
     }
   },
   "chat": {
-    "instructions": "Before finishing, reinstall your compute-but DO NOT reinstall if another re/installation is already in progress!"
+    "instructions": "Before finishing, reinstall your compute with the `reinstall` workspace script (scripts/reinstall-desktop.ps1) — but DO NOT reinstall if another re/installation is already in progress! A reinstall may take this machine down briefly, never permanently: build first, stop nothing until a fresh installer exists, and bring back exactly what was running before (desktop app, Hub, daemon). Hub relationships and daemon configuration live in PASEO_HOME and must survive the reinstall; never reset or recreate them to get something back up."
   }
 }
