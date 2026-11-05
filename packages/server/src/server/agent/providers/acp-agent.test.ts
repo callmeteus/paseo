@@ -24,6 +24,7 @@ import {
 import {
   ACPAgentClient,
   ACPAgentSession,
+  ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS,
   type SpawnedACPProcess,
   type SessionStateResponse,
   buildACPClientCapabilities,
@@ -3675,6 +3676,122 @@ describe("ACPAgentSession", () => {
       error: "prompt failed",
     });
     expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+  });
+
+  test("retries a Cursor prompt rejected for temporary provider load", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      let attempts = 0;
+      const prompt = vi.fn(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Promise.reject(new Error("RetriableError: [resource_exhausted] Error"));
+        }
+        return Promise.resolve({ stopReason: "end_turn" } as PromptResponse);
+      });
+      const cancel = vi.fn(async () => {});
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello", { clientMessageId: "msg-1" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(
+        events.find((event) => event.type === "timeline" && event.transient === true),
+      ).toMatchObject({
+        type: "timeline",
+        provider: "cursor",
+        item: { type: "error", message: expect.stringContaining("high load") },
+      });
+
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(2);
+      expect(prompt.mock.calls[1]?.[0]).toMatchObject({
+        sessionId: "session-1",
+        messageId: "msg-1",
+        prompt: [{ type: "text", text: "hello" }],
+      });
+      expect(events.find((event) => event.type === "turn_completed")).toMatchObject({
+        type: "turn_completed",
+        turnId,
+      });
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("fails a Cursor turn after the provider load retries are exhausted", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const prompt = vi.fn(() =>
+        Promise.reject(new Error("RetriableError: [resource_exhausted] Error")),
+      );
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt,
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      for (const delayMs of ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("resource_exhausted"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not retry a provider load rejection after the user interrupts", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const prompt = vi.fn(() =>
+        Promise.reject(new Error("RetriableError: [resource_exhausted] Error")),
+      );
+      const cancel = vi.fn(async () => {});
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(prompt).toHaveBeenCalledTimes(1);
+
+      await session.interrupt();
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(events.find((event) => event.type === "turn_canceled")).toMatchObject({
+        type: "turn_canceled",
+        turnId,
+        reason: "Interrupted",
+      });
+      expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("flushes an image-only provider echo before a rejected turn finishes", async () => {
