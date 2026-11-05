@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { classifyProviderError, isSystemErrorText, systemErrorMessage } from "./provider-error";
+import {
+  classifyProviderError,
+  isSystemErrorText,
+  looksLikeProviderFailureText,
+  readProviderErrorText,
+  systemErrorMessage,
+} from "./provider-error";
 
 describe("provider error classification", () => {
   it("detects usage limits across providers", () => {
@@ -38,5 +44,45 @@ describe("provider error classification", () => {
     expect(isSystemErrorText("[System Error] Provider failed")).toBe(true);
     expect(isSystemErrorText("Provider failed")).toBe(false);
     expect(systemErrorMessage("[System Error] Provider failed")).toBe("Provider failed");
+  });
+
+  it("classifies Cursor's authenticate wording as auth", () => {
+    expect(classifyProviderError("Failed to authenticate: OAuth session expired")).toBe("auth");
+  });
+});
+
+describe("unprefixed provider failures", () => {
+  it("detects the failure a CLI prints as assistant text", () => {
+    const text = "Failed to authenticate: OAuth session expired and could not be refreshed";
+
+    expect(looksLikeProviderFailureText(text)).toBe(true);
+    expect(readProviderErrorText(text)).toBe(text);
+  });
+
+  it("keeps a model explaining authentication in prose as normal text", () => {
+    expect(
+      looksLikeProviderFailureText(
+        "The authentication flow failed in the test because the token was stale.",
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a failure sentence the classifier cannot name", () => {
+    expect(looksLikeProviderFailureText("Failed to build the project")).toBe(false);
+  });
+
+  it("ignores a long or structured message", () => {
+    expect(
+      looksLikeProviderFailureText(
+        "Could not reach the API. It returned 401 Unauthorized, so I checked the token, rotated it, retried the request and confirmed the endpoint responds again.",
+      ),
+    ).toBe(false);
+    expect(looksLikeProviderFailureText("Error: 401\n\n```\nfetch failed\n```")).toBe(false);
+  });
+
+  it("prefers the system error prefix when both apply", () => {
+    expect(readProviderErrorText("[System Error] Failed to authenticate")).toBe(
+      "Failed to authenticate",
+    );
   });
 });

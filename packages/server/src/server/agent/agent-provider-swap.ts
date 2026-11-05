@@ -34,6 +34,10 @@ export interface SwapProviderResult {
 
 export const MAX_PORTED_TRANSCRIPT_CHARS = 24_000;
 
+/** Long single messages are cut so one paragraph cannot starve the rest of the transcript. */
+const MAX_PORTED_ENTRY_CHARS = 4_000;
+const OMITTED_CONTEXT_MARKER = "[... earlier turns omitted when porting ...]";
+
 const PORTED_CONTEXT_MARKER = "The following conversation was ported from";
 
 /**
@@ -66,31 +70,108 @@ export function buildPortedTimelineRows(input: {
   return rows;
 }
 
+interface PortingToolCall {
+  name: string;
+  status: string;
+}
+
+function formatToolRun(calls: readonly PortingToolCall[]): string {
+  const [only] = calls;
+  if (calls.length === 1 && only) {
+    return `Assistant used tool ${only.name} (${only.status})`;
+  }
+  const counts = new Map<string, number>();
+  for (const call of calls) {
+    counts.set(call.name, (counts.get(call.name) ?? 0) + 1);
+  }
+  const summary = [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([name, count]) => `${name}×${count}`)
+    .join(", ");
+  return `Assistant used ${calls.length} tools (${summary})`;
+}
+
 /**
- * Convert a provider timeline into a plain transcript that another provider can
- * read as context. Tool calls are reduced to a single line so the ported
- * conversation stays readable and bounded.
+ * One entry per message, with each run of tool calls collapsed into a single line. Writing
+ * one line per tool call let a tool-heavy stretch fill the whole budget, which is how a
+ * ported chat lost its conversation and read only "Assistant used tool execute (completed)"
+ * — the task itself never survived.
  */
-export function buildPortingTranscript(items: readonly AgentTimelineItem[]): string {
-  const lines: string[] = [];
+function buildTranscriptEntries(items: readonly AgentTimelineItem[]): string[] {
+  const entries: string[] = [];
+  let toolRun: PortingToolCall[] = [];
+  const flushTools = () => {
+    if (toolRun.length === 0) {
+      return;
+    }
+    entries.push(formatToolRun(toolRun));
+    toolRun = [];
+  };
 
   for (const item of items) {
+    if (item.type === "tool_call") {
+      toolRun.push({ name: item.name, status: item.status });
+      continue;
+    }
+    flushTools();
     if (item.type === "user_message") {
       const text = item.text.trim();
-      if (text) lines.push(`User: ${text}`);
+      if (text) entries.push(`User: ${text}`);
     } else if (item.type === "assistant_message") {
       const text = item.text.trim();
-      if (text) lines.push(`Assistant: ${text}`);
-    } else if (item.type === "tool_call") {
-      lines.push(`Assistant used tool ${item.name} (${item.status})`);
+      if (text) entries.push(`Assistant: ${text}`);
     }
   }
+  flushTools();
+  return entries;
+}
 
-  const transcript = lines.join("\n\n").trim();
-  if (transcript.length <= MAX_PORTED_TRANSCRIPT_CHARS) {
-    return transcript;
+function clampEntry(entry: string): string {
+  return entry.length <= MAX_PORTED_ENTRY_CHARS
+    ? entry
+    : `${entry.slice(0, MAX_PORTED_ENTRY_CHARS)}…`;
+}
+
+/**
+ * Convert a provider timeline into a plain transcript that another provider can read as
+ * context.
+ *
+ * When it does not fit, the opening request is kept and the rest is filled from the most
+ * recent turns. Trimming happens on whole entries: slicing by character offset used to cut
+ * the first line mid-word (`xecute (completed)`) and drop the message that named the task.
+ */
+export function buildPortingTranscript(items: readonly AgentTimelineItem[]): string {
+  const entries = buildTranscriptEntries(items).map(clampEntry);
+  if (entries.length === 0) {
+    return "";
   }
-  return transcript.slice(transcript.length - MAX_PORTED_TRANSCRIPT_CHARS);
+
+  const full = entries.join("\n\n").trim();
+  if (full.length <= MAX_PORTED_TRANSCRIPT_CHARS) {
+    return full;
+  }
+
+  // The first user message names what the ported chat is supposed to keep doing.
+  const anchorIndex = Math.max(
+    0,
+    entries.findIndex((entry) => entry.startsWith("User: ")),
+  );
+  const anchor = entries[anchorIndex] ?? "";
+  const rest = entries.filter((_entry, index) => index !== anchorIndex);
+
+  const kept: string[] = [];
+  let used = anchor.length;
+  for (let index = rest.length - 1; index >= 0; index -= 1) {
+    const entry = rest[index] ?? "";
+    const cost = entry.length + 2;
+    if (used + cost > MAX_PORTED_TRANSCRIPT_CHARS) {
+      break;
+    }
+    kept.unshift(entry);
+    used += cost;
+  }
+
+  return [anchor, OMITTED_CONTEXT_MARKER, ...kept].filter(Boolean).join("\n\n").trim();
 }
 
 /**
