@@ -292,6 +292,8 @@ export function useModelBrowser({
 }: ModelBrowserInput): ModelBrowserState {
   const { t } = useTranslation();
   const [view, setView] = useState<ModelBrowserView>({ kind: "all" });
+  // A catalog refresh replaces `providers` only. It must not reset the query
+  // or close the panel while the search field is open.
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchResetKey, bumpSearchResetKey] = useReducer((key: number) => key + 1, 0);

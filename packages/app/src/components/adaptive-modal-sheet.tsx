@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,8 @@ import { isWeb } from "@/constants/platform";
 import { useKeyboardVisibility } from "@/hooks/use-keyboard-visibility";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveTextInput } from "@/components/adaptive-text-input";
+import type { EditingTextInputHandle } from "@/components/ui/text-input";
+import { backButtonShouldYieldToSearch } from "@/components/model-browser-search-focus";
 export { AdaptiveTextInput, type AdaptiveTextInputProps } from "@/components/adaptive-text-input";
 
 // Horizontal indent token shared by the sheet header (title, back arrow,
@@ -63,6 +65,25 @@ export interface SheetHeader {
   leading?: ReactNode;
   actions?: ReactNode;
   search?: SheetHeaderSearch;
+}
+
+function useSheetSearchFocus() {
+  const searchRef = useRef<EditingTextInputHandle>(null);
+  const holdSearchFocus = useRef(false);
+  const handleSearchKeyPress = useCallback((event: { nativeEvent: { key: string } }) => {
+    // Letters, spaces, and horizontal arrows stay in the field. The back
+    // button is the previous control, so a search key must not leave it focused.
+    if (!backButtonShouldYieldToSearch({ key: event.nativeEvent.key })) return;
+    holdSearchFocus.current = true;
+  }, []);
+  const handleBackFocus = useCallback(() => {
+    if (!holdSearchFocus.current) return;
+    searchRef.current?.focus();
+  }, []);
+  const handleBackPressIn = useCallback(() => {
+    holdSearchFocus.current = false;
+  }, []);
+  return { searchRef, handleSearchKeyPress, handleBackFocus, handleBackPressIn };
 }
 
 const SCROLL_CONTENT_GROW = { flexGrow: 1 };
@@ -331,6 +352,7 @@ export function SheetHeaderView({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const searchFocus = useSheetSearchFocus();
   const titleStyle = useMemo(
     () => [styles.title, { color: theme.colors.foreground }],
     [theme.colors.foreground],
@@ -351,11 +373,14 @@ export function SheetHeaderView({
         {handleBackPress ? (
           <Pressable
             onPress={handleBackPress}
+            onPressIn={searchFocus.handleBackPressIn}
+            onFocus={searchFocus.handleBackFocus}
             hitSlop={8}
             style={styles.headerBackButton}
             accessibilityRole="button"
             accessibilityLabel={back?.accessibilityLabel ?? back?.label ?? t("common.actions.back")}
             testID="sheet-header-back"
+            tabIndex={-1}
           >
             {({ pressed }) => (
               <ArrowLeft
@@ -387,11 +412,13 @@ export function SheetHeaderView({
           <AdaptiveTextInput
             // @ts-expect-error - outlineStyle is web-only
             style={[styles.searchInput, isWeb && { outlineStyle: "none" }]}
+            ref={searchFocus.searchRef}
             placeholder={search.placeholder ?? t("common.actions.search")}
             resetKey={search.resetKey}
             onChangeText={handleSearchChange}
             onFocus={search.onFocus}
             onBlur={search.onBlur}
+            onKeyPress={searchFocus.handleSearchKeyPress}
             autoCapitalize="none"
             autoCorrect={false}
             autoFocus={search.autoFocus}
@@ -406,6 +433,7 @@ export function SheetHeaderView({
 export function InlineHeaderView({ header }: { header: SheetHeader }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const searchFocus = useSheetSearchFocus();
   const back = header.back;
   const handleBackPress = back?.onPress;
   const hasInlineRow = Boolean(handleBackPress || header.leading || header.actions);
@@ -417,6 +445,8 @@ export function InlineHeaderView({ header }: { header: SheetHeader }) {
           {handleBackPress ? (
             <Pressable
               onPress={handleBackPress}
+              onPressIn={searchFocus.handleBackPressIn}
+              onFocus={searchFocus.handleBackFocus}
               hitSlop={8}
               style={styles.headerBackButton}
               accessibilityRole="button"
@@ -424,6 +454,7 @@ export function InlineHeaderView({ header }: { header: SheetHeader }) {
                 back?.accessibilityLabel ?? back?.label ?? t("common.actions.back")
               }
               testID="sheet-header-back"
+              tabIndex={-1}
             >
               {({ pressed }) => (
                 <ArrowLeft
@@ -446,11 +477,13 @@ export function InlineHeaderView({ header }: { header: SheetHeader }) {
           <AdaptiveTextInput
             // @ts-expect-error - outlineStyle is web-only
             style={[styles.searchInput, isWeb && { outlineStyle: "none" }]}
+            ref={searchFocus.searchRef}
             placeholder={header.search.placeholder ?? t("common.actions.search")}
             resetKey={header.search.resetKey}
             onChangeText={header.search.onChange}
             onFocus={header.search.onFocus}
             onBlur={header.search.onBlur}
+            onKeyPress={searchFocus.handleSearchKeyPress}
             autoCapitalize="none"
             autoCorrect={false}
             autoFocus={header.search.autoFocus}

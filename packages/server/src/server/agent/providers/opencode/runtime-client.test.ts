@@ -222,3 +222,35 @@ test.each([
   },
   10000,
 );
+
+test("runs opencode models before the catalog read, and skips a server subcommand", async () => {
+  const { mkdtemp, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { OpenCodeRuntimeClient } = await import("./runtime-client.js");
+  const { createTestLogger } = await import("../../../../test-utils/test-logger.js");
+  const root = await mkdtemp(join(tmpdir(), "opencode-models-refresh-"));
+  const script = join(root, "models.cjs");
+  const marker = join(root, "argv.json");
+  await writeFile(
+    script,
+    `const fs = require("node:fs"); fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify(process.argv.slice(1)));`,
+  );
+  const client = new OpenCodeRuntimeClient(createTestLogger(), {
+    command: { mode: "replace", argv: [process.execPath, script] },
+  });
+  const server = new OpenCodeRuntimeClient(createTestLogger(), {
+    command: { mode: "replace", argv: [process.execPath, script, "serve"] },
+  });
+  try {
+    await client.refreshOwnedModelList();
+    expect(JSON.parse(await readFile(marker, "utf8"))).toEqual([script, "models"]);
+    await rm(marker);
+    await server.refreshOwnedModelList();
+    await expect(readFile(marker, "utf8")).rejects.toThrow();
+  } finally {
+    await client.shutdown();
+    await server.shutdown();
+    await rm(root, { recursive: true, force: true });
+  }
+});
