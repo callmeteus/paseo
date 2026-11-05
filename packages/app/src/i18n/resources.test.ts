@@ -679,6 +679,7 @@ describe("translation resources", () => {
       "Add setup commands so new worktrees can install dependencies and prepare themselves automatically.",
     );
     expect(en.sidebar.worktreeSetup.openProjectSettings).toBe("Open project settings");
+    expect(en.sidebar.worktreeSetup.dontShowAgain).toBe("Don't show again");
   });
 
   it("includes remaining small utility chrome keys for the Batch 4O migration", () => {

@@ -187,6 +187,12 @@ export const en = {
       openReview: "Open review attachment",
       removeReview: "Remove review attachment",
     },
+    inlineChip: {
+      pastedWord: "Pasted",
+      line_one: "line",
+      line_other: "lines",
+      mentionLoading: "Loading this chat…",
+    },
     errors: {
       failedToSend: "Failed to send message",
       failedToCreateAgent: "Failed to create agent",
@@ -279,6 +285,13 @@ export const en = {
       title: "Workflow",
       hint: "Change how this chat works",
       selectWithValue: "Select workflow mode ({{value}})",
+      taskTarget: {
+        label: "Tasks",
+        hint: "Each task uses this agent or this CLI.",
+        paseoName: "Paseo agent",
+        paseoDescription: "A Paseo subagent on this chat's CLI.",
+        selectWithValue: "Tasks: {{value}}",
+      },
     },
     hints: {
       thinking: "Thinking mode",
@@ -292,6 +305,12 @@ export const en = {
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",
     messageCapped: "This message was capped ({{bytes}} bytes).",
+    sessionLimit: {
+      reached: "This model's session has hit its limit.",
+      resetsAt:
+        "This model's session has hit its limit and comes back at {{time}}, {{place}} time.",
+      resetsRaw: "This model's session has hit its limit and comes back at {{when}}.",
+    },
     providerError: {
       badge: "Provider error",
       unknownProvider: "Provider",
@@ -581,6 +600,8 @@ export const en = {
       copyPath: "Copy path",
       copyBranchName: "Copy branch name",
       copied: "Copied",
+      local: "Local",
+      remote: "Remote",
     },
     fileActions: {
       openFile: "Open file",
@@ -1392,6 +1413,21 @@ export const en = {
       noHost: "No host",
       switchTitle: "Switch host",
       searchPlaceholder: "Search hosts...",
+      actions: {
+        menu: "Host actions",
+        rename: "Rename host",
+        color: "Color",
+        remove: "Remove host",
+      },
+      confirmations: {
+        removeTitle: "Remove host?",
+        removeMessage: 'Remove "{{name}}" from this device? Its saved connections go with it.',
+        removeLocalMessage:
+          'Remove "{{name}}" from this device? The localhost connection goes, and the built-in daemon stops. Other hosts stay connected.',
+        removeWorkspaces: "This host's workspaces go with it.",
+        removeConfirm: "Remove",
+        cancel: "Cancel",
+      },
     },
     actions: {
       addProject: "Add project",
@@ -1457,6 +1493,7 @@ export const en = {
       description:
         "Add setup commands so new worktrees can install dependencies and prepare themselves automatically.",
       openProjectSettings: "Open project settings",
+      dontShowAgain: "Don't show again",
     },
     project: {
       actions: {
@@ -2298,6 +2335,7 @@ export const en = {
       },
     },
     thought: "Thought",
+    briefly: "briefly",
     editedFiles: {
       one: "edited {{count}} file",
       other: "edited {{count}} files",

@@ -194,6 +194,12 @@ export const fr: TranslationResources = {
       openReview: "Ouvrir la revue jointe",
       removeReview: "Retirer la revue jointe",
     },
+    inlineChip: {
+      pastedWord: "Collé",
+      line_one: "ligne",
+      line_other: "lignes",
+      mentionLoading: "Chargement de cette conversation…",
+    },
     errors: {
       failedToSend: "Impossible d’envoyer le message",
       failedToCreateAgent: "Impossible de créer l’agent",
@@ -288,6 +294,13 @@ export const fr: TranslationResources = {
       title: "Flux",
       hint: "Changer le fonctionnement de ce chat",
       selectWithValue: "Sélectionner le mode de flux ({{value}})",
+      taskTarget: {
+        label: "Tâches",
+        hint: "Chaque tâche utilise cet agent ou ce CLI.",
+        paseoName: "Agent Paseo",
+        paseoDescription: "Sous-agent Paseo, sur le même CLI que ce chat.",
+        selectWithValue: "Tâches : {{value}}",
+      },
     },
     hints: {
       thinking: "Mode de réflexion",
@@ -301,6 +314,12 @@ export const fr: TranslationResources = {
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",
     messageCapped: "Ce message a été tronqué ({{bytes}} octets).",
+    sessionLimit: {
+      reached: "La session de ce modèle a atteint sa limite.",
+      resetsAt:
+        "La session de ce modèle a atteint sa limite et revient à {{time}}, heure de {{place}}.",
+      resetsRaw: "La session de ce modèle a atteint sa limite et revient à {{when}}.",
+    },
     providerError: {
       badge: "Erreur du provider",
       unknownProvider: "Provider",
@@ -595,6 +614,8 @@ export const fr: TranslationResources = {
       copyPath: "Copier le chemin",
       copyBranchName: "Copier le nom de la branche",
       copied: "Copié",
+      local: "Local",
+      remote: "Distant",
     },
     fileActions: {
       openFile: "Ouvrir le fichier",
@@ -1420,6 +1441,22 @@ export const fr: TranslationResources = {
       noHost: "Aucun hôte",
       switchTitle: "Changer d’hôte",
       searchPlaceholder: "Rechercher des hôtes…",
+      actions: {
+        menu: "Actions de l’hôte",
+        rename: "Renommer l’hôte",
+        color: "Couleur",
+        remove: "Retirer l’hôte",
+      },
+      confirmations: {
+        removeTitle: "Retirer l’hôte ?",
+        removeMessage:
+          "Retirer « {{name}} » de cet appareil ? Ses connexions enregistrées partent avec lui.",
+        removeLocalMessage:
+          "Retirer « {{name}} » de cet appareil ? La connexion localhost part et le daemon intégré s’arrête. Les autres hôtes restent connectés.",
+        removeWorkspaces: "Les espaces de travail de cet hôte partent aussi.",
+        removeConfirm: "Retirer",
+        cancel: "Annuler",
+      },
     },
     actions: {
       addProject: "Ajouter un projet",
@@ -1485,6 +1522,7 @@ export const fr: TranslationResources = {
       description:
         "Ajoutez des commandes de configuration pour que les nouveaux worktrees installent leurs dépendances et se préparent automatiquement.",
       openProjectSettings: "Ouvrir les paramètres du projet",
+      dontShowAgain: "Ne plus afficher",
     },
     project: {
       actions: {
@@ -2326,6 +2364,7 @@ export const fr: TranslationResources = {
       },
     },
     thought: "Réflexion",
+    briefly: "un instant",
     editedFiles: {
       one: "{{count}} fichier modifié",
       other: "{{count}} fichiers modifiés",

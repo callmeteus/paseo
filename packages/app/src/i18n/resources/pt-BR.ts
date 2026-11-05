@@ -193,6 +193,12 @@ export const ptBR: TranslationResources = {
       openReview: "Abrir anexo de revisão",
       removeReview: "Remover anexo de revisão",
     },
+    inlineChip: {
+      pastedWord: "Colado",
+      line_one: "linha",
+      line_other: "linhas",
+      mentionLoading: "Carregando esta conversa…",
+    },
     errors: {
       failedToSend: "Falha ao enviar mensagem",
       failedToCreateAgent: "Falha ao criar agente",
@@ -287,6 +293,13 @@ export const ptBR: TranslationResources = {
       title: "Fluxo",
       hint: "Alterar como este chat funciona",
       selectWithValue: "Selecionar modo de fluxo ({{value}})",
+      taskTarget: {
+        label: "Tarefas",
+        hint: "Cada tarefa usa este agente ou este CLI.",
+        paseoName: "Agente do Paseo",
+        paseoDescription: "Subagente do Paseo, no mesmo CLI deste chat.",
+        selectWithValue: "Tarefas: {{value}}",
+      },
     },
     hints: {
       thinking: "Modo de raciocínio",
@@ -300,6 +313,12 @@ export const ptBR: TranslationResources = {
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",
     messageCapped: "Esta mensagem foi truncada ({{bytes}} bytes).",
+    sessionLimit: {
+      reached: "A sessão deste modelo chegou no limite.",
+      resetsAt:
+        "A sessão deste modelo chegou no limite e volta às {{time}} no horário de {{place}}.",
+      resetsRaw: "A sessão deste modelo chegou no limite e volta em {{when}}.",
+    },
     providerError: {
       badge: "Erro do provider",
       unknownProvider: "Provider",
@@ -594,6 +613,8 @@ export const ptBR: TranslationResources = {
       copyPath: "Copiar caminho",
       copyBranchName: "Copiar nome da branch",
       copied: "Copiado",
+      local: "Local",
+      remote: "Remoto",
     },
     fileActions: {
       openFile: "Abrir arquivo",
@@ -1415,6 +1436,21 @@ export const ptBR: TranslationResources = {
       noHost: "Nenhum host",
       switchTitle: "Trocar host",
       searchPlaceholder: "Buscar hosts...",
+      actions: {
+        menu: "Ações do host",
+        rename: "Renomear host",
+        color: "Cor",
+        remove: "Remover host",
+      },
+      confirmations: {
+        removeTitle: "Remover host?",
+        removeMessage: 'Remover "{{name}}" deste dispositivo? As conexões salvas dele saem junto.',
+        removeLocalMessage:
+          'Remover "{{name}}" deste dispositivo? A conexão localhost sai e o daemon integrado para. Os outros hosts continuam conectados.',
+        removeWorkspaces: "Os workspaces deste host também saem.",
+        removeConfirm: "Remover",
+        cancel: "Cancelar",
+      },
     },
     actions: {
       addProject: "Adicionar projeto",
@@ -1480,6 +1516,7 @@ export const ptBR: TranslationResources = {
       description:
         "Adicione comandos de configuração para que novos worktrees instalem dependências e se preparem automaticamente.",
       openProjectSettings: "Abrir configurações do projeto",
+      dontShowAgain: "Não mostrar novamente",
     },
     project: {
       actions: {
@@ -2311,6 +2348,7 @@ export const ptBR: TranslationResources = {
       },
     },
     thought: "Pensei",
+    briefly: "um instante",
     editedFiles: {
       one: "editou {{count}} arquivo",
       other: "editou {{count}} arquivos",

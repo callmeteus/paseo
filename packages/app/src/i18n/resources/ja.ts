@@ -193,6 +193,12 @@ export const ja: TranslationResources = {
       openReview: "レビュー添付ファイルを開く",
       removeReview: "レビュー添付ファイルを削除",
     },
+    inlineChip: {
+      pastedWord: "貼り付け",
+      line_one: "行",
+      line_other: "行",
+      mentionLoading: "このチャットを読み込み中…",
+    },
     errors: {
       failedToSend: "メッセージの送信に失敗しました",
       failedToCreateAgent: "エージェントの作成に失敗しました",
@@ -286,6 +292,13 @@ export const ja: TranslationResources = {
       title: "ワークフロー",
       hint: "このチャットの動作を変更",
       selectWithValue: "ワークフローモードを選択 ({{value}})",
+      taskTarget: {
+        label: "タスク",
+        hint: "各タスクはこのエージェントかこの CLI を使います。",
+        paseoName: "Paseo エージェント",
+        paseoDescription: "このチャットと同じ CLI の Paseo サブエージェント。",
+        selectWithValue: "タスク: {{value}}",
+      },
     },
     hints: {
       thinking: "思考モード",
@@ -299,6 +312,11 @@ export const ja: TranslationResources = {
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
     messageCapped: "このメッセージは上限で切り詰められました（{{bytes}}バイト）。",
+    sessionLimit: {
+      reached: "このモデルのセッションは上限に達しました。",
+      resetsAt: "このモデルのセッションは上限に達しました。{{place}}時間の{{time}}に戻ります。",
+      resetsRaw: "このモデルのセッションは上限に達しました。戻りは {{when}} です。",
+    },
     providerError: {
       badge: "Provider エラー",
       unknownProvider: "Provider",
@@ -596,6 +614,8 @@ export const ja: TranslationResources = {
       copyPath: "パスをコピー",
       copyBranchName: "ブランチ名をコピー",
       copied: "コピーしました",
+      local: "ローカル",
+      remote: "リモート",
     },
     fileActions: {
       openFile: "ファイルを開く",
@@ -1403,6 +1423,22 @@ export const ja: TranslationResources = {
       noHost: "ホストなし",
       switchTitle: "ホストを切り替え",
       searchPlaceholder: "ホストを検索...",
+      actions: {
+        menu: "ホストの操作",
+        rename: "ホストの名前を変更",
+        color: "色",
+        remove: "ホストを削除",
+      },
+      confirmations: {
+        removeTitle: "ホストを削除しますか？",
+        removeMessage:
+          "「{{name}}」をこのデバイスから削除しますか？保存済みの接続も一緒に外れます。",
+        removeLocalMessage:
+          "「{{name}}」をこのデバイスから削除しますか？localhost の接続が外れ、組み込みデーモンが停止します。他のホストは接続されたままです。",
+        removeWorkspaces: "このホストのワークスペースも一緒に外れます。",
+        removeConfirm: "削除",
+        cancel: "キャンセル",
+      },
     },
     actions: {
       addProject: "プロジェクトを追加",
@@ -1469,6 +1505,7 @@ export const ja: TranslationResources = {
       description:
         "新しいワークツリーが依存関係をインストールして自動的に準備できるようにセットアップコマンドを追加してください。",
       openProjectSettings: "プロジェクト設定を開く",
+      dontShowAgain: "今後表示しない",
     },
     project: {
       actions: {
@@ -2299,6 +2336,7 @@ export const ja: TranslationResources = {
       },
     },
     thought: "思考",
+    briefly: "一瞬",
     editedFiles: {
       one: "{{count}}個のファイルを編集",
       other: "{{count}}個のファイルを編集",

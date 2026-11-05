@@ -191,6 +191,12 @@ export const ar: TranslationResources = {
       openReview: "فتح مرفق المراجعة",
       removeReview: "إزالة مرفق المراجعة",
     },
+    inlineChip: {
+      pastedWord: "تم اللصق",
+      line_one: "سطر",
+      line_other: "أسطر",
+      mentionLoading: "جارٍ تحميل هذه المحادثة…",
+    },
     errors: {
       failedToSend: "فشل في إرسال الرسالة",
       failedToCreateAgent: "فشل في إنشاء الوكيل",
@@ -283,6 +289,13 @@ export const ar: TranslationResources = {
       title: "سير العمل",
       hint: "تغيير طريقة عمل هذه المحادثة",
       selectWithValue: "اختيار وضع سير العمل ({{value}})",
+      taskTarget: {
+        label: "المهام",
+        hint: "تستخدم كل مهمة هذا الوكيل أو واجهة الأوامر هذه.",
+        paseoName: "وكيل Paseo",
+        paseoDescription: "وكيل فرعي من Paseo على واجهة الأوامر نفسها لهذه المحادثة.",
+        selectWithValue: "المهام: {{value}}",
+      },
     },
     hints: {
       thinking: "وضع التفكير",
@@ -296,6 +309,11 @@ export const ar: TranslationResources = {
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",
     messageCapped: "تم اقتطاع هذه الرسالة ({{bytes}} بايت).",
+    sessionLimit: {
+      reached: "بلغت جلسة هذا النموذج حدها.",
+      resetsAt: "بلغت جلسة هذا النموذج حدها وتعود عند {{time}} بتوقيت {{place}}.",
+      resetsRaw: "بلغت جلسة هذا النموذج حدها وتعود عند {{when}}.",
+    },
     providerError: {
       badge: "خطأ في provider",
       unknownProvider: "Provider",
@@ -584,6 +602,8 @@ export const ar: TranslationResources = {
       copyPath: "نسخ المسار",
       copyBranchName: "نسخ اسم الفرع",
       copied: "تم النسخ",
+      local: "محلي",
+      remote: "بعيد",
     },
     fileActions: {
       openFile: "افتح الملف",
@@ -1383,6 +1403,21 @@ export const ar: TranslationResources = {
       noHost: "لا مضيف",
       switchTitle: "تبديل المضيف",
       searchPlaceholder: "بحث عن المضيفين...",
+      actions: {
+        menu: "إجراءات المضيف",
+        rename: "إعادة تسمية المضيف",
+        color: "اللون",
+        remove: "إزالة المضيف",
+      },
+      confirmations: {
+        removeTitle: "هل تريد إزالة المضيف؟",
+        removeMessage: 'هل تريد إزالة "{{name}}" من هذا الجهاز؟ اتصالاته المحفوظة تغادر معه.',
+        removeLocalMessage:
+          'هل تريد إزالة "{{name}}" من هذا الجهاز؟ اتصال localhost يغادر ويتوقف البرنامج الخفي المدمج. تبقى المضيفات الأخرى متصلة.',
+        removeWorkspaces: "مساحات عمل هذا المضيف تغادر أيضاً.",
+        removeConfirm: "إزالة",
+        cancel: "إلغاء",
+      },
     },
     actions: {
       addProject: "إضافة مشروع",
@@ -1447,6 +1482,7 @@ export const ar: TranslationResources = {
       description:
         "أضف أوامر الإعداد حتى تتمكن أشجار العمل الجديدة من تثبيت التبعيات وإعداد نفسها تلقائيًا.",
       openProjectSettings: "افتح إعدادات المشروع",
+      dontShowAgain: "عدم الإظهار مرة أخرى",
     },
     project: {
       actions: {
@@ -2270,6 +2306,7 @@ export const ar: TranslationResources = {
       },
     },
     thought: "تفكير",
+    briefly: "للحظة",
     editedFiles: {
       one: "حرّر {{count}} ملفًا",
       other: "حرّر {{count}} ملفات",

@@ -192,6 +192,12 @@ export const ko: TranslationResources = {
       openReview: "리뷰 첨부 열기",
       removeReview: "리뷰 첨부 제거",
     },
+    inlineChip: {
+      pastedWord: "붙여넣음",
+      line_one: "줄",
+      line_other: "줄",
+      mentionLoading: "이 채팅을 불러오는 중…",
+    },
     errors: {
       failedToSend: "메시지를 보내지 못했습니다",
       failedToCreateAgent: "에이전트를 생성하지 못했습니다",
@@ -284,6 +290,13 @@ export const ko: TranslationResources = {
       title: "워크플로",
       hint: "이 채팅의 작동 방식 변경",
       selectWithValue: "워크플로 모드 선택 ({{value}})",
+      taskTarget: {
+        label: "작업",
+        hint: "각 작업은 이 에이전트나 이 CLI를 사용합니다.",
+        paseoName: "Paseo 에이전트",
+        paseoDescription: "이 채팅과 같은 CLI의 Paseo 하위 에이전트.",
+        selectWithValue: "작업: {{value}}",
+      },
     },
     hints: {
       thinking: "사고 모드",
@@ -297,6 +310,11 @@ export const ko: TranslationResources = {
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",
     messageCapped: "이 메시지는 길이 제한으로 잘렸습니다({{bytes}}바이트).",
+    sessionLimit: {
+      reached: "이 모델의 세션이 한도에 도달했습니다.",
+      resetsAt: "이 모델의 세션이 한도에 도달했고 {{place}} 시간 {{time}}에 돌아옵니다.",
+      resetsRaw: "이 모델의 세션이 한도에 도달했고 {{when}}에 돌아옵니다.",
+    },
     providerError: {
       badge: "Provider 오류",
       unknownProvider: "Provider",
@@ -589,6 +607,8 @@ export const ko: TranslationResources = {
       copyPath: "경로 복사",
       copyBranchName: "브랜치 이름 복사",
       copied: "복사됨",
+      local: "로컬",
+      remote: "원격",
     },
     fileActions: {
       openFile: "파일 열기",
@@ -1394,6 +1414,21 @@ export const ko: TranslationResources = {
       noHost: "호스트 없음",
       switchTitle: "호스트 전환",
       searchPlaceholder: "호스트 검색...",
+      actions: {
+        menu: "호스트 작업",
+        rename: "호스트 이름 바꾸기",
+        color: "색",
+        remove: "호스트 제거",
+      },
+      confirmations: {
+        removeTitle: "호스트를 제거할까요?",
+        removeMessage: '"{{name}}"을(를) 이 기기에서 제거할까요? 저장된 연결도 함께 사라집니다.',
+        removeLocalMessage:
+          '"{{name}}"을(를) 이 기기에서 제거할까요? localhost 연결이 사라지고 내장 데몬이 멈춥니다. 다른 호스트는 연결된 채로 있습니다.',
+        removeWorkspaces: "이 호스트의 워크스페이스도 함께 사라집니다.",
+        removeConfirm: "제거",
+        cancel: "취소",
+      },
     },
     actions: {
       addProject: "프로젝트 추가",
@@ -1458,6 +1493,7 @@ export const ko: TranslationResources = {
       description:
         "새 워크트리가 의존성을 설치하고 자동으로 준비될 수 있도록 설정 명령을 추가하세요.",
       openProjectSettings: "프로젝트 설정 열기",
+      dontShowAgain: "다시 표시하지 않기",
     },
     project: {
       actions: {
@@ -2284,6 +2320,7 @@ export const ko: TranslationResources = {
       },
     },
     thought: "사고",
+    briefly: "잠시",
     editedFiles: {
       one: "{{count}} 파일을 편집했습니다.",
       other: "{{count}} 파일을 편집했습니다.",
