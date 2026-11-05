@@ -1884,6 +1884,7 @@ export const ja: TranslationResources = {
     defaultModel: "デフォルト",
     profiles: "プロファイル",
     routers: "ルーター",
+    searchRouters: "ルーターを検索",
     providers: "プロバイダー",
     model: "モデル",
     editProfiles: "編集",

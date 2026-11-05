@@ -1910,6 +1910,7 @@ export const es: TranslationResources = {
     defaultModel: "Por defecto",
     profiles: "Perfiles",
     routers: "Enrutadores",
+    searchRouters: "Buscar enrutadores",
     providers: "Proveedores",
     model: "Modelo",
     editProfiles: "Editar",

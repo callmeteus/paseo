@@ -1887,6 +1887,7 @@ export const en = {
     defaultModel: "Default",
     profiles: "Profiles",
     routers: "Routers",
+    searchRouters: "Search routers",
     providers: "Providers",
     model: "Model",
     editProfiles: "Edit",

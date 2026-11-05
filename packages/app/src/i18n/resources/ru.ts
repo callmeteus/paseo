@@ -1893,6 +1893,7 @@ export const ru: TranslationResources = {
     defaultModel: "По умолчанию",
     profiles: "Профили",
     routers: "Роутеры",
+    searchRouters: "Поиск роутеров",
     providers: "Провайдеры",
     model: "Модель",
     editProfiles: "Изменить",

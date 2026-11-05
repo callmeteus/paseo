@@ -295,7 +295,7 @@ export function CombinedModelSelector({
         desktopFixedHeight={browser.desktopFixedHeight}
         desktopChildrenScrollEnabled={false}
         header={browser.header}
-        mobileChildrenScrollEnabled={!browser.isProviderView || !isNative}
+        mobileChildrenScrollEnabled={!browser.isDrillDownView || !isNative}
         mobileChildrenContentContainerStyle={styles.mobileBrowserContent}
       >
         {selectorBody}

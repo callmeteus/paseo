@@ -1873,6 +1873,7 @@ export const ko: TranslationResources = {
     defaultModel: "기본값",
     profiles: "프로필",
     routers: "라우터",
+    searchRouters: "라우터 검색",
     providers: "제공자",
     model: "모델",
     editProfiles: "편집",

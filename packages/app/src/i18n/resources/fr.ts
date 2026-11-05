@@ -1912,6 +1912,7 @@ export const fr: TranslationResources = {
     defaultModel: "Par défaut",
     profiles: "Profils",
     routers: "Routeurs",
+    searchRouters: "Rechercher des routeurs",
     providers: "Fournisseurs",
     model: "Modèle",
     editProfiles: "Modifier",

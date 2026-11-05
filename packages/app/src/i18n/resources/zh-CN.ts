@@ -1841,6 +1841,7 @@ export const zhCN: TranslationResources = {
     defaultModel: "默认",
     profiles: "配置文件",
     routers: "路由器",
+    searchRouters: "搜索路由器",
     providers: "提供方",
     model: "模型",
     editProfiles: "编辑",

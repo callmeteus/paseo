@@ -1859,6 +1859,7 @@ export const ar: TranslationResources = {
     defaultModel: "تقصير",
     profiles: "الملفات الشخصية",
     routers: "الموجّهات",
+    searchRouters: "البحث في الموجهات",
     providers: "المزودون",
     model: "النموذج",
     editProfiles: "تحرير",

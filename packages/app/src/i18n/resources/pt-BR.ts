@@ -1898,6 +1898,7 @@ export const ptBR: TranslationResources = {
     defaultModel: "Padrão",
     profiles: "Perfis",
     routers: "Roteadores",
+    searchRouters: "Buscar roteadores",
     providers: "Provedores",
     model: "Modelo",
     editProfiles: "Editar",
