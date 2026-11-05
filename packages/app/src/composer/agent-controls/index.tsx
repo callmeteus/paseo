@@ -1549,11 +1549,17 @@ function SheetFeatureItem({
   );
   const sheetHeader = useMemo<SheetHeader>(() => ({ title: feature.label }), [feature.label]);
 
+  const handleTogglePress = useCallback(() => {
+    if (feature.type === "toggle") {
+      onSetFeature?.(feature.id, !feature.value);
+    }
+  }, [feature, onSetFeature]);
+
   const handleSelectOption = useCallback(
     (optionId: string) => {
-      onSetFeature?.(feature.id, feature.type === "toggle" ? optionId === "true" : optionId);
+      onSetFeature?.(feature.id, optionId);
     },
-    [feature.id, feature.type, onSetFeature],
+    [feature.id, onSetFeature],
   );
   const comboboxOptions = useMemo<ComboboxOption[]>(() => {
     if (feature.type === "select") {
@@ -1568,36 +1574,17 @@ function SheetFeatureItem({
   if (feature.type === "toggle") {
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     return (
-      <>
-        <AgentControlTrigger
-          ref={featureAnchorRef}
-          icon={FeatureIcon}
-          iconColor={getFeatureIconColor(
-            feature,
-            theme.colors.palette,
-            theme.colors.foregroundMuted,
-          )}
-          surface="sheet"
-          label={feature.label}
-          value={feature.value ? t("agentControls.features.on") : t("agentControls.features.off")}
-          open={openSelector === featureSelector}
-          disabled={disabled}
-          onPress={handleSelectPress}
-          accessibilityLabel={getFeatureTooltip(feature)}
-          testID={`agent-feature-${feature.id}`}
-        />
-        <Combobox
-          options={comboboxOptions}
-          value={String(feature.value)}
-          onSelect={handleSelectOption}
-          open={openSelector === featureSelector}
-          onOpenChange={handleFeatureOpenChange}
-          anchorRef={featureAnchorRef}
-          presentation="push"
-          searchable={false}
-          header={sheetHeader}
-        />
-      </>
+      <AgentControlTrigger
+        icon={FeatureIcon}
+        iconColor={getFeatureIconColor(feature, theme.colors.palette, theme.colors.foregroundMuted)}
+        surface="sheet"
+        label={feature.label}
+        value={feature.value ? t("agentControls.features.on") : t("agentControls.features.off")}
+        disabled={disabled}
+        onPress={handleTogglePress}
+        accessibilityLabel={getFeatureTooltip(feature)}
+        testID={`agent-feature-${feature.id}`}
+      />
     );
   }
 

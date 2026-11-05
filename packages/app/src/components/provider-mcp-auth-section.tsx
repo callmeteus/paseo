@@ -185,7 +185,8 @@ export function ProviderMcpAuthSection({
     void refresh();
   }, [refresh]);
 
-  if (!supported || (!isLoading && servers.length === 0 && !error)) return null;
+  if (!supported) return null;
+  if (!isLoading && servers.length === 0 && !error && provider !== "cursor") return null;
 
   return (
     <View style={stylesheet.section}>

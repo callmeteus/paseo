@@ -778,6 +778,8 @@ export interface ACPConfigFeatureOption {
   tooltip?: string;
   icon?: string;
   emptyOptionLabel?: string;
+  /** Render a two-choice config option as a one-click boolean toggle. */
+  toggle?: boolean;
 }
 
 export type SelectConfigOption = Extract<SessionConfigOption, { type: "select" }>;
@@ -943,10 +945,30 @@ export function deriveFeaturesFromACP(
   configOptions: SessionConfigOption[] | null | undefined,
   featureOptions: ACPConfigFeatureOption[],
 ): AgentFeature[] {
-  return featureOptions.flatMap((featureOption) => {
+  return featureOptions.flatMap((featureOption): AgentFeature[] => {
     const option = findSelectConfigFeatureOption(configOptions, featureOption);
     if (!option) {
       return [];
+    }
+
+    if (featureOption.toggle) {
+      const choices = flattenSelectOptions(option.options);
+      const hasOnOff =
+        choices.some((choice) => choice.value === "true") &&
+        choices.some((choice) => choice.value === "false");
+      if (hasOnOff) {
+        return [
+          {
+            type: "toggle",
+            id: featureOption.id,
+            label: featureOption.label,
+            description: featureOption.description,
+            tooltip: featureOption.tooltip,
+            icon: featureOption.icon,
+            value: option.currentValue === "true",
+          },
+        ];
+      }
     }
 
     return [
@@ -2652,6 +2674,35 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const option = findSelectConfigFeatureOption(this.configOptions, featureOption);
     if (!option) {
       throw new Error(this.featureUnavailableMessage(featureId));
+    }
+
+    if (featureOption.toggle) {
+      const requestedValue = value === true || value === "true" ? "true" : "false";
+      if (!findSelectConfigChoice({ option, value: requestedValue })) {
+        throw new Error(
+          `${this.provider} feature '${featureId}' does not include option '${requestedValue}'`,
+        );
+      }
+      const { connection, sessionId } = this;
+      const response = await this.runACPRequest(() =>
+        connection.setSessionConfigOption({
+          sessionId,
+          configId: option.id,
+          value: requestedValue,
+        }),
+      );
+      const currentValue = this.applyConfigOptionResponse({
+        response,
+        configId: option.id,
+        category: featureOption.category,
+        requestedValue,
+        label: featureOption.label,
+      });
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        [featureId]: currentValue === "true",
+      };
+      return;
     }
 
     const requestedValue = normalizeConfigFeatureValue(value);

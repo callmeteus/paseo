@@ -29,6 +29,7 @@ import {
   type SessionStateResponse,
   buildACPClientCapabilities,
   createLoggedNdJsonStream,
+  deriveFeaturesFromACP,
   deriveModelDefinitionsFromACP,
   deriveModesFromACP,
   mapACPUsage,
@@ -2342,6 +2343,36 @@ describe("ACPAgentClient config features", () => {
           expect.objectContaining({ id: "Probe Agent", label: "Probe Agent", isDefault: true }),
         ],
       }),
+    ]);
+  });
+
+  test("derives a one-click toggle from a two-choice boolean config option", () => {
+    expect(
+      deriveFeaturesFromACP(
+        [
+          {
+            id: "fast",
+            name: "Fast",
+            type: "select",
+            currentValue: "true",
+            options: [
+              { value: "false", name: "Off" },
+              { value: "true", name: "On" },
+            ],
+          },
+        ],
+        [{ id: "fast", configId: "fast", label: "Fast", toggle: true }],
+      ),
+    ).toEqual([
+      {
+        type: "toggle",
+        id: "fast",
+        label: "Fast",
+        description: undefined,
+        tooltip: undefined,
+        icon: undefined,
+        value: true,
+      },
     ]);
   });
 });
