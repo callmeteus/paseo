@@ -58,6 +58,10 @@ export class OpenCodeV2Session implements AgentSession {
   private closed = false;
   private history: SessionMessageInfo[] = [];
   private modes: AgentMode[] = [];
+  /** Title the session was opened with. A later OpenCode title is what we publish. */
+  private baselineTitle: string | null = null;
+  private titleListener: ((title: string) => void) | null = null;
+  private lastPublishedTitle: string | null = null;
   constructor(
     private connection: V2Connection,
     private info: SessionInfo,
@@ -70,6 +74,8 @@ export class OpenCodeV2Session implements AgentSession {
     private readonly acquire?: () => Promise<V2Connection>,
     private readonly moved?: (connection: V2Connection) => void,
   ) {
+    const openedWith = config.title?.trim() ?? "";
+    this.baselineTitle = openedWith.length > 0 ? openedWith : null;
     this.permissions = new SessionPermissions(
       () => this.client,
       info.id,
@@ -266,6 +272,7 @@ export class OpenCodeV2Session implements AgentSession {
   async getRuntimeInfo() {
     await this.reconnectIfExited();
     this.info = await this.client.session.get({ sessionID: this.id });
+    this.publishSessionTitle(this.info.title);
     return {
       provider: "opencode",
       sessionId: this.id,
@@ -386,12 +393,31 @@ export class OpenCodeV2Session implements AgentSession {
     return commands(this.client, this.config.cwd);
   }
   describePersistence(): AgentPersistenceHandle {
+    const title = this.info.title?.trim();
     return {
       provider: "opencode",
       sessionId: this.id,
       nativeHandle: this.id,
-      metadata: { ...this.config },
+      metadata: {
+        ...this.config,
+        ...(title ? { title } : {}),
+      },
     };
+  }
+  /**
+   * Reports an OpenCode session title that replaced the prompt the session
+   * started with.
+   */
+  observeSessionTitle(listener: (title: string) => void): void {
+    this.titleListener = listener;
+    this.publishSessionTitle(this.info.title);
+  }
+  private publishSessionTitle(title: string | null | undefined): void {
+    const normalized = title?.trim() ?? "";
+    if (!normalized || !this.titleListener || normalized === this.baselineTitle) return;
+    if (normalized === this.lastPublishedTitle) return;
+    this.lastPublishedTitle = normalized;
+    this.titleListener(normalized);
   }
   run(prompt: AgentPromptInput, options?: AgentRunOptions) {
     return runProviderTurn({
@@ -440,6 +466,7 @@ export class OpenCodeV2Session implements AgentSession {
       messages(this.client, this.id),
     ]);
     this.info = info;
+    this.publishSessionTitle(info.title);
     this.history = history;
     for (const event of this.timeline.messages(history)) this.emitTimeline(event);
     await this.permissions.reconcile(this.id);
@@ -575,7 +602,10 @@ export class OpenCodeV2Session implements AgentSession {
           { ...(cursor ? { cursor } : { parentID: info.id }), limit: 100 },
           request,
         );
-        for (const child of page.data) family.set(child.id, child);
+        for (const child of page.data) {
+          if (child.parentID !== info.id) continue;
+          family.set(child.id, child);
+        }
         cursor = page.cursor.next ?? undefined;
       } while (cursor);
     }

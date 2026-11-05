@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CRASH_PATTERN } from "./provider-error.js";
 
 /**
  * Model routers group several provider+model targets behind one choice.
@@ -144,17 +145,15 @@ const RETRYABLE_FAILURE_PATTERN =
 /**
  * A provider process that died mid-turn (helper crashed, transport dropped) is
  * a transient local failure: retry the same provider instead of porting away.
+ * The terms are `CRASH_PATTERN`, the same list the error card classifies.
  */
-const PROVIDER_CRASH_PATTERN =
-  /(helper server exited|process exited|exited \(\d+\)|transport|econnreset|epipe|socket hang up|connection reset|terminated unexpectedly)/i;
-
 export function isProviderCrashFailure(input: {
   error?: string | null;
   code?: string | null;
   diagnostic?: string | null;
 }): boolean {
   const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
-  return text.length > 0 && PROVIDER_CRASH_PATTERN.test(text);
+  return text.length > 0 && CRASH_PATTERN.test(text);
 }
 
 /**
