@@ -2867,7 +2867,17 @@ export const zhCN: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "移除此主机，然后使用此守护进程要求的密码重新添加。",
+        requiredTitle: "需要密码",
+        incorrectTitle: "密码错误",
+        guidance: "输入此主机要求的密码以连接。",
+        label: "主机密码",
+        placeholder: "密码",
+        connect: "连接",
+        connecting: "正在连接...",
+        empty: "请输入密码。",
+        show: "显示密码",
+        hide: "隐藏密码",
+        failed: "无法连接。请检查密码后重试。",
       },
       appearance: {
         title: "外观",

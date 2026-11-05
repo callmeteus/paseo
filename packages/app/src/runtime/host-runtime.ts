@@ -154,6 +154,21 @@ export interface HostRuntimeSnapshot {
   connectionEpoch: number;
 }
 
+export type HostAuthFailureReason = "password_required" | "incorrect_password";
+
+export function getHostAuthFailureReason(
+  snapshot: HostRuntimeSnapshot | null | undefined,
+): HostAuthFailureReason | null {
+  const reason = snapshot?.authFailureReason;
+  if (reason === "password_required" || reason === "incorrect_password") {
+    return reason;
+  }
+  const message = snapshot?.lastError?.trim().toLowerCase() ?? "";
+  if (message.includes("incorrect password")) return "incorrect_password";
+  if (message.includes("password required")) return "password_required";
+  return null;
+}
+
 type HostRuntimeSnapshotPatch = Partial<Omit<HostRuntimeSnapshot, "serverId" | "clientGeneration">>;
 
 function setSnapshotPatchField<Key extends keyof HostRuntimeSnapshotPatch>(
@@ -1082,6 +1097,13 @@ export class HostRuntimeController {
           await this.switchToConnection({
             connectionId: nextConnectionId,
             expectedProbeVersion: requestVersion,
+          });
+        } else if (probeAuthFailure) {
+          const message = new DaemonAuthenticationError(probeAuthFailure).message;
+          this.applyConnectionEvent({ type: "connect_failed", message });
+          this.updateSnapshot({
+            ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
+            authFailureReason: probeAuthFailure,
           });
         }
         this.switchCandidateConnectionId = null;
@@ -3328,6 +3350,15 @@ export function useHostRuntimeLastError(serverId: string): string | null {
   );
 }
 
+export function useHostRuntimeAuthFailureReason(serverId: string): HostAuthFailureReason | null {
+  const store = getHostRuntimeStore();
+  return useSyncExternalStore(
+    (onStoreChange) => store.subscribe(serverId, onStoreChange),
+    () => getHostAuthFailureReason(store.getSnapshot(serverId)),
+    () => getHostAuthFailureReason(store.getSnapshot(serverId)),
+  );
+}
+
 export function useHostRuntimeAgentDirectoryStatus(
   serverId: string,
 ): HostRuntimeAgentDirectoryStatus {
@@ -3421,6 +3452,7 @@ export interface HostMutations {
   }) => Promise<{ profile: HostProfile; serverId: string; hostname: string | null }>;
   beginLinkPairing: () => LinkPairing;
   renameHost: (serverId: string, label: string) => Promise<void>;
+  setHostPassword: (serverId: string, password: string) => Promise<void>;
   setHostColor: (serverId: string, color: HostColor) => Promise<void>;
   setHostBadgeDisplay: (serverId: string, badgeDisplay: HostBadgeDisplay) => Promise<void>;
   removeHost: (serverId: string) => Promise<void>;
@@ -3436,6 +3468,7 @@ export function useHostMutations(): HostMutations {
       probeAndUpsertRemoteSshConnection: (input) => store.probeAndUpsertRemoteSshConnection(input),
       beginLinkPairing: () => store.beginLinkPairing(),
       renameHost: (serverId, label) => store.renameHost(serverId, label),
+      setHostPassword: (serverId, password) => store.setHostPassword(serverId, password),
       setHostColor: (serverId, color) => store.setHostColor(serverId, color),
       setHostBadgeDisplay: (serverId, badgeDisplay) =>
         store.setHostBadgeDisplay(serverId, badgeDisplay),

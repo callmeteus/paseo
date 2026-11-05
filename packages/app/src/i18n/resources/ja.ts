@@ -2930,8 +2930,17 @@ export const ja: TranslationResources = {
     },
     host: {
       password: {
-        guidance:
-          "このホストを削除し、このデーモンが求めるパスワードを入力して追加し直してください。",
+        requiredTitle: "パスワードが必要です",
+        incorrectTitle: "パスワードが正しくありません",
+        guidance: "接続するには、このホストが要求するパスワードを入力してください。",
+        label: "ホストのパスワード",
+        placeholder: "パスワード",
+        connect: "接続",
+        connecting: "接続中...",
+        empty: "パスワードを入力してください。",
+        show: "パスワードを表示",
+        hide: "パスワードを隠す",
+        failed: "接続できませんでした。パスワードを確認して再試行してください。",
       },
       appearance: {
         title: "外観",

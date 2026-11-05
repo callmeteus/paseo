@@ -2964,8 +2964,17 @@ export const fr: TranslationResources = {
     },
     host: {
       password: {
-        guidance:
-          "Supprimez cet hôte puis ajoutez-le à nouveau avec le mot de passe demandé par ce daemon.",
+        requiredTitle: "Mot de passe requis",
+        incorrectTitle: "Mot de passe incorrect",
+        guidance: "Saisissez le mot de passe demandé par cet hôte pour vous connecter.",
+        label: "Mot de passe de l’hôte",
+        placeholder: "Mot de passe",
+        connect: "Se connecter",
+        connecting: "Connexion...",
+        empty: "Saisissez le mot de passe.",
+        show: "Afficher le mot de passe",
+        hide: "Masquer le mot de passe",
+        failed: "Connexion impossible. Vérifiez le mot de passe et réessayez.",
       },
       appearance: {
         title: "Apparence",

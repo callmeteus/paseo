@@ -2959,7 +2959,17 @@ export const es: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "Elimina este host y vuelve a añadirlo con la contraseña que pide este daemon.",
+        requiredTitle: "Se requiere contraseña",
+        incorrectTitle: "Contraseña incorrecta",
+        guidance: "Introduce la contraseña que pide este host para conectarte.",
+        label: "Contraseña del host",
+        placeholder: "Contraseña",
+        connect: "Conectar",
+        connecting: "Conectando...",
+        empty: "Introduce la contraseña.",
+        show: "Mostrar contraseña",
+        hide: "Ocultar contraseña",
+        failed: "No se pudo conectar. Comprueba la contraseña e inténtalo de nuevo.",
       },
       appearance: {
         title: "Apariencia",

@@ -112,6 +112,7 @@ import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { useVisibleAgentIds } from "./visible-agent-ids";
 import {
+  getHostAuthFailureReason,
   getHostRuntimeStore,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
@@ -1067,6 +1068,7 @@ function WorkspaceScreenContent({
 
   const client = useHostRuntimeClient(normalizedServerId);
   const isConnected = useHostRuntimeIsConnected(normalizedServerId);
+  const hostRuntimeSnapshot = useHostRuntimeSnapshot(normalizedServerId);
   const supportsProvidersSnapshot = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
@@ -3218,6 +3220,8 @@ function WorkspaceScreenContent({
 
   const workspaceScreenGate = renderWorkspaceRouteGate({
     state: workspaceRouteState,
+    serverId: normalizedServerId,
+    authFailureReason: getHostAuthFailureReason(hostRuntimeSnapshot),
     actions: {
       onRetryHost: handleRetryHost,
       onManageHost: handleManageHost,

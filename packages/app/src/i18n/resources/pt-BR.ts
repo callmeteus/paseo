@@ -2941,7 +2941,17 @@ export const ptBR: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "Remova este host e adicione-o novamente com a senha que este daemon pede.",
+        requiredTitle: "Senha necessária",
+        incorrectTitle: "Senha incorreta",
+        guidance: "Digite a senha que este host pede para conectar.",
+        label: "Senha do host",
+        placeholder: "Senha",
+        connect: "Conectar",
+        connecting: "Conectando...",
+        empty: "Digite a senha.",
+        show: "Mostrar senha",
+        hide: "Ocultar senha",
+        failed: "Não foi possível conectar. Confira a senha e tente novamente.",
       },
       appearance: {
         title: "Aparência",

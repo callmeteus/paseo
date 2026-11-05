@@ -2911,7 +2911,17 @@ export const ko: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "이 호스트를 제거한 뒤 이 데몬이 요구하는 비밀번호로 다시 추가하세요.",
+        requiredTitle: "비밀번호 필요",
+        incorrectTitle: "잘못된 비밀번호",
+        guidance: "연결하려면 이 호스트가 요구하는 비밀번호를 입력하세요.",
+        label: "호스트 비밀번호",
+        placeholder: "비밀번호",
+        connect: "연결",
+        connecting: "연결 중...",
+        empty: "비밀번호를 입력하세요.",
+        show: "비밀번호 표시",
+        hide: "비밀번호 숨기기",
+        failed: "연결하지 못했습니다. 비밀번호를 확인하고 다시 시도하세요.",
       },
       appearance: {
         title: "모양",

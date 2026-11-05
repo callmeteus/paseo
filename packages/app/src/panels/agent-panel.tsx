@@ -24,6 +24,7 @@ import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
+import { HostPasswordPrompt } from "@/components/host-password-prompt";
 import { ComposerDock } from "@/composer/dock";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { useRetainedPanelActive } from "@/components/retained-panel";
@@ -70,6 +71,7 @@ import { useHasPluginComposerPills } from "@/plugins";
 import { buildDraftPanelDescriptor } from "@/panels/draft-panel-descriptor";
 import {
   type HostRuntimeConnectionStatus,
+  useHostRuntimeAuthFailureReason,
   useHostRuntimeClient,
   useHostRuntimeConnectionStatus,
   useHostRuntimeIsConnected,
@@ -492,6 +494,7 @@ function AgentPanelContent({
   const runtimeIsConnected = useHostRuntimeIsConnected(runtimeServerId);
   const runtimeConnectionStatus = useHostRuntimeConnectionStatus(runtimeServerId);
   const runtimeLastError = useHostRuntimeLastError(runtimeServerId);
+  const runtimeAuthFailureReason = useHostRuntimeAuthFailureReason(runtimeServerId);
   const hasCachedAgent = useSessionStore((state) => {
     if (!resolvedServerId || !resolvedAgentId) return false;
     const session = state.sessions[resolvedServerId];
@@ -516,8 +519,10 @@ function AgentPanelContent({
   if (!resolvedServerId || (!runtimeClient && !hasCachedAgent)) {
     return (
       <AgentSessionUnavailableState
+        serverId={connectionServerId}
         serverLabel={serverLabel}
         connectionStatus={connectionStatus}
+        authFailureReason={runtimeAuthFailureReason}
         lastError={lastConnectionError}
         isUnknownDaemon={isUnknownDaemon}
         t={t}
@@ -1691,14 +1696,18 @@ function ActiveAgentComposer({
 }
 
 function AgentSessionUnavailableState({
+  serverId,
   serverLabel,
   connectionStatus,
+  authFailureReason,
   lastError,
   isUnknownDaemon = false,
   t,
 }: {
+  serverId?: string | null;
   serverLabel: string;
   connectionStatus: HostRuntimeConnectionStatus;
+  authFailureReason: "password_required" | "incorrect_password" | null;
   lastError: string | null;
   isUnknownDaemon?: boolean;
   t: TFunction;
@@ -1711,6 +1720,18 @@ function AgentSessionUnavailableState({
             {t("agentPanel.unavailable.unknownHost", { serverLabel })}
           </Text>
           <Text style={styles.statusText}>{t("agentPanel.unavailable.addHost")}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (serverId && authFailureReason) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerState}>
+          <View style={styles.passwordPrompt}>
+            <HostPasswordPrompt serverId={serverId} testID="agent-panel-password" />
+          </View>
         </View>
       </View>
     );
@@ -1858,6 +1879,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     paddingHorizontal: theme.spacing[6],
     gap: theme.spacing[3],
+  },
+  passwordPrompt: {
+    width: "100%",
+    maxWidth: 420,
   },
   errorContainer: {
     flex: 1,

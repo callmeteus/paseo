@@ -3023,7 +3023,17 @@ export const en = {
     },
     host: {
       password: {
-        guidance: "Remove this host and add it again with the password this daemon asks for.",
+        requiredTitle: "Password required",
+        incorrectTitle: "Incorrect password",
+        guidance: "Enter the password this host asks for to connect.",
+        label: "Host password",
+        placeholder: "Password",
+        connect: "Connect",
+        connecting: "Connecting...",
+        empty: "Enter the password.",
+        show: "Show password",
+        hide: "Hide password",
+        failed: "Could not connect. Check the password and try again.",
       },
       appearance: {
         title: "Appearance",
