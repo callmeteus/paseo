@@ -157,7 +157,7 @@ export interface HostRuntimeSnapshot {
 export type HostAuthFailureReason = "password_required" | "incorrect_password";
 
 export function getHostAuthFailureReason(
-  snapshot: HostRuntimeSnapshot | null | undefined,
+  snapshot: Pick<HostRuntimeSnapshot, "authFailureReason" | "lastError"> | null | undefined,
 ): HostAuthFailureReason | null {
   const reason = snapshot?.authFailureReason;
   if (reason === "password_required" || reason === "incorrect_password") {

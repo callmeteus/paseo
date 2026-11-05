@@ -24,6 +24,7 @@ import { queryClient } from "@/data/query-client";
 import {
   HostRuntimeController,
   HostRuntimeStore,
+  getHostAuthFailureReason,
   readInitialDaemonConnectionHint,
   resolveWebLocalDaemonEndpoint,
   type HostRuntimeControllerDeps,
@@ -51,6 +52,18 @@ it("requests the managed connection credential through desktop main without a we
   token = "rotated-token";
   expect(await readDesktopManagedLocalCredential(connection, invoke)).toBe("rotated-token");
   expect(requests).toEqual(["localhost:17000", "localhost:17000"]);
+});
+
+it("derives a host auth failure from the snapshot or its error message", () => {
+  expect(
+    getHostAuthFailureReason({ authFailureReason: "incorrect_password", lastError: null }),
+  ).toBe("incorrect_password");
+  expect(
+    getHostAuthFailureReason({ authFailureReason: null, lastError: "Password required" }),
+  ).toBe("password_required");
+  expect(getHostAuthFailureReason({ authFailureReason: null, lastError: "transport closed" })).toBe(
+    null,
+  );
 });
 
 class FakeDaemonClient {
