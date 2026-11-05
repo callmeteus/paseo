@@ -10,11 +10,11 @@ import { UsageMeter } from "./meter";
 import { UsagePinGlyph } from "./pin-glyph";
 import type { UsageDisplayAs } from "./preferences";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
-import type { UnifiedUsage } from "./unified";
+import { unifiedSummarySurface, type UnifiedUsage } from "./unified";
 
 const ThemedActivity = withUnistyles(Activity);
 
-/** One provider's windows as one number: the most constrained one. */
+/** One provider's windows as the mean of their used shares. The line under the bar stays the largest window. */
 export function UnifiedUsageSummary({
   unified,
   displayAs,
@@ -38,8 +38,12 @@ export function UnifiedUsageSummary({
   const now = useRelativeTimeTick({ enabled: unified.driver.resetsAt != null });
   const reset = formatResetLabel(unified.driver.resetsAt, retained, now, t);
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
+  const surface = unifiedSummarySurface(pinned);
   return (
-    <View style={styles.container} testID="usage-unified-summary">
+    <View
+      style={surface === "pinned" ? [styles.container, styles.pinnedSurface] : styles.container}
+      testID="usage-unified-summary"
+    >
       <View style={styles.header}>
         <ThemedActivity size={14} uniProps={extraMutedIconColorMapping} />
         <Text style={styles.title}>{t("providerUsage.unified.title")}</Text>
@@ -84,10 +88,14 @@ export function UnifiedUsageSummary({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // No fill of its own. The card surface shows through until the block is pinned.
   container: {
     gap: theme.spacing[2],
     padding: theme.spacing[3],
     borderRadius: theme.borderRadius.md,
+  },
+  // Same surface a pinned window row uses.
+  pinnedSurface: {
     backgroundColor: theme.colors.surface2,
   },
   header: {

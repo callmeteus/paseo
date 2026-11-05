@@ -24,12 +24,12 @@ export interface UnifiedWindow {
   shortfallPct: number | null;
 }
 
-/** The combined summary and the window that drives it. */
+/** The mean of the windows, and the window that drives the highest line. */
 export interface UnifiedUsage<T extends UnifiedWindow = UnifiedWindow> {
-  /** The combined share, under the user's used/remaining preference. */
+  /** The mean share, under the user's used/remaining preference. */
   percent: number;
   percentText: string;
-  /** The combined share used, independent of the display preference. */
+  /** The mean share used, independent of the display preference. */
   usedPercent: number;
   /** The worst tone among the selected windows, escalated when one may run out. */
   tone: UsageTone;
@@ -66,27 +66,39 @@ function toneForPercent(percent: number): UsageTone {
 }
 
 /**
- * The chance that at least one selected window has reached its limit, treating each
- * window's remaining share as independent. Bounded by 100 and always at least the
- * largest single window, so a near-limit weekly or monthly cannot hide behind a fresh one.
+ * Arithmetic mean of the used shares. A window that is not in the list is left out,
+ * so a missing rolling, weekly, or monthly window does not count. An empty list is
+ * not 100.
  */
-function combinedUsedPercent(windows: readonly UnifiedWindow[]): number {
-  let allRemaining = 1;
-  for (const window of windows) {
-    allRemaining *= 1 - clampPct(window.usedPercent) / 100;
-  }
-  return (1 - allRemaining) * 100;
+export function meanUsedPercent(windows: readonly { usedPercent: number }[]): number | null {
+  if (windows.length === 0) return null;
+  let total = 0;
+  for (const window of windows) total += clampPct(window.usedPercent);
+  return total / windows.length;
+}
+
+/** The unified block's fill: the pinned highlight, or the card surface under it. */
+export type UnifiedSummarySurface = "pinned" | "card";
+
+/**
+ * The light surface on the unified block is the same highlight a pinned window row uses.
+ * It shows only while this block is pinned. Unpinned, the block keeps the card surface.
+ */
+export function unifiedSummarySurface(pinned: boolean): UnifiedSummarySurface {
+  return pinned ? "pinned" : "card";
 }
 
 /**
- * One number for a set of windows: their combined pressure, not an average. Adding a
- * window with real usage always raises it; any window at its limit makes it 100.
+ * One number for a set of windows: the arithmetic mean of their used shares. It is not
+ * their sum, and it is not 100 unless that is the mean. The driver stays the single
+ * most-used window.
  */
 export function resolveUnifiedWindows<T extends UnifiedWindow>(
   windows: readonly T[],
   options: { now?: number; displayAs?: UsageDisplayAs } = {},
 ): UnifiedUsage<T> | null {
-  if (windows.length === 0) return null;
+  const used = meanUsedPercent(windows);
+  if (used == null) return null;
 
   const now = options.now ?? Date.now();
   const ordered = windows
@@ -98,10 +110,9 @@ export function resolveUnifiedWindows<T extends UnifiedWindow>(
         left.index - right.index,
     )
     .map(({ window }) => window);
-  const combinedUsed = combinedUsedPercent(ordered);
-  const percent = options.displayAs === "remaining" ? 100 - combinedUsed : combinedUsed;
+  const percent = options.displayAs === "remaining" ? 100 - used : used;
   const driver = ordered[0]!;
-  let tone = toneForPercent(combinedUsed);
+  let tone = toneForPercent(used);
   let atRiskCount = 0;
   for (const window of ordered) {
     if (TONE_RANK[window.tone] > TONE_RANK[tone]) tone = window.tone;
@@ -112,7 +123,7 @@ export function resolveUnifiedWindows<T extends UnifiedWindow>(
   return {
     percent,
     percentText: formatPct(percent),
-    usedPercent: combinedUsed,
+    usedPercent: used,
     tone,
     driver,
     windows: ordered,
