@@ -33,6 +33,7 @@ import {
   mapACPUsage,
   resolveACPModeSelection,
   resolveACPModelSelection,
+  startKiloStdinKeepalive,
   summarizeACPRequestError,
 } from "./acp-agent.js";
 import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
@@ -597,6 +598,71 @@ describe("createLoggedNdJsonStream", () => {
 
     await writer.close();
     reader.releaseLock();
+  });
+});
+
+describe("startKiloStdinKeepalive", () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function createChildStub(): {
+    write: ReturnType<typeof vi.fn>;
+    child: ChildProcessWithoutNullStreams;
+  } {
+    const write = vi.fn();
+    const once = vi.fn();
+    return {
+      write,
+      child: {
+        stdin: { write, destroyed: false, writableEnded: false },
+        once,
+      } as unknown as ChildProcessWithoutNullStreams,
+    };
+  }
+
+  test("writes blank lines to a Kilo ACP stdin on Windows", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    vi.useFakeTimers();
+    const { write, child } = createChildStub();
+
+    const stop = startKiloStdinKeepalive("kilo", child);
+    expect(stop).not.toBeNull();
+
+    vi.advanceTimersByTime(2_000);
+    expect(write).toHaveBeenCalledWith("\n");
+
+    stop?.();
+    write.mockClear();
+    vi.advanceTimersByTime(4_000);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  test("stops writing once the ACP stdin closes", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    vi.useFakeTimers();
+    const { write, child } = createChildStub();
+    const stdin = child.stdin as unknown as { destroyed: boolean };
+    stdin.destroyed = true;
+
+    startKiloStdinKeepalive("kilo", child);
+    vi.advanceTimersByTime(4_000);
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  test("does not touch other providers or other platforms", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    const { write, child } = createChildStub();
+    expect(startKiloStdinKeepalive("cline", child)).toBeNull();
+
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    expect(startKiloStdinKeepalive("kilo", child)).toBeNull();
+    expect(write).not.toHaveBeenCalled();
   });
 });
 

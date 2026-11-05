@@ -342,6 +342,37 @@ function resolveTurnIdleLimitMs(options: AgentRunOptions | undefined): number {
 // the chat loading until the longer idle watchdog fires.
 const ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS = 45_000;
 
+// Kilo's ACP server runs `git config --get remote.origin.url` through a shell
+// that inherits stdin on every LLM request. On Windows the inherited git
+// process blocks at startup until the client writes another line, so
+// `session/prompt` never returns and the turn hangs until the first-activity
+// timeout fires. Blank lines are ignored by JSON-RPC readers and release the
+// blocked git process. Remove once Kilo ships
+// https://github.com/Kilo-Org/kilocode/pull/15374.
+const KILO_STDIN_KEEPALIVE_INTERVAL_MS = 2_000;
+
+export function startKiloStdinKeepalive(
+  provider: string,
+  child: ChildProcessWithoutNullStreams,
+): (() => void) | null {
+  if (process.platform !== "win32" || provider !== "kilo") {
+    return null;
+  }
+  const timer = setInterval(() => {
+    if (child.stdin.destroyed || child.stdin.writableEnded) return;
+    try {
+      child.stdin.write("\n");
+    } catch {
+      // The process can exit between the writable check and the write.
+    }
+  }, KILO_STDIN_KEEPALIVE_INTERVAL_MS);
+  timer.unref?.();
+  const stop = () => clearInterval(timer);
+  child.once("exit", stop);
+  child.once("close", stop);
+  return stop;
+}
+
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
     type: error instanceof Error ? error.name : typeof error,
@@ -1448,6 +1479,8 @@ export class ACPAgentClient implements AgentClient {
       stdio: ["pipe", "pipe", "pipe"],
     });
     assertChildWithPipes(child);
+
+    startKiloStdinKeepalive(this.provider, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -2980,6 +3013,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       stdio: ["pipe", "pipe", "pipe"],
     });
     assertChildWithPipes(child);
+
+    startKiloStdinKeepalive(this.provider, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
