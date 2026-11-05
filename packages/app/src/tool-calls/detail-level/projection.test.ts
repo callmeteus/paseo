@@ -45,20 +45,49 @@ function assistant(id: string): AssistantMessageItem {
   };
 }
 
+function narration(id: string, text: string): AssistantMessageItem {
+  return {
+    kind: "assistant_message",
+    id,
+    text,
+    timestamp: new Date(`2026-01-01T00:03:${id.padStart(2, "0")}.000Z`),
+  };
+}
+
+function thought(id: string, text: string, durationMs?: number): StreamItem {
+  const timestamp = new Date(`2026-01-01T00:02:${id.padStart(2, "0")}.000Z`);
+  return {
+    kind: "thought",
+    id,
+    text,
+    timestamp,
+    ...(durationMs === undefined
+      ? {}
+      : { startedAt: new Date(timestamp.getTime() - durationMs), thinkingDurationMs: durationMs }),
+    status: "ready",
+  };
+}
+
 function project(input: {
   level: ToolCallDetailLevel;
   tail?: StreamItem[];
   head?: StreamItem[];
   isTurnActive?: boolean;
   preparedHistory?: PreparedToolCallHistory | null;
+  includeThought?: boolean;
+  includeShortText?: boolean;
 }) {
   const tail = input.tail ?? [];
+  const includeThought = input.includeThought ?? true;
   return projectToolCallDetailLevel({
     level: input.level,
     tail,
     head: input.head ?? [],
-    preparedHistory: input.preparedHistory ?? prepareToolCallHistory(input.level, tail),
+    preparedHistory:
+      input.preparedHistory ??
+      prepareToolCallHistory(input.level, tail, includeThought, input.includeShortText ?? false),
     isTurnActive: input.isTurnActive ?? false,
+    includeThought,
   });
 }
 
@@ -240,7 +269,7 @@ describe("tool call detail-level projection", () => {
     expect(ended.groupsByHostId.get("1")?.run.isSealed).toBe(true);
   });
 
-  it("builds overview summaries without category-specific presentation data", () => {
+  it("builds overview summaries and separates attempted edits from applied ones", () => {
     const calls = [
       toolCall("1", { type: "read", filePath: "/repo/src/a.ts" }),
       toolCall("2", { type: "read", filePath: "/repo/src/b.ts" }),
@@ -255,12 +284,19 @@ describe("tool call detail-level projection", () => {
       run: expect.any(Object),
       isLoading: false,
       summary: {
-        editedFileCount: 1,
+        editedFileCount: 0,
         commandCount: 1,
         readFileCount: 2,
         searchCount: 0,
+        fetchCount: 0,
+        agentCount: 0,
         otherToolCount: 0,
         paseoCallCount: 0,
+        failedFileCount: 1,
+        readFiles: ["/repo/src/a.ts", "/repo/src/b.ts"],
+        thinkingDurationMs: 0,
+        thoughtCount: 0,
+        hasText: false,
       },
     });
   });
@@ -286,7 +322,8 @@ describe("tool call detail-level projection", () => {
         commandCount: 0,
         readFileCount: 2,
         searchCount: 1,
-        otherToolCount: 2,
+        fetchCount: 2,
+        otherToolCount: 0,
       },
     });
   });
@@ -313,6 +350,105 @@ describe("tool call detail-level projection", () => {
     });
   });
 
+  it("folds reasoning into the tool run it explains", () => {
+    const result = project({
+      level: "overview",
+      head: [
+        thought("1", "Planning the change", 2000),
+        toolCall("2", { type: "read", filePath: "/repo/a.ts" }),
+        thought("3", "Checking the other file", 1500),
+        toolCall("4", { type: "read", filePath: "/repo/b.ts" }),
+      ],
+    });
+
+    const group = result.groupsByHostId.get("1");
+    expect(group?.run.steps.map((step) => step.id)).toEqual(["1", "2", "3", "4"]);
+    expect(group?.run.calls.map((call) => call.id)).toEqual(["2", "4"]);
+    expect(group?.summary).toMatchObject({
+      readFileCount: 2,
+      thoughtCount: 2,
+      thinkingDurationMs: 3500,
+    });
+  });
+
+  it("keeps reasoning on its own row when the reader always expands reasoning", () => {
+    const result = project({
+      level: "overview",
+      includeThought: false,
+      head: [
+        thought("1", "Planning the change", 2000),
+        toolCall("2", { type: "read", filePath: "/repo/a.ts" }),
+        toolCall("3", { type: "read", filePath: "/repo/b.ts" }),
+      ],
+    });
+
+    // The thought is not folded in, so the tool calls group without it.
+    expect(result.groupsByHostId.get("2")?.run.steps.map((step) => step.id)).toEqual(["2", "3"]);
+    expect(result.groupsByHostId.get("1")).toBeUndefined();
+  });
+
+  it("folds short narration into the work but never the final answer", () => {
+    const tail: StreamItem[] = [
+      toolCall("1", { type: "read", filePath: "/repo/a.ts" }),
+      narration("2", "Now checking the config"),
+      toolCall("3", { type: "read", filePath: "/repo/b.ts" }),
+      narration(
+        "4",
+        "Both files agree, so the fix is small. I changed the default and added a test.",
+      ),
+    ];
+
+    const result = project({ level: "overview", tail, includeShortText: true });
+
+    const group = result.groupsByHostId.get("1");
+    expect(group?.run.steps.map((step) => step.id)).toEqual(["1", "2", "3"]);
+    expect(group?.summary.hasText).toBe(true);
+    // The closing reply stays its own row.
+    expect(result.tail.at(-1)).toMatchObject({ kind: "assistant_message", id: "4" });
+  });
+
+  it("never folds text that is still streaming", () => {
+    const result = project({
+      level: "overview",
+      includeShortText: true,
+      head: [
+        toolCall("1", { type: "read", filePath: "/repo/a.ts" }),
+        narration("2", "Now checking the config"),
+        toolCall("3", { type: "read", filePath: "/repo/b.ts" }),
+      ],
+    });
+
+    // The streaming line stays visible, so it splits the run into two groups.
+    expect(result.groupsByHostId.get("1")?.run.steps.map((step) => step.id)).toEqual(["1"]);
+    expect(result.groupsByHostId.get("3")?.run.steps.map((step) => step.id)).toEqual(["3"]);
+  });
+
+  it("does not turn a stretch of narration alone into a group", () => {
+    const tail: StreamItem[] = [
+      narration("1", "One short line"),
+      narration("2", "Another short line"),
+    ];
+
+    const result = project({ level: "overview", tail, includeShortText: true });
+
+    expect(result.groupsByHostId.size).toBe(0);
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "2"]);
+  });
+
+  it("never folds a provider failure into a group", () => {
+    const tail: StreamItem[] = [
+      toolCall("1", { type: "read", filePath: "/repo/a.ts" }),
+      narration("2", "Failed to authenticate: OAuth session expired and could not be refreshed"),
+      toolCall("3", { type: "read", filePath: "/repo/b.ts" }),
+    ];
+
+    const result = project({ level: "overview", tail, includeShortText: true });
+
+    // An error must stay visible, so it splits the run instead of hiding inside it.
+    expect(result.groupsByHostId.get("1")?.run.steps.map((step) => step.id)).toEqual(["1"]);
+    expect(result.groupsByHostId.get("3")?.run.steps.map((step) => step.id)).toEqual(["3"]);
+  });
+
   it("counts Paseo calls separately from other tools", () => {
     const calls = [
       toolCall("1", { type: "unknown", input: null, output: null }, { name: "paseo.list_agents" }),
@@ -328,7 +464,7 @@ describe("tool call detail-level projection", () => {
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { otherToolCount: 2, paseoCallCount: 2 },
+      summary: { fetchCount: 2, otherToolCount: 0, paseoCallCount: 2 },
     });
   });
 

@@ -2247,6 +2247,43 @@ export const ko: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "탐색",
+      edited: "편집",
+      ran: "실행",
+      skipped: "건너뜀",
+    },
+    parts: {
+      files: {
+        one: "파일 {{count}}개",
+        other: "파일 {{count}}개",
+      },
+      exploredFiles: {
+        one: "파일 {{count}}개 탐색",
+        other: "파일 {{count}}개 탐색",
+      },
+      searches: {
+        one: "검색 {{count}}회",
+        other: "검색 {{count}}회",
+      },
+      fetches: {
+        one: "가져오기 {{count}}회",
+        other: "가져오기 {{count}}회",
+      },
+      commands: {
+        one: "명령 {{count}}개 실행",
+        other: "명령 {{count}}개 실행",
+      },
+      tools: {
+        one: "도구 {{count}}개",
+        other: "도구 {{count}}개",
+      },
+      agents: {
+        one: "에이전트 {{count}}개",
+        other: "에이전트 {{count}}개",
+      },
+    },
+    thought: "사고",
     editedFiles: {
       one: "{{count}} 파일을 편집했습니다.",
       other: "{{count}} 파일을 편집했습니다.",

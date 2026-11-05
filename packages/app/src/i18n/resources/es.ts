@@ -2286,6 +2286,43 @@ export const es: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "Exploré",
+      edited: "Edité",
+      ran: "Ejecuté",
+      skipped: "Omití",
+    },
+    parts: {
+      files: {
+        one: "{{count}} archivo",
+        other: "{{count}} archivos",
+      },
+      exploredFiles: {
+        one: "exploré {{count}} archivo",
+        other: "exploré {{count}} archivos",
+      },
+      searches: {
+        one: "{{count}} búsqueda",
+        other: "{{count}} búsquedas",
+      },
+      fetches: {
+        one: "{{count}} petición",
+        other: "{{count}} peticiones",
+      },
+      commands: {
+        one: "ejecuté {{count}} comando",
+        other: "ejecuté {{count}} comandos",
+      },
+      tools: {
+        one: "{{count}} herramienta",
+        other: "{{count}} herramientas",
+      },
+      agents: {
+        one: "{{count}} agente",
+        other: "{{count}} agentes",
+      },
+    },
+    thought: "Pensé",
     editedFiles: {
       one: "editó {{count}} archivo",
       other: "editó {{count}} archivos",

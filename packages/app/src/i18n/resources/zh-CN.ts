@@ -2210,6 +2210,43 @@ export const zhCN: TranslationResources = {
     },
   },
   toolCallGroup: {
+    actions: {
+      explored: "已探索",
+      edited: "已编辑",
+      ran: "已运行",
+      skipped: "已跳过",
+    },
+    parts: {
+      files: {
+        one: "{{count}} 个文件",
+        other: "{{count}} 个文件",
+      },
+      exploredFiles: {
+        one: "探索了 {{count}} 个文件",
+        other: "探索了 {{count}} 个文件",
+      },
+      searches: {
+        one: "{{count}} 次搜索",
+        other: "{{count}} 次搜索",
+      },
+      fetches: {
+        one: "{{count}} 次抓取",
+        other: "{{count}} 次抓取",
+      },
+      commands: {
+        one: "运行了 {{count}} 条命令",
+        other: "运行了 {{count}} 条命令",
+      },
+      tools: {
+        one: "{{count}} 个工具",
+        other: "{{count}} 个工具",
+      },
+      agents: {
+        one: "{{count}} 个代理",
+        other: "{{count}} 个代理",
+      },
+    },
+    thought: "思考",
     editedFiles: {
       one: "编辑了 {{count}} 个文件",
       other: "编辑了 {{count}} 个文件",

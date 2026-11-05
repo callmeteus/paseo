@@ -43,7 +43,7 @@ import {
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
 import { ProviderErrorCard } from "@/components/provider-error-card";
-import { isSystemErrorText, systemErrorMessage } from "@/agent-stream/provider-error";
+import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
@@ -56,6 +56,12 @@ import type {
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
 import { useRevealedText } from "@/hooks/use-revealed-text";
+import {
+  formatThoughtDuration,
+  parseThoughtHeader,
+  resolveThoughtDuration,
+  stripThoughtHeader,
+} from "@/utils/thought-text";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { useLoadOlderAgentHistory } from "@/hooks/use-load-older-agent-history";
 import { resolveContentMaxWidth, useSettings } from "@/hooks/use-settings";
@@ -67,6 +73,8 @@ import { QuestionFormCard } from "@/components/question-form-card";
 import { ToolCallSheetProvider } from "@/components/tool-call-sheet";
 import { createStreamPresentation } from "./presentation";
 import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/view";
+import type { OverviewToolCallGroup } from "@/tool-calls/detail-level/overview/model";
+import type { GroupableStep } from "@/tool-calls/detail-level/grouping";
 import { IndentRail } from "@/components/indent-rail";
 import { TurnSummaryLine } from "./turn-collapse/summary-line";
 import { type AgentStreamRenderModel, buildAgentStreamRenderModel } from "./model";
@@ -532,6 +540,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           display: chatDisplay,
           expandedTurnHostIds,
           isTurnActive,
+          // A reasoning block the reader asked to always see cannot hide inside a
+          // collapsed group, so it keeps its own row.
+          groupReasoning: !autoExpandReasoning,
         }),
       [
         presentStream,
@@ -541,6 +552,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         chatDisplay,
         expandedTurnHostIds,
         isTurnActive,
+        autoExpandReasoning,
       ],
     );
     const {
@@ -764,13 +776,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
-        if (isSystemErrorText(item.text)) {
-          return (
-            <ProviderErrorCard
-              provider={context.provider}
-              message={systemErrorMessage(item.text)}
-            />
-          );
+        const errorText = readProviderErrorText(item.text);
+        if (errorText !== null) {
+          return <ProviderErrorCard provider={context.provider} message={errorText} />;
         }
         return (
           <AssistantFileLinkResolverProvider
@@ -819,6 +827,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             status={item.status}
             isLastInSequence={layoutItem.isLastInToolSequence}
             defaultExpanded={autoExpandReasoning}
+            durationMs={resolveThoughtDuration(item)}
           />
         );
       },
@@ -890,12 +899,43 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       presentation.groupsByHostId.get(hostId),
     );
     const renderToolCallItem = useCallback(
-      (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) => {
-        const group = getToolCallGroup(item.id);
-        if (!group) {
-          return renderSingleToolCallItem(item, layoutItem.isLastInToolSequence);
+      (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "tool_call" }>) =>
+        renderSingleToolCallItem(item, layoutItem.isLastInToolSequence),
+      [renderSingleToolCallItem],
+    );
+
+    const renderGroupedStep = useCallback(
+      (layoutItem: StreamLayoutItem, step: GroupableStep, isLast: boolean) => {
+        if (step.kind === "thought") {
+          return (
+            <ThoughtSlot
+              itemId={step.id}
+              onInlineDetailsExpandedChangeByItemId={setInlineDetailsExpanded}
+              text={step.text}
+              status={step.status}
+              isLastInSequence={isLast}
+              defaultExpanded={autoExpandReasoning}
+              durationMs={resolveThoughtDuration(step)}
+            />
+          );
         }
+        if (step.kind === "assistant_message") {
+          return renderAssistantMessageItem(layoutItem, step);
+        }
+        return renderSingleToolCallItem(step, isLast, GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT);
+      },
+      [
+        autoExpandReasoning,
+        renderAssistantMessageItem,
+        renderSingleToolCallItem,
+        setInlineDetailsExpanded,
+      ],
+    );
+
+    const renderGroupedHost = useCallback(
+      (layoutItem: StreamLayoutItem, group: OverviewToolCallGroup) => {
         const expanded = expandedToolCallGroupIds.has(group.run.id);
+        const lastIndex = group.run.steps.length - 1;
         return (
           <OverviewToolCallGroupView
             group={group}
@@ -904,30 +944,27 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             onExpandedChange={setToolCallGroupExpanded}
           >
             {expanded
-              ? group.run.calls.map((call, index) => (
-                  <React.Fragment key={call.id}>
-                    {renderSingleToolCallItem(
-                      call,
-                      index === group.run.calls.length - 1,
-                      GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT,
-                    )}
+              ? group.run.steps.map((step, index) => (
+                  <React.Fragment key={step.id}>
+                    {renderGroupedStep(layoutItem, step, index === lastIndex)}
                   </React.Fragment>
                 ))
               : null}
           </OverviewToolCallGroupView>
         );
       },
-      [
-        expandedToolCallGroupIds,
-        getToolCallGroup,
-        renderSingleToolCallItem,
-        setToolCallGroupExpanded,
-      ],
+      [expandedToolCallGroupIds, renderGroupedStep, setToolCallGroupExpanded],
     );
 
     const renderStreamItemContent = useCallback(
       (layoutItem: StreamLayoutItem) => {
         const item = layoutItem.item;
+        // A group's host item keeps the kind of its newest step, so the group lookup
+        // has to win over the per-kind dispatch below.
+        const group = getToolCallGroup(item.id);
+        if (group) {
+          return renderGroupedHost(layoutItem, group);
+        }
         switch (item.kind) {
           case "user_message":
             return renderUserMessageItem(layoutItem, item);
@@ -970,6 +1007,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       },
       [
         agentId,
+        getToolCallGroup,
+        renderGroupedHost,
         renderUserMessageItem,
         renderAssistantMessageItem,
         renderThoughtItem,
@@ -1394,6 +1433,7 @@ interface ThoughtSlotProps {
   status: Extract<StreamItem, { kind: "thought" }>["status"];
   isLastInSequence: boolean;
   defaultExpanded: boolean;
+  durationMs?: number;
 }
 
 // Reasoning text is paced the same way assistant text is; see @/hooks/use-revealed-text.
@@ -1404,18 +1444,28 @@ function ThoughtSlot({
   status,
   isLastInSequence,
   defaultExpanded,
+  durationMs,
 }: ThoughtSlotProps) {
+  const { t } = useTranslation();
   const revealedText = useRevealedText(text, status === "ready" ? "complete" : "streaming");
+  // A block that opens with a bold line or a heading carries its own label; the body
+  // then drops that line so the badge does not repeat it.
+  const header = parseThoughtHeader(revealedText);
+  const bodyText = header.title ? stripThoughtHeader(revealedText) : revealedText;
+  const label = header.title || t("toolCallGroup.thought");
+  const secondaryLabel = header.title ? undefined : formatThoughtDuration(durationMs);
   return (
     <ToolCallSlot
       itemId={itemId}
       onInlineDetailsExpandedChangeByItemId={onInlineDetailsExpandedChangeByItemId}
       toolName="thinking"
-      args={revealedText}
+      args={bodyText}
       status={status === "ready" ? "completed" : "executing"}
       isLastInSequence={isLastInSequence}
       defaultExpanded={defaultExpanded}
       forceInline={defaultExpanded}
+      labelOverride={label}
+      secondaryLabelOverride={secondaryLabel}
     />
   );
 }
