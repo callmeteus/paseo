@@ -63,7 +63,7 @@ cat node_modules/material-icon-theme/icons/ICON_NAME.svg
 
 ## Currently included icons
 
-53 unique icons covering these extensions:
+54 unique icons covering these extensions:
 
 | Extension(s)                               | Icon        |
 | ------------------------------------------ | ----------- |
@@ -115,6 +115,7 @@ cat node_modules/material-icon-theme/icons/ICON_NAME.svg
 | `wasm`                                     | webassembly |
 | `svg`                                      | svg         |
 | `png`, `jpg`, `jpeg`, `gif`, `webp`, `ico` | image       |
+| `csv`, `tsv`, `xls`, `xlsm`, `xlsx`, `ods` | table       |
 | `txt`                                      | document    |
 | `conf`, `cfg`, `ini`                       | settings    |
 | `lock`                                     | lock        |

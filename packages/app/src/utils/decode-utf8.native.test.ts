@@ -17,8 +17,14 @@ describe("decodeUtf8 on native", () => {
     expect(decodeUtf8(bytes)).toBe("hi");
   });
 
-  it("replaces malformed sequences", () => {
-    decodesLikeTextDecoder(new Uint8Array([0x61, 0xff, 0x62, 0xe4, 0xb8]));
+  it("reads a single-byte code page file instead of replacing its accents", () => {
+    // "João" written by a Western spreadsheet export.
+    expect(decodeUtf8(new Uint8Array([0x4a, 0x6f, 0xe3, 0x6f]))).toBe("João");
+  });
+
+  it("replaces a damaged sequence inside an otherwise valid file", () => {
+    const bytes = new Uint8Array([...new TextEncoder().encode("café "), 0xff]);
+    expect(decodeUtf8(bytes)).toBe("café \uFFFD");
   });
 
   it("decodes an empty file", () => {

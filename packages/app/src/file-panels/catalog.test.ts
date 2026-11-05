@@ -67,6 +67,16 @@ describe("built-in file panels", () => {
     expect(candidateIds({ path: "archive.zip", kind: "binary" })).toEqual([]);
   });
 
+  it("opens delimited text and workbooks with their own panel", () => {
+    expect(candidateIds(textFile("report.csv"))).toEqual(["builtin:table"]);
+    expect(panelId(textFile("report.tsv"))).toBe("builtin:table");
+    expect(panelId(textFile("data/SALES.CSV"))).toBe("builtin:table");
+    expect(panelId({ path: "report.xlsx", kind: "binary" })).toBe("builtin:spreadsheet");
+    expect(panelId({ path: "report.xls", kind: "binary" })).toBe("builtin:spreadsheet");
+    expect(panelId({ path: "report.xlsm", kind: "binary" })).toBe("builtin:spreadsheet");
+    expect(panelId({ path: "report.ods", kind: "binary" })).toBe("builtin:spreadsheet");
+  });
+
   it.each(["png", "jpg", "jpeg", "gif", "webp", "svg"])(
     "registers the image extension %s",
     (extension) => {

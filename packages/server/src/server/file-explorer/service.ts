@@ -93,7 +93,9 @@ export interface FileExplorerFileStream {
 }
 
 const TEXT_MIME_TYPES: Record<string, string> = {
+  ".csv": "text/csv",
   ".json": "application/json",
+  ".tsv": "text/tab-separated-values",
 };
 
 const BINARY_MIME_TYPES: Record<string, string> = {
@@ -106,6 +108,12 @@ const BINARY_MIME_TYPES: Record<string, string> = {
 };
 
 const DEFAULT_TEXT_MIME_TYPE = "text/plain";
+/**
+ * Spreadsheet exports that Excel writes in the OS code page rather than UTF-8, which is the
+ * default for a pt-BR Excel. Their structure is text either way, so a failed UTF-8 check must not
+ * turn the file binary; the client falls back to windows-1252 when it decodes.
+ */
+const LEGACY_TEXT_EXTENSIONS = new Set([".csv", ".tsv"]);
 const FILE_TYPE_SAMPLE_BYTES = 8192;
 export const FILE_EXPLORER_STREAM_CHUNK_BYTES = 256 * 1024;
 export const MAX_EDITABLE_FILE_BYTES = 1024 * 1024;
@@ -279,7 +287,11 @@ export async function readExplorerFileBytes({
       };
     }
 
-    if (ext in BINARY_MIME_TYPES || isLikelyBinary(buffer) || !isValidUtf8(buffer)) {
+    if (
+      ext in BINARY_MIME_TYPES ||
+      isLikelyBinary(buffer) ||
+      (!LEGACY_TEXT_EXTENSIONS.has(ext) && !isValidUtf8(buffer))
+    ) {
       return {
         ...basePayload,
         kind: "binary",
@@ -319,7 +331,11 @@ export async function streamExplorerFile(
     const ext = path.extname(filePath.resolvedPath).toLowerCase();
     const isImage = ext in IMAGE_MIME_TYPES;
     const isBinary =
-      isImage || ext in BINARY_MIME_TYPES || (await isFileHandleBinary(handle, advertisedSize));
+      isImage ||
+      ext in BINARY_MIME_TYPES ||
+      (await isFileHandleBinary(handle, advertisedSize, {
+        strictUtf8: !LEGACY_TEXT_EXTENSIONS.has(ext),
+      }));
     let kind: ExplorerFileKind = "text";
     let mimeType = textMimeTypeForExtension(ext);
     if (isImage) {
@@ -345,7 +361,11 @@ export async function streamExplorerFile(
   }
 }
 
-async function isFileHandleBinary(handle: FileHandle, advertisedSize: number): Promise<boolean> {
+async function isFileHandleBinary(
+  handle: FileHandle,
+  advertisedSize: number,
+  options: { strictUtf8: boolean },
+): Promise<boolean> {
   if (advertisedSize === 0) return false;
 
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -365,18 +385,22 @@ async function isFileHandleBinary(handle: FileHandle, advertisedSize: number): P
       const isControl = byte < 32 && byte !== 9 && byte !== 10 && byte !== 13;
       if (isControl || byte === 127) suspiciousBytes += 1;
     }
-    try {
-      decoder.decode(bytes, { stream: true });
-    } catch {
-      return true;
+    if (options.strictUtf8) {
+      try {
+        decoder.decode(bytes, { stream: true });
+      } catch {
+        return true;
+      }
     }
     position += bytesRead;
   }
 
-  try {
-    decoder.decode();
-  } catch {
-    return true;
+  if (options.strictUtf8) {
+    try {
+      decoder.decode();
+    } catch {
+      return true;
+    }
   }
   return suspiciousBytes / advertisedSize > 0.3;
 }
@@ -931,7 +955,8 @@ async function sniffFileType(
   const sample = Buffer.alloc(FILE_TYPE_SAMPLE_BYTES);
   const { bytesRead } = await handle.read(sample, 0, sample.length, 0);
   const chunk = sample.subarray(0, bytesRead);
-  if (isLikelyBinary(chunk) || !isValidUtf8Prefix(chunk)) return binary;
+  const invalidUtf8 = !LEGACY_TEXT_EXTENSIONS.has(ext) && !isValidUtf8Prefix(chunk);
+  if (isLikelyBinary(chunk) || invalidUtf8) return binary;
   return { kind: "text", mimeType: textMimeTypeForExtension(ext) };
 }
 

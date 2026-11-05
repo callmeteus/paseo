@@ -280,6 +280,23 @@ describe("file explorer service", () => {
     }
   });
 
+  it("classifies a spreadsheet export in the Windows code page as text", async () => {
+    const root = await createTempDir("paseo-file-csv-");
+    try {
+      const bytes = Buffer.from([0x6e, 0x6f, 0x6d, 0x65, 0x0a, 0x4a, 0x6f, 0xe3, 0x6f, 0x0a]);
+      await writeFile(path.join(root, "people.csv"), bytes);
+      const target = { root, relativePath: "people.csv" };
+      expect(await readExplorerFile(target)).toMatchObject({ kind: "text", encoding: "utf-8" });
+      expect(await readExplorerFileBytes(target)).toMatchObject({ kind: "text", bytes });
+      await streamExplorerFile(target, async (file) => {
+        expect(file.kind).toBe("text");
+        expect(file.encoding).toBe("utf-8");
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("classifies files with null bytes as binary", async () => {
     const root = await createTempDir("paseo-file-explorer-");
 

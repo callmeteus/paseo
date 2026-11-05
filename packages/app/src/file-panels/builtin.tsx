@@ -8,6 +8,8 @@ import { FileHtmlPreview } from "./html-preview";
 import { FilePanelLoading } from "./loading";
 import { FileMarkdownPreview } from "./markdown-preview";
 import { TextFilePanel, type TextFilePreviewProps } from "./source/panel";
+import { DelimitedTextPreview } from "./table/delimited-preview";
+import { WorkbookPreviewPanel } from "./table/workbook-panel";
 import type { RenderingFilePanel, SourceFilePanel } from "./catalog";
 
 /** Source: the text file panel with no Preview, for text files no other built-in panel claims. */
@@ -23,6 +25,16 @@ function MarkdownPanel(props: PluginFilePanelProps) {
 /** HTML: the text file panel with the sandboxed page as its Preview. */
 function HtmlPanel(props: PluginFilePanelProps) {
   return <TextFilePanel {...props} preview={HtmlPreview} />;
+}
+
+/** CSV/TSV: the text file panel with the parsed grid as its Preview. */
+function TablePanel(props: PluginFilePanelProps) {
+  return <TextFilePanel {...props} preview={DelimitedTextPreview} />;
+}
+
+/** XLSX/XLS: the workbook's sheets as a grid. Binary, so there is no Source beside it. */
+function SpreadsheetPanel({ file }: PluginFilePanelProps) {
+  return <WorkbookPreviewPanel file={file} />;
 }
 
 /** Shows Loading until the rendered Markdown has laid out once; later edits keep the content. */
@@ -77,6 +89,8 @@ const components = {
   "builtin:markdown": MarkdownPanel,
   "builtin:html": HtmlPanel,
   "builtin:image": ImagePanel,
+  "builtin:table": TablePanel,
+  "builtin:spreadsheet": SpreadsheetPanel,
   "builtin:source": SourcePanel,
 };
 
