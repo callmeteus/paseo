@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3272,6 +3273,7 @@ export const ru: TranslationResources = {
         custom: "Пользовательские модели",
         updated: "Обновлено {{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "Диагностика",
         button: "Диагностика",

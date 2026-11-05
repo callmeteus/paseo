@@ -18,6 +18,8 @@ import {
   type AgentModelDefinition,
   type AgentProvider,
   type FetchCatalogOptions,
+  type ProviderMcpLoginResult,
+  type ProviderMcpServerInfo,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
 import {
@@ -653,6 +655,23 @@ export class ProviderSnapshotManager {
     const status = formatProviderStatus(entry);
     const diagnostic = `${baseDiagnostic}\n  Models: ${modelCount}\n  Status: ${status}`;
     return { provider, diagnostic };
+  }
+
+  async listProviderMcpServers(provider: AgentProvider): Promise<ProviderMcpServerInfo[]> {
+    const client = this.providerClients[provider];
+    if (!client?.listMcpServers) return [];
+    return client.listMcpServers();
+  }
+
+  async loginProviderMcpServer(
+    provider: AgentProvider,
+    server: string,
+  ): Promise<ProviderMcpLoginResult> {
+    const client = this.providerClients[provider];
+    if (!client?.loginMcpServer) {
+      throw new Error(`Provider '${provider}' does not support MCP authentication`);
+    }
+    return client.loginMcpServer(server);
   }
 
   applyMutableProviderConfig(

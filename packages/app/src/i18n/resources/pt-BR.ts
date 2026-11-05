@@ -1,3 +1,4 @@
+import { providerMcpPtBR } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3264,6 +3265,7 @@ export const ptBR: TranslationResources = {
         custom: "Modelos personalizados",
         updated: "Atualizado {{time}}",
       },
+      mcp: providerMcpPtBR,
       diagnostic: {
         title: "Diagnóstico",
         button: "Diagnóstico",

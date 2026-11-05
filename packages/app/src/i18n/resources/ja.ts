@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3253,6 +3254,7 @@ export const ja: TranslationResources = {
         custom: "カスタムモデル",
         updated: "{{time}}に更新",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "診断",
         button: "診断",

@@ -106,6 +106,8 @@ import type {
   GetProvidersSnapshotResponseMessage,
   RefreshProvidersSnapshotResponseMessage,
   ProviderDiagnosticResponseMessage,
+  ProviderMcpListResponseMessage,
+  ProviderMcpLoginResponseMessage,
   ProviderUsageListResponseMessage,
   UsageReportEntry,
   DaemonGetStatusResponse,
@@ -591,6 +593,8 @@ type ListAvailableProvidersPayload = ListAvailableProvidersResponse["payload"];
 type GetProvidersSnapshotPayload = GetProvidersSnapshotResponseMessage["payload"];
 type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["payload"];
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
+type ProviderMcpListPayload = ProviderMcpListResponseMessage["payload"];
+type ProviderMcpLoginPayload = ProviderMcpLoginResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
 interface UsageListReportsPayload {
   requestId: string;
@@ -6047,6 +6051,44 @@ export class DaemonClient {
       },
       responseType: "provider_diagnostic_response",
       timeout: 180000,
+    });
+  }
+
+  async listProviderMcpServers(
+    provider: AgentProvider,
+    options?: { requestId?: string },
+  ): Promise<ProviderMcpListPayload> {
+    const features = this.getLastServerInfoMessage()?.features;
+    if (features?.providerMcpAuth !== true) {
+      throw new Error("Update the host to manage MCP authentication.");
+    }
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "provider.mcp.list.request",
+        provider,
+      },
+      timeout: 30_000,
+    });
+  }
+
+  async loginProviderMcpServer(
+    provider: AgentProvider,
+    server: string,
+    options?: { requestId?: string },
+  ): Promise<ProviderMcpLoginPayload> {
+    const features = this.getLastServerInfoMessage()?.features;
+    if (features?.providerMcpAuth !== true) {
+      throw new Error("Update the host to manage MCP authentication.");
+    }
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "provider.mcp.login.request",
+        provider,
+        server,
+      },
+      timeout: 60_000,
     });
   }
 

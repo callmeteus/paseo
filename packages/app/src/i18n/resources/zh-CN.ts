@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3179,6 +3180,7 @@ export const zhCN: TranslationResources = {
         custom: "自定义 Models",
         updated: "已更新 {{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "诊断",
         button: "诊断",

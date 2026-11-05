@@ -538,6 +538,15 @@ export type ACPCatalogModelResolver = (
   context: ACPCatalogModelResolverContext,
 ) => Promise<AgentModelDefinition[]>;
 
+/**
+ * Provider-specific preparation of the external MCP config file a harness
+ * reads at process start. Cursor is the current caller: ACP injection works for
+ * native config but not for Cursor plugin MCP servers.
+ */
+export interface ExternalMcpConfigBridge {
+  acquire: () => Promise<void>;
+}
+
 interface ACPAgentClientOptions {
   provider: string;
   // Provider id usage sources match a session against; ACP sessions without one report no usage.
@@ -576,6 +585,7 @@ interface ACPAgentClientOptions {
   initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
   now?: () => number;
+  mcpConfigBridge?: ExternalMcpConfigBridge;
 }
 
 interface ACPAgentSessionOptions {
@@ -613,6 +623,7 @@ interface ACPAgentSessionOptions {
   waitForInitialCommands?: boolean;
   initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
+  mcpConfigBridge?: ExternalMcpConfigBridge;
 }
 
 export interface SpawnedACPProcess {
@@ -1045,6 +1056,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private readonly importPromptCache = new Map<string, ACPImportPromptCacheEntry>();
   private readonly now: () => number;
+  private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
   protected readonly terminateProcess: ProcessTerminator;
 
   constructor(options: ACPAgentClientOptions) {
@@ -1076,6 +1088,7 @@ export class ACPAgentClient implements AgentClient {
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
     this.now = options.now ?? Date.now;
+    this.mcpConfigBridge = options.mcpConfigBridge;
   }
 
   async createSession(
@@ -1117,6 +1130,7 @@ export class ACPAgentClient implements AgentClient {
         extensionCommandsParser: this.extensionCommandsParser,
         waitForInitialCommands: this.waitForInitialCommands,
         initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
+        mcpConfigBridge: this.mcpConfigBridge,
       },
     );
     await session.initializeNewSession();
@@ -1178,6 +1192,7 @@ export class ACPAgentClient implements AgentClient {
       extensionCommandsParser: this.extensionCommandsParser,
       waitForInitialCommands: this.waitForInitialCommands,
       initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
+      mcpConfigBridge: this.mcpConfigBridge,
     });
     await session.initializeResumedSession();
     return session;
@@ -1865,6 +1880,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private authMethods: NonNullable<InitializeResponse["authMethods"]> = [];
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
+  private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
   private historyPending = false;
   private historyRuntimeReleased = false;
   private replayingHistory = false;
@@ -1910,6 +1926,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
+    this.mcpConfigBridge = options.mcpConfigBridge;
   }
 
   get id(): string | null {
@@ -1926,8 +1943,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
+  private async prepareExternalMcpConfig(): Promise<void> {
+    if (!this.mcpConfigBridge) return;
+    try {
+      await this.mcpConfigBridge.acquire();
+    } catch (error) {
+      // The harness still works without the bridged servers.
+      this.logger.warn({ err: error }, "Failed to prepare external MCP config");
+    }
+  }
+
   async initializeNewSession(): Promise<void> {
     try {
+      await this.prepareExternalMcpConfig();
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
@@ -1965,6 +1993,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         throw new Error("Resume requested without persistence handle");
       }
 
+      await this.prepareExternalMcpConfig();
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;

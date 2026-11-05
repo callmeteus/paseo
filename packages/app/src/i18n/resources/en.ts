@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 export const en = {
   goalNotice: {
     noGoal: "No goal set. Usage: /goal <objective> | /goal pause | /goal resume | /goal clear",
@@ -3345,6 +3346,7 @@ export const en = {
         custom: "Custom models",
         updated: "Updated {{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "Diagnostic",
         button: "Diagnostic",

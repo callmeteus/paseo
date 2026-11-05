@@ -30,6 +30,7 @@ import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
 } from "./provider-diagnostic-models";
+import { ProviderMcpAuthSection } from "./provider-mcp-auth-section";
 
 interface ProviderDiagnosticSheetProps {
   provider: string;
@@ -697,6 +698,7 @@ export function ProviderDiagnosticSheet({
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
+        <ProviderMcpAuthSection serverId={serverId} provider={provider} enabled={visible} />
         <ProviderModalBody
           discoveredCount={discoveredModels.length}
           additionalCount={additionalModels.length}

@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3233,6 +3234,7 @@ export const ko: TranslationResources = {
         custom: "사용자 지정 모델",
         updated: "{{time}} 업데이트됨",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "진단",
         button: "진단",

@@ -26,6 +26,8 @@ import type {
   MutableDaemonConfig,
   MutableDaemonConfigPatch,
   ProviderDiagnosticResponseMessage,
+  ProviderMcpListResponseMessage,
+  ProviderMcpLoginResponseMessage,
   ProviderUsageListResponseMessage,
   ProjectPlacementPayload,
   WorkspaceProjectDescriptorPayload,
@@ -424,6 +426,8 @@ export type PaseoProviderSnapshotUpdate = Extract<
 >["payload"];
 export type PaseoProviderRefreshResult = RefreshProvidersSnapshotResponseMessage["payload"];
 export type PaseoProviderDiagnosticResult = ProviderDiagnosticResponseMessage["payload"];
+export type PaseoProviderMcpListResult = ProviderMcpListResponseMessage["payload"];
+export type PaseoProviderMcpLoginResult = ProviderMcpLoginResponseMessage["payload"];
 export type PaseoProviderUsageResult = ProviderUsageListResponseMessage["payload"];
 export interface PaseoProviderUsageOptions {
   requestId?: string;
@@ -467,6 +471,15 @@ export interface PaseoProviderActions {
     options?: { requestId?: string },
   ): Promise<PaseoProviderDiagnosticResult>;
   listUsage(options?: PaseoProviderUsageOptions): Promise<PaseoProviderUsageResult>;
+  listMcpServers(
+    provider: PaseoAgentProvider,
+    options?: { requestId?: string },
+  ): Promise<PaseoProviderMcpListResult>;
+  loginMcpServer(
+    provider: PaseoAgentProvider,
+    server: string,
+    options?: { requestId?: string },
+  ): Promise<PaseoProviderMcpLoginResult>;
   subscribe(handler: (update: PaseoProviderSnapshotUpdate) => void): () => void;
 }
 
@@ -782,6 +795,9 @@ export function createPaseoApi(
       refresh: (options) => daemonClient.refreshProvidersSnapshot(options),
       diagnostic: (provider, options) => daemonClient.getProviderDiagnostic(provider, options),
       listUsage: (options) => listProviderUsage(daemonClient, options),
+      listMcpServers: (provider, options) => daemonClient.listProviderMcpServers(provider, options),
+      loginMcpServer: (provider, server, options) =>
+        daemonClient.loginProviderMcpServer(provider, server, options),
       subscribe: (handler) => {
         return subscribeEvent("providers_snapshot_update", (message) => {
           if (message.type === "providers_snapshot_update") handler(message.payload);

@@ -2,12 +2,24 @@ import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.g
 import type { Logger } from "pino";
 import { z } from "zod";
 
-import type { AgentModelDefinition, FetchCatalogOptions } from "../agent-sdk-types.js";
+import type {
+  AgentModelDefinition,
+  FetchCatalogOptions,
+  ProviderMcpLoginResult,
+  ProviderMcpServerInfo,
+} from "../agent-sdk-types.js";
 import {
   deriveSelectorOptions,
   type ACPCatalogModelResolverContext,
   type ACPConfigFeatureOption,
 } from "./acp-agent.js";
+import { createCursorMcpConfigBridge } from "./cursor-mcp-config.js";
+import {
+  disposeCursorMcpLogins,
+  listCursorMcpServers,
+  loginCursorMcpServer,
+  resolveCursorCliCommand,
+} from "./cursor-mcp-auth.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 interface CursorACPAgentClientOptions {
@@ -85,7 +97,15 @@ async function fetchCursorModelCatalog(connection: ACPCatalogModelResolverContex
 }
 
 export class CursorACPAgentClient extends GenericACPAgentClient {
+  private readonly cliCommand: [string, ...string[]];
+  private readonly cliEnv?: Record<string, string>;
+  private readonly cursorMcpConfigBridge: ReturnType<typeof createCursorMcpConfigBridge>;
+  private cursorMcpConfigPrepared = false;
+
   constructor(options: CursorACPAgentClientOptions) {
+    const mcpConfigBridge = createCursorMcpConfigBridge({
+      logger: options.logger.child({ module: "cursor-mcp-config" }),
+    });
     super({
       logger: options.logger,
       command: options.command,
@@ -99,7 +119,31 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       clientCapabilityMeta: CURSOR_CLIENT_CAPABILITY_META,
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
       catalogModelResolver: resolveCursorCatalogModels,
+      // Cursor's ACP mode loads native mcp.json entries but not Cursor plugins.
+      // Mirror plugin MCP servers into the native config before spawn.
+      mcpConfigBridge,
     });
+    this.cliCommand = resolveCursorCliCommand(options.command);
+    this.cliEnv = options.env;
+    this.cursorMcpConfigBridge = mcpConfigBridge;
+  }
+
+  async listMcpServers(): Promise<ProviderMcpServerInfo[]> {
+    if (!this.cursorMcpConfigPrepared) {
+      await this.cursorMcpConfigBridge.acquire();
+      this.cursorMcpConfigPrepared = true;
+    }
+    return listCursorMcpServers({ command: this.cliCommand, env: this.cliEnv });
+  }
+
+  async loginMcpServer(server: string): Promise<ProviderMcpLoginResult> {
+    await this.cursorMcpConfigBridge.acquire();
+    this.cursorMcpConfigPrepared = true;
+    return loginCursorMcpServer({ command: this.cliCommand, server, env: this.cliEnv });
+  }
+
+  async shutdown(): Promise<void> {
+    disposeCursorMcpLogins();
   }
 
   async getCatalogCacheKey(_options: FetchCatalogOptions): Promise<string> {

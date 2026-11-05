@@ -150,9 +150,10 @@ function createSession(
     provider?: "cursor" | "claude-acp";
     terminateProcess?: ProcessTerminator;
     launchEnv?: Record<string, string>;
+    mcpConfigBridge?: { acquire: () => Promise<void> };
   } = {},
 ): ACPAgentSession {
-  const { provider = "claude-acp", terminateProcess, launchEnv } = options;
+  const { provider = "claude-acp", terminateProcess, launchEnv, mcpConfigBridge } = options;
   return new ACPAgentSession(
     {
       provider,
@@ -173,6 +174,7 @@ function createSession(
       },
       ...(terminateProcess ? { terminateProcess } : {}),
       ...(launchEnv ? { launchEnv } : {}),
+      ...(mcpConfigBridge ? { mcpConfigBridge } : {}),
     },
   );
 }
@@ -3918,6 +3920,27 @@ describe("ACPAgentSession", () => {
     await expect(turnFailed).resolves.toMatchObject({
       error: expect.not.stringContaining("[object Object]"),
     });
+  });
+
+  test("prepares the external MCP config before spawning the provider", async () => {
+    const acquire = vi.fn(async () => {});
+    const session = createSession({
+      provider: "cursor",
+      mcpConfigBridge: { acquire },
+    });
+    const spawnSpy = vi
+      .spyOn(
+        ACPAgentSession.prototype as unknown as { spawnProcess: () => Promise<unknown> },
+        "spawnProcess",
+      )
+      .mockRejectedValue(new Error("spawn failed"));
+
+    try {
+      await expect(session.initializeNewSession()).rejects.toThrow("spawn failed");
+      expect(acquire).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnSpy.mockRestore();
+    }
   });
 });
 

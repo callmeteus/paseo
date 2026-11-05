@@ -3354,6 +3354,10 @@ export class Session {
         return this.providerCatalogSession.handleRefreshProvidersSnapshotRequest(msg);
       case "provider_diagnostic_request":
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
+      case "provider.mcp.list.request":
+        return this.providerCatalogSession.handleProviderMcpListRequest(msg);
+      case "provider.mcp.login.request":
+        return this.providerCatalogSession.handleProviderMcpLoginRequest(msg);
       case "agent.swap_provider.request":
         return this.handleSwapProviderRequest(
           msg.agentId,

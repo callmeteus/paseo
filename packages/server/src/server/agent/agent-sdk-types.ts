@@ -781,6 +781,25 @@ export interface ResolveAgentDefaultModeInput {
   signal?: AbortSignal;
 }
 
+export type ProviderMcpServerStatus =
+  | "ready"
+  | "needs_auth"
+  | "needs_approval"
+  | "error"
+  | "unknown";
+
+export interface ProviderMcpServerInfo {
+  name: string;
+  status: ProviderMcpServerStatus;
+  detail?: string | null;
+}
+
+export interface ProviderMcpLoginResult {
+  status: "authenticated" | "waiting" | "failed";
+  url?: string | null;
+  message?: string | null;
+}
+
 export interface AgentClient {
   readonly provider: AgentProvider;
   readonly capabilities: AgentCapabilityFlags;
@@ -831,6 +850,10 @@ export interface AgentClient {
    */
   isAvailable(signal?: AbortSignal, options?: FetchCatalogOptions): Promise<boolean>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
+  /** MCP servers this provider configures outside Paseo, for the settings UI. */
+  listMcpServers?(): Promise<ProviderMcpServerInfo[]>;
+  /** Start the provider's own MCP OAuth/login flow for one server. */
+  loginMcpServer?(server: string): Promise<ProviderMcpLoginResult>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
    * Called when Paseo archives an agent so the provider's own UI reflects the same state.

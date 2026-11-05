@@ -2010,6 +2010,33 @@ export const ProviderDiagnosticRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const ProviderMcpServerStatusSchema = z.enum([
+  "ready",
+  "needs_auth",
+  "needs_approval",
+  "error",
+  "unknown",
+]);
+
+export const ProviderMcpServerSchema = z.object({
+  name: z.string(),
+  status: ProviderMcpServerStatusSchema,
+  detail: z.string().nullable().optional(),
+});
+
+export const ProviderMcpListRequestMessageSchema = z.object({
+  type: z.literal("provider.mcp.list.request"),
+  provider: AgentProviderSchema,
+  requestId: z.string(),
+});
+
+export const ProviderMcpLoginRequestMessageSchema = z.object({
+  type: z.literal("provider.mcp.login.request"),
+  provider: AgentProviderSchema,
+  server: z.string().min(1),
+  requestId: z.string(),
+});
+
 export const ProviderUsageListRequestMessageSchema = z.object({
   type: z.literal("provider.usage.list.request"),
   requestId: z.string(),
@@ -3688,6 +3715,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   GetProvidersSnapshotRequestMessageSchema,
   RefreshProvidersSnapshotRequestMessageSchema,
   ProviderDiagnosticRequestMessageSchema,
+  ProviderMcpListRequestMessageSchema,
+  ProviderMcpLoginRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
   UsageListReportsRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
@@ -4160,6 +4189,8 @@ export const ServerInfoStatusPayloadSchema = z
         commitBaseClassification: z.boolean().optional(),
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: z.boolean().optional(),
+        // COMPAT(providerMcpAuth): added in v0.13.2, remove after 2027-11-05.
+        providerMcpAuth: z.boolean().optional(),
         // COMPAT(hopliteProvider): added after v0.11.2, remove after 2027-04-15 once host floor includes the bundled adapter.
         hopliteProvider: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
@@ -6812,6 +6843,28 @@ export const ProviderDiagnosticResponseMessageSchema = z.object({
   }),
 });
 
+export const ProviderMcpListResponseMessageSchema = z.object({
+  type: z.literal("provider.mcp.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: AgentProviderSchema,
+    servers: z.array(ProviderMcpServerSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ProviderMcpLoginResponseMessageSchema = z.object({
+  type: z.literal("provider.mcp.login.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: AgentProviderSchema,
+    server: z.string(),
+    status: z.enum(["authenticated", "waiting", "failed"]),
+    url: z.string().nullable().optional(),
+    message: z.string().nullable(),
+  }),
+});
+
 export const ProviderUsageToneSchema = z.enum(["default", "ok", "warning", "danger"]);
 export const ProviderUsageStatusSchema = z.enum(["available", "unavailable", "error"]);
 
@@ -7646,6 +7699,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProvidersSnapshotUpdateMessageSchema,
   RefreshProvidersSnapshotResponseMessageSchema,
   ProviderDiagnosticResponseMessageSchema,
+  ProviderMcpListResponseMessageSchema,
+  ProviderMcpLoginResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
   UsageListReportsUpdateMessageSchema,
   UsageListReportsResponseMessageSchema,
@@ -7839,6 +7894,9 @@ export type RefreshProvidersSnapshotResponseMessage = z.infer<
 export type ProviderDiagnosticResponseMessage = z.infer<
   typeof ProviderDiagnosticResponseMessageSchema
 >;
+export type ProviderMcpServer = z.infer<typeof ProviderMcpServerSchema>;
+export type ProviderMcpListResponseMessage = z.infer<typeof ProviderMcpListResponseMessageSchema>;
+export type ProviderMcpLoginResponseMessage = z.infer<typeof ProviderMcpLoginResponseMessageSchema>;
 export type ProviderUsageTone = z.infer<typeof ProviderUsageToneSchema>;
 export type UsageProblem = z.infer<typeof UsageProblemSchema>;
 export type UsageReport = z.infer<typeof UsageReportSchema>;

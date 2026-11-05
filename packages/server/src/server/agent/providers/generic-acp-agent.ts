@@ -8,6 +8,7 @@ import {
   type ACPConfigFeatureOption,
   DEFAULT_ACP_CAPABILITIES,
   type ACPExtensionCommandsParser,
+  type ExternalMcpConfigBridge,
 } from "./acp-agent.js";
 import {
   buildBinaryDiagnosticRows,
@@ -32,6 +33,7 @@ interface GenericACPAgentClientOptions {
   assistantTextTransform?: (text: string) => string | null;
   catalogModelResolver?: ACPCatalogModelResolver;
   now?: () => number;
+  mcpConfigBridge?: ExternalMcpConfigBridge;
 }
 
 export class GenericACPAgentClient extends ACPAgentClient {
@@ -60,6 +62,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       assistantTextTransform: options.assistantTextTransform,
       catalogModelResolver: options.catalogModelResolver,
       now: options.now,
+      mcpConfigBridge: options.mcpConfigBridge,
     });
 
     this.command = options.command;

@@ -490,6 +490,72 @@ export class ProviderCatalogSession {
       });
     }
   }
+
+  async handleProviderMcpListRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.mcp.list.request" }>,
+  ): Promise<void> {
+    try {
+      const servers = await this.providerSnapshotManager.listProviderMcpServers(msg.provider);
+      this.host.emit({
+        type: "provider.mcp.list.response",
+        payload: {
+          requestId: msg.requestId,
+          provider: msg.provider,
+          servers,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err, provider: msg.provider }, "Failed to list provider MCP servers");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to list MCP servers: ${err.message}`,
+          code: "provider_mcp_list_failed",
+        },
+      });
+    }
+  }
+
+  async handleProviderMcpLoginRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.mcp.login.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.providerSnapshotManager.loginProviderMcpServer(
+        msg.provider,
+        msg.server,
+      );
+      this.host.emit({
+        type: "provider.mcp.login.response",
+        payload: {
+          requestId: msg.requestId,
+          provider: msg.provider,
+          server: msg.server,
+          status: result.status,
+          url: result.url ?? null,
+          message: result.message ?? null,
+        },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        { err, provider: msg.provider, server: msg.server },
+        "Failed to start provider MCP login",
+      );
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to start MCP login: ${err.message}`,
+          code: "provider_mcp_login_failed",
+        },
+      });
+    }
+  }
 }
 
 function resolveCatalogRequestCwd(cwd?: string | null): string | undefined {

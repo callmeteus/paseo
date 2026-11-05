@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -3249,6 +3250,7 @@ export const ar: TranslationResources = {
         custom: "نماذج مخصصة",
         updated: "تم تحديث{{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "التشخيص",
         button: "التشخيص",
