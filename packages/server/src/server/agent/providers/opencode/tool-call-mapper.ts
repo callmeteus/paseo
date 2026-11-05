@@ -26,6 +26,15 @@ const OpencodeRawToolCallSchema = z
   })
   .passthrough();
 
+// OpenCode keeps a `question` part running while the form is open. Nothing in the timeline can
+// finish that row, so a reopened chat shows a spinner that never resolves. The pending form owns
+// the "waiting for you" state; the row itself is only the record of what was asked.
+const QUESTION_TOOL_NAME = "question";
+
+function isQuestionTool(name: string): boolean {
+  return name.trim().toLowerCase() === QUESTION_TOOL_NAME;
+}
+
 export function mapOpencodeToolCall(params: OpencodeToolCallParams): ToolCallTimelineItem | null {
   const parsed = OpencodeRawToolCallSchema.safeParse(params);
   if (!parsed.success) {
@@ -42,7 +51,11 @@ export function mapOpencodeToolCall(params: OpencodeToolCallParams): ToolCallTim
   const output = raw.output ?? null;
   const error = raw.error ?? null;
   const rawStatus = typeof raw.status === "string" ? raw.status : undefined;
-  const status = normalizeToolCallStatus(rawStatus, error, output);
+  const normalizedStatus = normalizeToolCallStatus(rawStatus, error, output);
+  // A question is either waiting for the form (OpenCode says running) or was interrupted when the
+  // user answered elsewhere (OpenCode says aborted). Neither is work the timeline can finish, and
+  // painting the aborted case as an error blames the tool for the user's choice.
+  const status = isQuestionTool(name) ? "completed" : normalizedStatus;
   const detail = deriveOpencodeToolDetail(name, input, output, error, raw.metadata);
 
   if (status === "failed") {

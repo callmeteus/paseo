@@ -566,4 +566,81 @@ describe("opencode tool-call mapper", () => {
 
     expect(item).toBeNull();
   });
+
+  it("renders a pending question as readable text instead of a running call", () => {
+    const item = expectMapped(
+      mapOpencodeToolCall({
+        toolName: "question",
+        callId: "call-question-pending",
+        status: "running",
+        input: {
+          questions: [
+            {
+              question: "O que você quer que eu gere para testar no celular?",
+              header: "Build",
+              options: [{ label: "APK arm64" }, { label: "Só o desktop" }],
+            },
+          ],
+        },
+        output: null,
+      }),
+    );
+
+    expect(item.status).toBe("completed");
+    expect(item.detail).toEqual({
+      type: "plain_text",
+      text: "O que você quer que eu gere para testar no celular?",
+    });
+  });
+
+  it("renders an answered question with the chosen answers", () => {
+    const item = expectMapped(
+      mapOpencodeToolCall({
+        toolName: "question",
+        callId: "call-question-answered",
+        status: "completed",
+        input: {
+          questions: [
+            { question: "Qual commit?", header: "Commit" },
+            { question: "O que é reinstalar?", header: "Rebuild" },
+          ],
+        },
+        output: "User has answered your questions",
+        metadata: {
+          answers: [["Separar meus hunks"], ["Rebuild + reinstalar app desktop"]],
+        },
+      }),
+    );
+
+    expect(item.status).toBe("completed");
+    expect(item.detail).toEqual({
+      type: "plain_text",
+      text: [
+        "Qual commit?\nSeparar meus hunks",
+        "O que é reinstalar?\nRebuild + reinstalar app desktop",
+      ].join("\n\n"),
+    });
+  });
+
+  it("does not leave a dismissed question as a failed tool call", () => {
+    const item = expectMapped(
+      mapOpencodeToolCall({
+        toolName: "question",
+        callId: "call-question-aborted",
+        status: "error",
+        input: {
+          questions: [{ question: "O que você quer que eu gere?", header: "Build" }],
+        },
+        output: null,
+        error: { type: "aborted", message: "Tool execution interrupted: question" },
+      }),
+    );
+
+    expect(item.status).toBe("completed");
+    expect(item.error).toBeNull();
+    expect(item.detail).toEqual({
+      type: "plain_text",
+      text: "O que você quer que eu gere?",
+    });
+  });
 });

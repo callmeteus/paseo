@@ -221,6 +221,59 @@ function deriveOpencodeTaskDetail(
   };
 }
 
+const OpencodeQuestionEntrySchema = z
+  .object({
+    question: z.string().optional(),
+    header: z.string().optional(),
+  })
+  .passthrough();
+
+function normalizeQuestionAnswer(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return nonEmptyString(value.trim());
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const parts = value
+    .map(normalizeQuestionAnswer)
+    .filter((part): part is string => part !== undefined);
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+/**
+ * The `question` tool is a form, not a tool with an output to inspect: its timeline row is the
+ * only record left after the answer, so it reads as question/answer instead of raw input JSON.
+ * OpenCode reports the answers in `state.metadata.answers`, paired by question index.
+ */
+function deriveOpencodeQuestionDetail(
+  input: unknown,
+  metadata: Record<string, unknown> | undefined,
+): ToolCallDetail | null {
+  if (!isRecord(input) || !Array.isArray(input.questions)) {
+    return null;
+  }
+  const answers = Array.isArray(metadata?.answers) ? metadata.answers : [];
+  const entries: string[] = [];
+  input.questions.forEach((raw, index) => {
+    const parsed = OpencodeQuestionEntrySchema.safeParse(raw);
+    if (!parsed.success) {
+      return;
+    }
+    const question =
+      nonEmptyString(parsed.data.question?.trim()) ?? nonEmptyString(parsed.data.header?.trim());
+    if (!question) {
+      return;
+    }
+    const answer = normalizeQuestionAnswer(answers[index]);
+    entries.push(answer ? `${question}\n${answer}` : question);
+  });
+  if (entries.length === 0) {
+    return null;
+  }
+  return { type: "plain_text", text: entries.join("\n\n") };
+}
+
 function toOpencodeEditInput(value: { filePath: string; oldString?: string; newString?: string }) {
   return {
     filePath: value.filePath,
@@ -380,6 +433,13 @@ export function deriveOpencodeToolDetail(
     const taskDetail = deriveOpencodeTaskDetail(input, output, error, metadata);
     if (taskDetail) {
       return taskDetail;
+    }
+  }
+
+  if (toolName.trim().toLowerCase() === "question") {
+    const questionDetail = deriveOpencodeQuestionDetail(input, metadata);
+    if (questionDetail) {
+      return questionDetail;
     }
   }
 
