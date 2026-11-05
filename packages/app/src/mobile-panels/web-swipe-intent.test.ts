@@ -41,7 +41,7 @@ describe("web swipe phase", () => {
 });
 
 describe("web swipe completion", () => {
-  it("opens past a third of the screen or on a fast flick", () => {
+  it("opens past a quarter of the screen or on a fast flick", () => {
     expect(shouldCompleteWebSwipe({ deltaX: 200, velocityX: 0, windowWidth: 390 })).toBe(true);
     expect(shouldCompleteWebSwipe({ deltaX: 40, velocityX: 700, windowWidth: 390 })).toBe(true);
   });

@@ -10,7 +10,7 @@
 export type WebSwipePhase = "idle" | "tracking" | "active" | "cancelled";
 
 /** Horizontal travel before the swipe claims the gesture. */
-const ACTIVATION_DISTANCE = 15;
+const ACTIVATION_DISTANCE = 12;
 /** Vertical travel that means the reader is scrolling the transcript instead. */
 const VERTICAL_TOLERANCE = 10;
 
@@ -46,5 +46,5 @@ export function shouldCompleteWebSwipe(input: {
   velocityX: number;
   windowWidth: number;
 }): boolean {
-  return input.deltaX > input.windowWidth / 3 || input.velocityX > 500;
+  return input.deltaX > input.windowWidth / 4 || input.velocityX > 400;
 }
