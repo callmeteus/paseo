@@ -152,6 +152,7 @@ import {
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { createAgentProviderRuntime } from "./agent/provider-runtime.js";
 import { createProviderCatalogRefreshScheduler } from "./agent/provider-catalog-refresh-scheduler.js";
+import { createOpenWeightRouterSync } from "./agent/open-weight-routers.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -1043,6 +1044,11 @@ export async function createPaseoDaemon(
   const providerCatalogRefreshScheduler = createProviderCatalogRefreshScheduler({
     manager: providerSnapshotManager,
     logger: logger.child({ module: "provider-catalog-refresh" }),
+  });
+  const openWeightRouterSync = createOpenWeightRouterSync({
+    store: daemonConfigStore,
+    snapshotManager: providerSnapshotManager,
+    logger: logger.child({ module: "open-weight-routers" }),
   });
   daemonConfigStore.onFieldChange("catalogRefreshTimeoutMs", (value) => {
     providerSnapshotManager.setRefreshTimeoutMs(typeof value === "number" ? value : undefined);
@@ -1938,6 +1944,7 @@ export async function createPaseoDaemon(
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
             providerCatalogRefreshScheduler.start();
+            openWeightRouterSync.start();
             await finishSubscriptions.start();
             wsServer.beginAcceptingConnections();
             const relaySecurityLogger = logger.child({ module: "relay-security" });
@@ -1997,6 +2004,7 @@ export async function createPaseoDaemon(
       scriptHealthMonitor.start();
     } catch (error) {
       providerCatalogRefreshScheduler.stop();
+      openWeightRouterSync.stop();
       localCredential = null;
       await deleteLocalCredential(config.paseoHome);
       unsubscribePluginProviders();
@@ -2013,6 +2021,7 @@ export async function createPaseoDaemon(
 
   const stop = async () => {
     providerCatalogRefreshScheduler.stop();
+    openWeightRouterSync.stop();
     localCredential = null;
     await deleteLocalCredential(config.paseoHome);
     // Stop tracking plugin provider registrations before anything tears plugins

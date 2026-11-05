@@ -1,5 +1,10 @@
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { ModelRouter, ModelRouterTarget } from "@getpaseo/protocol/model-router";
+import {
+  isFreeModel,
+  isFreeProvider,
+  isOpenWeightModel,
+} from "@getpaseo/protocol/open-weight-models";
 
 export interface RouterModelCandidate {
   provider: string;
@@ -12,11 +17,6 @@ export interface RouterModelCandidate {
 
 /** Matches `ModelRouterSchema`'s target cap. */
 const MAX_PRESET_TARGETS = 32;
-
-const OPEN_WEIGHT_PATTERN =
-  /(llama|qwen|deepseek|mistral|mixtral|gpt-oss|kimi|glm|gemma|phi-?\d|nemotron|minimax|mimo|hermes|falcon|yi-|olmo|granite|smollm|seed-oss|hunyuan|exaone|ernie|dots|step-?\d)/i;
-
-const FREE_HINT_PATTERN = /(?:^|[^a-z])(free|gratis|gratuito)(?:[^a-z]|$)|:free\b/i;
 
 /** Providers whose entire catalog is free to use (kept explicit on purpose). */
 const FREE_TIER_PROVIDERS = new Set<string>();
@@ -41,16 +41,6 @@ const OPEN_WEIGHT_TIERS: RegExp[] = [
   /(nemotron|llama|mistral|gemma|phi|smollm|hermes|granite|olmo)/i,
 ];
 
-function readCostIsZero(metadata: unknown): boolean {
-  if (!metadata || typeof metadata !== "object") return false;
-  const cost = (metadata as { cost?: unknown }).cost;
-  if (!cost || typeof cost !== "object") return false;
-  const values = Object.values(cost as Record<string, unknown>).filter(
-    (value): value is number => typeof value === "number",
-  );
-  return values.length > 0 && values.every((value) => value === 0);
-}
-
 function tierScore(label: string, modelId: string, tiers: RegExp[]): number {
   const haystack = `${label} ${modelId}`;
   const index = tiers.findIndex((tier) => tier.test(haystack));
@@ -65,11 +55,11 @@ export function collectRouterCandidates(
     if (!entry.enabled) continue;
     for (const model of entry.models ?? []) {
       if (model.isSelectable === false) continue;
-      const haystack = `${model.label} ${model.id}`;
-      const freeByHint = FREE_HINT_PATTERN.test(haystack);
-      const freeByCost = readCostIsZero(model.metadata);
-      const isFree = freeByHint || freeByCost || FREE_TIER_PROVIDERS.has(entry.provider);
-      const isOpenWeight = OPEN_WEIGHT_PATTERN.test(haystack);
+      const isFree =
+        isFreeModel({ id: model.id, label: model.label, metadata: model.metadata }) ||
+        isFreeProvider({ id: entry.provider, label: entry.label }) ||
+        FREE_TIER_PROVIDERS.has(entry.provider);
+      const isOpenWeight = isOpenWeightModel({ id: model.id, label: model.label });
       candidates.push({
         provider: entry.provider,
         model: model.id || null,
