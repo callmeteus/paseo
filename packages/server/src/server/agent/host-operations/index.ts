@@ -16,7 +16,7 @@ import type { ConnectedHosts } from "../../connected-hosts/index.js";
 import { resolveRequiredProviderModel } from "../mcp-shared.js";
 import { selectAgentListItems } from "../agent-projections.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
-import { findChatTextMatches } from "../chat-search/index.js";
+import { searchChatsAcrossChats } from "../chat-search/cross-chat-search.js";
 import { expandUserPath } from "../../path-utils.js";
 import type { PaseoToolExecutionContext, PaseoToolResult } from "../tools/types.js";
 
@@ -355,33 +355,38 @@ export function createHostResolver(input: {
                 limit: (args.maxChats as number | undefined) ?? 25,
               },
             );
-            const chats = [];
-            for (const agent of candidates) {
-              const timeline = await client.fetchAgentTimeline(agent.id, {
-                direction: "tail",
-                limit: 0,
-                projection: "projected",
-              });
-              const matches = findChatTextMatches({
-                items: timeline.entries.map((entry) => ({
-                  seq: entry.seqEnd,
-                  item: entry.item,
-                })),
-                query,
-                maxMatches: (args.matchesPerChat as number | undefined) ?? 3,
-              });
-              if (matches.length > 0) {
-                chats.push({
-                  agentId: agent.id,
-                  title: agent.title,
-                  provider: agent.provider,
-                  status: agent.status,
-                  cwd: agent.cwd,
-                  updatedAt: agent.updatedAt,
-                  matches,
+            const chats = await searchChatsAcrossChats({
+              query,
+              limit: (args.maxChats as number | undefined) ?? 25,
+              matchesPerChat: (args.matchesPerChat as number | undefined) ?? 3,
+              // MCP callers asked for this explicitly, so they can wait for a full scan.
+              deadlineMs: 5_000,
+              chats: candidates.map((agent) => ({
+                agentId: agent.id,
+                title: agent.title,
+                provider: agent.provider,
+                status: agent.status,
+                cwd: agent.cwd,
+                updatedAt: agent.updatedAt,
+                archivedAt: agent.archivedAt ?? null,
+              })),
+              loadEntries: async (agentId) => {
+                const timeline = await client.fetchAgentTimeline(agentId, {
+                  direction: "tail",
+                  limit: 0,
+                  projection: "projected",
                 });
-              }
-            }
+                return timeline.entries.map((entry) => ({
+                  seq: entry.seqEnd,
+                  item: {
+                    type: entry.item.type,
+                    ...("text" in entry.item && typeof entry.item.text === "string"
+                      ? { text: entry.item.text }
+                      : {}),
+                  },
+                }));
+              },
+            });
             return result({ query, chats });
           },
           async createWorkspace(args) {

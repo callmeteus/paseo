@@ -112,6 +112,7 @@ import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { useVisibleAgentIds } from "./visible-agent-ids";
 import {
+  getHostAuthFailureReason,
   getHostRuntimeStore,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
@@ -128,7 +129,7 @@ import { useWorkspace } from "@/stores/session-store-hooks";
 import { useWorkspaceTerminalSessionRetention } from "@/terminal/hooks/use-workspace-terminal-session-retention";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { useArchiveAgent } from "@/hooks/use-archive-agent";
+import { useArchiveAgent, useDeleteAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
 import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store";
@@ -1067,6 +1068,7 @@ function WorkspaceScreenContent({
 
   const client = useHostRuntimeClient(normalizedServerId);
   const isConnected = useHostRuntimeIsConnected(normalizedServerId);
+  const hostRuntimeSnapshot = useHostRuntimeSnapshot(normalizedServerId);
   const supportsProvidersSnapshot = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
@@ -1219,6 +1221,7 @@ function WorkspaceScreenContent({
     onTerminalCreateFailed: handleTerminalCreateFailed,
   });
   const { archiveAgent } = useArchiveAgent();
+  const { deleteAgent } = useDeleteAgent();
 
   const { checkoutQuery, isCheckoutStatusLoading } = useWorkspaceCheckoutStatus({
     client,
@@ -2026,6 +2029,59 @@ function WorkspaceScreenContent({
       persistenceKey,
       t,
       toast,
+    ],
+  );
+
+  const handleDeleteAgentTab = useCallback(
+    async (agentId: string) => {
+      if (!normalizedServerId) {
+        return;
+      }
+      const tabId =
+        uiTabs.find((tab) => tab.target.kind === "agent" && tab.target.agentId === agentId)
+          ?.tabId ?? null;
+      const agent =
+        useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
+      const confirmed = await confirmDialog({
+        title: t("workspace.tabs.confirmations.deleteAgentTitle"),
+        message:
+          agent?.status === "running"
+            ? t("workspace.tabs.confirmations.deleteAgentRunningMessage")
+            : t("workspace.tabs.confirmations.deleteAgentMessage"),
+        confirmLabel: t("workspace.tabs.confirmations.deletePermanently"),
+        cancelLabel: t("workspace.tabs.confirmations.cancel"),
+        destructive: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      if (tabId) {
+        setHoveredCloseTabKey((current) => (current === tabId ? null : current));
+      }
+      if (persistenceKey) {
+        if (tabId) {
+          closeWorkspaceTabWithCleanup({ tabId, target: { kind: "agent", agentId } });
+        }
+        hideWorkspaceAgent(persistenceKey, agentId);
+      }
+      try {
+        await deleteAgent({ serverId: normalizedServerId, agentId });
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : t("workspace.tabs.toasts.failedToDeleteAgent"),
+        );
+      }
+    },
+    [
+      closeWorkspaceTabWithCleanup,
+      deleteAgent,
+      hideWorkspaceAgent,
+      normalizedServerId,
+      persistenceKey,
+      setHoveredCloseTabKey,
+      t,
+      toast,
+      uiTabs,
     ],
   );
 
@@ -3164,6 +3220,8 @@ function WorkspaceScreenContent({
 
   const workspaceScreenGate = renderWorkspaceRouteGate({
     state: workspaceRouteState,
+    serverId: normalizedServerId,
+    authFailureReason: getHostAuthFailureReason(hostRuntimeSnapshot),
     actions: {
       onRetryHost: handleRetryHost,
       onManageHost: handleManageHost,
@@ -3382,6 +3440,7 @@ function WorkspaceScreenContent({
             onCopyTerminalId={handleCopyTerminalId}
             onCopyFilePath={handleCopyFilePath}
             onReloadAgent={handleReloadAgent}
+            onDeleteAgent={handleDeleteAgentTab}
             onRenameTab={handleRenameTab}
             onCloseTab={handleCloseTabById}
             onCloseTabsAbove={handleCloseTabsToLeft}
@@ -3431,6 +3490,7 @@ function WorkspaceScreenContent({
       handleCreateTerminalWithProfile,
       handleOpenSetupTab,
       handleReloadAgent,
+      handleDeleteAgentTab,
       handleRenameTab,
       handleSelectSwitcherTab,
       handleToggleExplorerSidebar,
@@ -3473,6 +3533,7 @@ function WorkspaceScreenContent({
         onCopyTerminalId={handleCopyTerminalId}
         onCopyFilePath={handleCopyFilePath}
         onReloadAgent={handleReloadAgent}
+        onDeleteAgent={handleDeleteAgentTab}
         onRenameTab={handleRenameTab}
         onCloseTabsToLeft={handleCloseTabsToLeftInPane}
         onCloseTabsToRight={handleCloseTabsToRightInPane}
@@ -3508,6 +3569,7 @@ function WorkspaceScreenContent({
     handleCopyTerminalId,
     handleCopyFilePath,
     handleReloadAgent,
+    handleDeleteAgentTab,
     handleRenameTab,
     handleCloseTabsToLeftInPane,
     handleCloseTabsToRightInPane,
@@ -3578,6 +3640,7 @@ function WorkspaceScreenContent({
             onCopyTerminalId={handleCopyTerminalId}
             onCopyFilePath={handleCopyFilePath}
             onReloadAgent={handleReloadAgent}
+            onDeleteAgent={handleDeleteAgentTab}
             onRenameTab={handleRenameTab}
             onCloseTabsToLeft={handleCloseTabsToLeft}
             onCloseTabsToRight={handleCloseTabsToRight}
@@ -3623,6 +3686,7 @@ function WorkspaceScreenContent({
         onCopyTerminalId={handleCopyTerminalId}
         onCopyFilePath={handleCopyFilePath}
         onReloadAgent={handleReloadAgent}
+        onDeleteAgent={handleDeleteAgentTab}
         onRenameTab={handleRenameTab}
         onCloseTabsToLeft={handleCloseTabsToLeftInPane}
         onCloseTabsToRight={handleCloseTabsToRightInPane}
@@ -3664,6 +3728,7 @@ function WorkspaceScreenContent({
     handleCopyTerminalId,
     handleCopyFilePath,
     handleReloadAgent,
+    handleDeleteAgentTab,
     handleRenameTab,
     handleCloseTabsToLeftInPane,
     handleCloseTabsToRightInPane,

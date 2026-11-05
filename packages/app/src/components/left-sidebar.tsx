@@ -52,6 +52,7 @@ import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
+import type { SidebarHostProjectGroup } from "@/components/sidebar/sidebar-projection";
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
 import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { useHosts } from "@/runtime/host-runtime";
@@ -81,6 +82,7 @@ const DEV_BUILD_LABEL = process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() ||
 interface SidebarSharedProps {
   theme: SidebarTheme;
   workspaceGroups: SidebarWorkspaceGroup[];
+  hostProjects: SidebarHostProjectGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
   projects: SidebarProjectEntry[];
@@ -140,6 +142,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     isRevalidating,
     refreshAll,
     workspaceGroups,
+    hostProjects,
     projectIconTargets,
     pinnedGroups,
     collapsedProjectKeys,
@@ -222,6 +225,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const sharedProps = {
     theme,
     workspaceGroups,
+    hostProjects,
     projectIconTargets,
     pinnedGroups,
     projects,
@@ -512,6 +516,7 @@ function MobileSidebar({
   active,
   theme,
   workspaceGroups,
+  hostProjects,
   projectIconTargets,
   pinnedGroups,
   projects,
@@ -588,6 +593,7 @@ function MobileSidebar({
             shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
             groupMode={groupMode}
             workspaceGroups={workspaceGroups}
+            hostProjects={hostProjects}
             projectIconTargets={projectIconTargets}
             pinnedGroups={pinnedGroups}
             projects={projects}
@@ -621,6 +627,7 @@ function MobileSidebar({
 function DesktopSidebar({
   theme,
   workspaceGroups,
+  hostProjects,
   projectIconTargets,
   pinnedGroups,
   projects,
@@ -770,6 +777,7 @@ function DesktopSidebar({
             shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
             groupMode={groupMode}
             workspaceGroups={workspaceGroups}
+            hostProjects={hostProjects}
             projectIconTargets={projectIconTargets}
             pinnedGroups={pinnedGroups}
             projects={projects}
@@ -808,6 +816,7 @@ function DesktopSidebar({
 function WorkspacesSectionHeader() {
   return (
     <SidebarSectionHeader title="Workspaces">
+      <HostGroupingToggle />
       <Tooltip delayDuration={300}>
         <TooltipTrigger asChild>
           <View>
@@ -819,6 +828,47 @@ function WorkspacesSectionHeader() {
         </TooltipContent>
       </Tooltip>
     </SidebarSectionHeader>
+  );
+}
+
+/** One-press switch for the optional host tree; the menu carries the same decision. */
+function HostGroupingToggle() {
+  const { t } = useTranslation();
+  const groupMode = useSidebarViewStore((state) => state.groupMode);
+  const setGroupMode = useSidebarViewStore((state) => state.setGroupMode);
+  const active = groupMode === "host";
+  const label = t(active ? "sidebar.hostGrouping.disable" : "sidebar.hostGrouping.enable");
+  const handlePress = useCallback(() => {
+    setGroupMode(active ? "project" : "host");
+  }, [active, setGroupMode]);
+  const accessibilityState = useMemo(() => ({ selected: active }), [active]);
+  const buttonStyle = useCallback(
+    ({ hovered = false }: { hovered?: boolean }) => [
+      styles.headerIconButton,
+      hovered && styles.headerIconButtonHovered,
+      active && styles.headerIconButtonActive,
+    ],
+    [active],
+  );
+
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          accessibilityState={accessibilityState}
+          onPress={handlePress}
+          style={buttonStyle}
+          testID="sidebar-toggle-host-grouping"
+        >
+          <DensityIcon icon={Server} size="sm" color={active ? "accent" : "foregroundMuted"} />
+        </Pressable>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="center" offset={8}>
+        <IconTooltipContent label={label} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -919,6 +969,19 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[1],
+  },
+  headerIconButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+  },
+  headerIconButtonHovered: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  headerIconButtonActive: {
+    backgroundColor: theme.colors.surface2,
   },
   tooltipRow: {
     flexDirection: "row",

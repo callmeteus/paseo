@@ -1962,6 +1962,8 @@ export class VoiceAssistantWebSocketServer {
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
+        // COMPAT(workspaceDelete): added in v0.9.0, remove gate after 2027-11-04.
+        workspaceDelete: true,
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,
         workspaceSetupObservation: true,
@@ -2058,6 +2060,8 @@ export class VoiceAssistantWebSocketServer {
         daemonSelfUpdate: this.daemonRuntimeConfig?.desktopManaged !== true,
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: true,
+        // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
+        chatSearch: true,
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
         agentProviderSwap: true,
         // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.
@@ -2088,6 +2092,8 @@ export class VoiceAssistantWebSocketServer {
         commitBaseClassification: true,
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: true,
+        // COMPAT(providerMcpAuth): added in v0.13.2, remove after 2027-11-05.
+        providerMcpAuth: true,
         hopliteProvider: this.providerSnapshotManager.supportsConfigRequiredProvider("hoplite"),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,

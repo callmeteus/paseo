@@ -50,6 +50,22 @@ describe("create agent preferences", () => {
     });
   });
 
+  it("moves the written provider to the end so key order tracks recency", () => {
+    const preferences = mergeProviderPreferences({
+      preferences: {
+        providerPreferences: {
+          claude: { model: "opus-5" },
+          codex: { model: "gpt-5.5" },
+        },
+      },
+      provider: "claude",
+      updates: { mode: "plan" },
+    });
+
+    expect(Object.keys(preferences.providerPreferences ?? {})).toEqual(["codex", "claude"]);
+    expect(preferences.provider).toBe("claude");
+  });
+
   it("does not commit a failed write or leak it into the next update", async () => {
     const storage = new FakeCreateAgentPreferenceStorage();
     const preferences = new CreateAgentPreferencesService(storage);

@@ -1,3 +1,4 @@
+import { providerMcpPtBR } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -778,6 +779,7 @@ export const ptBR: TranslationResources = {
         moveToWorkspace: "Mover para workspace",
         promoteToWorkspace: "Promover a workspace",
         openContainingDirectory: "Abrir diretório do arquivo",
+        deletePermanently: "Excluir chat permanentemente",
         moveWorkspace: {
           title: "Mover workspace para pasta",
           empty: "Nenhuma outra pasta aberta.",
@@ -855,6 +857,7 @@ export const ptBR: TranslationResources = {
         reloadedAgent: "Agente recarregado",
         failedToReloadAgent: "Falha ao recarregar agente",
         failedToCloseAgent: "Falha ao fechar agente",
+        failedToDeleteAgent: "Falha ao excluir o chat",
       },
       confirmations: {
         unsavedTitle: "Alterações não salvas",
@@ -872,6 +875,12 @@ export const ptBR: TranslationResources = {
         archiveRunningAgentTitle: "Arquivar agente em execução?",
         archiveRunningAgentMessage:
           "Este agente ainda está em execução. Arquivá-lo interromperá o agente e fechará a aba.",
+        deleteAgentTitle: "Excluir chat permanentemente?",
+        deleteAgentMessage:
+          "Isso exclui permanentemente este chat e seu histórico. Não é possível desfazer.",
+        deleteAgentRunningMessage:
+          "Este chat ainda está em execução. Excluí-lo encerra o agente e apaga o histórico permanentemente. Não é possível desfazer.",
+        deletePermanently: "Excluir permanentemente",
         closeTabsLeftTitle: "Fechar abas à esquerda?",
         closeTabsRightTitle: "Fechar abas à direita?",
         closeOtherTabsTitle: "Fechar outras abas?",
@@ -1333,6 +1342,10 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "Agrupar por host",
+      disable: "Parar de agrupar por host",
+    },
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Precisa de resposta",
@@ -1357,6 +1370,7 @@ export const ptBR: TranslationResources = {
         project: "Projeto",
         status: "Status",
         labels: "Etiquetas",
+        host: "Host",
       },
       titleSource: {
         label: "Título",
@@ -1523,6 +1537,7 @@ export const ptBR: TranslationResources = {
         moveToFolder: "Mover workspace para pasta…",
         archive: "Arquivar",
         archiveWorkspace: "Arquivar workspace",
+        deletePermanently: "Excluir permanentemente",
         hideFromSidebar: "Ocultar da barra lateral",
         archiving: "Arquivando...",
         hiding: "Ocultando...",
@@ -1532,6 +1547,10 @@ export const ptBR: TranslationResources = {
         hideMessage:
           'Ocultar "{{workspaceName}}" da barra lateral?\n\nOs arquivos no disco não serão alterados.',
         hideConfirm: "Ocultar",
+        deleteTitle: "Excluir workspace permanentemente?",
+        deleteMessage:
+          'Isso exclui permanentemente "{{name}}" e todos os seus chats. Não é possível desfazer.',
+        deleteConfirm: "Excluir permanentemente",
         cancel: "Cancelar",
       },
       rename: {
@@ -1548,6 +1567,7 @@ export const ptBR: TranslationResources = {
         movedToFolder: "Workspace movido para {{path}}",
         moveToFolderFailed: "Não foi possível mover o workspace",
         archiveFailed: "Falha ao arquivar workspace",
+        deleteFailed: "Falha ao excluir o workspace",
       },
     },
   },
@@ -1828,11 +1848,15 @@ export const ptBR: TranslationResources = {
   agentAutocomplete: {
     searchingWorkspace: "Buscando workspace...",
     loadingCommands: "Carregando comandos...",
-    noFiles: "Nenhum arquivo ou diretório encontrado",
+    noFiles: "Nenhum arquivo, chat ou workspace encontrado",
     noCommands: "Nenhum comando encontrado",
     failedToLoad: "Falha ao carregar",
     chooseProjectForCommands: "Escolha um projeto para ver os comandos",
     chooseModelForCommands: "Selecione um modelo para ver os comandos",
+    untitledChat: "Chat sem título",
+    archivedChat: "Arquivado",
+    attachChatFailed: "Não foi possível anexar esse chat",
+    attachChatUnavailable: "Este composer não pode anexar um chat aqui",
   },
   loadOlderHistory: {
     failed: "Não foi possível carregar o histórico mais antigo",
@@ -2918,7 +2942,17 @@ export const ptBR: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "Remova este host e adicione-o novamente com a senha que este daemon pede.",
+        requiredTitle: "Senha necessária",
+        incorrectTitle: "Senha incorreta",
+        guidance: "Digite a senha que este host pede para conectar.",
+        label: "Senha do host",
+        placeholder: "Senha",
+        connect: "Conectar",
+        connecting: "Conectando...",
+        empty: "Digite a senha.",
+        show: "Mostrar senha",
+        hide: "Ocultar senha",
+        failed: "Não foi possível conectar. Confira a senha e tente novamente.",
       },
       appearance: {
         title: "Aparência",
@@ -3231,6 +3265,7 @@ export const ptBR: TranslationResources = {
         custom: "Modelos personalizados",
         updated: "Atualizado {{time}}",
       },
+      mcp: providerMcpPtBR,
       diagnostic: {
         title: "Diagnóstico",
         button: "Diagnóstico",

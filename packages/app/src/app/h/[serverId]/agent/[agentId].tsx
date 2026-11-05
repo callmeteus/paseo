@@ -7,7 +7,12 @@ import { AgentRouteResolutionView } from "@/navigation/agent-route-resolution-vi
 import { useHasHydratedWorkspaces } from "@/stores/session-store-hooks";
 import { useWorkspaceLayoutStoreHydrated } from "@/stores/workspace-layout-store";
 import { useSessionStore } from "@/stores/session-store";
-import { getHostRuntimeStore, useHostRuntimeSnapshot, useHosts } from "@/runtime/host-runtime";
+import {
+  getHostAuthFailureReason,
+  getHostRuntimeStore,
+  useHostRuntimeSnapshot,
+  useHosts,
+} from "@/runtime/host-runtime";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -156,6 +161,8 @@ function HostAgentReadyRouteContent() {
       <AgentRouteResolutionView
         resolution={resolution}
         hostName={hostName}
+        serverId={serverId}
+        authFailureReason={getHostAuthFailureReason(runtimeSnapshot)}
         lastHostError={runtimeSnapshot?.lastError ?? null}
         onRetry={handleRetry}
         onManageHost={handleManageHost}

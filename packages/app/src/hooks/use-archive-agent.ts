@@ -479,3 +479,53 @@ export function useArchiveAgent() {
     isArchivingAgent,
   };
 }
+
+/**
+ * Permanent deletion — the daemon removes the agent record and its timeline, so the agent is not
+ * recoverable from History. Archiving stays the reversible close path.
+ */
+export function useDeleteAgent() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (input: ArchiveAgentInput): Promise<void> => {
+      const client = useSessionStore.getState().sessions[input.serverId]?.client ?? null;
+      if (!client) {
+        throw new Error(t("common.errors.daemonClientUnavailable"));
+      }
+      await client.deleteAgent(input.agentId);
+    },
+    onMutate: (input) => {
+      const context = { agent: getStoredAgentSnapshot(input) };
+      removeAgentFromCachedLists(queryClient, input);
+      try {
+        getHostRuntimeStore().removeAgentSnapshot(input.serverId, input.agentId);
+      } catch {
+        // The host runtime may not have a directory yet; the refetch below settles it.
+      }
+      return context;
+    },
+    onError: (_error, input, context) => {
+      if (context?.agent) {
+        restoreAgentSnapshot({ ...input, agent: context.agent });
+      }
+    },
+    onSettled: (_result, _error, input) => {
+      void queryClient.invalidateQueries({ queryKey: ["sidebarAgentsList", input.serverId] });
+      void queryClient.invalidateQueries({ queryKey: ["allAgents", input.serverId] });
+      void queryClient.invalidateQueries({ queryKey: agentHistoryQueryKey(input.serverId) });
+      void queryClient.invalidateQueries({ queryKey: allAgentHistoryQueryRootKey() });
+    },
+  });
+
+  const deleteMutateAsync = deleteMutation.mutateAsync;
+  const deleteAgent = useCallback(
+    async (input: ArchiveAgentInput): Promise<void> => {
+      await deleteMutateAsync(input);
+    },
+    [deleteMutateAsync],
+  );
+
+  return { deleteAgent };
+}

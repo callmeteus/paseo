@@ -109,10 +109,8 @@ import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import {
   composeWorkflowPrompt,
-  getWorkflowMode,
   isWorkflowModeId,
-  resolveDefaultWritableProviderMode,
-  resolveReadOnlyProviderMode,
+  stripWorkflowInstruction,
 } from "./workflow-modes.js";
 import {
   ProviderSubagentStore,
@@ -670,9 +668,22 @@ function attachManagedTurnIdentity(
 }
 
 function limitAgentStreamEventContent(event: AgentStreamEvent): AgentStreamEvent {
-  return event.type === "timeline"
-    ? { ...event, item: limitAgentTimelineItemContent(event.item) }
-    : event;
+  if (event.type !== "timeline") return event;
+  const item =
+    event.item.type === "user_message"
+      ? { ...event.item, text: stripWorkflowInstruction(event.item.text) }
+      : event.item;
+  return { ...event, item: limitAgentTimelineItemContent(item) };
+}
+
+function stripWorkflowFromTimelineItem(item: AgentTimelineItem): AgentTimelineItem {
+  return item.type === "user_message"
+    ? { ...item, text: stripWorkflowInstruction(item.text) }
+    : item;
+}
+
+function stripWorkflowFromTimelineRow(row: AgentTimelineRow): AgentTimelineRow {
+  return { ...row, item: stripWorkflowFromTimelineItem(row.item) };
 }
 
 interface WriteLabelsResult {
@@ -1135,8 +1146,6 @@ export class AgentManager {
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
-  /** Provider mode to restore when a read-only workflow mode is left. */
-  private readonly readOnlyWorkflowPreviousMode = new Map<string, string | null>();
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
@@ -1608,7 +1617,26 @@ export class AgentManager {
 
   getTimeline(id: string): AgentTimelineItem[] {
     this.requireAgent(id);
-    return this.timelineStore.getItems(id);
+    return this.timelineStore.getItems(id).map(stripWorkflowFromTimelineItem);
+  }
+
+  /**
+   * Timeline rows for read-only scans such as cross-chat search.
+   *
+   * Unlike `getTimelineRows`, this never resumes a provider session to answer. Cross-chat
+   * search runs on every keystroke across many chats, and waking a provider just to read
+   * its transcript costs more than the search. An agent that is not live therefore
+   * contributes no rows here; callers that must include it load the chat explicitly,
+   * which is why the picker matches unloaded chats by title only.
+   */
+  async getSearchableTimelineRows(id: string): Promise<AgentTimelineRow[]> {
+    if (this.durableTimelineStore) {
+      const committed = await this.durableTimelineStore.getCommittedRows(id);
+      return projectTimelineRows({ rows: committed, mode: "projected" })
+        .map((entry) => Object.assign({ seq: entry.seqEnd }, entry))
+        .map(stripWorkflowFromTimelineRow);
+    }
+    return this.timelineStore.getRows(id).map(stripWorkflowFromTimelineRow);
   }
 
   async getTimelineRows(id: string): Promise<AgentTimelineRow[]> {
@@ -1619,9 +1647,11 @@ export class AgentManager {
       return projectTimelineRows({
         rows: repaired ?? committed,
         mode: "projected",
-      }).map((entry) => Object.assign({ seq: entry.seqEnd }, entry));
+      })
+        .map((entry) => Object.assign({ seq: entry.seqEnd }, entry))
+        .map(stripWorkflowFromTimelineRow);
     }
-    return this.timelineStore.getRows(id);
+    return this.timelineStore.getRows(id).map(stripWorkflowFromTimelineRow);
   }
 
   /**
@@ -2610,30 +2640,10 @@ export class AgentManager {
       if (currentWorkflowId === normalized) {
         return normalized;
       }
-      const currentWorkflow = getWorkflowMode(currentWorkflowId);
-      const nextWorkflow = getWorkflowMode(normalized);
-      if (nextWorkflow.readOnly) {
-        const readOnlyModeId = resolveReadOnlyProviderMode(liveAgent.provider);
-        if (!readOnlyModeId) {
-          throw new Error(
-            `Workflow mode '${nextWorkflow.id}' is read-only, but provider '${liveAgent.provider}' has no known read-only mode`,
-          );
-        }
-        if (!currentWorkflow.readOnly) {
-          this.readOnlyWorkflowPreviousMode.set(agentId, liveAgent.currentModeId);
-        }
-        // Switch the provider's own mode; a running turn keeps running, but its
-        // next edit request is rejected by the provider's read-only mode.
-        await this.setAgentMode(agentId, readOnlyModeId);
-      } else if (currentWorkflow.readOnly) {
-        const previousModeId =
-          this.readOnlyWorkflowPreviousMode.get(agentId) ??
-          resolveDefaultWritableProviderMode(liveAgent.provider);
-        this.readOnlyWorkflowPreviousMode.delete(agentId);
-        if (previousModeId) {
-          await this.setAgentMode(agentId, previousModeId);
-        }
-      }
+      // Paseo workflow modes are prompt-level roles. Do not switch the
+      // provider's own permission mode here: the app keeps it on Build, and
+      // switching to the provider's Plan mode reintroduces its native plan
+      // instructions and makes Shift+Tab oscillate between modes.
       liveAgent.config.workflowModeId = normalized ?? undefined;
       this.touchUpdatedAt(liveAgent);
       this.emitState(liveAgent);
@@ -6587,18 +6597,6 @@ export class AgentManager {
       env: options.env,
       purpose: options.purpose,
     });
-    const workflowMode = getWorkflowMode(storedConfig.workflowModeId);
-    if (workflowMode.readOnly) {
-      const readOnlyModeId = resolveReadOnlyProviderMode(storedConfig.provider);
-      if (!readOnlyModeId) {
-        throw new Error(
-          `Workflow mode '${workflowMode.id}' is read-only, but provider '${storedConfig.provider}' has no known read-only mode`,
-        );
-      }
-      // The provider mode is the enforcement; the workflow prompt only explains
-      // the role. Resuming a writable session in Plan/Ask would let it edit.
-      storedConfig = { ...storedConfig, modeId: readOnlyModeId };
-    }
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };

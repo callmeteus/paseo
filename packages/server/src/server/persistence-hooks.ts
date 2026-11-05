@@ -7,6 +7,7 @@ import type {
 } from "./agent/agent-sdk-types.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent/agent-storage.js";
 import type { AttentionState } from "./agent/agent-manager.js";
+import { getImportSourceFromLabels } from "@getpaseo/protocol/agent-labels";
 
 interface LoggerLike {
   child(bindings: Record<string, unknown>): LoggerLike;
@@ -67,19 +68,39 @@ export function buildConfigOverrides(record: StoredAgentRecord): Partial<AgentSe
   return stripInternalPaseoMcpServer({
     provider: record.provider,
     cwd: record.cwd,
-    // lastModeId is the last live mode — it also covers provider-side switches
+    // lastModeId is the last live mode - it also covers provider-side switches
     // (ACP current_mode_update, in-session commands) that never reach
     // record.config.modeId.
     modeId: record.lastModeId ?? record.config?.modeId ?? undefined,
     workflowModeId: record.config?.workflowModeId ?? undefined,
     model: record.config?.model ?? undefined,
     thinkingOptionId: record.config?.thinkingOptionId ?? undefined,
-    featureValues: record.config?.featureValues ?? undefined,
+    featureValues: resolveFeatureValues(record),
     providerOptions: record.config?.providerOptions ?? undefined,
     toolPolicy: record.config?.toolPolicy ?? undefined,
     systemPrompt: record.config?.systemPrompt ?? undefined,
     mcpServers: record.config?.mcpServers ?? undefined,
   });
+}
+
+const CURSOR_IMPORT_SOURCE = "cursor";
+const ACP_AUTO_ACCEPT_FEATURE = "auto_accept";
+
+/**
+ * Imported Cursor chats keep Cursor's own default of auto-accepting permission
+ * prompts. Records imported before this default existed have no stored
+ * featureValues, so apply it when the session is created. An explicit `false`
+ * from the user is preserved.
+ */
+function resolveFeatureValues(record: StoredAgentRecord): Record<string, unknown> | undefined {
+  const featureValues = record.config?.featureValues ?? undefined;
+  const isImportedCursor =
+    record.provider === "cursor" &&
+    getImportSourceFromLabels(record.labels) === CURSOR_IMPORT_SOURCE;
+  if (!isImportedCursor || featureValues?.[ACP_AUTO_ACCEPT_FEATURE] !== undefined) {
+    return featureValues;
+  }
+  return { ...featureValues, [ACP_AUTO_ACCEPT_FEATURE]: true };
 }
 
 export function buildSessionConfig(

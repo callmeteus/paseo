@@ -28,6 +28,17 @@ import {
   findActiveFileMention,
   type FileMentionRange,
 } from "@/utils/file-mention-autocomplete";
+import { removeMentionToken, type ChatMentionCandidate } from "@/utils/chat-mention-autocomplete";
+import { useChatMentionSuggestions } from "./use-chat-mention-suggestions";
+import { useHostFeature } from "@/runtime/host-features";
+import { useIsCompactFormFactor } from "@/constants/layout";
+
+/** Compact layouts close the picker here: it would otherwise cover the conversation. */
+const COMPACT_MENTION_MAX_WORDS = 4;
+
+function resolveMentionWordLimit(isCompactFormFactor: boolean): number | undefined {
+  return isCompactFormFactor ? COMPACT_MENTION_MAX_WORDS : undefined;
+}
 
 interface UseAgentAutocompleteInput {
   userInput: string;
@@ -40,6 +51,8 @@ interface UseAgentAutocompleteInput {
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
+  /** Selecting a chat attaches its history instead of inserting text. */
+  onChatSelected?: (chat: ChatMentionCandidate) => void | Promise<void>;
 }
 
 interface AgentAutocompleteKeyPressEvent {
@@ -64,7 +77,8 @@ type AgentAutocompleteOption =
       type: "workspace_entry";
       entryPath: string;
       mention: FileMentionRange;
-    });
+    })
+  | (AutocompleteOption & { type: "chat"; chat: ChatMentionCandidate });
 
 interface AgentAutocompleteResult {
   isVisible: boolean;
@@ -90,6 +104,7 @@ function resolveAgentAutocompleteSnapshot(input: {
   cursorIndex: number;
   activeSlashCommand: SlashCommandRange | null;
   activeFileMention: FileMentionRange | null;
+  mentionWordLimit?: number;
 }): AgentAutocompleteSnapshot {
   if (!input.input) {
     return {
@@ -104,7 +119,11 @@ function resolveAgentAutocompleteSnapshot(input: {
   return {
     text,
     slashCommand: findActiveSlashCommand({ text, cursorIndex }),
-    fileMention: findActiveFileMention({ text, cursorIndex }),
+    fileMention: findActiveFileMention({
+      text,
+      cursorIndex,
+      maxWords: input.mentionWordLimit,
+    }),
   };
 }
 
@@ -200,6 +219,7 @@ interface BuildAutocompleteOptionsInput {
   activeSlashCommand: SlashCommandRange | null;
   activeFileMention: FileMentionRange | null;
   fileSuggestions: DirectorySuggestionEntry[];
+  chatSuggestions: ChatMentionCandidate[];
   t: TFunction;
 }
 
@@ -242,15 +262,29 @@ function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
 
   const activeFileMention = input.activeFileMention;
   if (input.mode === "file" && activeFileMention) {
-    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
-    return orderedEntries.map((entry) => ({
-      type: "workspace_entry" as const,
-      id: `${entry.kind}:${entry.path}`,
-      label: entry.path,
-      kind: entry.kind,
-      entryPath: entry.path,
-      mention: activeFileMention,
+    // Chats are prepended so they sit closest to the input once the popover
+    // reverses the list, and so a file rename never outranks an explicit pick.
+    const chatOptions: AgentAutocompleteOption[] = input.chatSuggestions.map((chat) => ({
+      type: "chat" as const,
+      id: `chat:${chat.serverId}:${chat.agentId}`,
+      label: chat.title?.trim() || input.t("agentAutocomplete.untitledChat"),
+      kind: "chat",
+      description: chat.snippet ?? chat.workspaceName ?? chat.cwd,
+      detail: chat.archived ? input.t("agentAutocomplete.archivedChat") : undefined,
+      chat,
     }));
+    const orderedEntries = orderAutocompleteOptions(input.fileSuggestions);
+    return [
+      ...chatOptions,
+      ...orderedEntries.map((entry) => ({
+        type: "workspace_entry" as const,
+        id: `${entry.kind}:${entry.path}`,
+        label: entry.path,
+        kind: entry.kind,
+        entryPath: entry.path,
+        mention: activeFileMention,
+      })),
+    ];
   }
 
   return [];
@@ -282,6 +316,32 @@ function resolveAutocompleteIsVisible(args: {
     return Boolean(args.serverId) && args.autocompleteCwd.length > 0;
   }
   return false;
+}
+
+// Selecting a chat attaches its history, so the picker needs the fork-context RPC
+// as well as the search itself.
+function resolveChatMentionSupport(args: {
+  chatSearch: boolean;
+  agentForkContext: boolean;
+}): boolean {
+  return args.chatSearch && args.agentForkContext;
+}
+
+function resolveAutocompleteEscape(args: {
+  mode: AutocompleteMode;
+  slashCommand: SlashCommandRange | null;
+  fileMention: FileMentionRange | null;
+  clearInput: () => void;
+  dismissMention: (start: number) => void;
+}): (() => void) | undefined {
+  if (args.mode === "command" && args.slashCommand?.position === "start") {
+    return args.clearInput;
+  }
+  const mention = args.fileMention;
+  if (args.mode === "file" && mention) {
+    return () => args.dismissMention(mention.start);
+  }
+  return undefined;
 }
 
 function resolveCanLoadCommands(args: {
@@ -375,6 +435,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onClientSlashCommand,
     canExecuteClientSlashCommand,
     pluginClientSlashCommands = [],
+    onChatSelected,
   } = input;
 
   const activeSlashCommand = useMemo(
@@ -388,16 +449,30 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const showCommandAutocomplete = activeSlashCommand !== null;
   const commandFilterQuery = activeSlashCommand?.query ?? "";
 
+  const mentionWordLimit = resolveMentionWordLimit(useIsCompactFormFactor());
   const activeFileMention = useMemo(
     () =>
       findActiveFileMention({
         text: userInput,
         cursorIndex,
+        maxWords: mentionWordLimit,
       }),
-    [cursorIndex, userInput],
+    [cursorIndex, mentionWordLimit, userInput],
   );
-  const showFileAutocomplete = activeFileMention !== null;
-  const fileFilterQuery = activeFileMention?.query ?? "";
+  // Escape closes the picker for the token it was pressed on. Tracking the start
+  // index keeps it closed while the user keeps typing that same mention, and
+  // reopens it as soon as a different `@` token begins.
+  const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
+  useEffect(() => {
+    if (dismissedMentionStart !== null && activeFileMention?.start !== dismissedMentionStart) {
+      setDismissedMentionStart(null);
+    }
+  }, [activeFileMention, dismissedMentionStart]);
+  const mentionDismissed =
+    dismissedMentionStart !== null && activeFileMention?.start === dismissedMentionStart;
+  const fileMention = mentionDismissed ? null : activeFileMention;
+  const showFileAutocomplete = fileMention !== null;
+  const fileFilterQuery = fileMention?.query ?? "";
   const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(fileFilterQuery);
 
   useEffect(() => {
@@ -423,8 +498,13 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
+  const supportsChatMention = resolveChatMentionSupport({
+    chatSearch: useHostFeature(serverId, "chatSearch"),
+    agentForkContext: useHostFeature(serverId, "agentForkContext"),
+  });
 
   const mode = resolveAutocompleteMode({ showFileAutocomplete, showCommandAutocomplete });
+  const isMentionMode = mode === "file";
   const canShowAutocomplete = resolveAutocompleteIsVisible({
     mode,
     canLoadCommands,
@@ -479,27 +559,39 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     placeholderData: keepPreviousData,
   });
 
+  const chatSuggestions = useChatMentionSuggestions({
+    serverId,
+    agentId,
+    enabled: isMentionMode,
+    query: debouncedFileFilterQuery,
+    client,
+    isConnected,
+    supportsChatMention,
+  });
+
   const options = useMemo<AgentAutocompleteOption[]>(
     () =>
       buildCommandAutocompleteOptions({
-        activeFileMention,
+        activeFileMention: fileMention,
         commandFilterQuery,
         commands,
         pluginCommands: pluginClientSlashCommands,
         activeSlashCommand,
         fileSuggestions: fileSuggestionsQuery.data ?? [],
+        chatSuggestions,
         isDraftContext,
         isVisible,
         mode,
         t,
       }),
     [
-      activeFileMention,
+      fileMention,
       activeSlashCommand,
       commandFilterQuery,
       commands,
       pluginClientSlashCommands,
       fileSuggestionsQuery.data,
+      chatSuggestions,
       isDraftContext,
       isVisible,
       mode,
@@ -515,7 +607,8 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         userInput,
         cursorIndex,
         activeSlashCommand,
-        activeFileMention,
+        activeFileMention: fileMention,
+        mentionWordLimit,
       });
       const selectedIsCommand =
         selected.type === "client_command" ||
@@ -550,6 +643,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }
 
       if (!current.fileMention) return;
+
+      if (selected.type === "chat") {
+        setUserInput(removeMentionToken({ text: current.text, mention: current.fileMention }));
+        void onChatSelected?.(selected.chat);
+        onAutocompleteApplied?.();
+        return;
+      }
+
       const nextInput = applyFileMentionReplacement({
         text: current.text,
         mention: current.fileMention,
@@ -561,12 +662,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [
       canExecuteClientSlashCommand,
       onAutocompleteApplied,
+      onChatSelected,
       onClientSlashCommand,
       setUserInput,
       userInput,
       cursorIndex,
-      activeFileMention,
+      fileMention,
       activeSlashCommand,
+      mentionWordLimit,
     ],
   );
 
@@ -576,16 +679,40 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     [onSelectOption],
   );
 
-  const { selectedIndex, onKeyPress } = useAutocomplete({
+  const clearInputOnEscape = useCallback(() => setUserInput(""), [setUserInput]);
+  const dismissMentionOnEscape = useCallback(
+    (start: number) => setDismissedMentionStart(start),
+    [],
+  );
+  const onEscape = resolveAutocompleteEscape({
+    mode,
+    slashCommand: activeSlashCommand,
+    fileMention,
+    clearInput: clearInputOnEscape,
+    dismissMention: dismissMentionOnEscape,
+  });
+
+  const { selectedIndex, onKeyPress: handleAutocompleteKeyPress } = useAutocomplete({
     isVisible,
     options,
     query: mode === "command" ? commandFilterQuery : fileFilterQuery,
     onSelectOption: selectOptionFromKeyPress,
-    onEscape:
-      mode === "command" && activeSlashCommand?.position === "start"
-        ? () => setUserInput("")
-        : undefined,
+    onEscape,
   });
+  // useAutocomplete ignores Escape when there are no options, which would let it
+  // fall through to the global shortcut (interrupt the agent) while the mention is
+  // still open with an empty result list. Escape belongs to the picker either way.
+  const onKeyPress = useCallback(
+    (event: AgentAutocompleteKeyPressEvent) => {
+      if (event.key === "Escape" && onEscape) {
+        event.preventDefault();
+        onEscape();
+        return true;
+      }
+      return handleAutocompleteKeyPress(event);
+    },
+    [handleAutocompleteKeyPress, onEscape],
+  );
 
   const isLoading = resolveAutocompleteIsLoading({
     mode,

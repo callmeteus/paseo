@@ -27,6 +27,7 @@ import {
   Maximize,
   Minimize,
   Plus,
+  Trash2,
   X,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -136,6 +137,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
 const ThemedRows2 = withUnistyles(Rows2);
@@ -444,6 +446,8 @@ function TabContextMenuItem({
         return <ThemedFolderInput size={16} uniProps={mutedColorMapping} />;
       case "folder-plus":
         return <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />;
+      case "trash-2":
+        return <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
       default:
@@ -545,6 +549,7 @@ export interface WorkspaceDesktopTabsRowProps {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onDeleteAgent?: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
@@ -1057,6 +1062,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   onCopyTerminalId,
   onCopyFilePath,
   onReloadAgent,
+  onDeleteAgent,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -1150,6 +1156,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
       openContainingDirectory: t("workspace.tabs.menu.openContainingDirectory"),
+      deletePermanently: t("workspace.tabs.menu.deletePermanently"),
     }),
     [t],
   );
@@ -1333,6 +1340,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
+          onDeleteAgent={onDeleteAgent}
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
           onCloseTabsToRight={onCloseTabsToRight}
@@ -1368,6 +1376,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       onCopyResumeCommand,
       onNavigateTab,
       onReloadAgent,
+      onDeleteAgent,
       onRenameTab,
       rail,
       setHoveredCloseTabKey,
@@ -1491,6 +1500,7 @@ function ResolvedDesktopTabChip({
   onCopyTerminalId,
   onCopyFilePath,
   onReloadAgent,
+  onDeleteAgent,
   onRenameTab,
   onCloseTabsToLeft,
   onCloseTabsToRight,
@@ -1519,6 +1529,7 @@ function ResolvedDesktopTabChip({
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onDeleteAgent?: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
@@ -1548,6 +1559,7 @@ function ResolvedDesktopTabChip({
         onCopyTerminalId,
         onCopyFilePath,
         onReloadAgent,
+        onDeleteAgent,
         onRenameTab,
         onCloseTab,
         onCloseTabsToLeft,
@@ -1568,6 +1580,7 @@ function ResolvedDesktopTabChip({
       onCopyResumeCommand,
       labels,
       onReloadAgent,
+      onDeleteAgent,
       onRenameTab,
       tabCount,
     ],

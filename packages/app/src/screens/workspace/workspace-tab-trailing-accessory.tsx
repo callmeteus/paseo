@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Pencil,
   RotateCw,
+  Trash2,
   X,
 } from "lucide-react-native";
 import {
@@ -36,6 +37,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedX = withUnistyles(X);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -70,6 +72,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedFolderInput size={16} uniProps={mutedColorMapping} />;
       case "folder-plus":
         return <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />;
+      case "trash-2":
+        return <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
       case "x":
         return <ThemedX size={16} uniProps={mutedColorMapping} />;
       default:

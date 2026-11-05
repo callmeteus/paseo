@@ -2010,6 +2010,33 @@ export const ProviderDiagnosticRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const ProviderMcpServerStatusSchema = z.enum([
+  "ready",
+  "needs_auth",
+  "needs_approval",
+  "error",
+  "unknown",
+]);
+
+export const ProviderMcpServerSchema = z.object({
+  name: z.string(),
+  status: ProviderMcpServerStatusSchema,
+  detail: z.string().nullable().optional(),
+});
+
+export const ProviderMcpListRequestMessageSchema = z.object({
+  type: z.literal("provider.mcp.list.request"),
+  provider: AgentProviderSchema,
+  requestId: z.string(),
+});
+
+export const ProviderMcpLoginRequestMessageSchema = z.object({
+  type: z.literal("provider.mcp.login.request"),
+  provider: AgentProviderSchema,
+  server: z.string().min(1),
+  requestId: z.string(),
+});
+
 export const ProviderUsageListRequestMessageSchema = z.object({
   type: z.literal("provider.usage.list.request"),
   requestId: z.string(),
@@ -2102,6 +2129,52 @@ export const AgentTimelineListPromptsRequestMessageSchema = z.object({
   agentId: z.string(),
   requestId: z.string(),
 });
+
+export const ChatSearchRequestMessageSchema = z.object({
+  type: z.literal("chat.search.request"),
+  requestId: z.string(),
+  query: z.string(),
+  /** Only chats working in this directory or below it. */
+  cwd: z.string().optional(),
+  includeArchived: z.boolean().optional(),
+  sinceHours: z.number().int().positive().optional(),
+  limit: z.number().int().positive().optional(),
+});
+
+export const ChatSearchMatchSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  role: z.enum(["user", "assistant"]),
+  snippet: z.string(),
+});
+
+export const ChatSearchResultSchema = z.object({
+  agentId: z.string(),
+  title: z.string().nullable(),
+  provider: z.string(),
+  status: AgentStatusSchema,
+  cwd: z.string(),
+  updatedAt: z.string(),
+  archivedAt: z.string().nullable(),
+  /** Display name of the workspace the chat lives in, when the daemon knows it. */
+  workspaceName: z.string().nullable().optional(),
+  /** The query matched the chat title or its workspace name, not only message text. */
+  titleMatch: z.boolean(),
+  matches: z.array(ChatSearchMatchSchema),
+});
+
+export type ChatSearchResult = z.infer<typeof ChatSearchResultSchema>;
+
+export const ChatSearchResponseMessageSchema = z.object({
+  type: z.literal("chat.search.response"),
+  payload: z.object({
+    requestId: z.string(),
+    query: z.string(),
+    chats: z.array(ChatSearchResultSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export type ChatSearchPayload = z.infer<typeof ChatSearchResponseMessageSchema>["payload"];
 
 export const CursorImportListRequestMessageSchema = z.object({
   type: z.literal("agent.imports.cursor.list.request"),
@@ -2948,6 +3021,17 @@ export const ArchiveWorkspaceRequestSchema = z.object({
   requestId: z.string(),
 });
 
+/**
+ * Permanently removes a workspace and every agent that belongs to it. `deleteFiles` is opt-in and
+ * only ever removes a Paseo-owned worktree directory; a checkout the user opened stays on disk.
+ */
+export const WorkspaceDeleteRequestSchema = z.object({
+  type: z.literal("workspace.delete.request"),
+  workspaceId: z.string(),
+  requestId: z.string(),
+  deleteFiles: z.boolean().optional(),
+});
+
 // Create a new workspace record. Unlike open_project, this never deduplicates by
 // directory: it always produces a fresh workspace. The source discriminates
 // between an existing local directory and a newly created paseo worktree.
@@ -3631,6 +3715,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   GetProvidersSnapshotRequestMessageSchema,
   RefreshProvidersSnapshotRequestMessageSchema,
   ProviderDiagnosticRequestMessageSchema,
+  ProviderMcpListRequestMessageSchema,
+  ProviderMcpLoginRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
   UsageListReportsRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
@@ -3643,6 +3729,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentTimelineRequestMessageSchema,
   AgentTimelineSearchRequestMessageSchema,
   AgentTimelineListPromptsRequestMessageSchema,
+  ChatSearchRequestMessageSchema,
   CursorImportListRequestMessageSchema,
   CursorImportRunRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
@@ -3705,6 +3792,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WorkspaceGithubSearchRepositoriesRequestSchema,
   ProjectGithubCloneRequestSchema,
   ArchiveWorkspaceRequestSchema,
+  WorkspaceDeleteRequestSchema,
   WorkspaceCreateRequestSchema,
   AgentCreateRequestSchema,
   AgentSwapProviderRequestSchema,
@@ -3964,6 +4052,8 @@ export const ServerInfoStatusPayloadSchema = z
         directorySync: z.boolean().optional(),
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         workspaceLabels: z.boolean().optional(),
+        // COMPAT(workspaceDelete): added in v0.9.0, remove gate after 2027-11-04.
+        workspaceDelete: z.boolean().optional(),
         // COMPAT(workspaceSetupRun): added in v0.8.0, remove gate after 2027-09-02.
         workspaceSetupRun: z.boolean().optional(),
         // COMPAT(workspaceTerminals): added in v0.8.0, remove gate after 2027-09-05.
@@ -4062,6 +4152,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonSelfUpdate: z.boolean().optional(),
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: z.boolean().optional(),
+        // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
+        chatSearch: z.boolean().optional(),
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
         agentProviderSwap: z.boolean().optional(),
         // COMPAT(agentSnapshotTransfer): added in v0.13.0, remove gate after 2027-01-31.
@@ -4097,6 +4189,8 @@ export const ServerInfoStatusPayloadSchema = z
         commitBaseClassification: z.boolean().optional(),
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: z.boolean().optional(),
+        // COMPAT(providerMcpAuth): added in v0.13.2, remove after 2027-11-05.
+        providerMcpAuth: z.boolean().optional(),
         // COMPAT(hopliteProvider): added after v0.11.2, remove after 2027-04-15 once host floor includes the bundled adapter.
         hopliteProvider: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
@@ -5012,6 +5106,15 @@ export const ArchiveWorkspaceResponseMessageSchema = z.object({
     requestId: z.string(),
     workspaceId: z.string(),
     archivedAt: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const WorkspaceDeleteResponseMessageSchema = z.object({
+  type: z.literal("workspace.delete.response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
     error: z.string().nullable(),
   }),
 });
@@ -6740,6 +6843,28 @@ export const ProviderDiagnosticResponseMessageSchema = z.object({
   }),
 });
 
+export const ProviderMcpListResponseMessageSchema = z.object({
+  type: z.literal("provider.mcp.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: AgentProviderSchema,
+    servers: z.array(ProviderMcpServerSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ProviderMcpLoginResponseMessageSchema = z.object({
+  type: z.literal("provider.mcp.login.response"),
+  payload: z.object({
+    requestId: z.string(),
+    provider: AgentProviderSchema,
+    server: z.string(),
+    status: z.enum(["authenticated", "waiting", "failed"]),
+    url: z.string().nullable().optional(),
+    message: z.string().nullable(),
+  }),
+});
+
 export const ProviderUsageToneSchema = z.enum(["default", "ok", "warning", "danger"]);
 export const ProviderUsageStatusSchema = z.enum(["available", "unavailable", "error"]);
 
@@ -7449,11 +7574,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LegacyListAvailableEditorsResponseMessageSchema,
   LegacyOpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
+  WorkspaceDeleteResponseMessageSchema,
   FetchAgentResponseMessageSchema,
   FetchAgentTimelineResponseMessageSchema,
   AgentTimelineReplacementMessageSchema,
   AgentTimelineSearchResponseMessageSchema,
   AgentTimelineListPromptsResponseMessageSchema,
+  ChatSearchResponseMessageSchema,
   CursorImportListResponseMessageSchema,
   CursorImportRunResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
@@ -7572,6 +7699,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProvidersSnapshotUpdateMessageSchema,
   RefreshProvidersSnapshotResponseMessageSchema,
   ProviderDiagnosticResponseMessageSchema,
+  ProviderMcpListResponseMessageSchema,
+  ProviderMcpLoginResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
   UsageListReportsUpdateMessageSchema,
   UsageListReportsResponseMessageSchema,
@@ -7688,6 +7817,7 @@ export type LegacyOpenInEditorResponseMessage = z.infer<
   typeof LegacyOpenInEditorResponseMessageSchema
 >;
 export type ArchiveWorkspaceResponseMessage = z.infer<typeof ArchiveWorkspaceResponseMessageSchema>;
+export type WorkspaceDeleteResponseMessage = z.infer<typeof WorkspaceDeleteResponseMessageSchema>;
 export type FetchAgentResponseMessage = z.infer<typeof FetchAgentResponseMessageSchema>;
 export type FetchAgentTimelineResponseMessage = z.infer<
   typeof FetchAgentTimelineResponseMessageSchema
@@ -7764,6 +7894,9 @@ export type RefreshProvidersSnapshotResponseMessage = z.infer<
 export type ProviderDiagnosticResponseMessage = z.infer<
   typeof ProviderDiagnosticResponseMessageSchema
 >;
+export type ProviderMcpServer = z.infer<typeof ProviderMcpServerSchema>;
+export type ProviderMcpListResponseMessage = z.infer<typeof ProviderMcpListResponseMessageSchema>;
+export type ProviderMcpLoginResponseMessage = z.infer<typeof ProviderMcpLoginResponseMessageSchema>;
 export type ProviderUsageTone = z.infer<typeof ProviderUsageToneSchema>;
 export type UsageProblem = z.infer<typeof UsageProblemSchema>;
 export type UsageReport = z.infer<typeof UsageReportSchema>;
@@ -8006,6 +8139,7 @@ export type WorkspaceGithubSearchRepositoriesRequest = z.infer<
 export type ProjectGithubCloneRequest = z.infer<typeof ProjectGithubCloneRequestSchema>;
 export type ProjectGithubCloneProtocol = z.infer<typeof ProjectGithubCloneProtocolSchema>;
 export type ArchiveWorkspaceRequest = z.infer<typeof ArchiveWorkspaceRequestSchema>;
+export type WorkspaceDeleteRequest = z.infer<typeof WorkspaceDeleteRequestSchema>;
 export type WorkspaceClearAttentionRequest = z.infer<typeof WorkspaceClearAttentionRequestSchema>;
 export type WorkspaceMarkUnreadRequest = z.infer<typeof WorkspaceMarkUnreadRequestSchema>;
 export type WorkspaceRelocateRequest = z.infer<typeof WorkspaceRelocateRequestSchema>;

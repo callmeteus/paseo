@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -773,6 +774,7 @@ export const ko: TranslationResources = {
         moveToWorkspace: "워크스페이스로 이동",
         promoteToWorkspace: "워크스페이스로 승격",
         openContainingDirectory: "포함된 폴더 열기",
+        deletePermanently: "채팅 영구 삭제",
         moveWorkspace: {
           title: "워크스페이스를 폴더로 이동",
           empty: "열려 있는 다른 폴더가 없습니다.",
@@ -851,6 +853,7 @@ export const ko: TranslationResources = {
         reloadedAgent: "에이전트를 다시 로드했습니다",
         failedToReloadAgent: "에이전트를 다시 로드하지 못했습니다",
         failedToCloseAgent: "에이전트를 닫지 못했습니다",
+        failedToDeleteAgent: "채팅을 삭제하지 못했습니다",
       },
       confirmations: {
         close: "닫기",
@@ -867,6 +870,11 @@ export const ko: TranslationResources = {
         archiveRunningAgentTitle: "실행 중인 에이전트를 보관할까요?",
         archiveRunningAgentMessage:
           "이 에이전트는 아직 실행 중입니다. 보관하면 에이전트가 중지되고 탭이 닫힙니다.",
+        deleteAgentTitle: "채팅을 영구 삭제할까요?",
+        deleteAgentMessage: "이 채팅과 기록을 영구 삭제합니다. 되돌릴 수 없습니다.",
+        deleteAgentRunningMessage:
+          "이 채팅은 아직 실행 중입니다. 삭제하면 에이전트가 중지되고 기록이 영구적으로 지워집니다. 되돌릴 수 없습니다.",
+        deletePermanently: "영구 삭제",
         closeTabsLeftTitle: "왼쪽 탭을 닫을까요?",
         closeTabsRightTitle: "오른쪽 탭을 닫을까요?",
         closeOtherTabsTitle: "다른 탭을 닫을까요?",
@@ -1313,6 +1321,10 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "호스트별로 그룹화",
+      disable: "호스트 그룹화 해제",
+    },
     statusGroupAccessibility: "{{label}} 그룹",
     statusBucket: {
       needsInput: "입력 필요",
@@ -1337,6 +1349,7 @@ export const ko: TranslationResources = {
         project: "프로젝트",
         status: "상태",
         labels: "레이블",
+        host: "호스트",
       },
       titleSource: {
         label: "제목",
@@ -1502,6 +1515,7 @@ export const ko: TranslationResources = {
         moveToFolder: "워크스페이스를 폴더로 이동…",
         archive: "보관",
         archiveWorkspace: "워크스페이스 보관",
+        deletePermanently: "영구 삭제",
         hideFromSidebar: "사이드바에서 숨기기",
         archiving: "보관하는 중...",
         hiding: "숨기는 중...",
@@ -1511,6 +1525,9 @@ export const ko: TranslationResources = {
         hideMessage:
           '"{{workspaceName}}"을(를) 사이드바에서 숨길까요?\n\n디스크의 파일은 변경되지 않습니다.',
         hideConfirm: "숨기기",
+        deleteTitle: "워크스페이스를 영구 삭제할까요?",
+        deleteMessage: '"{{name}}" 및 모든 채팅을 영구 삭제합니다. 되돌릴 수 없습니다.',
+        deleteConfirm: "영구 삭제",
         cancel: "취소",
       },
       rename: {
@@ -1527,6 +1544,7 @@ export const ko: TranslationResources = {
         movedToFolder: "워크스페이스를 {{path}}(으)로 이동했습니다",
         moveToFolderFailed: "워크스페이스를 이동하지 못했습니다",
         archiveFailed: "워크스페이스를 보관하지 못했습니다.",
+        deleteFailed: "워크스페이스를 삭제하지 못했습니다",
       },
     },
   },
@@ -1810,6 +1828,10 @@ export const ko: TranslationResources = {
     failedToLoad: "불러오지 못했습니다",
     chooseProjectForCommands: "명령을 보려면 프로젝트를 선택하세요",
     chooseModelForCommands: "명령을 보려면 모델을 선택하세요",
+    untitledChat: "제목 없는 채팅",
+    archivedChat: "보관됨",
+    attachChatFailed: "이 채팅을 첨부하지 못했습니다",
+    attachChatUnavailable: "이 컴포저에서는 채팅을 첨부할 수 없습니다",
   },
   loadOlderHistory: {
     failed: "이전 기록을 불러올 수 없습니다",
@@ -2890,7 +2912,17 @@ export const ko: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "이 호스트를 제거한 뒤 이 데몬이 요구하는 비밀번호로 다시 추가하세요.",
+        requiredTitle: "비밀번호 필요",
+        incorrectTitle: "잘못된 비밀번호",
+        guidance: "연결하려면 이 호스트가 요구하는 비밀번호를 입력하세요.",
+        label: "호스트 비밀번호",
+        placeholder: "비밀번호",
+        connect: "연결",
+        connecting: "연결 중...",
+        empty: "비밀번호를 입력하세요.",
+        show: "비밀번호 표시",
+        hide: "비밀번호 숨기기",
+        failed: "연결하지 못했습니다. 비밀번호를 확인하고 다시 시도하세요.",
       },
       appearance: {
         title: "모양",
@@ -3202,6 +3234,7 @@ export const ko: TranslationResources = {
         custom: "사용자 지정 모델",
         updated: "{{time}} 업데이트됨",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "진단",
         button: "진단",

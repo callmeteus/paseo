@@ -3,6 +3,7 @@ import { ArrowLeftToLine, RotateCw, Settings } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { HostPasswordPrompt } from "@/components/host-password-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatConnectionStatus } from "@/utils/daemons";
@@ -25,6 +26,8 @@ interface WorkspaceRouteStateActions {
 export function renderWorkspaceRouteGate(input: {
   state: WorkspaceRouteState;
   actions: WorkspaceRouteStateActions;
+  serverId?: string;
+  authFailureReason?: "password_required" | "incorrect_password" | null;
 }): React.ReactNode {
   switch (input.state.kind) {
     case "loading":
@@ -56,6 +59,8 @@ export function renderWorkspaceRouteGate(input: {
       return (
         <WorkspaceUnreachable
           state={input.state}
+          serverId={input.serverId}
+          authFailureReason={input.authFailureReason ?? null}
           onRetry={input.actions.onRetryHost}
           onManageHost={input.actions.onManageHost}
         />
@@ -206,15 +211,34 @@ function WorkspaceRecoveryInspectionFailed({
 
 function WorkspaceUnreachable({
   state,
+  serverId,
+  authFailureReason,
   onRetry,
   onManageHost,
 }: {
   state: Extract<WorkspaceRouteState, { kind: "unreachable" }>;
+  serverId?: string;
+  authFailureReason: "password_required" | "incorrect_password" | null;
   onRetry: () => void;
   onManageHost: () => void;
 }) {
   const { t } = useTranslation();
   const canRetry = state.connectionStatus === "offline" || state.connectionStatus === "error";
+
+  if (serverId && authFailureReason) {
+    return (
+      <View style={styles.emptyState}>
+        <View style={styles.passwordPrompt}>
+          <HostPasswordPrompt serverId={serverId} testID="workspace-host-password" />
+        </View>
+        <View style={styles.actions}>
+          <Button size="sm" variant="outline" leftIcon={Settings} onPress={onManageHost}>
+            {t("workspace.route.manageHost")}
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.emptyState}>
@@ -292,6 +316,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[3],
     paddingHorizontal: theme.spacing[6],
+  },
+  passwordPrompt: {
+    width: "100%",
+    maxWidth: 420,
   },
   textStack: {
     alignItems: "center",

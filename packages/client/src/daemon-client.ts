@@ -96,6 +96,7 @@ import type {
   ProjectGithubCloneProtocol,
   ProjectGithubCloneResponse,
   ArchiveWorkspaceResponseMessage,
+  WorkspaceDeleteResponseMessage,
   WorkspaceSetupStatusResponseMessage,
   ListCommandsResponse,
   ListProviderFeaturesResponseMessage,
@@ -105,6 +106,8 @@ import type {
   GetProvidersSnapshotResponseMessage,
   RefreshProvidersSnapshotResponseMessage,
   ProviderDiagnosticResponseMessage,
+  ProviderMcpListResponseMessage,
+  ProviderMcpLoginResponseMessage,
   ProviderUsageListResponseMessage,
   UsageReportEntry,
   DaemonGetStatusResponse,
@@ -590,6 +593,8 @@ type ListAvailableProvidersPayload = ListAvailableProvidersResponse["payload"];
 type GetProvidersSnapshotPayload = GetProvidersSnapshotResponseMessage["payload"];
 type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["payload"];
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
+type ProviderMcpListPayload = ProviderMcpListResponseMessage["payload"];
+type ProviderMcpLoginPayload = ProviderMcpLoginResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
 interface UsageListReportsPayload {
   requestId: string;
@@ -707,6 +712,19 @@ export interface AgentTimelineSearchOptions {
 export type AgentTimelineSearchPayload = Extract<
   SessionOutboundMessage,
   { type: "agent.timeline.search.response" }
+>["payload"];
+
+export interface ChatSearchOptions {
+  query: string;
+  cwd?: string;
+  includeArchived?: boolean;
+  sinceHours?: number;
+  limit?: number;
+}
+
+export type ChatSearchPayload = Extract<
+  SessionOutboundMessage,
+  { type: "chat.search.response" }
 >["payload"];
 
 export type AgentTimelinePromptIndexPayload = Extract<
@@ -940,6 +958,7 @@ export type WorkspaceGithubSearchRepositoriesPayload =
   WorkspaceGithubSearchRepositoriesResponse["payload"];
 type ProjectGithubClonePayload = ProjectGithubCloneResponse["payload"];
 type ArchiveWorkspacePayload = ArchiveWorkspaceResponseMessage["payload"];
+type WorkspaceDeletePayload = WorkspaceDeleteResponseMessage["payload"];
 type WorkspaceSetupStatusPayload = WorkspaceSetupStatusResponseMessage["payload"];
 
 export interface FetchAgentResult {
@@ -3077,6 +3096,21 @@ export class DaemonClient {
     });
   }
 
+  async deleteWorkspace(
+    workspaceId: string,
+    options?: { deleteFiles?: boolean; requestId?: string },
+  ): Promise<WorkspaceDeletePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "workspace.delete.request",
+        workspaceId,
+        ...(options?.deleteFiles ? { deleteFiles: true } : {}),
+      },
+      responseType: "workspace.delete.response",
+    });
+  }
+
   observeWorkspaceSetup(
     workspaceId: string,
     options?: { signal?: AbortSignal },
@@ -3788,6 +3822,31 @@ export class DaemonClient {
       requestId,
       message: { type: "agent.timeline.search.request", requestId, agentId, query, cursor },
       responseType: "agent.timeline.search.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
+  }
+
+  async searchChats({
+    query,
+    cwd,
+    includeArchived,
+    sinceHours,
+    limit,
+  }: ChatSearchOptions): Promise<ChatSearchPayload> {
+    const requestId = this.createRequestId();
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "chat.search.request",
+        requestId,
+        query,
+        ...(cwd ? { cwd } : {}),
+        ...(includeArchived === undefined ? {} : { includeArchived }),
+        ...(sinceHours === undefined ? {} : { sinceHours }),
+        ...(limit === undefined ? {} : { limit }),
+      },
+      responseType: "chat.search.response",
     });
     if (payload.error) throw new Error(payload.error);
     return payload;
@@ -5992,6 +6051,44 @@ export class DaemonClient {
       },
       responseType: "provider_diagnostic_response",
       timeout: 180000,
+    });
+  }
+
+  async listProviderMcpServers(
+    provider: AgentProvider,
+    options?: { requestId?: string },
+  ): Promise<ProviderMcpListPayload> {
+    const features = this.getLastServerInfoMessage()?.features;
+    if (features?.providerMcpAuth !== true) {
+      throw new Error("Update the host to manage MCP authentication.");
+    }
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "provider.mcp.list.request",
+        provider,
+      },
+      timeout: 30_000,
+    });
+  }
+
+  async loginProviderMcpServer(
+    provider: AgentProvider,
+    server: string,
+    options?: { requestId?: string },
+  ): Promise<ProviderMcpLoginPayload> {
+    const features = this.getLastServerInfoMessage()?.features;
+    if (features?.providerMcpAuth !== true) {
+      throw new Error("Update the host to manage MCP authentication.");
+    }
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "provider.mcp.login.request",
+        provider,
+        server,
+      },
+      timeout: 60_000,
     });
   }
 

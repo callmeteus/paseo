@@ -24,6 +24,7 @@ export interface WorkspaceTabMenuLabels {
   reloadAgentTooltip: string;
   close: string;
   openContainingDirectory: string;
+  deletePermanently: string;
 }
 
 export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
@@ -43,6 +44,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   reloadAgentTooltip: i18n.t("workspace.tabs.menu.reloadAgentTooltip"),
   close: i18n.t("workspace.tabs.menu.close"),
   openContainingDirectory: i18n.t("workspace.tabs.menu.openContainingDirectory"),
+  deletePermanently: i18n.t("workspace.tabs.menu.deletePermanently"),
 };
 
 export type WorkspaceTabMenuEntry =
@@ -59,6 +61,7 @@ export type WorkspaceTabMenuEntry =
         | "pencil"
         | "folder-input"
         | "folder-plus"
+        | "trash-2"
         | "x";
       hint?: string;
       tooltip?: string;
@@ -96,6 +99,7 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onDeleteAgent?: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsBefore: (tabId: string) => Promise<void> | void;
@@ -113,6 +117,7 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onDeleteAgent?: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -200,6 +205,7 @@ export function buildWorkspaceTabMenuEntries(
     onCopyTerminalId,
     onCopyFilePath,
     onReloadAgent,
+    onDeleteAgent,
     onRenameTab,
     onCloseTab,
     onCloseTabsBefore,
@@ -360,6 +366,19 @@ export function buildWorkspaceTabMenuEntries(
         void onReloadAgent(agentId);
       },
     });
+    if (onDeleteAgent) {
+      entries.push({
+        kind: "item",
+        key: "delete-agent",
+        label: labels.deletePermanently,
+        icon: "trash-2",
+        destructive: true,
+        testID: `${menuTestIDBase}-delete-agent`,
+        onSelect: () => {
+          void onDeleteAgent(agentId);
+        },
+      });
+    }
   }
   entries.push({
     kind: "item",
@@ -392,6 +411,7 @@ export function buildWorkspaceDesktopTabActions(
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFilePath: input.onCopyFilePath,
       onReloadAgent: input.onReloadAgent,
+      onDeleteAgent: input.onDeleteAgent,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,
       onCloseTabsBefore: input.onCloseTabsToLeft,

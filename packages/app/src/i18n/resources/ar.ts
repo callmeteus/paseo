@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -768,6 +769,7 @@ export const ar: TranslationResources = {
         moveToWorkspace: "نقل إلى مساحة العمل",
         promoteToWorkspace: "ترقية إلى مساحة عمل",
         openContainingDirectory: "فتح المجلد المحتوي",
+        deletePermanently: "حذف المحادثة نهائيًا",
         moveWorkspace: {
           title: "نقل مساحة العمل إلى مجلد",
           empty: "لا توجد مجلدات أخرى مفتوحة.",
@@ -845,6 +847,7 @@ export const ar: TranslationResources = {
         reloadedAgent: "وكيل إعادة تحميل",
         failedToReloadAgent: "فشل في إعادة تحميل الوكيل",
         failedToCloseAgent: "فشل في إغلاق الوكيل",
+        failedToDeleteAgent: "تعذر حذف المحادثة",
       },
       confirmations: {
         unsavedTitle: "تغييرات غير محفوظة",
@@ -862,6 +865,11 @@ export const ar: TranslationResources = {
         archiveRunningAgentTitle: "وكيل تشغيل الأرشيف؟",
         archiveRunningAgentMessage:
           "هذا الوكيل لا يزال قيد التشغيل. ستؤدي أرشفته إلى إيقاف الوكيل وإغلاق علامة التبويب.",
+        deleteAgentTitle: "حذف المحادثة نهائيًا؟",
+        deleteAgentMessage: "سيؤدي هذا إلى حذف هذه المحادثة وسجلها نهائيًا. لا يمكن التراجع عن ذلك.",
+        deleteAgentRunningMessage:
+          "هذه المحادثة قيد التشغيل. سيؤدي حذفها إلى إيقاف الوكيل ومسح سجلها نهائيًا. لا يمكن التراجع عن ذلك.",
+        deletePermanently: "حذف نهائي",
         closeTabsLeftTitle: "هل تريد إغلاق علامات التبويب على اليسار؟",
         closeTabsRightTitle: "هل تريد إغلاق علامات التبويب على اليمين؟",
         closeOtherTabsTitle: "هل تريد إغلاق علامات التبويب الأخرى؟",
@@ -1302,6 +1310,10 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "التجميع حسب المضيف",
+      disable: "إيقاف التجميع حسب المضيف",
+    },
     statusGroupAccessibility: "مجموعة {{label}}",
     statusBucket: {
       needsInput: "تحتاج إدخالاً",
@@ -1326,6 +1338,7 @@ export const ar: TranslationResources = {
         project: "المشروع",
         status: "الحالة",
         labels: "التسميات",
+        host: "المضيف",
       },
       titleSource: {
         label: "العنوان",
@@ -1491,6 +1504,7 @@ export const ar: TranslationResources = {
         moveToFolder: "نقل مساحة العمل إلى مجلد…",
         archive: "أرشيف",
         archiveWorkspace: "أرشفة مساحة العمل",
+        deletePermanently: "حذف نهائي",
         hideFromSidebar: "إخفاء من الشريط الجانبي",
         archiving: "أرشفة...",
         hiding: "إخفاء...",
@@ -1500,6 +1514,9 @@ export const ar: TranslationResources = {
         hideMessage:
           'إخفاء "{{workspaceName}}" من الشريط الجانبي؟\n\n لن يتم تغيير الملفات الموجودة على القرص.',
         hideConfirm: "يخفي",
+        deleteTitle: "حذف مساحة العمل نهائيًا؟",
+        deleteMessage: "سيؤدي هذا إلى حذف «{{name}}» وكل محادثاته نهائيًا. لا يمكن التراجع عن ذلك.",
+        deleteConfirm: "حذف نهائي",
         cancel: "يلغي",
       },
       rename: {
@@ -1516,6 +1533,7 @@ export const ar: TranslationResources = {
         movedToFolder: "تم نقل مساحة العمل إلى {{path}}",
         moveToFolderFailed: "تعذر نقل مساحة العمل",
         archiveFailed: "فشل في أرشفة مساحة العمل",
+        deleteFailed: "تعذر حذف مساحة العمل",
       },
     },
   },
@@ -1796,6 +1814,10 @@ export const ar: TranslationResources = {
     failedToLoad: "فشل التحميل",
     chooseProjectForCommands: "اختر مشروعًا لعرض الأوامر",
     chooseModelForCommands: "اختر نموذجًا لعرض الأوامر",
+    untitledChat: "محادثة بلا عنوان",
+    archivedChat: "مؤرشفة",
+    attachChatFailed: "تعذّر إرفاق هذه المحادثة",
+    attachChatUnavailable: "لا يمكن لمحرّر الإدخال هذا إرفاق محادثة هنا",
   },
   loadOlderHistory: {
     failed: "تعذر تحميل السجل الأقدم",
@@ -2911,7 +2933,17 @@ export const ar: TranslationResources = {
     },
     host: {
       password: {
-        guidance: "أزل هذا المضيف ثم أضفه مرة أخرى بكلمة المرور التي يطلبها هذا الخادم.",
+        requiredTitle: "كلمة المرور مطلوبة",
+        incorrectTitle: "كلمة المرور غير صحيحة",
+        guidance: "أدخل كلمة المرور التي يطلبها هذا المضيف للاتصال.",
+        label: "كلمة مرور المضيف",
+        placeholder: "كلمة المرور",
+        connect: "اتصال",
+        connecting: "جارٍ الاتصال...",
+        empty: "أدخل كلمة المرور.",
+        show: "إظهار كلمة المرور",
+        hide: "إخفاء كلمة المرور",
+        failed: "تعذر الاتصال. تحقق من كلمة المرور وحاول مرة أخرى.",
       },
       appearance: {
         title: "المظهر",
@@ -3218,6 +3250,7 @@ export const ar: TranslationResources = {
         custom: "نماذج مخصصة",
         updated: "تم تحديث{{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "التشخيص",
         button: "التشخيص",

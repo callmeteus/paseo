@@ -6,6 +6,8 @@ import {
   type SidebarWorkspaceEntry,
   type SidebarWorkspacesListResult,
 } from "@/hooks/use-sidebar-workspaces-list";
+import { useHosts } from "@/runtime/host-runtime";
+import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useSidebarWorkspaceEntries } from "@/hooks/use-sidebar-workspace-entries";
 import { usePinnedSidebarKeys, type PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
@@ -16,7 +18,7 @@ import {
 } from "@/stores/sidebar-view-store";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import type { SidebarShortcutModel } from "@/utils/sidebar-shortcuts";
-import { buildSidebarProjection } from "./sidebar-projection";
+import { buildSidebarProjection, type SidebarHostProjectGroup } from "./sidebar-projection";
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
 import { filterWorkspacesByLabels, type SidebarWorkspaceGroup } from "./sidebar-labels";
 import { filterWorkspacesByProjects, resolveActiveProjectFilters } from "./sidebar-project-filter";
@@ -39,6 +41,7 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   hasProjectsBeforeFilter: boolean;
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
+  hostProjects: SidebarHostProjectGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
   collapsedProjectKeys: ReadonlySet<string>;
@@ -57,6 +60,18 @@ export function SidebarModelProvider({
 }) {
   const { t } = useTranslation();
   const list = useSidebarWorkspacesList({ enabled: active });
+  const hosts = useHosts();
+  const localServerId = useLocalDaemonServerId();
+  const hostById = useMemo(
+    () =>
+      new Map(
+        hosts.map((host) => [
+          host.serverId,
+          { label: host.label.trim() || host.serverId, isLocal: host.serverId === localServerId },
+        ]),
+      ),
+    [hosts, localServerId],
+  );
   const showBackground = useSidebarViewStore((state) => state.showBackground);
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
@@ -159,12 +174,14 @@ export function SidebarModelProvider({
       pinnedCollapsed,
       collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
+      hostById,
       t,
     }),
     [
       collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
       groupMode,
+      hostById,
       list.projectNamesByViewKey,
       filteredProjects,
       pinnedCollapsed,
@@ -185,6 +202,7 @@ export function SidebarModelProvider({
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
+      hostProjects: projection.hostProjects,
       projectIconTargets: projection.projectIconTargets,
       pinnedGroups: projection.pinnedGroups,
       collapsedProjectKeys,

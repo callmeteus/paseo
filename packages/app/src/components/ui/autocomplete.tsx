@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { File, Folder } from "lucide-react-native";
+import { File, Folder, MessageSquare } from "lucide-react-native";
 import type { Theme } from "@/styles/theme";
 import { getScrollOffsetToRevealItem } from "./scroll-reveal";
 
@@ -20,7 +20,7 @@ export interface AutocompleteOption {
   label: string;
   detail?: string;
   description?: string;
-  kind?: "command" | "file" | "directory";
+  kind?: "command" | "file" | "directory" | "chat";
 }
 
 interface AutocompleteProps {
@@ -44,6 +44,18 @@ function removeBoltGlyphs(value?: string): string | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
+function AutocompleteLeadingIcon({
+  kind,
+  color,
+}: {
+  kind: AutocompleteOption["kind"];
+  color: string;
+}) {
+  if (kind === "chat") return <MessageSquare size={14} color={color} />;
+  if (kind === "directory") return <Folder size={14} color={color} />;
+  return <File size={14} color={color} />;
+}
+
 interface AutocompleteRowProps {
   index: number;
   option: AutocompleteOption;
@@ -64,6 +76,7 @@ function AutocompleteRow({
   const optionLabel = removeBoltGlyphs(option.label) ?? option.label;
   const optionDescription = removeBoltGlyphs(option.description);
   const isFileOrDir = option.kind === "directory" || option.kind === "file";
+  const isChat = option.kind === "chat";
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => onRowLayout(index, event),
@@ -80,18 +93,16 @@ function AutocompleteRow({
 
   return (
     <Pressable onLayout={handleLayout} onPress={handlePress} style={pressableStyle}>
-      {isFileOrDir ? (
+      {isFileOrDir || isChat ? (
         <>
           <View style={styles.itemLeading}>
-            {option.kind === "directory" ? (
-              <Folder size={14} color={mutedColor} />
-            ) : (
-              <File size={14} color={mutedColor} />
-            )}
+            <AutocompleteLeadingIcon kind={option.kind} color={mutedColor} />
           </View>
           <View style={styles.itemMain}>
             <View style={styles.itemHeader}>
-              <Text style={styles.itemLabel}>{optionLabel}</Text>
+              <Text style={styles.itemLabel} numberOfLines={1}>
+                {optionLabel}
+              </Text>
               {removeBoltGlyphs(option.detail) ? (
                 <Text style={styles.itemDetail}>{removeBoltGlyphs(option.detail)}</Text>
               ) : null}

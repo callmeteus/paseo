@@ -3,6 +3,7 @@ import { ArrowLeftToLine, RotateCw, Settings } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { HostPasswordPrompt } from "@/components/host-password-prompt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { AgentRouteResolution } from "@/navigation/agent-route-resolution";
 import { formatConnectionStatus } from "@/utils/daemons";
@@ -21,6 +22,8 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 export function AgentRouteResolutionView({
   resolution,
   hostName,
+  serverId,
+  authFailureReason,
   lastHostError,
   onRetry,
   onManageHost,
@@ -28,12 +31,29 @@ export function AgentRouteResolutionView({
 }: {
   resolution: VisibleAgentRouteResolution;
   hostName: string;
+  serverId: string;
+  authFailureReason: "password_required" | "incorrect_password" | null;
   lastHostError: string | null;
   onRetry: () => void;
   onManageHost: () => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
+
+  if (resolution.kind === "waitingForHost" && serverId && authFailureReason) {
+    return (
+      <View style={styles.emptyState} testID="agent-route-password-required">
+        <View style={styles.passwordPrompt}>
+          <HostPasswordPrompt serverId={serverId} testID="agent-route-password" />
+        </View>
+        <View style={styles.actions}>
+          <Button size="sm" variant="outline" leftIcon={Settings} onPress={onManageHost}>
+            {t("workspace.route.manageHost")}
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   if (resolution.kind === "fetchingAgent") {
     return (
@@ -114,6 +134,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[3],
     paddingHorizontal: theme.spacing[6],
+  },
+  passwordPrompt: {
+    width: "100%",
+    maxWidth: 420,
   },
   textStack: {
     alignItems: "center",

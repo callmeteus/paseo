@@ -2214,7 +2214,7 @@ function createToolCatalog(
     {
       title: "Search chats",
       description:
-        'Search every Paseo conversation on this host (including archived chats) for a text query and return the matching chats with short excerpts. Use it whenever the user refers to something discussed earlier in another chat (for example "we talked about X recently", "what did that chat conclude"), before asking them to repeat themselves. Follow up with get_agent_activity on the matching agentId to read the full conversation.',
+        'Search every Paseo conversation on this host (including archived chats) for a text query and return the matching chats with short excerpts. A query matches chat titles as well as message text, so a title-only match returns no excerpts. Use it whenever the user refers to something discussed earlier in another chat (for example "we talked about X recently", "what did that chat conclude"), before asking them to repeat themselves. Follow up with get_agent_activity on the matching agentId to read the full conversation.',
       inputSchema: {
         query: z
           .string()
@@ -2237,7 +2237,7 @@ function createToolCatalog(
           .max(100)
           .optional()
           .default(25)
-          .describe("Maximum chats to scan, newest first."),
+          .describe("Maximum matching chats to return, newest first."),
         matchesPerChat: z.number().int().positive().max(10).optional().default(3),
       },
       outputSchema: {
@@ -2250,6 +2250,8 @@ function createToolCatalog(
             status: z.string(),
             cwd: z.string(),
             updatedAt: z.string(),
+            archivedAt: z.string().nullable(),
+            titleMatch: z.boolean(),
             matches: z.array(
               z.object({
                 seq: z.number(),

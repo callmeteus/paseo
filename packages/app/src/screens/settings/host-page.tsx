@@ -24,6 +24,7 @@ import {
 import { AgentProfilesSection } from "@/agent-profiles";
 import { AgentSkillsSection } from "@/agent-skills";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { HostPasswordPrompt } from "@/components/host-password-prompt";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import {
+  getHostAuthFailureReason,
   getHostRuntimeStore,
   isHostRuntimeConnected,
   useHostMutations,
@@ -182,9 +184,16 @@ function HostStatusBadges({ serverId }: { serverId: string }) {
   );
 
   const connectionStatus = snapshot?.connectionStatus ?? "connecting";
+  const authFailureReason = getHostAuthFailureReason(snapshot);
   const activeConnection = snapshot?.activeConnection ?? null;
-  const statusLabel = formatConnectionStatus(connectionStatus);
-  const statusTone = getConnectionStatusTone(connectionStatus);
+  let statusLabel = formatConnectionStatus(connectionStatus);
+  if (authFailureReason === "incorrect_password") {
+    statusLabel = t("settings.host.password.incorrectTitle");
+  } else if (authFailureReason === "password_required") {
+    statusLabel = t("settings.host.password.requiredTitle");
+  }
+  let statusTone = getConnectionStatusTone(connectionStatus);
+  if (authFailureReason) statusTone = "error";
   let statusVariant: StatusBadgeVariant = "muted";
   let statusDotColor = theme.colors.foregroundMuted;
   if (statusTone === "success") {
@@ -228,8 +237,15 @@ function HostStatusBadges({ serverId }: { serverId: string }) {
 }
 
 function HostConnectionError({ serverId }: { serverId: string }) {
-  const { t } = useTranslation();
   const snapshot = useHostRuntimeSnapshot(serverId);
+  const authFailureReason = getHostAuthFailureReason(snapshot);
+  if (authFailureReason) {
+    return (
+      <View style={styles.connectionError}>
+        <HostPasswordPrompt serverId={serverId} testID="host-connection-password" />
+      </View>
+    );
+  }
   const lastError = snapshot?.lastError ?? null;
   const connectionError =
     typeof lastError === "string" && lastError.trim().length > 0 ? lastError.trim() : null;
@@ -240,7 +256,6 @@ function HostConnectionError({ serverId }: { serverId: string }) {
         size="sm"
         variant="error"
         title={connectionError}
-        description={snapshot?.authFailureReason ? t("settings.host.password.guidance") : undefined}
         testID="host-connection-error"
       />
     </View>

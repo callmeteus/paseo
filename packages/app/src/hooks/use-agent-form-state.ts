@@ -218,6 +218,15 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       statuses: SELECTABLE_PROVIDER_STATUSES,
     });
   }, [snapshotEntries, snapshotProviderDefinitions]);
+  const unavailableProviders = useMemo(
+    () =>
+      new Set(
+        (snapshotEntries ?? [])
+          .filter((entry) => entry.status === "error" || entry.status === "unavailable")
+          .map((entry) => entry.provider),
+      ),
+    [snapshotEntries],
+  );
   const snapshotAllProviderModels = useMemo(
     () => buildAllProviderModels(snapshotEntries),
     [snapshotEntries],
@@ -270,6 +279,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       preferences,
       providerModelsByProvider: snapshotProviderModelsByProvider,
       allowedProviderMap: snapshotResolvableProviderDefinitionMap,
+      unavailableProviders,
     });
   }, [
     serverId,
@@ -281,6 +291,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     preferences,
     snapshotProviderModelsByProvider,
     snapshotResolvableProviderDefinitionMap,
+    unavailableProviders,
   ]);
 
   const setProviderAndModelFromUser = useCallback(

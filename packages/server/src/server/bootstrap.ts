@@ -1585,6 +1585,7 @@ export async function createPaseoDaemon(
     archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
     emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
     emitPlanUpdate: (input) => {
+      logger.info({ input }, "plan update emitted");
       wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
     },
     workspaceRegistry,

@@ -32,19 +32,57 @@ describe("findActiveFileMention", () => {
     });
   });
 
-  it("returns null when cursor is outside the mention token", () => {
-    const text = "please review @src/components now";
+  it("keeps the token open across spaces so multi-word searches work", () => {
+    const text = "please review @add chat search";
     const mention = findActiveFileMention({
       text,
       cursorIndex: text.length,
     });
+    expect(mention).toEqual({
+      start: text.indexOf("@"),
+      end: text.length,
+      query: "add chat search",
+    });
+  });
+
+  it("keeps a four-word query open when a word limit is set", () => {
+    const text = "@add chat search here";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+      maxWords: 4,
+    });
+    expect(mention).toEqual({
+      start: 0,
+      end: text.length,
+      query: "add chat search here",
+    });
+  });
+
+  it("closes once the query passes the word limit", () => {
+    const text = "@add chat search here please";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+      maxWords: 4,
+    });
     expect(mention).toBeNull();
   });
 
-  it("returns null when @ at start is followed by a delimiter", () => {
+  it("keeps unlimited words when no limit is set", () => {
+    const text = "@one two three four five six";
     const mention = findActiveFileMention({
-      text: "@ ",
-      cursorIndex: 2,
+      text,
+      cursorIndex: text.length,
+    });
+    expect(mention?.query).toBe("one two three four five six");
+  });
+
+  it("still ends the token at a quote inserted by a picked path", () => {
+    const text = 'open @"src/components/chat.tsx" next';
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
     });
     expect(mention).toBeNull();
   });

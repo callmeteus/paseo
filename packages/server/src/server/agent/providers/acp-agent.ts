@@ -330,17 +330,82 @@ const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 // (or while a permission is pending) is a hung turn, not a slow one. A caller
 // can raise this for a turn whose tool stays quiet, such as a long build.
 const ACP_TURN_IDLE_TIMEOUT_MS = 120_000;
+// Cursor's Harness can think for minutes before emitting its next update, and
+// Grok's high reasoning routinely goes quiet past the generic limit. Keep the
+// hung-process guard, but give the provider room to finish.
+const ACP_CURSOR_TURN_IDLE_TIMEOUT_MS = 10 * 60_000;
+// Cursor retries upstream capacity errors internally, then rejects
+// `session/prompt` with a raw `RetriableError: [resource_exhausted]` while the
+// turn is already mid-work. Retry the same prompt here instead of ending a long
+// turn over a temporary capacity spike. Back off far enough for the spike to
+// pass, and give up after the last delay.
+export const ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const;
 
-function resolveTurnIdleLimitMs(options: AgentRunOptions | undefined): number {
+export function isRetriableProviderLoadError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("resource_exhausted") ||
+    normalized.includes("resource exhausted") ||
+    normalized.includes("high load")
+  );
+}
+
+function resolveTurnIdleLimitMs(provider: string, options: AgentRunOptions | undefined): number {
   const requested = options?.idleTimeoutMs;
-  return requested !== undefined && Number.isSafeInteger(requested) && requested > 0
-    ? requested
-    : ACP_TURN_IDLE_TIMEOUT_MS;
+  if (requested !== undefined && Number.isSafeInteger(requested) && requested > 0) {
+    return requested;
+  }
+  return provider === "cursor" ? ACP_CURSOR_TURN_IDLE_TIMEOUT_MS : ACP_TURN_IDLE_TIMEOUT_MS;
 }
 // A provider that never starts a turn usually needs authentication or is
 // otherwise broken. Fail early with an actionable message instead of leaving
 // the chat loading until the longer idle watchdog fires.
 const ACP_TURN_FIRST_ACTIVITY_TIMEOUT_MS = 45_000;
+
+// Kilo's ACP server runs `git config --get remote.origin.url` through a shell
+// that inherits stdin on every LLM request. On Windows the inherited git
+// process blocks at startup until the client writes another line, so
+// `session/prompt` never returns and the turn hangs until the first-activity
+// timeout fires. Blank lines are ignored by JSON-RPC readers and release the
+// blocked git process. Remove once Kilo ships
+// https://github.com/Kilo-Org/kilocode/pull/15374.
+const KILO_STDIN_KEEPALIVE_INTERVAL_MS = 2_000;
+
+// Generic ACP providers (Kilo, Cline, Cursor, ...) all run with the internal
+// provider id "acp", so the launch command is the only reliable signal that the
+// process is Kilo. Match the binary name, ignoring a Windows extension and the
+// directory it lives in.
+const KILO_BINARY_NAMES = new Set(["kilo", "kilocode"]);
+
+function isKiloLaunchCommand(command: string): boolean {
+  const base = path
+    .basename(command)
+    .replace(/\.(exe|cmd|bat|ps1|com)$/i, "")
+    .toLowerCase();
+  return KILO_BINARY_NAMES.has(base);
+}
+
+export function startKiloStdinKeepalive(
+  command: string,
+  child: ChildProcessWithoutNullStreams,
+): (() => void) | null {
+  if (process.platform !== "win32" || !isKiloLaunchCommand(command)) {
+    return null;
+  }
+  const timer = setInterval(() => {
+    if (child.stdin.destroyed || child.stdin.writableEnded) return;
+    try {
+      child.stdin.write("\n");
+    } catch {
+      // The process can exit between the writable check and the write.
+    }
+  }, KILO_STDIN_KEEPALIVE_INTERVAL_MS);
+  timer.unref?.();
+  const stop = () => clearInterval(timer);
+  child.once("exit", stop);
+  child.once("close", stop);
+  return stop;
+}
 
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
@@ -473,6 +538,15 @@ export type ACPCatalogModelResolver = (
   context: ACPCatalogModelResolverContext,
 ) => Promise<AgentModelDefinition[]>;
 
+/**
+ * Provider-specific preparation of the external MCP config file a harness
+ * reads at process start. Cursor is the current caller: ACP injection works for
+ * native config but not for Cursor plugin MCP servers.
+ */
+export interface ExternalMcpConfigBridge {
+  acquire: () => Promise<void>;
+}
+
 interface ACPAgentClientOptions {
   provider: string;
   // Provider id usage sources match a session against; ACP sessions without one report no usage.
@@ -511,6 +585,7 @@ interface ACPAgentClientOptions {
   initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
   now?: () => number;
+  mcpConfigBridge?: ExternalMcpConfigBridge;
 }
 
 interface ACPAgentSessionOptions {
@@ -548,6 +623,7 @@ interface ACPAgentSessionOptions {
   waitForInitialCommands?: boolean;
   initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
+  mcpConfigBridge?: ExternalMcpConfigBridge;
 }
 
 export interface SpawnedACPProcess {
@@ -980,6 +1056,7 @@ export class ACPAgentClient implements AgentClient {
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private readonly importPromptCache = new Map<string, ACPImportPromptCacheEntry>();
   private readonly now: () => number;
+  private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
   protected readonly terminateProcess: ProcessTerminator;
 
   constructor(options: ACPAgentClientOptions) {
@@ -1011,6 +1088,7 @@ export class ACPAgentClient implements AgentClient {
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
     this.now = options.now ?? Date.now;
+    this.mcpConfigBridge = options.mcpConfigBridge;
   }
 
   async createSession(
@@ -1052,6 +1130,7 @@ export class ACPAgentClient implements AgentClient {
         extensionCommandsParser: this.extensionCommandsParser,
         waitForInitialCommands: this.waitForInitialCommands,
         initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
+        mcpConfigBridge: this.mcpConfigBridge,
       },
     );
     await session.initializeNewSession();
@@ -1113,6 +1192,7 @@ export class ACPAgentClient implements AgentClient {
       extensionCommandsParser: this.extensionCommandsParser,
       waitForInitialCommands: this.waitForInitialCommands,
       initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
+      mcpConfigBridge: this.mcpConfigBridge,
     });
     await session.initializeResumedSession();
     return session;
@@ -1448,6 +1528,8 @@ export class ACPAgentClient implements AgentClient {
       stdio: ["pipe", "pipe", "pipe"],
     });
     assertChildWithPipes(child);
+
+    startKiloStdinKeepalive(command, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -1790,12 +1872,15 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly extensionCommandsParser?: ACPExtensionCommandsParser;
   private currentTurnUsage: AgentUsage | undefined;
   private activeForegroundTurnId: string | null = null;
+  private turnCancelRequested = false;
+  private wakePromptRetryWait: (() => void) | null = null;
   private turnIdleTimeout: ReturnType<typeof setTimeout> | null = null;
   private turnIdleLimitMs = ACP_TURN_IDLE_TIMEOUT_MS;
   private turnFirstActivityTimeout: ReturnType<typeof setTimeout> | null = null;
   private authMethods: NonNullable<InitializeResponse["authMethods"]> = [];
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
+  private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
   private historyPending = false;
   private historyRuntimeReleased = false;
   private replayingHistory = false;
@@ -1841,6 +1926,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
+    this.mcpConfigBridge = options.mcpConfigBridge;
   }
 
   get id(): string | null {
@@ -1857,8 +1943,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
+  private async prepareExternalMcpConfig(): Promise<void> {
+    if (!this.mcpConfigBridge) return;
+    try {
+      await this.mcpConfigBridge.acquire();
+    } catch (error) {
+      // The harness still works without the bridged servers.
+      this.logger.warn({ err: error }, "Failed to prepare external MCP config");
+    }
+  }
+
   async initializeNewSession(): Promise<void> {
     try {
+      await this.prepareExternalMcpConfig();
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
@@ -1896,6 +1993,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         throw new Error("Resume requested without persistence handle");
       }
 
+      await this.prepareExternalMcpConfig();
       const spawned = await this.spawnProcess();
       this.child = spawned.child;
       this.connection = spawned.connection;
@@ -2018,7 +2116,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const turnId = randomUUID();
     const messageId = options?.clientMessageId ?? randomUUID();
     this.activeForegroundTurnId = turnId;
-    this.turnIdleLimitMs = resolveTurnIdleLimitMs(options);
+    this.turnCancelRequested = false;
+    this.turnIdleLimitMs = resolveTurnIdleLimitMs(this.provider, options);
     this.fallbackAssistantMessageId = null;
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
@@ -2027,33 +2126,111 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.armTurnIdleTimeout(turnId);
     this.armTurnFirstActivityTimeout(turnId);
 
-    void this.connection
-      .prompt({
-        sessionId: this.sessionId,
-        messageId,
-        // Cursor stores session/prompt as the user message and resends that
-        // transcript on later turns. ACP has no system-prompt field, so the
-        // Hub note stays on the MCP server instructions instead of this text.
-        prompt: toACPContentBlocks(prompt),
-      })
-      .then((response) => {
-        this.handlePromptResponse(response, turnId);
-        return;
-      })
-      .catch((error) => {
-        if (this.activeForegroundTurnId !== turnId) return;
-        const summary = summarizeACPRequestError(error);
-        this.finishTurn({
-          type: "turn_failed",
-          provider: this.provider,
-          error: summary.message,
-          code: summary.code,
-          diagnostic: this.collectDiagnostic(summary.diagnostic ?? summary.message),
-          turnId,
-        });
-      });
+    void this.runPromptWithRetries({
+      turnId,
+      messageId,
+      // Cursor stores session/prompt as the user message and resends that
+      // transcript on later turns. ACP has no system-prompt field, so the
+      // Hub note stays on the MCP server instructions instead of this text.
+      prompt: toACPContentBlocks(prompt),
+    });
 
     return { turnId };
+  }
+
+  /**
+   * Cursor rejects a long turn with `RetriableError: [resource_exhausted]` when
+   * its provider is briefly out of capacity, after its own retries are spent.
+   * Keep the turn open through a short backoff instead of failing work the user
+   * already watched run.
+   */
+  private async runPromptWithRetries(input: {
+    turnId: string;
+    messageId: string;
+    prompt: ContentBlock[];
+  }): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      const connection = this.connection;
+      const sessionId = this.sessionId;
+      if (!connection || !sessionId) return;
+      try {
+        const response = await connection.prompt({
+          sessionId,
+          messageId: input.messageId,
+          prompt: input.prompt,
+        });
+        this.handlePromptResponse(response, input.turnId);
+        return;
+      } catch (error) {
+        if (this.activeForegroundTurnId !== input.turnId) return;
+        const summary = summarizeACPRequestError(error);
+        const retryDelayMs = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[attempt];
+        const shouldRetry =
+          retryDelayMs !== undefined &&
+          !this.closed &&
+          !this.turnCancelRequested &&
+          isRetriableProviderLoadError(summary.message);
+        if (!shouldRetry) {
+          this.finishTurn({
+            type: "turn_failed",
+            provider: this.provider,
+            error: summary.message,
+            code: summary.code,
+            diagnostic: this.collectDiagnostic(summary.diagnostic ?? summary.message),
+            turnId: input.turnId,
+          });
+          return;
+        }
+
+        const retryNumber = attempt + 1;
+        const totalAttempts = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1;
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          transient: true,
+          turnId: input.turnId,
+          item: {
+            type: "error",
+            message: `${this.provider} is under high load; retrying in ${Math.round(
+              retryDelayMs / 1000,
+            )}s (attempt ${retryNumber + 1}/${totalAttempts})`,
+          },
+        });
+        // The backoff is intended waiting, not a silent provider.
+        this.clearTurnIdleTimeout();
+        this.clearTurnFirstActivityTimeout();
+        await this.waitForPromptRetry(retryDelayMs);
+        if (this.activeForegroundTurnId !== input.turnId) return;
+        if (this.closed) return;
+        if (this.turnCancelRequested) {
+          this.finishTurn({
+            type: "turn_canceled",
+            provider: this.provider,
+            reason: "Interrupted",
+            turnId: input.turnId,
+          });
+          return;
+        }
+        this.armTurnIdleTimeout(input.turnId);
+      }
+    }
+  }
+
+  private waitForPromptRetry(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        this.wakePromptRetryWait = null;
+        resolve();
+      };
+      const timer = setTimeout(settle, delayMs);
+      this.wakePromptRetryWait = () => {
+        clearTimeout(timer);
+        settle();
+      };
+    });
   }
 
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {
@@ -2602,6 +2779,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.cancelPendingPermissions();
 
     if (this.activeForegroundTurnId) {
+      // A retry backoff must not restart the turn the user just stopped.
+      this.turnCancelRequested = true;
+      this.wakePromptRetryWait?.();
       await this.connection.cancel({ sessionId: this.sessionId });
     }
   }
@@ -2620,6 +2800,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return;
     }
     this.closed = true;
+    this.wakePromptRetryWait?.();
 
     this.clearTurnIdleTimeout();
     this.clearTurnFirstActivityTimeout();
@@ -2980,6 +3161,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       stdio: ["pipe", "pipe", "pipe"],
     });
     assertChildWithPipes(child);
+
+    startKiloStdinKeepalive(command, child);
 
     const stderrChunks: string[] = [];
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -3513,14 +3696,25 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
+  private hasActiveToolCall(): boolean {
+    for (const toolCall of this.toolCalls.values()) {
+      if (toolCall.status === "pending" || toolCall.status === "in_progress") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private armTurnIdleTimeout(turnId: string): void {
     this.clearTurnIdleTimeout();
     this.turnIdleTimeout = setTimeout(() => {
       this.turnIdleTimeout = null;
       if (this.activeForegroundTurnId !== turnId) return;
       // A pending permission blocks the provider on purpose; keep waiting.
-      // A running tool that stopped producing updates is a hung turn.
-      if (this.pendingPermissions.size > 0) {
+      // A running tool that stopped producing updates is a hung turn, unless
+      // the tool is still in progress: builds and test suites can be silent for
+      // minutes and their completion is the next real activity boundary.
+      if (this.pendingPermissions.size > 0 || this.hasActiveToolCall()) {
         this.armTurnIdleTimeout(turnId);
         return;
       }

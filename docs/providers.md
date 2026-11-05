@@ -53,6 +53,10 @@ preferences and selection history. Cursor versions without that extension must b
 still probes model selections in its own shim. The initial session supplies modes and the current
 model; it does not override the model list returned by a resolver.
 
+Cursor ACP loads `~/.cursor/mcp.json` and `session/new` MCP servers, but it does not load Cursor plugins. Paseo mirrors each installed plugin's MCP definition into `~/.cursor/mcp.json` before spawning Cursor, and reconciles entries it wrote when a plugin changes or disappears. This is the only path that makes plugin-provided MCP tools (Slack and similar) available in Paseo chats; remove the bridge once Cursor loads plugins in ACP mode.
+
+Provider settings lists the MCP servers the harness reports and starts its login flow for servers that need OAuth (`cursor-agent mcp enable` followed by `mcp login`). The daemon returns the authorization URL to the client, so the flow also works from a remote Paseo client; the URL itself must be opened on the host because the OAuth callback listens on the host's localhost.
+
 ### Direct
 
 Implement the `AgentClient` and `AgentSession` interfaces from `agent-sdk-types.ts` yourself. This gives full control but requires you to handle process management, streaming, permissions, and session persistence from scratch.

@@ -297,7 +297,13 @@ function buildRecord(input: {
     labels,
     lastStatus: "closed",
     lastModeId: null,
-    config: chat.modelName ? { model: chat.modelName } : null,
+    config: {
+      ...(chat.modelName ? { model: chat.modelName } : {}),
+      // Cursor's own default is auto-accept. Imported chats start a fresh
+      // Cursor session on first prompt, so keep that behavior without asking
+      // the user to flip the toggle for every import.
+      featureValues: { auto_accept: true },
+    },
     runtimeInfo: {
       provider: CURSOR_IMPORT_PROVIDER,
       sessionId: null,

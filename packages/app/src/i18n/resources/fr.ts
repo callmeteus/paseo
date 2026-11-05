@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
@@ -780,6 +781,7 @@ export const fr: TranslationResources = {
         moveToWorkspace: "Déplacer vers un espace de travail",
         promoteToWorkspace: "Promouvoir en espace de travail",
         openContainingDirectory: "Ouvrir le dossier parent",
+        deletePermanently: "Supprimer définitivement le chat",
         moveWorkspace: {
           title: "Déplacer l'espace de travail vers un dossier",
           empty: "Aucun autre dossier ouvert.",
@@ -858,6 +860,7 @@ export const fr: TranslationResources = {
         reloadedAgent: "Agent rechargé",
         failedToReloadAgent: "Impossible de recharger l’agent",
         failedToCloseAgent: "Impossible de fermer l’agent",
+        failedToDeleteAgent: "Échec de la suppression du chat",
       },
       confirmations: {
         unsavedTitle: "Modifications non enregistrées",
@@ -875,6 +878,12 @@ export const fr: TranslationResources = {
         archiveRunningAgentTitle: "Archiver l’agent en cours ?",
         archiveRunningAgentMessage:
           "Cet agent est toujours en cours d’exécution. L’archiver arrêtera l’agent et fermera l’onglet.",
+        deleteAgentTitle: "Supprimer définitivement le chat ?",
+        deleteAgentMessage:
+          "Cela supprime définitivement ce chat et son historique. Cette action est irréversible.",
+        deleteAgentRunningMessage:
+          "Ce chat est encore en cours. Le supprimer arrête l’agent et efface définitivement son historique. Cette action est irréversible.",
+        deletePermanently: "Supprimer définitivement",
         closeTabsLeftTitle: "Fermer les onglets à gauche ?",
         closeTabsRightTitle: "Fermer les onglets à droite ?",
         closeOtherTabsTitle: "Fermer les autres onglets ?",
@@ -1337,6 +1346,10 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "Grouper par hôte",
+      disable: "Ne plus grouper par hôte",
+    },
     statusGroupAccessibility: "Groupe {{label}}",
     statusBucket: {
       needsInput: "Attend une réponse",
@@ -1361,6 +1374,7 @@ export const fr: TranslationResources = {
         project: "Projet",
         status: "Statut",
         labels: "Libellés",
+        host: "Hôte",
       },
       titleSource: {
         label: "Titre",
@@ -1528,6 +1542,7 @@ export const fr: TranslationResources = {
         moveToFolder: "Déplacer l'espace de travail vers un dossier…",
         archive: "Archiver",
         archiveWorkspace: "Archiver l’espace de travail",
+        deletePermanently: "Supprimer définitivement",
         hideFromSidebar: "Masquer de la barre latérale",
         archiving: "Archivage…",
         hiding: "Masquage…",
@@ -1537,6 +1552,10 @@ export const fr: TranslationResources = {
         hideMessage:
           "Masquer « {{workspaceName}} » de la barre latérale ?\n\nLes fichiers sur le disque ne seront pas modifiés.",
         hideConfirm: "Masquer",
+        deleteTitle: "Supprimer définitivement l’espace de travail ?",
+        deleteMessage:
+          "Cela supprime définitivement « {{name}} » et tous ses chats. Cette action est irréversible.",
+        deleteConfirm: "Supprimer définitivement",
         cancel: "Annuler",
       },
       rename: {
@@ -1553,6 +1572,7 @@ export const fr: TranslationResources = {
         movedToFolder: "Espace de travail déplacé vers {{path}}",
         moveToFolderFailed: "Impossible de déplacer l'espace de travail",
         archiveFailed: "Impossible d’archiver l’espace de travail",
+        deleteFailed: "Échec de la suppression de l’espace de travail",
       },
     },
   },
@@ -1846,6 +1866,10 @@ export const fr: TranslationResources = {
     failedToLoad: "Échec du chargement",
     chooseProjectForCommands: "Choisissez un projet pour afficher les commandes",
     chooseModelForCommands: "Sélectionnez un modèle pour afficher les commandes",
+    untitledChat: "Chat sans titre",
+    archivedChat: "Archivé",
+    attachChatFailed: "Impossible de joindre cette conversation",
+    attachChatUnavailable: "Ce composeur ne peut pas joindre de conversation ici",
   },
   loadOlderHistory: {
     failed: "Impossible de charger l’historique plus ancien",
@@ -2941,8 +2965,17 @@ export const fr: TranslationResources = {
     },
     host: {
       password: {
-        guidance:
-          "Supprimez cet hôte puis ajoutez-le à nouveau avec le mot de passe demandé par ce daemon.",
+        requiredTitle: "Mot de passe requis",
+        incorrectTitle: "Mot de passe incorrect",
+        guidance: "Saisissez le mot de passe demandé par cet hôte pour vous connecter.",
+        label: "Mot de passe de l’hôte",
+        placeholder: "Mot de passe",
+        connect: "Se connecter",
+        connecting: "Connexion...",
+        empty: "Saisissez le mot de passe.",
+        show: "Afficher le mot de passe",
+        hide: "Masquer le mot de passe",
+        failed: "Connexion impossible. Vérifiez le mot de passe et réessayez.",
       },
       appearance: {
         title: "Apparence",
@@ -3259,6 +3292,7 @@ export const fr: TranslationResources = {
         custom: "Modèles personnalisés",
         updated: "Mis à jour {{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "Diagnostic",
         button: "Diagnostic",

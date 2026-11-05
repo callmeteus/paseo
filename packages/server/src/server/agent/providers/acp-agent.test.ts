@@ -24,6 +24,7 @@ import {
 import {
   ACPAgentClient,
   ACPAgentSession,
+  ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS,
   type SpawnedACPProcess,
   type SessionStateResponse,
   buildACPClientCapabilities,
@@ -33,6 +34,7 @@ import {
   mapACPUsage,
   resolveACPModeSelection,
   resolveACPModelSelection,
+  startKiloStdinKeepalive,
   summarizeACPRequestError,
 } from "./acp-agent.js";
 import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
@@ -145,18 +147,20 @@ interface ACPConfiguredOverrideInternals {
 
 function createSession(
   options: {
+    provider?: "cursor" | "claude-acp";
     terminateProcess?: ProcessTerminator;
     launchEnv?: Record<string, string>;
+    mcpConfigBridge?: { acquire: () => Promise<void> };
   } = {},
 ): ACPAgentSession {
-  const { terminateProcess, launchEnv } = options;
+  const { provider = "claude-acp", terminateProcess, launchEnv, mcpConfigBridge } = options;
   return new ACPAgentSession(
     {
-      provider: "claude-acp",
+      provider,
       cwd: "/tmp/paseo-acp-test",
     },
     {
-      provider: "claude-acp",
+      provider,
       logger: createTestLogger(),
       defaultCommand: ["claude", "--acp"],
       defaultModes: [],
@@ -170,6 +174,7 @@ function createSession(
       },
       ...(terminateProcess ? { terminateProcess } : {}),
       ...(launchEnv ? { launchEnv } : {}),
+      ...(mcpConfigBridge ? { mcpConfigBridge } : {}),
     },
   );
 }
@@ -597,6 +602,79 @@ describe("createLoggedNdJsonStream", () => {
 
     await writer.close();
     reader.releaseLock();
+  });
+});
+
+describe("startKiloStdinKeepalive", () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function createChildStub(): {
+    write: ReturnType<typeof vi.fn>;
+    child: ChildProcessWithoutNullStreams;
+  } {
+    const write = vi.fn();
+    const once = vi.fn();
+    return {
+      write,
+      child: {
+        stdin: { write, destroyed: false, writableEnded: false },
+        once,
+      } as unknown as ChildProcessWithoutNullStreams,
+    };
+  }
+
+  test("writes blank lines to a Kilo ACP stdin on Windows", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    vi.useFakeTimers();
+    const { write, child } = createChildStub();
+
+    const stop = startKiloStdinKeepalive("kilo", child);
+    expect(stop).not.toBeNull();
+
+    vi.advanceTimersByTime(2_000);
+    expect(write).toHaveBeenCalledWith("\n");
+
+    stop?.();
+    write.mockClear();
+    vi.advanceTimersByTime(4_000);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  test("stops writing once the ACP stdin closes", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    vi.useFakeTimers();
+    const { write, child } = createChildStub();
+    const stdin = child.stdin as unknown as { destroyed: boolean };
+    stdin.destroyed = true;
+
+    startKiloStdinKeepalive("kilo", child);
+    vi.advanceTimersByTime(4_000);
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  test("matches the launch command, not the internal provider id", () => {
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    const { write, child } = createChildStub();
+    // Generic ACP providers run with the internal provider id "acp"; the
+    // keepalive must still recognize the Kilo binary or the git-stdin hang
+    // returns. See GenericACPAgentClient passing `provider: "acp"`.
+    expect(startKiloStdinKeepalive("acp", child)).toBeNull();
+    expect(startKiloStdinKeepalive("cline", child)).toBeNull();
+    expect(startKiloStdinKeepalive("kilo", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("kilocode", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("kilo.cmd", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("C:\\tools\\kilo.exe", child)).not.toBeNull();
+
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    expect(startKiloStdinKeepalive("kilo", child)).toBeNull();
+    expect(write).not.toHaveBeenCalled();
   });
 });
 
@@ -3174,6 +3252,87 @@ describe("ACPAgentSession", () => {
     }
   });
 
+  test("Cursor gets a longer idle limit for long reasoning turns", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("investigate");
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "assistant-1",
+          content: { type: "text", text: "Working" },
+        } as SessionUpdate,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000 - 120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("600000"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps a turn alive while an ACP tool call is in progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt: () => new Promise<PromptResponse>(() => {}),
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("run the tests");
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-1",
+          title: "Run tests",
+          kind: "execute",
+          status: "in_progress",
+        } as SessionUpdate,
+      });
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await session.sessionUpdate({
+        sessionId: "session-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-1",
+          status: "completed",
+        } as SessionUpdate,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("stopped responding"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("startTurn emits the submitted user message even when ACP does not echo it", async () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];
@@ -3529,6 +3688,122 @@ describe("ACPAgentSession", () => {
     expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
   });
 
+  test("retries a Cursor prompt rejected for temporary provider load", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      let attempts = 0;
+      const prompt = vi.fn(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Promise.reject(new Error("RetriableError: [resource_exhausted] Error"));
+        }
+        return Promise.resolve({ stopReason: "end_turn" } as PromptResponse);
+      });
+      const cancel = vi.fn(async () => {});
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello", { clientMessageId: "msg-1" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(
+        events.find((event) => event.type === "timeline" && event.transient === true),
+      ).toMatchObject({
+        type: "timeline",
+        provider: "cursor",
+        item: { type: "error", message: expect.stringContaining("high load") },
+      });
+
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(2);
+      expect(prompt.mock.calls[1]?.[0]).toMatchObject({
+        sessionId: "session-1",
+        messageId: "msg-1",
+        prompt: [{ type: "text", text: "hello" }],
+      });
+      expect(events.find((event) => event.type === "turn_completed")).toMatchObject({
+        type: "turn_completed",
+        turnId,
+      });
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("fails a Cursor turn after the provider load retries are exhausted", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const prompt = vi.fn(() =>
+        Promise.reject(new Error("RetriableError: [resource_exhausted] Error")),
+      );
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = {
+        prompt,
+        cancel: async () => {},
+      };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      for (const delayMs of ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: expect.stringContaining("resource_exhausted"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not retry a provider load rejection after the user interrupts", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const prompt = vi.fn(() =>
+        Promise.reject(new Error("RetriableError: [resource_exhausted] Error")),
+      );
+      const cancel = vi.fn(async () => {});
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(prompt).toHaveBeenCalledTimes(1);
+
+      await session.interrupt();
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(events.find((event) => event.type === "turn_canceled")).toMatchObject({
+        type: "turn_canceled",
+        turnId,
+        reason: "Interrupted",
+      });
+      expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("flushes an image-only provider echo before a rejected turn finishes", async () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];
@@ -3645,6 +3920,27 @@ describe("ACPAgentSession", () => {
     await expect(turnFailed).resolves.toMatchObject({
       error: expect.not.stringContaining("[object Object]"),
     });
+  });
+
+  test("prepares the external MCP config before spawning the provider", async () => {
+    const acquire = vi.fn(async () => {});
+    const session = createSession({
+      provider: "cursor",
+      mcpConfigBridge: { acquire },
+    });
+    const spawnSpy = vi
+      .spyOn(
+        ACPAgentSession.prototype as unknown as { spawnProcess: () => Promise<unknown> },
+        "spawnProcess",
+      )
+      .mockRejectedValue(new Error("spawn failed"));
+
+    try {
+      await expect(session.initializeNewSession()).rejects.toThrow("spawn failed");
+      expect(acquire).toHaveBeenCalledTimes(1);
+    } finally {
+      spawnSpy.mockRestore();
+    }
   });
 });
 

@@ -19,6 +19,10 @@ export function statusWorkspaceGroups(groups: readonly StatusGroup[]): SidebarWo
   }));
 }
 
+export function hostGroupKey(serverId: string): string {
+  return `host:${serverId}`;
+}
+
 /**
  * Applies the Labels page's selection to the sidebar.
  *

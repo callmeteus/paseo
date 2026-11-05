@@ -76,7 +76,10 @@ import {
 } from "@/projects/host-projects";
 import { useProjectIcons } from "@/projects/icons";
 import type { ComposerAttachment } from "@/attachments/types";
-import { useDraftWorkspaceAttachmentScopeKey } from "@/attachments/workspace-attachments-store";
+import {
+  buildDraftWorkspaceAttachmentScopeKey,
+  useDraftWorkspaceAttachmentScopeKey,
+} from "@/attachments/workspace-attachments-store";
 import type { MessagePayload } from "@/composer/types";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
@@ -1011,9 +1014,20 @@ export function NewWorkspaceScreen({
   const draftKey = buildNewWorkspaceDraftKey(draftId);
   const forkDraftSetup = usePendingWorkspaceDraftSetup(draftId);
   const draftContextScopeKey = useDraftWorkspaceAttachmentScopeKey(draftId);
+  // A plain /new draft has no draft id, so the hook yields no scope and the composer
+  // could not hold any attachment. The screen's own draft key is a stable scope that
+  // exists for every new-workspace draft.
+  const fallbackDraftContextScopeKey = useMemo(
+    () => buildDraftWorkspaceAttachmentScopeKey(draftKey),
+    [draftKey],
+  );
   const visibleDraftContextScopeKeys = useMemo(
-    () => resolveVisibleDraftContextScopeKeys({ isDraftHandoffActive, draftContextScopeKey }),
-    [draftContextScopeKey, isDraftHandoffActive],
+    () =>
+      resolveVisibleDraftContextScopeKeys({
+        isDraftHandoffActive,
+        draftContextScopeKey: draftContextScopeKey || fallbackDraftContextScopeKey,
+      }),
+    [draftContextScopeKey, fallbackDraftContextScopeKey, isDraftHandoffActive],
   );
   const chatDraft = useAgentInputDraft({
     draftKey,

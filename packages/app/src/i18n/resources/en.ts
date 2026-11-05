@@ -1,3 +1,4 @@
+import { providerMcp } from "./provider-mcp";
 export const en = {
   goalNotice: {
     noGoal: "No goal set. Usage: /goal <objective> | /goal pause | /goal resume | /goal clear",
@@ -765,6 +766,7 @@ export const en = {
         moveToWorkspace: "Move to workspace",
         promoteToWorkspace: "Promote to workspace",
         openContainingDirectory: "Open containing directory",
+        deletePermanently: "Delete chat permanently",
         moveWorkspace: {
           title: "Move workspace to folder",
           empty: "No other folders are open.",
@@ -842,6 +844,7 @@ export const en = {
         reloadedAgent: "Reloaded agent",
         failedToReloadAgent: "Failed to reload agent",
         failedToCloseAgent: "Failed to close agent",
+        failedToDeleteAgent: "Failed to delete chat",
       },
       confirmations: {
         close: "Close",
@@ -858,6 +861,12 @@ export const en = {
         archiveRunningAgentTitle: "Archive running agent?",
         archiveRunningAgentMessage:
           "This agent is still running. Archiving it will stop the agent and close the tab.",
+        deleteAgentTitle: "Delete chat permanently?",
+        deleteAgentMessage:
+          "This permanently deletes this chat and its history. This cannot be undone.",
+        deleteAgentRunningMessage:
+          "This chat is still running. Deleting it stops the agent and removes its history permanently. This cannot be undone.",
+        deletePermanently: "Delete permanently",
         closeTabsLeftTitle: "Close tabs to the left?",
         closeTabsRightTitle: "Close tabs to the right?",
         closeOtherTabsTitle: "Close other tabs?",
@@ -1310,6 +1319,10 @@ export const en = {
     },
   },
   sidebar: {
+    hostGrouping: {
+      enable: "Group by host",
+      disable: "Stop grouping by host",
+    },
     statusGroupAccessibility: "{{label}} group",
     statusBucket: {
       needsInput: "Needs input",
@@ -1334,6 +1347,7 @@ export const en = {
         project: "Project",
         status: "Status",
         labels: "Labels",
+        host: "Host",
       },
       titleSource: {
         label: "Title",
@@ -1500,6 +1514,7 @@ export const en = {
         moveToFolder: "Move workspace to folder…",
         archive: "Archive",
         archiveWorkspace: "Archive workspace",
+        deletePermanently: "Delete permanently",
         hideFromSidebar: "Hide from sidebar",
         archiving: "Archiving...",
         hiding: "Hiding...",
@@ -1509,6 +1524,10 @@ export const en = {
         hideMessage:
           'Hide "{{workspaceName}}" from the sidebar?\n\nFiles on disk will not be changed.',
         hideConfirm: "Hide",
+        deleteTitle: "Delete workspace permanently?",
+        deleteMessage:
+          'This permanently deletes "{{name}}" and all of its chats. This cannot be undone.',
+        deleteConfirm: "Delete permanently",
         cancel: "Cancel",
       },
       rename: {
@@ -1525,6 +1544,7 @@ export const en = {
         movedToFolder: "Workspace moved to {{path}}",
         moveToFolderFailed: "Couldn't move the workspace",
         archiveFailed: "Failed to archive workspace",
+        deleteFailed: "Failed to delete workspace",
       },
     },
   },
@@ -1817,11 +1837,15 @@ export const en = {
   agentAutocomplete: {
     searchingWorkspace: "Searching workspace...",
     loadingCommands: "Loading commands...",
-    noFiles: "No files or directories found",
+    noFiles: "No files, chats, or workspaces found",
     noCommands: "No commands found",
     failedToLoad: "Failed to load",
     chooseProjectForCommands: "Choose a project to see commands",
     chooseModelForCommands: "Select a model to see commands",
+    untitledChat: "Untitled chat",
+    archivedChat: "Archived",
+    attachChatFailed: "Couldn't attach that chat",
+    attachChatUnavailable: "This composer can't attach a chat here",
   },
   loadOlderHistory: {
     failed: "Couldn't load older history",
@@ -3000,7 +3024,17 @@ export const en = {
     },
     host: {
       password: {
-        guidance: "Remove this host and add it again with the password this daemon asks for.",
+        requiredTitle: "Password required",
+        incorrectTitle: "Incorrect password",
+        guidance: "Enter the password this host asks for to connect.",
+        label: "Host password",
+        placeholder: "Password",
+        connect: "Connect",
+        connecting: "Connecting...",
+        empty: "Enter the password.",
+        show: "Show password",
+        hide: "Hide password",
+        failed: "Could not connect. Check the password and try again.",
       },
       appearance: {
         title: "Appearance",
@@ -3312,6 +3346,7 @@ export const en = {
         custom: "Custom models",
         updated: "Updated {{time}}",
       },
+      mcp: providerMcp,
       diagnostic: {
         title: "Diagnostic",
         button: "Diagnostic",

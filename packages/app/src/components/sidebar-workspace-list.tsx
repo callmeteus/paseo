@@ -21,6 +21,7 @@ import {
   type Ref,
   type ComponentProps,
   type PropsWithChildren,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { router, usePathname, type Href } from "expo-router";
@@ -37,7 +38,15 @@ import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop
 import { type GestureType } from "react-native-gesture-handler";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
-import { ExternalLink, Settings, MoreVertical, Plus, Trash2 } from "lucide-react-native";
+import {
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  Settings,
+  MoreVertical,
+  Plus,
+  Trash2,
+} from "lucide-react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
@@ -53,6 +62,7 @@ import {
 } from "@/hooks/use-sidebar-workspace-pin";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import { useHostFeatureMap } from "@/runtime/host-features";
+import { useHostFeature } from "@/runtime/host-features";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
 import {
@@ -92,6 +102,8 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
+import { hostGroupKey } from "@/components/sidebar/sidebar-labels";
+import type { SidebarHostProjectGroup } from "@/components/sidebar/sidebar-projection";
 import {
   SidebarWorkspaceContextMenu,
   SidebarWorkspaceMenu,
@@ -138,6 +150,7 @@ import {
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { useWorkspaceArchive } from "@/workspace/use-workspace-archive";
+import { useWorkspaceDelete } from "@/workspace/use-workspace-delete";
 import {
   getCurrentProjectRemoveReadiness,
   removeProjectFromHosts,
@@ -152,6 +165,7 @@ import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
+import { HostStatusDot } from "@/components/host-status-dot";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
 import {
@@ -167,6 +181,66 @@ import {
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
 const projectViewKeyExtractor = (project: SidebarProjectEntry) => project.viewKey;
+const EMPTY_HOST_BADGE_MAP: ReadonlyMap<string, HostBadgeModel> = new Map();
+const noopDrag = () => {};
+
+function HostProjectSection({
+  host,
+  collapsed,
+  onToggleHost,
+  children,
+}: {
+  host: SidebarHostProjectGroup;
+  collapsed: boolean;
+  onToggleHost: (key: string) => void;
+  children: ReactNode;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+  const isCompact = useIsCompactFormFactor();
+  const showChevron = isHovered || platformIsNative || isCompact;
+  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
+  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  const accessibilityState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
+  const handleToggle = useCallback(() => onToggleHost(host.key), [host.key, onToggleHost]);
+  const rowStyle = useCallback(
+    ({ pressed }: PressableStateCallbackType) => [
+      styles.hostHeaderRow,
+      isHovered && styles.hostHeaderRowHovered,
+      pressed && styles.hostHeaderRowPressed,
+    ],
+    [isHovered],
+  );
+
+  return (
+    <View testID={`sidebar-host-project-group-${host.serverId}`}>
+      <View onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
+        <Pressable
+          accessibilityRole={platformIsWeb ? undefined : "button"}
+          accessibilityLabel={host.label}
+          accessibilityState={accessibilityState}
+          onPress={handleToggle}
+          style={rowStyle}
+          testID={`sidebar-host-project-toggle-${host.serverId}`}
+        >
+          <View style={styles.hostHeaderLeft}>
+            <HostStatusDot serverId={host.serverId} />
+            <Text style={styles.hostHeaderTitle} numberOfLines={1}>
+              {host.label}
+            </Text>
+          </View>
+          {showChevron ? (
+            <DensityIcon
+              icon={collapsed ? ChevronRight : ChevronDown}
+              size="xs"
+              color="foregroundMuted"
+            />
+          ) : null}
+        </Pressable>
+      </View>
+      {collapsed ? null : <View style={styles.hostSectionBody}>{children}</View>}
+    </View>
+  );
+}
 
 const WORKSPACE_STATUS_DOT_WIDTH = 14;
 const ThemedExternalLink = withUnistyles(ExternalLink);
@@ -224,6 +298,7 @@ function selectionForSelectedWorkspace(
 
 interface SidebarWorkspaceListProps {
   workspaceGroups: SidebarWorkspaceGroup[];
+  hostProjects: SidebarHostProjectGroup[];
   /** What `useProjectIcons` is asked for, straight from the projection. See `SidebarProjection`. */
   projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
@@ -292,6 +367,7 @@ interface WorkspaceRowInnerProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   onArchive?: () => void;
+  onDelete?: () => void;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
   onRename?: () => void;
@@ -622,6 +698,7 @@ function WorkspaceRowRightGroup({
   archivePendingLabel,
   archiveShortcutKeys,
   onArchive,
+  onDelete,
   onMarkAsRead,
   onMarkAsUnread,
   onCopyBranchName,
@@ -642,6 +719,7 @@ function WorkspaceRowRightGroup({
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
   onArchive?: () => void;
+  onDelete?: () => void;
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   onCopyBranchName?: () => void;
@@ -697,6 +775,7 @@ function WorkspaceRowRightGroup({
                 onMarkAsRead={onMarkAsRead}
                 onMarkAsUnread={onMarkAsUnread}
                 onArchive={onArchive}
+                onDelete={onDelete}
                 archiveLabel={archiveLabel}
                 archiveStatus={archiveStatus}
                 archivePendingLabel={archivePendingLabel}
@@ -1077,6 +1156,7 @@ function WorkspaceRowInner({
   archiveStatus = "idle",
   archivePendingLabel,
   onArchive,
+  onDelete,
   onCopyBranchName,
   onCopyPath,
   onRename,
@@ -1162,6 +1242,7 @@ function WorkspaceRowInner({
               onMarkAsRead={onMarkAsRead}
               onMarkAsUnread={onMarkAsUnread}
               onArchive={onArchive}
+              onDelete={onDelete}
               archiveLabel={archiveLabel}
               archiveStatus={archiveStatus}
               archivePendingLabel={archivePendingLabel}
@@ -1208,6 +1289,7 @@ function WorkspaceRowInner({
                   archivePendingLabel={archivePendingLabel}
                   archiveShortcutKeys={archiveShortcutKeys}
                   onArchive={onArchive}
+                  onDelete={onDelete}
                   onCopyBranchName={onCopyBranchName}
                   onCopyPath={onCopyPath}
                   onRename={onRename}
@@ -1290,6 +1372,19 @@ function WorkspaceRowWithMenu({
     archiveController.archive();
   }, [archiveController, isArchiving]);
 
+  const supportsDelete = useHostFeature(workspace.serverId, "workspaceDelete");
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const deleteController = useWorkspaceDelete({
+    serverId: workspace.serverId,
+    workspaceId: workspace.workspaceId,
+    workspaceKind: workspace.workspaceKind,
+    name: workspace.name,
+    onDeleted: redirectAfterArchive,
+    onSetDeleting: setIsDeletingWorkspace,
+  });
+  const onDelete = supportsDelete ? deleteController.deleteWorkspace : undefined;
+  const isBusy = isArchiving || isDeletingWorkspace;
+
   const clipboard = useWorkspaceClipboardActions();
   const handleCopyPath = useCallback(() => {
     clipboard.copyPath(workspace);
@@ -1354,7 +1449,7 @@ function WorkspaceRowWithMenu({
         onPress={onPress}
         drag={drag}
         isDragging={isDragging}
-        isArchiving={isArchiving}
+        isArchiving={isBusy}
         isCreating={isCreating}
         dragHandleProps={dragHandleProps}
         menuController={null}
@@ -1362,6 +1457,7 @@ function WorkspaceRowWithMenu({
         archiveStatus={isArchiving ? "pending" : "idle"}
         archivePendingLabel={t("sidebar.workspace.actions.archiving")}
         onArchive={handleArchive}
+        onDelete={onDelete}
         onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
         onCopyPath={handleCopyPath}
         onRename={handleOpenRename}
@@ -1946,6 +2042,7 @@ const MemoProjectBlock = memo(ProjectBlock, areProjectBlockPropsEqual);
 
 export function SidebarWorkspaceList({
   workspaceGroups,
+  hostProjects,
   projectIconTargets,
   pinnedGroups,
   projects,
@@ -2057,6 +2154,12 @@ export function SidebarWorkspaceList({
       if (project && collapsedProjectKeys.has(project.viewKey)) {
         setProjectCollapsed(project.viewKey, false);
       }
+    } else if (groupMode === "host") {
+      const serverId = workspaceEntriesByKey.get(workspaceKey)?.serverId;
+      const hostKey = serverId ? hostGroupKey(serverId) : null;
+      if (hostKey && collapsedWorkspaceGroupKeys.has(hostKey)) {
+        toggleWorkspaceGroupCollapsed(hostKey);
+      }
     } else {
       const group = workspaceGroups.find((candidate) =>
         candidate.rows.some((workspace) => workspace.workspaceKey === workspaceKey),
@@ -2093,6 +2196,7 @@ export function SidebarWorkspaceList({
     setProjectCollapsed,
     togglePinnedCollapsed,
     toggleWorkspaceGroupCollapsed,
+    workspaceEntriesByKey,
     workspaceGroups,
   ]);
 
@@ -2100,7 +2204,7 @@ export function SidebarWorkspaceList({
   // list of grouped rows, so a new mode lands in the grouped branch rather than silently in this
   // one's `else`.
   const content =
-    groupMode !== "project" ? (
+    groupMode === "status" ? (
       <SidebarGroupedModeList
         workspaceGroups={workspaceGroups}
         pinnedGroups={pinnedGroups}
@@ -2109,6 +2213,7 @@ export function SidebarWorkspaceList({
         shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
         onWorkspacePress={onWorkspacePress}
         hostBadgeByServerId={hostBadgeByServerId}
+        groupMode={groupMode}
         supportsPinningByServerId={supportsPinningByServerId}
         onToggleWorkspacePin={onToggleWorkspacePin}
         onPinnedWorkspaceReorder={handlePinnedWorkspaceReorder}
@@ -2120,6 +2225,7 @@ export function SidebarWorkspaceList({
     ) : (
       <ProjectModeList
         projects={projects}
+        hostProjects={groupMode === "host" ? hostProjects : undefined}
         pinnedGroups={pinnedGroups}
         workspaceEntriesByKey={workspaceEntriesByKey}
         projectIconByProjectViewKey={projectIconByProjectViewKey}
@@ -2161,6 +2267,7 @@ function SidebarGroupedModeList({
   shortcutIndexByWorkspaceKey: _projectShortcutIndex,
   onWorkspacePress,
   hostBadgeByServerId,
+  groupMode,
   supportsPinningByServerId,
   onToggleWorkspacePin,
   onPinnedWorkspaceReorder,
@@ -2176,6 +2283,7 @@ function SidebarGroupedModeList({
   shortcutIndexByWorkspaceKey: Map<string, number>;
   onWorkspacePress?: () => void;
   hostBadgeByServerId: ReadonlyMap<string, HostBadgeModel>;
+  groupMode: SidebarGroupMode;
   supportsPinningByServerId: ReadonlyMap<string, boolean>;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
   onPinnedWorkspaceReorder: (workspaces: SidebarWorkspacePlacement[]) => void;
@@ -2202,7 +2310,7 @@ function SidebarGroupedModeList({
       shortcutIndexByWorkspaceKey={_projectShortcutIndex}
       showShortcutBadges={showShortcutBadges}
       onWorkspacePress={onWorkspacePress}
-      hostBadgeByServerId={hostBadgeByServerId}
+      hostBadgeByServerId={groupMode === "host" ? EMPTY_HOST_BADGE_MAP : hostBadgeByServerId}
       supportsPinningByServerId={supportsPinningByServerId}
       onToggleWorkspacePin={onToggleWorkspacePin}
       onPinnedWorkspaceReorder={onPinnedWorkspaceReorder}
@@ -2216,6 +2324,7 @@ function SidebarGroupedModeList({
 
 function ProjectModeList({
   projects,
+  hostProjects,
   pinnedGroups,
   workspaceEntriesByKey,
   projectIconByProjectViewKey,
@@ -2240,12 +2349,14 @@ function ProjectModeList({
 }: Omit<
   SidebarWorkspaceListProps,
   | "workspaceGroups"
+  | "hostProjects"
   | "projectIconTargets"
   | "groupMode"
   | "hasProjectsBeforeFilter"
   | "isRefreshing"
   | "onRefresh"
 > & {
+  hostProjects?: SidebarHostProjectGroup[];
   /** Swaps the list body for the label filter's empty state. Never the header above it. */
   sidebarFilterEmpty: boolean;
   projectIconByProjectViewKey: ReadonlyMap<string, string | null>;
@@ -2266,6 +2377,12 @@ function ProjectModeList({
   const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
   const togglePinnedCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.togglePinnedCollapsed,
+  );
+  const collapsedHostKeys = useSidebarCollapsedSectionsStore(
+    (state) => state.collapsedWorkspaceGroupKeys,
+  );
+  const toggleHostCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.toggleWorkspaceGroupCollapsed,
   );
 
   const manualSort = useSidebarViewStore((state) => state.workspaceSort === "manual");
@@ -2453,7 +2570,7 @@ function ProjectModeList({
           dragHandleProps={dragState.dragHandleProps}
           creatingWorkspaceIds={creatingWorkspaceIds}
           activeWorkspaceSelection={activeWorkspaceSelection}
-          hostBadgeByServerId={hostBadgeByServerId}
+          hostBadgeByServerId={hostProjects ? EMPTY_HOST_BADGE_MAP : hostBadgeByServerId}
           supportsMultiplicityByServerId={supportsMultiplicityByServerId}
           supportsPinningByServerId={supportsPinningByServerId}
           onToggleWorkspacePin={onToggleWorkspacePin}
@@ -2468,6 +2585,7 @@ function ProjectModeList({
       parentGestureRef,
       dragGestureHostActive,
       handleWorkspaceReorder,
+      hostProjects,
       hostBadgeByServerId,
       supportsMultiplicityByServerId,
       supportsPinningByServerId,
@@ -2535,7 +2653,7 @@ function ProjectModeList({
     ],
   );
 
-  const projectBody =
+  const projectList =
     projects.length === 0 ? (
       <SidebarProjectEmptyState onAddProject={onAddProject} onImportSession={onImportSession} />
     ) : (
@@ -2554,6 +2672,32 @@ function ProjectModeList({
         containerStyle={styles.projectListContainer}
       />
     );
+
+  const hostBody = (
+    <View testID="sidebar-host-project-list" style={styles.projectListContainer}>
+      {hostProjects?.map((host) => {
+        const collapsed = collapsedHostKeys.has(host.key);
+        return (
+          <HostProjectSection
+            key={host.key}
+            host={host}
+            collapsed={collapsed}
+            onToggleHost={toggleHostCollapsed}
+          >
+            {host.projects.map((project) =>
+              renderProjectBlock(project, {
+                drag: noopDrag,
+                isDragging: false,
+                dragHandleProps: undefined,
+              }),
+            )}
+          </HostProjectSection>
+        );
+      })}
+    </View>
+  );
+
+  const projectBody = hostProjects ? hostBody : projectList;
 
   const content = (
     <>
@@ -2674,6 +2818,41 @@ const styles = StyleSheet.create((theme) => ({
   // headers closes up to the pitch of a list instead of staying spaced for content that is gone.
   projectBlockExpanded: {
     paddingBottom: theme.spacing[3],
+  },
+  hostHeaderRow: {
+    minHeight: density.rowHeight,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing[2],
+    userSelect: "none",
+  },
+  hostHeaderRowHovered: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  hostHeaderRowPressed: {
+    backgroundColor: theme.colors.surface2,
+  },
+  hostHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    flex: 1,
+    minWidth: 0,
+  },
+  hostHeaderTitle: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    fontWeight: "400",
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  hostSectionBody: {
+    paddingBottom: theme.spacing[2],
   },
   workspaceListContainer: {},
   // Kept in step with `workspaceRow` above. It stands in a project's list where a workspace row
