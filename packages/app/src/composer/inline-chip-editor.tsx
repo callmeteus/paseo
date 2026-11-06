@@ -13,8 +13,11 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { EditingTextInputHandle } from "@/components/ui/text-input/types";
+import { isWeb } from "@/constants/platform";
+import type { Theme } from "@/styles/theme";
 import {
   insertTextAtSelection,
   parseInlineParts,
@@ -24,7 +27,7 @@ import {
   type TextSelection,
 } from "@getpaseo/protocol/inline-chip";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
-import { applyInlineChipDomStyle } from "./inline-chip-chrome";
+import { applyInlineChipDomStyle, getUnistylesAppTheme } from "./inline-chip-chrome";
 import { InlineChipDisclosure } from "./inline-context-chip";
 
 const chipStore = new WeakMap<HTMLElement, InlineChip>();
@@ -67,6 +70,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
     const skillColorRef = useRef(props.skillColor ?? "");
     const rangeSignatureRef = useRef("");
     const paintedSignatureRef = useRef("");
+    const [themeEpoch, setThemeEpoch] = useState(0);
     onChangeTextRef.current = props.onChangeText;
     onSelectionChangeRef.current = props.onSelectionChange;
     onKeyPressRef.current = props.onKeyPress;
@@ -87,7 +91,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       const root = rootRef.current;
       if (!root) return;
       restoringRef.current = true;
-      renderDocument(root, text, {
+      renderDocument(root, text, getUnistylesAppTheme(), {
         names: skillNamesRef.current,
         color: skillColorRef.current,
       });
@@ -113,7 +117,20 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
         return;
       }
       paint(textRef.current, selectionRef.current);
-    });
+    }, [paint, skillSignature]);
+
+    useLayoutEffect(() => {
+      if (!isWeb || themeEpoch === 0) return;
+      paint(textRef.current, selectionRef.current);
+    }, [themeEpoch, paint]);
+
+    const bumpThemeEpoch = useCallback(() => {
+      setThemeEpoch((previous) => previous + 1);
+    }, []);
+    useEffect(() => {
+      if (!isWeb) return;
+      return StyleSheet.addChangeListener(bumpThemeEpoch);
+    }, [bumpThemeEpoch]);
 
     useImperativeHandle(
       ref,
@@ -353,14 +370,14 @@ function skillRangeSignature(text: string, names: readonly string[]): string {
     .join(",");
 }
 
-function renderDocument(root: HTMLElement, text: string, skills: SkillPaint): void {
+function renderDocument(root: HTMLElement, text: string, theme: Theme, skills: SkillPaint): void {
   root.replaceChildren();
   for (const part of parseInlineParts(text)) {
     if (part.kind === "text") {
       appendText(root, part.text, skills);
       continue;
     }
-    root.appendChild(createChipElement(part.chip));
+    root.appendChild(createChipElement(part.chip, theme));
   }
 }
 
@@ -396,13 +413,13 @@ function appendSkillText(root: HTMLElement, text: string, color: string): void {
   root.appendChild(span);
 }
 
-function createChipElement(chip: InlineChip): HTMLSpanElement {
+function createChipElement(chip: InlineChip, theme: Theme): HTMLSpanElement {
   const span = document.createElement("span");
   span.dataset.inlineChip = "true";
   span.contentEditable = "false";
   span.textContent = chip.label;
   span.setAttribute("role", "button");
-  applyInlineChipDomStyle(span);
+  applyInlineChipDomStyle(span, theme);
   chipStore.set(span, chip);
   return span;
 }

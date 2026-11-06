@@ -91,6 +91,10 @@ function isStyleFactory<T>(styles: T | StyleFactory<T>): styles is StyleFactory<
 export const StyleSheet = {
   create: <T>(styles: T | StyleFactory<T>): T =>
     isStyleFactory(styles) ? styles(testTheme) : styles,
+  addChangeListener:
+    (_listener: (deps: unknown[]) => void): (() => void) =>
+    () =>
+      undefined,
 };
 
 export const withUnistyles = <T>(Component: T): T => Component;
@@ -104,4 +108,5 @@ export const useUnistyles = () => ({
 export const UnistylesRuntime = {
   setTheme: () => undefined,
   themeName: "light",
+  getTheme: () => testTheme,
 };

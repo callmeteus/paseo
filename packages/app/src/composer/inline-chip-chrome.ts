@@ -1,26 +1,55 @@
-import { baseColors, BORDER_RADIUS, lightTheme, SPACING } from "@/styles/theme";
+import type { Theme } from "@/styles/theme";
+import { UnistylesRuntime } from "react-native-unistyles";
+
+/** JS runtime exposes `getTheme`; web `.d.ts` still types it as `never`. */
+export function getUnistylesAppTheme(): Theme {
+  const rt = UnistylesRuntime as unknown as {
+    getTheme: (name?: string) => Theme;
+    themeName: string | undefined;
+  };
+  return rt.getTheme(rt.themeName);
+}
 
 /**
- * The orange atom OpenCode uses for a paste. Paste chips and mention chips share it
- * so a mention in the sentence is the same kind of control, not a second design.
- * The fill is the orange token, the text is the light theme's foreground so it
- * stays readable on that fill in either theme, and the radius and padding are
- * the control scale.
+ * Inline paste/mention chip: same visual language as `StatusBadge` (surface + border + muted label),
+ * not OpenCode’s orange fill.
  */
-export const inlineChipChrome = {
-  backgroundColor: baseColors.orange[500],
-  color: lightTheme.colors.foreground,
-  borderRadius: BORDER_RADIUS.md,
-  paddingHorizontal: SPACING[1.5],
-  paddingVertical: SPACING[0.5],
+export function inlineChipChromeFromTheme(theme: Theme) {
+  return {
+    backgroundColor: theme.colors.surface3,
+    color: theme.colors.foregroundMuted,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: 3,
+  } as const;
+}
+
+const FALLBACK_CHROME = {
+  backgroundColor: "#e4e4e7",
+  color: "#71717a",
+  borderWidth: 1,
+  borderColor: "#e4e4e7",
+  borderRadius: 9999,
+  paddingHorizontal: 8,
+  paddingVertical: 3,
 } as const;
 
 /** Paint one chip span. The label is the only visible text; the body stays on the element. */
-export function applyInlineChipDomStyle(element: HTMLElement): void {
-  element.style.backgroundColor = inlineChipChrome.backgroundColor;
-  element.style.color = inlineChipChrome.color;
-  element.style.borderRadius = `${inlineChipChrome.borderRadius}px`;
-  element.style.padding = `${inlineChipChrome.paddingVertical}px ${inlineChipChrome.paddingHorizontal}px`;
+export function applyInlineChipDomStyle(element: HTMLElement, theme?: Theme): void {
+  const resolved = theme ?? getUnistylesAppTheme();
+  const chrome =
+    resolved.colors.surface3 != null && resolved.spacing != null
+      ? inlineChipChromeFromTheme(resolved)
+      : FALLBACK_CHROME;
+  element.style.backgroundColor = chrome.backgroundColor;
+  element.style.color = chrome.color;
+  element.style.borderWidth = `${chrome.borderWidth}px`;
+  element.style.borderStyle = "solid";
+  element.style.borderColor = chrome.borderColor;
+  element.style.borderRadius = `${chrome.borderRadius}px`;
+  element.style.padding = `${chrome.paddingVertical}px ${chrome.paddingHorizontal}px`;
   element.style.userSelect = "none";
   element.style.cursor = "pointer";
   element.style.whiteSpace = "pre";
