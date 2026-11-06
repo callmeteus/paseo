@@ -118,6 +118,7 @@ import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import {
   composeWorkflowPrompt,
+  workflowChangeNotice,
   isWorkflowModeId,
   stripWorkflowInstruction,
 } from "./workflow-modes.js";
@@ -1174,6 +1175,8 @@ export class AgentManager {
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private readonly rewriteGoalObjective?: AgentManagerOptions["rewriteGoalObjective"];
   private acceptingAgentRegistrations = true;
+  /** One notice for the next user message after a workflow change. */
+  private readonly pendingWorkflowHandoff = new Map<string, string>();
 
   constructor(options: AgentManagerOptions) {
     this.pluginLifecycle = options.pluginLifecycle;
@@ -2765,17 +2768,26 @@ export class AgentManager {
         updatedAt: new Date().toISOString(),
       });
     };
+    const handoff = workflowChangeNotice(currentWorkflowId, normalized);
     if (agent.session.setDaemonAppendSystemPrompt) {
       try {
-        const prompt = await this.buildLaunchSystemPrompt(nextConfig, agent.id);
-        await agent.session.setDaemonAppendSystemPrompt(prompt ?? null, normalized);
+        const base = await this.buildLaunchSystemPrompt(nextConfig, agent.id);
+        const prompt = [base?.trim(), handoff]
+          .filter((part) => part && part.length > 0)
+          .join("\n\n");
+        await agent.session.setDaemonAppendSystemPrompt(
+          prompt.length > 0 ? prompt : null,
+          normalized,
+        );
       } catch (error) {
         await restorePreviousMode();
         throw error;
       }
+      if (handoff) this.pendingWorkflowHandoff.set(agent.id, handoff);
       this.refreshSessionPersistence(agent);
       this.touchUpdatedAt(agent);
       this.emitState(agent);
+      await this.steerLiveWorkflowChange(agent, handoff);
       return;
     }
     // Providers that cannot replace the prompt in place need a reload so the
@@ -2787,10 +2799,31 @@ export class AgentManager {
         await restorePreviousMode();
         throw error;
       }
+      if (handoff) this.pendingWorkflowHandoff.set(agent.id, handoff);
       return;
     }
+    if (handoff) this.pendingWorkflowHandoff.set(agent.id, handoff);
     this.touchUpdatedAt(agent);
     this.emitState(agent);
+  }
+
+  /**
+   * A running turn already has the previous workflow in its prompt. Steering
+   * the change notice in, without a chat bubble, is what makes the switch
+   * apply to that turn.
+   */
+  private async steerLiveWorkflowChange(agent: LiveManagedAgent, handoff: string): Promise<void> {
+    if (!handoff || !this.hasInFlightRun(agent.id) || !agent.session.steerActiveTurn) return;
+    const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
+    if (!expectedTurnId) return;
+    try {
+      await agent.session.steerActiveTurn(handoff, { expectedTurnId });
+    } catch (error) {
+      this.logger.warn(
+        { err: error, agentId: agent.id },
+        "Workflow change could not be steered into the running turn",
+      );
+    }
   }
 
   async setAgentModel(agentId: string, modelId: string | null): Promise<void> {
@@ -3254,8 +3287,11 @@ export class AgentManager {
       debugSessionId: agentId,
       taskTargetLabel: agent.labels[MULTITASK_TASK_TARGET_LABEL],
     });
-    if (!fragment) return null;
-    return prependWorkflowInstruction(prompt, fragment);
+    const handoff = this.pendingWorkflowHandoff.get(agentId);
+    if (handoff) this.pendingWorkflowHandoff.delete(agentId);
+    const notice = [handoff, fragment].filter((part) => part && part.length > 0).join("\n\n");
+    if (!notice) return null;
+    return prependWorkflowInstruction(prompt, notice);
   }
 
   async planGoalTurn(agentId: string, prompt: AgentPromptInput): Promise<GoalTurnPlan | null> {
