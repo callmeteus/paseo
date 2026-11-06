@@ -107,6 +107,7 @@ import type { SidebarHostProjectGroup } from "@/components/sidebar/sidebar-proje
 import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceHoverActions,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
@@ -190,11 +191,13 @@ function HostProjectSection({
   host,
   collapsed,
   onToggleHost,
+  onWorkspacePress,
   children,
 }: {
   host: SidebarHostProjectGroup;
   collapsed: boolean;
   onToggleHost: (key: string) => void;
+  onWorkspacePress?: () => void;
   children: ReactNode;
 }) {
   const hosts = useHosts();
@@ -205,6 +208,10 @@ function HostProjectSection({
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const accessibilityState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
   const handleToggle = useCallback(() => onToggleHost(host.key), [host.key, onToggleHost]);
+  const handleNewWorkspace = useCallback(() => {
+    onWorkspacePress?.();
+    router.navigate(buildNewWorkspaceRoute({ serverId: host.serverId }) as Href);
+  }, [host.serverId, onWorkspacePress]);
   const color = useMemo(
     () => hosts.find((entry) => entry.serverId === host.serverId)?.appearance.color ?? "none",
     [host.serverId, hosts],
@@ -244,13 +251,23 @@ function HostProjectSection({
               {host.label}
             </Text>
           </View>
-          {showChevron ? (
-            <DensityIcon
-              icon={collapsed ? ChevronRight : ChevronDown}
-              size="xs"
-              color="foregroundMuted"
-            />
-          ) : null}
+          <View style={styles.hostHeaderTrailing}>
+            {showChevron ? (
+              <NewWorktreeButton
+                displayName={host.label}
+                onPress={handleNewWorkspace}
+                visible
+                testID={`sidebar-host-new-workspace-${host.serverId}`}
+              />
+            ) : null}
+            {showChevron ? (
+              <DensityIcon
+                icon={collapsed ? ChevronRight : ChevronDown}
+                size="xs"
+                color="foregroundMuted"
+              />
+            ) : null}
+          </View>
         </SidebarHostContextMenu>
       </View>
       {collapsed ? null : <View style={styles.hostSectionBody}>{children}</View>}
@@ -779,27 +796,36 @@ function WorkspaceRowRightGroup({
             scrimBackdrop={showScrim ? backdrop : undefined}
           >
             {onArchive ? (
-              <SidebarWorkspaceMenu
-                {...kebab.menuProps}
+              <SidebarWorkspaceHoverActions
                 workspaceKey={workspace.workspaceKey}
-                serverId={workspace.serverId}
-                workspaceId={workspace.workspaceId}
-                workspaceLabels={workspace.labels}
-                onCopyPath={onCopyPath}
-                onCopyBranchName={onCopyBranchName}
-                onRename={onRename}
-                onMarkAsRead={onMarkAsRead}
-                onMarkAsUnread={onMarkAsUnread}
-                onArchive={onArchive}
-                onDelete={onDelete}
-                archiveLabel={archiveLabel}
-                archiveStatus={archiveStatus}
-                archivePendingLabel={archivePendingLabel}
-                archiveShortcutKeys={archiveShortcutKeys}
                 isPinned={isPinned}
                 onTogglePin={onTogglePin}
-                openInFileManagerPath={workspacePath}
-              />
+                onArchive={onArchive}
+                archiveLabel={archiveLabel}
+                archiveStatus={archiveStatus}
+              >
+                <SidebarWorkspaceMenu
+                  {...kebab.menuProps}
+                  workspaceKey={workspace.workspaceKey}
+                  serverId={workspace.serverId}
+                  workspaceId={workspace.workspaceId}
+                  workspaceLabels={workspace.labels}
+                  onCopyPath={onCopyPath}
+                  onCopyBranchName={onCopyBranchName}
+                  onRename={onRename}
+                  onMarkAsRead={onMarkAsRead}
+                  onMarkAsUnread={onMarkAsUnread}
+                  onArchive={onArchive}
+                  onDelete={onDelete}
+                  archiveLabel={archiveLabel}
+                  archiveStatus={archiveStatus}
+                  archivePendingLabel={archivePendingLabel}
+                  archiveShortcutKeys={archiveShortcutKeys}
+                  isPinned={isPinned}
+                  onTogglePin={onTogglePin}
+                  openInFileManagerPath={workspacePath}
+                />
+              </SidebarWorkspaceHoverActions>
             ) : null}
           </SidebarWorkspaceTrailingActionOverlay>
         </SidebarWorkspaceTrailingActionSlot>
@@ -922,38 +948,7 @@ function NewWorkspaceGhostRow({
   );
 }
 
-/**
- * The New workspace row for one host. It opens the same New workspace screen a project row
- * opens, with this host already selected, and sits in that host's workspace list.
- */
-function HostNewWorkspaceRow({
-  serverId,
-  hostLabel,
-  onWorkspacePress,
-}: {
-  serverId: string;
-  hostLabel: string;
-  onWorkspacePress?: () => void;
-}) {
-  const { t } = useTranslation();
-  const handlePress = useCallback(() => {
-    onWorkspacePress?.();
-    router.navigate(buildNewWorkspaceRoute({ serverId }) as Href);
-  }, [onWorkspacePress, serverId]);
-
-  return (
-    <NewWorkspaceGhostPressable
-      testID={`sidebar-host-new-workspace-${serverId}`}
-      accessibilityLabel={t("sidebar.workspace.actions.createWorkspaceFor", {
-        projectName: hostLabel,
-      })}
-      indented={false}
-      onPress={handlePress}
-    />
-  );
-}
-
-/** Shared row for "New workspace": indented under a project, or aligned with the host's projects. */
+/** Shared row for "New workspace" under a project. */
 function NewWorkspaceGhostPressable({
   testID,
   accessibilityLabel,
@@ -2741,14 +2736,8 @@ function ProjectModeList({
             host={host}
             collapsed={collapsed}
             onToggleHost={toggleHostCollapsed}
+            onWorkspacePress={onWorkspacePress}
           >
-            <HostNewWorkspaceRow
-              serverId={host.serverId}
-              hostLabel={host.label}
-              onWorkspacePress={onWorkspacePress}
-            />
-            {/* The new-workspace row stays outside this list. It is not a
-                workspace, and a drag must not write it into the stored order. */}
             <DraggableList
               testID={`sidebar-host-project-order-${host.serverId}`}
               data={host.projects}
@@ -2926,6 +2915,12 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     flex: 1,
     minWidth: 0,
+  },
+  hostHeaderTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    flexShrink: 0,
   },
   hostHeaderTitle: {
     color: theme.colors.foregroundMuted,

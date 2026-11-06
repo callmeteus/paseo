@@ -65,6 +65,7 @@ import {
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
   SidebarWorkspaceContextMenu,
+  SidebarWorkspaceHoverActions,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
 import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
@@ -1032,26 +1033,35 @@ function StatusWorkspaceActionSlot({
         scrimBackdrop={showScrim ? backdrop : undefined}
       >
         {kebab.showKebab && onArchive ? (
-          <SidebarWorkspaceMenu
-            {...kebab.menuProps}
+          <SidebarWorkspaceHoverActions
             workspaceKey={workspace.workspaceKey}
-            serverId={workspace.serverId}
-            workspaceId={workspace.workspaceId}
-            workspaceLabels={workspace.labels}
-            onCopyPath={onCopyPath}
-            onCopyBranchName={onCopyBranchName}
-            onRename={onRename}
-            onMarkAsRead={onMarkAsRead}
-            onMarkAsUnread={onMarkAsUnread}
-            onArchive={onArchive}
-            onDelete={onDelete}
-            archiveLabel={archiveLabel}
-            archiveStatus={archiveStatus}
-            archivePendingLabel={archivePendingLabel}
-            archiveShortcutKeys={archiveShortcutKeys}
             isPinned={isPinned}
             onTogglePin={onTogglePin}
-          />
+            onArchive={onArchive}
+            archiveLabel={archiveLabel}
+            archiveStatus={archiveStatus}
+          >
+            <SidebarWorkspaceMenu
+              {...kebab.menuProps}
+              workspaceKey={workspace.workspaceKey}
+              serverId={workspace.serverId}
+              workspaceId={workspace.workspaceId}
+              workspaceLabels={workspace.labels}
+              onCopyPath={onCopyPath}
+              onCopyBranchName={onCopyBranchName}
+              onRename={onRename}
+              onMarkAsRead={onMarkAsRead}
+              onMarkAsUnread={onMarkAsUnread}
+              onArchive={onArchive}
+              onDelete={onDelete}
+              archiveLabel={archiveLabel}
+              archiveStatus={archiveStatus}
+              archivePendingLabel={archivePendingLabel}
+              archiveShortcutKeys={archiveShortcutKeys}
+              isPinned={isPinned}
+              onTogglePin={onTogglePin}
+            />
+          </SidebarWorkspaceHoverActions>
         ) : null}
       </SidebarWorkspaceTrailingActionOverlay>
     </SidebarWorkspaceTrailingActionSlot>

@@ -1007,6 +1007,19 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
   detailWrapperBorderless: {
     borderWidth: 0,
   },
+  // The sentence under "Pensei". Same reading text as a reply, lined up with the label,
+  // without the tool-detail fill.
+  thinkingBody: {
+    color: theme.colors.foreground,
+    fontFamily: theme.fontFamily.ui,
+    fontSize: theme.fontSize.content,
+    lineHeight: Math.round(theme.fontSize.content * 1.5),
+    marginLeft: 22 + theme.spacing[1],
+    paddingLeft: theme.spacing[2],
+    paddingRight: theme.spacing[2],
+    paddingBottom: theme.spacing[2],
+    ...(isWeb ? { userSelect: "text" as const } : {}),
+  },
   shimmerOverlay: {
     position: "absolute",
     top: 0,
@@ -1612,6 +1625,11 @@ interface ExpandableBadgeProps {
   isLastInSequence?: boolean;
   disableOuterSpacing?: boolean;
   borderlessWhenExpanded?: boolean;
+  /**
+   * Expanded reasoning keeps the quiet "Pensei" row. The tool-detail fill and
+   * border are what turned that sentence into a full-width gray card.
+   */
+  quietDetails?: boolean;
   testID?: string;
 }
 
@@ -2008,6 +2026,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   isLastInSequence = false,
   disableOuterSpacing,
   borderlessWhenExpanded = false,
+  quietDetails = false,
   testID,
 }: ExpandableBadgeProps) {
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
@@ -2016,6 +2035,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   const [isPressed, setIsPressed] = useState(false);
   const isInteractive = Boolean(onToggle);
   const hasDetailContent = Boolean(renderDetails);
+  const showDetailChrome = isExpanded && !quietDetails;
   const detailContent = hasDetailContent && isExpanded ? renderDetails?.() : null;
   const detailWrapperRef = useRef<View | null>(null);
 
@@ -2177,21 +2197,22 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     () => [
       expandableBadgeStylesheet.pressable,
       isPressed && isInteractive ? expandableBadgeStylesheet.pressablePressed : null,
-      isExpanded && expandableBadgeStylesheet.pressableExpanded,
-      isExpanded &&
+      showDetailChrome && expandableBadgeStylesheet.pressableExpanded,
+      showDetailChrome &&
         (borderlessWhenExpanded
           ? expandableBadgeStylesheet.pressableExpandedDetached
           : expandableBadgeStylesheet.pressableExpandedAttached),
     ],
-    [borderlessWhenExpanded, isExpanded, isInteractive, isPressed],
+    [borderlessWhenExpanded, isInteractive, isPressed, showDetailChrome],
   );
 
   const detailWrapperStyle = useMemo(
     () => [
       expandableBadgeStylesheet.detailWrapper,
-      borderlessWhenExpanded && expandableBadgeStylesheet.detailWrapperBorderless,
+      (borderlessWhenExpanded || quietDetails) &&
+        expandableBadgeStylesheet.detailWrapperBorderless,
     ],
-    [borderlessWhenExpanded],
+    [borderlessWhenExpanded, quietDetails],
   );
 
   const accessibilityState = useMemo(
@@ -2199,7 +2220,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
     [isExpanded, isInteractive],
   );
 
-  const isActive = isHovered || isExpanded;
+  const isActive = isHovered || showDetailChrome;
 
   const labelStyle = useMemo(
     () => [
@@ -2367,6 +2388,7 @@ function areExpandableBadgePropsEqual(previous: ExpandableBadgeProps, next: Expa
   if (previous.isLastInSequence !== next.isLastInSequence) return false;
   if (previous.disableOuterSpacing !== next.disableOuterSpacing) return false;
   if (previous.borderlessWhenExpanded !== next.borderlessWhenExpanded) return false;
+  if (previous.quietDetails !== next.quietDetails) return false;
   if (previous.testID !== next.testID) return false;
   if (previous.onToggle !== next.onToggle) return false;
   if (previous.onOpenFile !== next.onOpenFile) return false;
@@ -2519,9 +2541,19 @@ export const ToolCall = memo(function ToolCall({
     };
   }, [onInlineDetailsExpandedChange]);
 
-  // Render inline details for desktop
+  // A thought is the sentence under "Pensei". ToolCallDetailsContent draws that sentence
+  // inside the tool-output card (fill, border, full width).
+  const thinkingBody = toolName === "thinking" && typeof args === "string" ? args : null;
   const renderDetails = useCallback(() => {
     if (!shouldRenderInline) return null;
+    if (thinkingBody !== null) {
+      if (!thinkingBody.trim()) return null;
+      return (
+        <Text selectable style={expandableBadgeStylesheet.thinkingBody}>
+          {thinkingBody}
+        </Text>
+      );
+    }
     return (
       <ToolCallDetailsContent
         toolName={toolName}
@@ -2533,6 +2565,7 @@ export const ToolCall = memo(function ToolCall({
     );
   }, [
     shouldRenderInline,
+    thinkingBody,
     toolName,
     presentation.detail,
     presentation.errorText,
@@ -2565,6 +2598,7 @@ export const ToolCall = memo(function ToolCall({
       isError={status === "failed"}
       isLastInSequence={isLastInSequence}
       disableOuterSpacing={disableOuterSpacing}
+      quietDetails={thinkingBody !== null}
       onDetailHoverChange={onInlineDetailsHoverChange}
     />
   );

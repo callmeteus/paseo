@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { type PressableStateCallbackType } from "react-native";
+import { View, type GestureResponderEvent, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   Archive,
@@ -49,6 +49,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { Shortcut } from "@/components/ui/shortcut";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
@@ -92,6 +93,78 @@ const archiveLeadingIcon = <ThemedArchive size={14} uniProps={foregroundMutedCol
 const deleteLeadingIcon = <ThemedTrash2 size={14} uniProps={foregroundMutedColorMapping} />;
 const pinLeadingIcon = <ThemedPin size={14} uniProps={foregroundMutedColorMapping} />;
 const unpinLeadingIcon = <ThemedPinOff size={14} uniProps={foregroundMutedColorMapping} />;
+
+function stopRowPress(event: GestureResponderEvent): void {
+  event.stopPropagation();
+}
+
+/** Pin and archive sit beside the workspace menu while that menu is showing. */
+export function SidebarWorkspaceHoverActions({
+  workspaceKey,
+  isPinned,
+  onTogglePin,
+  onArchive,
+  archiveLabel,
+  archiveStatus,
+  children,
+}: {
+  workspaceKey: string;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
+  onArchive?: () => void;
+  archiveLabel?: string;
+  archiveStatus?: "idle" | "pending" | "success";
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const pinAction = workspacePinAction(isPinned === true);
+  const pinLabel = t(`sidebar.workspace.actions.${pinAction}`);
+  const archiveAccessibilityLabel = archiveLabel ?? t("sidebar.workspace.actions.archive");
+  const handlePin = useCallback(
+    (event: GestureResponderEvent) => {
+      stopRowPress(event);
+      onTogglePin?.();
+    },
+    [onTogglePin],
+  );
+  const handleArchive = useCallback(
+    (event: GestureResponderEvent) => {
+      stopRowPress(event);
+      onArchive?.();
+    },
+    [onArchive],
+  );
+  return (
+    <View style={styles.hoverActions}>
+      {onTogglePin ? (
+        <ToolbarButton
+          label={pinLabel}
+          onPress={handlePin}
+          style={styles.hoverIconButton}
+          testID={`sidebar-workspace-pin-${workspaceKey}`}
+        >
+          {pinAction === "unpin" ? (
+            <ThemedPinOff size={14} uniProps={foregroundMutedColorMapping} />
+          ) : (
+            <ThemedPin size={14} uniProps={foregroundMutedColorMapping} />
+          )}
+        </ToolbarButton>
+      ) : null}
+      {onArchive ? (
+        <ToolbarButton
+          label={archiveAccessibilityLabel}
+          disabled={archiveStatus === "pending"}
+          onPress={handleArchive}
+          style={styles.hoverIconButton}
+          testID={`sidebar-workspace-archive-${workspaceKey}`}
+        >
+          <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />
+        </ToolbarButton>
+      ) : null}
+      {children}
+    </View>
+  );
+}
 
 function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
   return (
@@ -600,5 +673,13 @@ const styles = StyleSheet.create((theme) => ({
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,
+  },
+  hoverActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hoverIconButton: {
+    width: 24,
+    height: 24,
   },
 }));
