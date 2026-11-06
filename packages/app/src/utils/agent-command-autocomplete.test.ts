@@ -5,6 +5,8 @@ import {
   filterAndRankCommandAutocompleteEntries,
   filterInlineSkillCommandEntries,
   findActiveSlashCommand,
+  findSkillHighlightRanges,
+  skillCommandNames,
 } from "./agent-command-autocomplete";
 
 describe("filterAndRankCommandAutocompleteEntries", () => {
@@ -118,6 +120,48 @@ describe("applySlashCommandReplacement", () => {
         commandName: "taste",
       }),
     ).toBe("/taste ");
+  });
+});
+
+describe("findSkillHighlightRanges", () => {
+  const skills = ["create-skill", "deploy"];
+
+  it("colors a skill token and leaves the surrounding sentence plain", () => {
+    const text =
+      "/create-skill para permitir que\nEssa skill não pode ser listada\n\nPrecisa ser tipo /deploy";
+
+    expect(findSkillHighlightRanges(text, skills)).toEqual([
+      { start: 0, end: "/create-skill".length },
+      { start: text.lastIndexOf("/deploy"), end: text.length },
+    ]);
+  });
+
+  it("ignores a skill that is not installed and a token still being typed", () => {
+    expect(findSkillHighlightRanges("use /missing and /dep", skills)).toEqual([]);
+  });
+
+  it("ignores a slash inside a path", () => {
+    expect(findSkillHighlightRanges("read /tmp/deploy now", skills)).toEqual([]);
+  });
+
+  it("matches the typed letters without caring about case", () => {
+    const text = "run /Deploy";
+    expect(findSkillHighlightRanges(text, skills)).toEqual([
+      { start: text.indexOf("/Deploy"), end: text.length },
+    ]);
+  });
+});
+
+describe("skillCommandNames", () => {
+  it("keeps installed skills and drops executable commands", () => {
+    expect(
+      skillCommandNames([
+        { name: "clear", kind: "command" },
+        { name: "/deploy", kind: "skill" },
+        { name: "   ", kind: "skill" },
+        { name: "create-skill", kind: "skill" },
+      ]),
+    ).toEqual(["deploy", "create-skill"]);
   });
 });
 

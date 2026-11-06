@@ -145,7 +145,9 @@ type AvailableCommand =
   | { source: "plugin"; command: PluginClientSlashCommand }
   | { source: "provider"; command: AgentSlashCommand };
 
-function resolveDraftQueryConfig(draft?: DraftCommandTarget): DraftCommandConfig | undefined {
+export function resolveDraftQueryConfig(
+  draft?: DraftCommandTarget,
+): DraftCommandConfig | undefined {
   if (draft?.status !== "ready") {
     return undefined;
   }

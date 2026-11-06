@@ -7,11 +7,13 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
   Text,
+  StyleSheet as RNStyleSheet,
   useWindowDimensions,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   TextInputSelectionChangeEventData,
   type LayoutChangeEvent,
+  type TextStyle,
 } from "react-native";
 import {
   useState,
@@ -82,6 +84,8 @@ import {
 } from "@getpaseo/protocol/inline-chip";
 import { InlineChipEditor } from "@/composer/inline-chip-editor";
 import { InlineMessageText } from "@/composer/inline-context-chip";
+import { SkillHighlightedText } from "@/composer/skill-highlight";
+import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
@@ -107,6 +111,12 @@ import {
 } from "./state";
 
 const DEFAULT_SEND_KEYS: ShortcutKey[][] = [["Enter"]];
+const NO_SKILL_NAMES: readonly string[] = [];
+// Inline, so it wins over the themed text color class on web.
+const SKILL_INPUT_COLOR = {
+  color: "transparent",
+  backgroundColor: "transparent",
+} as const;
 const COMPOSER_INPUT_DATASET = { composerInput: "" } as const;
 
 export interface AttachmentMenuItem {
@@ -196,6 +206,8 @@ export interface MessageInputProps {
   inputMode?: ComposerInputMode;
   /** Renders `value` as static text on the same surface, for content there is nothing to type into. */
   readOnly?: boolean;
+  /** Installed skill names. A typed `/name` that matches one is drawn in the accent color. */
+  skillNames?: readonly string[];
   /** Command issued when application state must replace native-owned text. */
   textReplacement: TextReplacement;
   /** Replaces the submit icon with this label, still inside the composer's own toolbar row. */
@@ -680,6 +692,7 @@ interface ComposerTextSurfaceProps {
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
   chipEditor: boolean;
+  skillNames: readonly string[];
 }
 
 /**
@@ -687,19 +700,80 @@ interface ComposerTextSurfaceProps {
  * nothing to type. Both sit in the same bordered surface, so read-only is a
  * state of this composer rather than a second one.
  */
+function skillMirrorStyle(style: EditingTextInputProps["style"]): TextStyle {
+  const flat = RNStyleSheet.flatten(style);
+  return {
+    width: "100%",
+    fontSize: flat.fontSize,
+    fontWeight: flat.fontWeight,
+    fontFamily: flat.fontFamily,
+    lineHeight: flat.lineHeight,
+    paddingRight: flat.paddingRight,
+    textAlignVertical: "top",
+    ...(isWeb ? { whiteSpace: "pre-wrap" as const, overflowWrap: "break-word" as const } : {}),
+  };
+}
+
 function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElement {
   const { onChangeText, onRenderedLinesChange } = props;
   const [measurementText, setMeasurementText] = useState(props.value);
+  const [liveText, setLiveText] = useState(props.value);
+  const [syncedValue, setSyncedValue] = useState(props.value);
+  if (syncedValue !== props.value) {
+    setSyncedValue(props.value);
+    setLiveText(props.value);
+  }
+  const inputHandleRef = useRef<ComposerTextInputHandle | null>(null);
+  const highlightShiftRef = useRef<View>(null);
   useEffect(() => {
     if (!isWeb) setMeasurementText(props.value);
   }, [props.value, props.textReplacementKey]);
   const handleTextChange = useCallback(
     (text: string) => {
+      setLiveText(text);
       if (!isWeb) setMeasurementText(text);
       onChangeText(text);
     },
     [onChangeText, setMeasurementText],
   );
+  const assignInput = useCallback(
+    (input: ComposerTextInputHandle | null) => {
+      inputHandleRef.current = input;
+      const ref = props.textInputRef;
+      if (typeof ref === "function") {
+        ref(input);
+        return;
+      }
+      if (ref) ref.current = input;
+    },
+    [props.textInputRef],
+  );
+  const syncSkillHighlightScroll = useCallback((offsetY: number) => {
+    highlightShiftRef.current?.setNativeProps({
+      style: { transform: [{ translateY: -offsetY }] },
+    });
+  }, []);
+  const handleSkillHighlightScroll = useCallback<NonNullable<EditingTextInputProps["onScroll"]>>(
+    (event) => {
+      syncSkillHighlightScroll(event.nativeEvent.contentOffset.y);
+    },
+    [syncSkillHighlightScroll],
+  );
+  const skillRanges = findSkillHighlightRanges(liveText, props.skillNames);
+  const highlightSkills = !props.readOnly && !props.chipEditor && skillRanges.length > 0;
+  useEffect(() => {
+    if (!isWeb || !highlightSkills) return;
+    const node = getTextInputNativeElement(inputHandleRef.current);
+    if (!node) return;
+    node.style.caretColor = skillStyles.text.color;
+    const sync = () => syncSkillHighlightScroll(node.scrollTop);
+    node.addEventListener("scroll", sync, { passive: true });
+    sync();
+    return () => {
+      node.style.caretColor = "";
+      node.removeEventListener("scroll", sync);
+    };
+  }, [highlightSkills, liveText, syncSkillHighlightScroll]);
   const measureLines = useCallback(
     (event: import("react-native").TextLayoutEvent) =>
       onRenderedLinesChange(event.nativeEvent.lines.length),
@@ -742,9 +816,13 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         {hasInlineChip(props.value) ? (
           <InlineMessageText text={props.value} style={props.readOnlyTextStyle} />
         ) : (
-          <Text style={props.readOnlyTextStyle} testID="composer-readonly-content">
-            {props.value}
-          </Text>
+          <SkillHighlightedText
+            text={props.value}
+            skillNames={props.skillNames}
+            style={props.readOnlyTextStyle}
+            skillStyle={skillStyles.token}
+            testID="composer-readonly-content"
+          />
         )}
       </View>
     );
@@ -761,14 +839,33 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           {`${measurementText}\u200b`}
         </Text>
       ) : null}
+      {highlightSkills ? (
+        <View
+          pointerEvents="none"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          style={skillStyles.highlight}
+        >
+          <View ref={highlightShiftRef}>
+            <SkillHighlightedText
+              text={liveText}
+              skillNames={props.skillNames}
+              style={[skillMirrorStyle(props.textInputStyle), skillStyles.text]}
+              skillStyle={skillStyles.token}
+            />
+          </View>
+        </View>
+      ) : null}
       {props.chipEditor ? (
         <InlineChipEditor
-          ref={props.textInputRef}
+          ref={assignInput}
           initialText={props.value}
           initialSelection={chipInitialSelection}
           style={props.textInputStyle}
           editable={props.editable}
           accessibilityLabel={props.accessibilityLabel}
+          skillNames={props.skillNames}
+          skillColor={skillStyles.token.color}
           onChangeText={handleTextChange}
           onSelectionChange={handleChipSelectionChange}
           onKeyPress={props.onKeyPress ? handleChipKeyPress : undefined}
@@ -777,7 +874,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         />
       ) : (
         <ComposerTextInput
-          ref={props.textInputRef}
+          ref={assignInput}
           dataSet={COMPOSER_INPUT_DATASET}
           initialValue={props.value}
           onChangeText={handleTextChange}
@@ -785,12 +882,14 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           accessibilityLabel={props.accessibilityLabel}
           onFocus={props.onFocus}
           onBlur={props.onBlur}
-          style={props.textInputStyle}
+          style={[props.textInputStyle, highlightSkills ? SKILL_INPUT_COLOR : null]}
+          cursorColor={highlightSkills ? skillStyles.text.color : undefined}
           multiline
           scrollEnabled={props.scrollEnabled}
           editable={props.editable}
           onKeyPress={props.onKeyPress}
           onSelectionChange={props.onSelectionChange}
+          onScroll={handleSkillHighlightScroll}
           onPasteImages={props.onPasteImages}
           onPasteError={props.onPasteError}
           autoFocus={props.autoFocus}
@@ -1210,6 +1309,7 @@ interface ResolvedMessageInputProps {
   readOnly: boolean;
   textReplacement: TextReplacement;
   submitLabel: string | undefined;
+  skillNames: readonly string[];
 }
 
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
@@ -1257,6 +1357,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     readOnly: props.readOnly ?? false,
     textReplacement: props.textReplacement,
     submitLabel: props.submitLabel,
+    skillNames: props.skillNames ?? NO_SKILL_NAMES,
   };
 }
 
@@ -1334,6 +1435,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       readOnly,
       textReplacement,
       submitLabel,
+      skillNames,
     } = resolveMessageInputProps(props);
     const { isPaneFocused } = useComposerKeyboardScope();
     const mode = resolveComposerInputMode(inputMode);
@@ -2183,6 +2285,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               shortcut: focusInputKeys ? formatShortcut(focusInputKeys[0], getShortcutOs()) : "",
             })}
             chipEditor={chipEditor}
+            skillNames={skillNames}
           />
         </RenderProfile>
       ),
@@ -2204,6 +2307,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isComposerScrollEnabled,
         shouldHandleWebKeyPress,
         handleDesktopKeyPress,
+        skillNames,
         handleSelectionChange,
         onPasteImages,
         handlePasteError,
@@ -2358,6 +2462,25 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     );
   },
 );
+
+const skillStyles = StyleSheet.create((theme: Theme) => ({
+  // The field keeps the caret and the real text. This copy sits behind it so an
+  // installed skill can take the accent color without a second editor.
+  highlight: {
+    position: "absolute" as const,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: "hidden" as const,
+  },
+  text: {
+    color: theme.colors.foreground,
+  },
+  token: {
+    color: theme.colors.accent,
+  },
+}));
 
 const styles = StyleSheet.create((theme: Theme) => ({
   container: {

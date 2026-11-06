@@ -82,6 +82,47 @@ export function filterInlineSkillCommandEntries<TEntry extends InlineSkillComman
   return entries.filter((entry) => entry.source === "provider" && entry.command.kind === "skill");
 }
 
+export function skillCommandNames(commands: readonly { name: string; kind?: string }[]): string[] {
+  const names: string[] = [];
+  for (const command of commands) {
+    if (command.kind !== "skill") continue;
+    const name = command.name.trim().replace(/^\//, "");
+    if (name.length === 0) continue;
+    names.push(name);
+  }
+  return names;
+}
+
+export interface SkillHighlightRange {
+  start: number;
+  end: number;
+}
+
+/** `/name` tokens whose name is an installed skill. A prefix still being typed is left plain. */
+export function findSkillHighlightRanges(
+  text: string,
+  skillNames: readonly string[],
+): SkillHighlightRange[] {
+  if (skillNames.length === 0 || !text.includes("/")) return [];
+  const names = new Set<string>();
+  for (const skillName of skillNames) {
+    const normalized = skillName.trim().replace(/^\//, "").toLowerCase();
+    if (normalized.length > 0) names.add(normalized);
+  }
+  if (names.size === 0) return [];
+
+  const ranges: SkillHighlightRange[] = [];
+  const token = /(?:^|\s)\/([^\s/]+)/g;
+  for (const match of text.matchAll(token)) {
+    const name = match[1];
+    const matchIndex = match.index;
+    if (!name || matchIndex === undefined || !names.has(name.toLowerCase())) continue;
+    const start = matchIndex + match[0].length - name.length - 1;
+    ranges.push({ start, end: start + name.length + 1 });
+  }
+  return ranges;
+}
+
 const INVALID_SLASH_COMMAND_QUERY_CHARS = /[/\s\n\r\t"']/;
 
 export function findActiveSlashCommand(

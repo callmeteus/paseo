@@ -23,6 +23,7 @@ import {
   type InlineChip,
   type TextSelection,
 } from "@getpaseo/protocol/inline-chip";
+import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 import { applyInlineChipDomStyle } from "./inline-chip-chrome";
 import { InlineChipDisclosure } from "./inline-context-chip";
 
@@ -39,6 +40,8 @@ export interface InlineChipEditorProps {
   onKeyPress?: (event: globalThis.KeyboardEvent) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  skillNames?: readonly string[];
+  skillColor?: string;
 }
 
 /**
@@ -60,11 +63,17 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
     const onKeyPressRef = useRef(props.onKeyPress);
     const onFocusRef = useRef(props.onFocus);
     const onBlurRef = useRef(props.onBlur);
+    const skillNamesRef = useRef(props.skillNames ?? NO_SKILL_NAMES);
+    const skillColorRef = useRef(props.skillColor ?? "");
+    const rangeSignatureRef = useRef("");
+    const paintedSignatureRef = useRef("");
     onChangeTextRef.current = props.onChangeText;
     onSelectionChangeRef.current = props.onSelectionChange;
     onKeyPressRef.current = props.onKeyPress;
     onFocusRef.current = props.onFocus;
     onBlurRef.current = props.onBlur;
+    skillNamesRef.current = props.skillNames ?? NO_SKILL_NAMES;
+    skillColorRef.current = props.skillColor ?? "";
     const [preview, setPreview] = useState<{ chip: InlineChip; anchor: DOMRect } | null>(null);
 
     const publish = useCallback((text: string, selection: TextSelection) => {
@@ -78,17 +87,31 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       const root = rootRef.current;
       if (!root) return;
       restoringRef.current = true;
-      renderDocument(root, text);
+      renderDocument(root, text, {
+        names: skillNamesRef.current,
+        color: skillColorRef.current,
+      });
+      rangeSignatureRef.current = skillRangeSignature(text, skillNamesRef.current);
+      paintedSignatureRef.current = skillPaintSignature(
+        skillNamesRef.current,
+        skillColorRef.current,
+      );
       setRawSelection(root, selection);
       restoringRef.current = false;
     }, []);
 
+    const skillSignature = skillPaintSignature(skillNamesRef.current, skillColorRef.current);
     // React renders this div with no children, so a parent render wipes the chips.
     // Restore before paint on every commit, not only on mount.
     useLayoutEffect(() => {
       const root = rootRef.current;
       if (!root || restoringRef.current) return;
-      if (readDocument(root) === textRef.current) return;
+      if (
+        readDocument(root) === textRef.current &&
+        paintedSignatureRef.current === skillSignature
+      ) {
+        return;
+      }
       paint(textRef.current, selectionRef.current);
     });
 
@@ -144,9 +167,12 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       const root = rootRef.current;
       if (!root) return;
       const text = readDocument(root);
-      if (text === textRef.current) return;
-      publish(text, readSelection(root, selectionRef.current));
-    }, [publish]);
+      const selection = readSelection(root, selectionRef.current);
+      if (text !== textRef.current) publish(text, selection);
+      const signature = skillRangeSignature(text, skillNamesRef.current);
+      if (signature === rangeSignatureRef.current) return;
+      paint(text, selection);
+    }, [paint, publish]);
 
     const handleKeyDown = useCallback(
       (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -310,23 +336,64 @@ const editorDomStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
-function renderDocument(root: HTMLElement, text: string): void {
+const NO_SKILL_NAMES: readonly string[] = [];
+
+interface SkillPaint {
+  names: readonly string[];
+  color: string;
+}
+
+function skillPaintSignature(names: readonly string[], color: string): string {
+  return `${color}\n${names.join("\n")}`;
+}
+
+function skillRangeSignature(text: string, names: readonly string[]): string {
+  return findSkillHighlightRanges(text, names)
+    .map((range) => `${range.start}:${range.end}`)
+    .join(",");
+}
+
+function renderDocument(root: HTMLElement, text: string, skills: SkillPaint): void {
   root.replaceChildren();
   for (const part of parseInlineParts(text)) {
     if (part.kind === "text") {
-      appendText(root, part.text);
+      appendText(root, part.text, skills);
       continue;
     }
     root.appendChild(createChipElement(part.chip));
   }
 }
 
-function appendText(root: HTMLElement, text: string): void {
+function appendText(root: HTMLElement, text: string, skills: SkillPaint): void {
+  const ranges = findSkillHighlightRanges(text, skills.names);
+  if (ranges.length === 0) {
+    appendPlainText(root, text);
+    return;
+  }
+  let cursor = 0;
+  for (const range of ranges) {
+    appendPlainText(root, text.slice(cursor, range.start));
+    appendSkillText(root, text.slice(range.start, range.end), skills.color);
+    cursor = range.end;
+  }
+  appendPlainText(root, text.slice(cursor));
+}
+
+function appendPlainText(root: HTMLElement, text: string): void {
   const lines = text.split("\n");
   lines.forEach((line, index) => {
     if (index > 0) root.appendChild(document.createElement("br"));
     if (line.length > 0) root.appendChild(document.createTextNode(line));
   });
+}
+
+function appendSkillText(root: HTMLElement, text: string, color: string): void {
+  if (text.length === 0) return;
+  const span = document.createElement("span");
+  span.dataset.skillMention = "true";
+  if (color) span.style.color = color;
+  span.textContent = text;
+  root.appendChild(span);
 }
 
 function createChipElement(chip: InlineChip): HTMLSpanElement {
