@@ -37,6 +37,8 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
+import { PriceMarks } from "@/model-pricing/marks";
+import { resolveModelPriceTier, summarizePriceTiers } from "@/model-pricing/tier";
 import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -193,7 +195,11 @@ function ProviderRow({
     entry.error.trim().length > 0
       ? entry.error.trim()
       : null;
-  const modelCount = filterSelectableModels(entry.models ?? null)?.length ?? 0;
+  const selectableModels = filterSelectableModels(entry.models ?? null) ?? [];
+  const modelCount = selectableModels.length;
+  const priceSpan = summarizePriceTiers(
+    selectableModels.map((model) => resolveModelPriceTier(model)),
+  );
   const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t);
 
   const handlePress = useCallback(() => {
@@ -233,9 +239,10 @@ function ProviderRow({
             <ProviderIcon size={theme.iconSize.md} color={theme.colors.foreground} />
             <View style={styles.textColumn}>
               <View style={styles.titleRow}>
-                <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+                <Text style={[settingsStyles.rowTitle, styles.title]} numberOfLines={1}>
                   {def.label}
                 </Text>
+                {priceSpan ? <PriceMarks minTier={priceSpan.min} maxTier={priceSpan.max} /> : null}
                 {!isCompact ? <Text style={styles.separator}>·</Text> : null}
                 <StatusIndicator status={providerStatus} compact={isCompact} />
               </View>
@@ -530,6 +537,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+  },
+  title: {
+    flexShrink: 1,
   },
   statusRow: {
     flexDirection: "row",

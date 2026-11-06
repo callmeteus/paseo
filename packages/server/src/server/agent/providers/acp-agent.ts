@@ -424,7 +424,10 @@ const KILO_STDIN_KEEPALIVE_INTERVAL_MS = 2_000;
 const KILO_BINARY_NAMES = new Set(["kilo", "kilocode"]);
 
 function isKiloLaunchCommand(command: string): boolean {
-  const base = path
+  // Use `path.win32` for the basename so Windows paths like `C:\tools\kilo.exe`
+  // resolve correctly when the daemon runs on Linux and `process.platform` is
+  // mocked to `win32` in tests (POSIX `basename` treats `\` as a literal char).
+  const base = path.win32
     .basename(command)
     .replace(/\.(exe|cmd|bat|ps1|com)$/i, "")
     .toLowerCase();
@@ -3014,9 +3017,26 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
     }
 
+    let toolSnapshot =
+      this.toolCalls.get(params.toolCall.toolCallId) ??
+      mergeToolSnapshot(params.toolCall.toolCallId, params.toolCall);
+    if (this.toolSnapshotTransformer) {
+      toolSnapshot = this.toolSnapshotTransformer(toolSnapshot);
+    }
+    const autoPlan = tryAutoResolveRedundantPlanModeSwitch({
+      config: this.config,
+      currentMode: this.currentMode,
+      params,
+      toolSnapshot,
+      logger: this.logger,
+    });
+    if (autoPlan) {
+      return autoPlan;
+    }
+
     // Match Zed acp.rs:3189-3220 when Paseo is not handling the request locally.
     const requestId = randomUUID();
-    let toolSnapshot =
+    toolSnapshot =
       this.toolCalls.get(params.toolCall.toolCallId) ??
       mergeToolSnapshot(params.toolCall.toolCallId, params.toolCall);
     if (this.toolSnapshotTransformer) {
@@ -4548,6 +4568,52 @@ function extractTerminalContent(
     output: entry.output,
     exitCode: entry.exit?.exitCode ?? null,
   };
+}
+
+/**
+ * Paseo Plan workflow already puts the session in read-only planning; some ACP agents still
+ * emit `switch_mode` to enter their native plan mode. Answering that prompt is a no-op at best
+ * and confusing when the composer already shows Plan — auto-select the positive allow option.
+ */
+function tryAutoResolveRedundantPlanModeSwitch(input: {
+  config: AgentSessionConfig;
+  currentMode: string | null;
+  params: RequestPermissionRequest;
+  toolSnapshot: ACPToolSnapshot;
+  logger: Logger;
+}): RequestPermissionResponse | null {
+  const { config, currentMode, params, toolSnapshot, logger } = input;
+  if (config.workflowModeId !== "plan") {
+    return null;
+  }
+  if (toolSnapshot.kind !== "switch_mode") {
+    return null;
+  }
+  const combined = [
+    extractToolText(params.toolCall.content),
+    extractToolText(toolSnapshot.content),
+    stringifyUnknown(toolSnapshot.rawInput),
+    stringifyUnknown(params.toolCall.rawInput),
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+  const wantsPlan =
+    /\benter[\s_]*plan[\s_]*mode\b/.test(combined) ||
+    combined.includes("enter_plan_mode") ||
+    (/\bplan\s*mode\b/.test(combined) && /\benter\b/.test(combined));
+  if (!wantsPlan) {
+    return null;
+  }
+  const allowOption = params.options.find((o) => o.kind.startsWith("allow"));
+  if (!allowOption) {
+    return null;
+  }
+  logger.info(
+    { toolCallId: params.toolCall.toolCallId, optionId: allowOption.optionId, currentMode },
+    "Auto-resolving redundant ACP plan mode switch while Paseo workflow is plan",
+  );
+  return { outcome: { outcome: "selected", optionId: allowOption.optionId } };
 }
 
 function mapPermissionRequest(

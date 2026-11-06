@@ -1145,6 +1145,62 @@ export function stripEphemeralTabsFromLayout(layout: WorkspaceLayout): Workspace
   });
 }
 
+/**
+ * Tabs the user opened while the saved layout was still loading. Hydration must
+ * not throw them away and put the previous chat back in front.
+ */
+export function keepTabsOpenedBeforeHydration(input: {
+  persistedLayout: WorkspaceLayout;
+  currentLayout: WorkspaceLayout | null | undefined;
+  explorerSidebarPaneId: string | null;
+}): WorkspaceLayout {
+  const currentLayout = input.currentLayout;
+  if (!currentLayout) return input.persistedLayout;
+
+  const persistedIds = new Set(collectAllTabs(input.persistedLayout.root).map((tab) => tab.tabId));
+  const openedDuringHydration = collectAllTabs(currentLayout.root).filter(
+    (tab) => !persistedIds.has(tab.tabId),
+  );
+  if (openedDuringHydration.length === 0) return input.persistedLayout;
+
+  const focusedPane = findPaneById(currentLayout.root, currentLayout.focusedPaneId);
+  const focusedTabId = focusedPane?.focusedTabId ?? null;
+  const persistedFocusedPane = findPaneById(
+    input.persistedLayout.root,
+    input.persistedLayout.focusedPaneId,
+  );
+  const mainPane =
+    (persistedFocusedPane && persistedFocusedPane.id !== input.explorerSidebarPaneId
+      ? persistedFocusedPane
+      : null) ??
+    collectAllPanes(input.persistedLayout.root).find(
+      (pane) => pane.id !== input.explorerSidebarPaneId,
+    ) ??
+    findPaneById(input.persistedLayout.root, DEFAULT_PANE_ID);
+  const placement: WorkspaceTabPlacement = mainPane
+    ? { mode: "pane", paneId: mainPane.id }
+    : FOCUSED_PANE_PLACEMENT;
+
+  let layout = input.persistedLayout;
+  for (const tab of openedDuringHydration) {
+    const created = createTabInLayout({
+      layout,
+      target: tab.target,
+      now: tab.createdAt,
+      placement,
+      explorerSidebarPaneId: input.explorerSidebarPaneId,
+      createTabId: () => tab.tabId,
+      ...(tab.state !== undefined ? { state: tab.state } : {}),
+    });
+    if (created) layout = created.layout;
+  }
+
+  if (focusedTabId && openedDuringHydration.some((tab) => tab.tabId === focusedTabId)) {
+    layout = focusTabInLayout({ layout, tabId: focusedTabId }) ?? layout;
+  }
+  return layout;
+}
+
 function restoreEmptyPanesInNode(
   node: SplitNodeInternal,
   explorerSidebarPaneId: string | null,

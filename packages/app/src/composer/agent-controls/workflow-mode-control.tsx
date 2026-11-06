@@ -27,6 +27,7 @@ import {
   reduceWorkflowModeSelection,
   type WorkflowModeSelection,
 } from "@/utils/workflow-mode-selection";
+import { trackWorkflowModeChange } from "@/composer/agent-controls/workflow-mode-pending";
 
 export type { WorkflowModeId };
 
@@ -317,7 +318,7 @@ export function useLiveWorkflowModeControl(
       const requestId = ++requestSequence.current;
       const requestRevision = chosen.revision;
       const previousModeId = current.modeId;
-      void client
+      const change = client
         .setAgentWorkflowMode(agentId, workflowModeId)
         .then((applied) => {
           if (requestId !== requestSequence.current) return undefined;
@@ -341,6 +342,7 @@ export function useLiveWorkflowModeControl(
           writeWorkflowModeSelection(serverId, agentId, rejected);
           toast.error(toErrorMessage(error));
         });
+      trackWorkflowModeChange(agentId, change);
     },
     [agentId, client, serverId, toast],
   );

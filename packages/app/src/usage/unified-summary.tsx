@@ -14,7 +14,7 @@ import { unifiedSummarySurface, type UnifiedUsage } from "./unified";
 
 const ThemedActivity = withUnistyles(Activity);
 
-/** One provider's windows as the mean of their used shares. The line under the bar stays the largest window. */
+/** One provider's windows as the max used share (binding limit). The subtitle stays the largest window. */
 export function UnifiedUsageSummary({
   unified,
   displayAs,

@@ -10,6 +10,7 @@ import {
   Ellipsis,
   FolderInput,
   FolderPlus,
+  Split,
   Pencil,
   RotateCw,
   Trash2,
@@ -37,6 +38,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedSplit = withUnistyles(Split);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedX = withUnistyles(X);
 
@@ -72,6 +74,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedFolderInput size={16} uniProps={mutedColorMapping} />;
       case "folder-plus":
         return <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />;
+      case "split":
+        return <ThemedSplit size={16} uniProps={mutedColorMapping} />;
       case "trash-2":
         return <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
       case "x":

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { clearAgentForkRequest, getAgentForkRequest } from "@/screens/workspace/agent-fork-request";
 import {
   buildWorkspaceDesktopTabActions,
   buildWorkspaceTabMenuEntries,
@@ -50,6 +51,8 @@ describe("buildWorkspaceTabMenuEntries", () => {
       "Rename",
       "Move to workspace",
       "Promote to workspace",
+      "Fork in a new tab",
+      "Fork in a new workspace",
       "Close to the left",
       "Close to the right",
       "Close other tabs",
@@ -91,6 +94,40 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(onDeleteAgent).toHaveBeenCalledWith("agent-123");
   });
 
+  it("forks the whole chat from the tab menu", () => {
+    const entries = buildWorkspaceTabMenuEntries({
+      surface: "desktop",
+      tab: createAgentTab(),
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context-agent_123",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    });
+
+    const forkTab = entries.find((entry) => entry.kind === "item" && entry.key === "fork-new-tab");
+    const forkWorkspace = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "fork-new-workspace",
+    );
+    if (forkTab?.kind !== "item" || forkWorkspace?.kind !== "item") {
+      throw new Error("expected fork menu items");
+    }
+    forkTab.onSelect();
+    expect(getAgentForkRequest()).toMatchObject({ agentId: "agent-123", target: "tab" });
+    clearAgentForkRequest();
+    forkWorkspace.onSelect();
+    expect(getAgentForkRequest()).toMatchObject({ agentId: "agent-123", target: "workspace" });
+    clearAgentForkRequest();
+  });
+
   it("uses stacked ordering labels for mobile menus", () => {
     const entries = buildWorkspaceTabMenuEntries({
       surface: "mobile",
@@ -116,6 +153,8 @@ describe("buildWorkspaceTabMenuEntries", () => {
       "Rename",
       "Move to workspace",
       "Promote to workspace",
+      "Fork in a new tab",
+      "Fork in a new workspace",
       "Close tabs above",
       "Close tabs below",
       "Close other tabs",

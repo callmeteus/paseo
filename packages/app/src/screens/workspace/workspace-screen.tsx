@@ -5,7 +5,7 @@ import {
   type InlinePathTarget,
 } from "@/assistant-file-links";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
-import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
+import { guardTabActivation, revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import type { LayoutChangeEvent } from "react-native";
 import { ExplorerSidebarDock } from "@/screens/workspace/explorer-sidebar";
 import { ExplorerFrame } from "./explorer-sidebar/frame";
@@ -148,6 +148,7 @@ import {
   WorkspaceDesktopTabsRow,
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
+import { AgentForkRequestHost } from "@/screens/workspace/agent-fork-request-host";
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
 import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
@@ -1826,7 +1827,8 @@ function WorkspaceScreenContent({
   const activeTabKey = useMemo(() => activeTabId ?? "", [activeTabId]);
   const handleCreateDraftTab = useCallback(
     (input?: { paneId?: string }) => {
-      openWorkspaceDraftTab({ paneId: input?.paneId });
+      const tabId = openWorkspaceDraftTab({ paneId: input?.paneId });
+      if (tabId) guardTabActivation(tabId);
     },
     [openWorkspaceDraftTab],
   );
@@ -1897,7 +1899,12 @@ function WorkspaceScreenContent({
       if (!persistenceKey) {
         return;
       }
-      createWorkspaceTab(persistenceKey, { kind: "new_tab" }, paneLocalPlacement(input?.paneId));
+      const tabId = createWorkspaceTab(
+        persistenceKey,
+        { kind: "new_tab" },
+        paneLocalPlacement(input?.paneId),
+      );
+      if (tabId) guardTabActivation(tabId);
     },
     [createWorkspaceTab, persistenceKey],
   );
@@ -1908,11 +1915,11 @@ function WorkspaceScreenContent({
         return;
       }
       const openTarget = (target: WorkspaceTab["target"]) => {
-        if (destination.kind === "replace") {
-          replaceWorkspaceTabTarget(persistenceKey, destination.tabId, target);
-        } else {
-          createWorkspaceTab(persistenceKey, target, paneLocalPlacement(destination.paneId));
-        }
+        const tabId =
+          destination.kind === "replace"
+            ? replaceWorkspaceTabTarget(persistenceKey, destination.tabId, target)
+            : createWorkspaceTab(persistenceKey, target, paneLocalPlacement(destination.paneId));
+        if (tabId) guardTabActivation(tabId);
       };
       if (selection.kind === "target") {
         openTarget(selection.target);
@@ -3985,6 +3992,7 @@ function WorkspaceScreenContent({
         toast={toast}
       >
         {renderedWorkspaceScreen}
+        <AgentForkRequestHost serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
         <MoveAgentToWorkspaceSheet />
         <PromoteAgentToWorkspaceSheet />
         <MoveWorkspaceToFolderSheet />

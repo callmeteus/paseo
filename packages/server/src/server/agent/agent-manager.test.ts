@@ -12967,6 +12967,18 @@ test("reconciliation waits for an in-flight turn instead of duplicating its outp
   }
 });
 
+async function expectAgentModeHandoff(manager: AgentManager, agentId: string): Promise<void> {
+  await expect(manager.setAgentWorkflowMode(agentId, "agent")).resolves.toBe("agent");
+  const agentLive = manager.getAgent(agentId);
+  const agentMetadata = agentLive?.persistence?.metadata;
+  expect(agentLive?.config.workflowModeId).toBe("agent");
+  expect(agentMetadata?.workflowModeId).toBe("agent");
+  expect(agentMetadata?.daemonAppendSystemPrompt).toContain("Debug mode has ended");
+  expect(agentMetadata?.daemonAppendSystemPrompt).not.toContain("You are in Debug mode");
+  expect(manager.planWorkflowTurn(agentId, "Vá")).toContain("Debug mode has ended");
+  expect(manager.planWorkflowTurn(agentId, "de novo")).toBeNull();
+}
+
 test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-workflow-mode-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
@@ -13005,12 +13017,7 @@ test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch
   expect(reloaded.config.workflowModeId).toBe("debug");
   expect(client.resumeOverrides.at(-1)?.daemonAppendSystemPrompt).toContain("Debug mode");
 
-  await expect(manager.setAgentWorkflowMode(snapshot.id, "agent")).resolves.toBe("agent");
-  const agentLive = manager.getAgent(snapshot.id);
-  const agentMetadata = agentLive?.persistence?.metadata;
-  expect(agentLive?.config.workflowModeId).toBe("agent");
-  expect(agentMetadata?.workflowModeId).toBe("agent");
-  expect(agentMetadata?.daemonAppendSystemPrompt).not.toContain("Debug mode");
+  await expectAgentModeHandoff(manager, snapshot.id);
 
   await expect(manager.setAgentWorkflowMode(snapshot.id, "unknown")).rejects.toThrow(
     "Unknown workflow mode",

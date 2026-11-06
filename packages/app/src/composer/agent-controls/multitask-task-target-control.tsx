@@ -203,6 +203,7 @@ export function MultitaskTaskTargetControl({
             modelLabel: paseoName,
             description: t("agentControls.workflowMode.taskTarget.paseoDescription"),
             isDefault: true,
+            priceTier: null,
             serverId,
           },
         ],

@@ -319,6 +319,8 @@ export const fr: TranslationResources = {
       resetsAt:
         "La session de ce modèle a atteint sa limite et revient à {{time}}, heure de {{place}}.",
       resetsRaw: "La session de ce modèle a atteint sa limite et revient à {{when}}.",
+      resume: "Reprendre ce chat quand la limite se termine",
+      resumePrompt: "La limite est terminée. Reprends là où tu t'étais arrêté.",
     },
     providerError: {
       badge: "Erreur du provider",
@@ -1961,6 +1963,7 @@ export const fr: TranslationResources = {
     editProfilesCount: "Modifier les profils ({{count}})",
     modelCount: "{{count}} modèle",
     modelCountPlural: "{{count}} modèles",
+    priceFree: "Gratuit",
     retry: "Réessayer",
     retrying: "Nouvelle tentative…",
     noMatches: "Aucun modèle ne correspond à votre recherche",
@@ -2649,6 +2652,10 @@ export const fr: TranslationResources = {
       cancel: "Annuler",
       save: "Enregistrer",
       namePlaceholder: "Nom du routeur",
+      icon: "Icône",
+      iconAutomatic: "Suivre les modèles",
+      iconSearch: "Rechercher une icône",
+      iconEmpty: "Aucune icône correspondante",
       invalidTitle: "Routeur incomplet",
       invalidBody: "Donnez un nom et au moins une cible.",
       saveError: "Impossible d'enregistrer les routeurs",

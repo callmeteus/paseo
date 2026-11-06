@@ -310,6 +310,8 @@ export const en = {
       resetsAt:
         "This model's session has hit its limit and comes back at {{time}}, {{place}} time.",
       resetsRaw: "This model's session has hit its limit and comes back at {{when}}.",
+      resume: "Resume this chat when the limit ends",
+      resumePrompt: "The limit has reset. Continue from where you stopped.",
     },
     providerError: {
       badge: "Provider error",
@@ -1935,6 +1937,7 @@ export const en = {
     editProfilesCount: "Edit profiles ({{count}})",
     modelCount: "{{count}} model",
     modelCountPlural: "{{count}} models",
+    priceFree: "Free",
     retry: "Retry",
     retrying: "Retrying...",
     noMatches: "No models match your search",
@@ -2719,6 +2722,10 @@ export const en = {
       cancel: "Cancel",
       save: "Save",
       namePlaceholder: "Router name",
+      icon: "Icon",
+      iconAutomatic: "Match the models",
+      iconSearch: "Search icons",
+      iconEmpty: "No matching icon",
       targetCount: "{{count}} targets",
       usePreset: "Use preset",
       wizard: {

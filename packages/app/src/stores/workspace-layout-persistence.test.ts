@@ -4,6 +4,7 @@ import type { StateStorage } from "zustand/middleware";
 import {
   createWorkspaceLayoutStore,
   collectAllTabs,
+  findPaneById,
   selectExplorerSidebarPaneId,
 } from "./workspace-layout-store";
 import { deriveWorkspacePaneState } from "../screens/workspace/workspace-pane-state";
@@ -57,6 +58,54 @@ it("skips unchanged reconciliations and immediately saves real layout changes", 
   expect(restored.getState().layoutByWorkspace[workspaceKey]).toEqual(
     store.getState().layoutByWorkspace[workspaceKey],
   );
+});
+
+it("keeps a chat opened while the layout is still loading, and leaves it focused", async () => {
+  const values = new Map<string, string>();
+  let gate: Promise<void> | null = null;
+  const storage: StateStorage = {
+    getItem: async (name) => {
+      if (gate) await gate;
+      return values.get(name) ?? null;
+    },
+    setItem: (name, value) => {
+      values.set(name, value);
+    },
+    removeItem: (name) => {
+      values.delete(name);
+    },
+  };
+  const workspaceKey = "server:workspace";
+  const saved = createWorkspaceLayoutStore(undefined, storage);
+  await saved.persist.rehydrate();
+  saved.getState().openTab({
+    workspaceKey,
+    target: { kind: "agent", agentId: "agent-old" },
+    intent: "reveal",
+  });
+
+  let release: () => void = () => {};
+  gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const loaded = createWorkspaceLayoutStore(undefined, storage);
+  const hydrated = new Promise<void>((resolve) => {
+    loaded.persist.onFinishHydration(() => resolve());
+  });
+  const draftTabId = loaded.getState().openTab({
+    workspaceKey,
+    target: { kind: "draft", draftId: "draft-new" },
+    intent: "reveal",
+  });
+  release();
+  await hydrated;
+
+  const layout = loaded.getState().layoutByWorkspace[workspaceKey];
+  const tabs = collectAllTabs(layout.root);
+  expect(
+    tabs.some((tab) => tab.target.kind === "agent" && tab.target.agentId === "agent-old"),
+  ).toBe(true);
+  expect(findPaneById(layout.root, layout.focusedPaneId)?.focusedTabId).toBe(draftTabId);
 });
 
 it("keeps the saved layout when the shell publishes its layout mode before hydration", async () => {

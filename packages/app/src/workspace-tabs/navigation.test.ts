@@ -1,14 +1,16 @@
 import { beforeEach, expect, it } from "vitest";
 import {
+  findPaneById,
   selectIsExplorerSidebarVisible,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import { usePanelStore } from "@/stores/panel-store";
-import { revealWorkspaceTab } from "./navigation";
+import { clearTabActivationGuard, guardTabActivation, revealWorkspaceTab } from "./navigation";
 import { openWorkspaceTargetAtLocation } from "./open-beside";
 
 const workspaceKey = "server:workspace";
 beforeEach(() => {
+  clearTabActivationGuard();
   useWorkspaceLayoutStore.setState({
     layoutMode: "split-panes",
     layoutByWorkspace: {},
@@ -16,6 +18,27 @@ beforeEach(() => {
     explorerSidebarPaneIdByWorkspace: {},
   });
   usePanelStore.getState().showMobileFileExplorer();
+});
+it("ignores a click that lands on the previous tab just after a new chat opens", () => {
+  const store = useWorkspaceLayoutStore.getState();
+  const previousTabId = store.openTab({
+    workspaceKey,
+    target: { kind: "agent", agentId: "agent-old" },
+    intent: "reveal",
+  });
+  const createdTabId = store.openTab({
+    workspaceKey,
+    target: { kind: "draft", draftId: "draft-new" },
+    intent: "reveal",
+  });
+  guardTabActivation(createdTabId as string);
+
+  expect(revealWorkspaceTab(workspaceKey, previousTabId)).toBeNull();
+  const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+  expect(findPaneById(layout.root, layout.focusedPaneId)?.focusedTabId).toBe(createdTabId);
+
+  clearTabActivationGuard();
+  expect(revealWorkspaceTab(workspaceKey, previousTabId)).toBe(previousTabId);
 });
 it("reveals an existing main file selected from compact Explorer", () => {
   const store = useWorkspaceLayoutStore.getState();

@@ -4,7 +4,7 @@ import { formatPct } from "./format";
 import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import type { UsageWindow } from "./types";
 import {
-  meanUsedPercent,
+  maxUsedPercent,
   resolveReportUnifiedUsage,
   resolveUnifiedUsage,
   resolveUnifiedUsageBySource,
@@ -41,7 +41,7 @@ function source(windows: PinnedUsageWindow[], key = "source"): PinnedUsageSource
 }
 
 describe("resolveUnifiedUsage", () => {
-  it("averages the windows instead of repeating the largest", () => {
+  it("uses the max used share across windows, not the mean", () => {
     const unified = resolveUnifiedUsage([
       source([
         window({ key: "session", usedPercent: 20, tone: "ok" }),
@@ -51,14 +51,13 @@ describe("resolveUnifiedUsage", () => {
     ]);
 
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBeCloseTo((20 + 95 + 28) / 3, 5);
-    expect(unified?.usedPercent).toBeCloseTo((20 + 95 + 28) / 3, 5);
-    expect(unified?.percent).not.toBe(95);
+    expect(unified?.percent).toBe(95);
+    expect(unified?.usedPercent).toBe(95);
     expect(unified?.tone).toBe("danger");
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["weekly", "monthly", "session"]);
   });
 
-  it("shows the mean remaining share when the preference is remaining", () => {
+  it("shows remaining from the max used share when the preference is remaining", () => {
     const unified = resolveUnifiedUsage(
       [
         source([
@@ -70,28 +69,27 @@ describe("resolveUnifiedUsage", () => {
     );
 
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBeCloseTo(100 - (20 + 95) / 2, 5);
+    expect(unified?.percent).toBe(5);
+    expect(unified?.usedPercent).toBe(95);
   });
 
-  it("averages rolling, weekly and monthly instead of lifting them to one limit", () => {
+  it("hits 100% when any rolling, weekly, or monthly window is exhausted", () => {
     const unified = resolveUnifiedUsage([
       source([
-        window({ key: "rolling", usedPercent: 24 }),
-        window({ key: "weekly", usedPercent: 93 }),
-        window({ key: "monthly", usedPercent: 97 }),
+        window({ key: "rolling", usedPercent: 13 }),
+        window({ key: "weekly", usedPercent: 99, tone: "danger" }),
+        window({ key: "monthly", usedPercent: 100, tone: "danger" }),
       ]),
     ]);
 
-    const mean = (24 + 93 + 97) / 3;
-    expect(unified?.percent).toBeCloseTo(mean, 5);
-    expect(unified?.usedPercent).toBeCloseTo(mean, 5);
-    expect(unified?.percent).not.toBe(100);
-    expect(formatPct(unified?.percent ?? Number.NaN, "en")).toBe("71%");
-    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("71%");
+    expect(unified?.percent).toBe(100);
+    expect(unified?.usedPercent).toBe(100);
+    expect(formatPct(unified?.percent ?? Number.NaN, "en")).toBe("100%");
+    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("100%");
     expect(unified?.driver.key).toBe("monthly");
   });
 
-  it("averages the windows that exist when one of the three is missing", () => {
+  it("uses the max when one of the three windows is missing", () => {
     const unified = resolveUnifiedUsage([
       source([
         window({ key: "rolling", usedPercent: 24 }),
@@ -99,8 +97,8 @@ describe("resolveUnifiedUsage", () => {
       ]),
     ]);
 
-    expect(unified?.percent).toBeCloseTo((24 + 97) / 2, 5);
-    expect(unified?.percent).not.toBe(100);
+    expect(unified?.percent).toBe(97);
+    expect(unified?.usedPercent).toBe(97);
     expect(unified?.driver.key).toBe("monthly");
   });
 
@@ -140,8 +138,8 @@ describe("resolveUnifiedUsage", () => {
   });
 
   it("returns nothing when no window has a percentage", () => {
-    expect(meanUsedPercent([])).toBeNull();
-    expect(meanUsedPercent([])).not.toBe(100);
+    expect(maxUsedPercent([])).toBeNull();
+    expect(maxUsedPercent([])).not.toBe(100);
     expect(resolveUnifiedUsage([])).toBeNull();
     expect(resolveUnifiedUsage([{ key: "source", icon: null, windows: [] }])).toBeNull();
   });
@@ -172,8 +170,8 @@ describe("resolveUnifiedUsageBySource", () => {
 
     const bySource = items.map((item) => [item.source.key, item.unified.percent] as const);
     expect(bySource[0]?.[0]).toBe("claude");
-    expect(bySource[0]?.[1]).toBeCloseTo((20 + 69) / 2, 5);
-    expect(bySource[1]).toEqual(["cursor", 55]);
+    expect(bySource[0]?.[1]).toBe(69);
+    expect(bySource[1]).toEqual(["cursor", 100]);
     expect(items[0]?.unified.driver.key).toBe("weekly");
     expect(items[1]?.unified.driver.key).toBe("total");
   });
@@ -193,16 +191,16 @@ describe("resolveReportUnifiedUsage", () => {
       t: i18n.t,
     });
 
-    expect(unified?.percent).toBe(34.5);
+    expect(unified?.percent).toBe(69);
     expect(unified?.driver.key).toBe("weekly");
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["weekly", "session"]);
   });
 
-  it("averages an OpenCode Go card instead of showing 100", () => {
+  it("shows 100% on the card when any OpenCode Go window is at 100%", () => {
     const windows: UsageWindow[] = [
       { id: "rolling", label: "Rolling", usedPct: 24 },
-      { id: "weekly", label: "Weekly", usedPct: 93 },
-      { id: "monthly", label: "Monthly", usedPct: 97 },
+      { id: "weekly", label: "Weekly", usedPct: 99 },
+      { id: "monthly", label: "Monthly", usedPct: 100 },
     ];
 
     const unified = resolveReportUnifiedUsage({
@@ -211,11 +209,11 @@ describe("resolveReportUnifiedUsage", () => {
       t: i18n.t,
     });
 
-    expect(unified?.percent).toBeCloseTo((24 + 93 + 97) / 3, 5);
-    expect(unified?.percent).not.toBe(100);
-    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("71%");
+    expect(unified?.percent).toBe(100);
+    expect(unified?.usedPercent).toBe(100);
+    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("100%");
     expect(unified?.driver.key).toBe("monthly");
-    expect(unified?.driver.percent).toBe(97);
+    expect(unified?.driver.percent).toBe(100);
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["monthly", "weekly", "rolling"]);
   });
 

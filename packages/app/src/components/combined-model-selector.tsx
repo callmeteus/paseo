@@ -19,8 +19,11 @@ import { ModelBrowser, ModelProviderGlyph, useModelBrowser } from "@/components/
 import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
+import { ModelIconGlyph } from "@/model-icons/glyph";
+import type { ModelIconId } from "@/model-icons/icons";
+import { resolveChoiceIconId } from "@/model-icons/resolve";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
-import { useActiveRouterName } from "@/model-routers/use-router-picker";
+import { useActiveRouter } from "@/model-routers/use-router-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const EMPTY_COMBOBOX_OPTIONS: ComboboxOption[] = [];
@@ -115,6 +118,7 @@ function DefaultModelSelectorTrigger({
   serverId,
   label,
   activeRouterName,
+  iconId,
 }: {
   anchorRef: RefObject<View | null>;
   disabled: boolean;
@@ -126,7 +130,10 @@ function DefaultModelSelectorTrigger({
   serverId: string | null;
   label: string;
   activeRouterName: string | null;
+  iconId: ModelIconId | null;
 }): ReactElement {
+  const glyphSize = toolbar?.glyphSize ?? ICON_SIZE.md;
+  const showGlyph = iconId !== null || selectedProvider.trim().length > 0;
   return (
     <ComboboxTrigger
       ref={anchorRef}
@@ -139,13 +146,13 @@ function DefaultModelSelectorTrigger({
       testID="combined-model-selector"
       chevron={toolbar?.showCaret === false ? null : undefined}
     >
-      {selectedProvider.trim().length > 0 ? (
+      {showGlyph ? (
         <View style={toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16}>
-          <ModelProviderGlyph
-            provider={selectedProvider}
-            serverId={serverId}
-            size={toolbar?.glyphSize ?? ICON_SIZE.md}
-          />
+          {iconId ? (
+            <ModelIconGlyph id={iconId} size={glyphSize} color={styles.mark.color} />
+          ) : (
+            <ModelProviderGlyph provider={selectedProvider} serverId={serverId} size={glyphSize} />
+          )}
         </View>
       ) : null}
       <View style={styles.triggerTextColumn}>
@@ -191,7 +198,8 @@ export function CombinedModelSelector({
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
-  const activeRouterName = useActiveRouterName(serverId, activeRouterId);
+  const activeRouter = useActiveRouter(serverId, activeRouterId);
+  const activeRouterName = activeRouter?.name ?? null;
   const modelBrowserScrolling = resolveModelBrowserScrolling({ isNative, isCompact });
   const anchorRef = useRef<View>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -354,6 +362,11 @@ export function CombinedModelSelector({
       serverId={serverId}
       label={browser.triggerLabel}
       activeRouterName={activeRouterName}
+      iconId={resolveChoiceIconId({
+        modelId: selectedModel,
+        modelLabel: browser.selectedModelLabel,
+        router: activeRouter,
+      })}
     />
   );
   const triggerWithTooltip = withModelSelectorTooltip(trigger, tooltip, isOpen);
@@ -401,6 +414,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,
+  },
+  mark: {
+    color: theme.colors.foregroundMuted,
   },
   toolbarGlyph16: {
     width: 16,

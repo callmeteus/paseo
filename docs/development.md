@@ -29,6 +29,8 @@ the titlebar row. Production builds leave the variable unset and show no label.
 
 `npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
 
+**Gotcha — Linux and React Native DevTools.** Metro may start the React Native DevTools Electron helper on first launch. On some Linux machines the helper’s bundled `chrome-sandbox` is not installed with the setuid bit Electron expects, so the process exits with a sandbox fatal while Metro keeps serving. `scripts/dev-app.sh` sets `ELECTRON_DISABLE_SANDBOX=1` on Linux (when unset) so the helper runs without that sandbox. If you start Expo outside that script and see the same error, export `ELECTRON_DISABLE_SANDBOX=1` in the same shell.
+
 ### Reaching the dev stack over Tailscale
 
 The dev launchers bind the daemon to `0.0.0.0`, allow any hostname and CORS origin,

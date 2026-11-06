@@ -196,6 +196,8 @@ function MobileWorkspaceTabOption({
       rename: t("workspace.tabs.menu.rename"),
       moveToWorkspace: t("workspace.tabs.menu.moveToWorkspace"),
       promoteToWorkspace: t("workspace.tabs.menu.promoteToWorkspace"),
+      forkInNewTab: t("message.actions.forkInNewTab"),
+      forkInNewWorkspace: t("message.actions.forkInNewWorkspace"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
       closeLeft: t("workspace.tabs.menu.closeLeft"),

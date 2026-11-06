@@ -94,6 +94,7 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
               modelId: "gpt-5.4",
               modelLabel: "gpt-5.4",
               isDefault: true,
+              priceTier: null,
             },
           ],
         },

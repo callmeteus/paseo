@@ -318,6 +318,8 @@ export const es: TranslationResources = {
       resetsAt:
         "La sesión de este modelo llegó al límite y vuelve a las {{time}}, horario de {{place}}.",
       resetsRaw: "La sesión de este modelo llegó al límite y vuelve a las {{when}}.",
+      resume: "Retomar este chat cuando termine el límite",
+      resumePrompt: "El límite terminó. Continúa desde donde te quedaste.",
     },
     providerError: {
       badge: "Error del provider",
@@ -1959,6 +1961,7 @@ export const es: TranslationResources = {
     editProfilesCount: "Editar perfiles ({{count}})",
     modelCount: "{{count}} modelo",
     modelCountPlural: "{{count}} modelos",
+    priceFree: "Gratis",
     retry: "Rever",
     retrying: "Reintentando...",
     noMatches: "Ningún modelo coincide con tu búsqueda",
@@ -2645,6 +2648,10 @@ export const es: TranslationResources = {
       cancel: "Cancelar",
       save: "Guardar",
       namePlaceholder: "Nombre del enrutador",
+      icon: "Icono",
+      iconAutomatic: "Seguir los modelos",
+      iconSearch: "Buscar iconos",
+      iconEmpty: "Ningún icono coincide",
       invalidTitle: "Enrutador incompleto",
       invalidBody: "Ponle un nombre y al menos un destino.",
       saveError: "No se pudieron guardar los enrutadores",

@@ -30,6 +30,13 @@ export interface SessionLimitNotice {
   reset: string | null;
 }
 
+/** The reset clock in the zone the provider named. The hour is 0 through 23. */
+export interface SessionLimitClock {
+  hour: number;
+  minute: number;
+  timeZone: string;
+}
+
 export function readSessionLimitNotice(text: string): SessionLimitNotice | null {
   const line = sessionLimitLine(text);
   if (!line) return null;
@@ -69,21 +76,38 @@ function sessionLimitLine(text: string): string | null {
   return SESSION_LIMIT_LINE.test(head) ? head : null;
 }
 
+/** The clock in a session-limit sentence, or null when the clause is not one. */
+export function readSessionLimitClock(text: string): SessionLimitClock | null {
+  const notice = readSessionLimitNotice(text);
+  if (!notice?.reset) return null;
+  return clockFromResetClause(notice.reset);
+}
+
 function readResetClock(reset: string): { time: string; place: string } | null {
+  const clock = clockFromResetClause(reset);
+  if (!clock) return null;
+  const place = zonePlace(clock.timeZone);
+  if (!place) return null;
+  const time = `${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")}`;
+  return { time, place };
+}
+
+function clockFromResetClause(reset: string): SessionLimitClock | null {
   const match = RESET_CLOCK.exec(reset.trim());
   if (!match) return null;
   const hour = Number(match[1]);
   const minute = Number(match[2]);
   const meridiem = match[3]?.toLowerCase();
-  const zone = match[4]?.trim() ?? "";
+  const timeZone = match[4]?.trim() ?? "";
   if (!Number.isInteger(hour) || hour < 1 || hour > 12) return null;
   if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
   if (meridiem !== "am" && meridiem !== "pm") return null;
-  const place = zonePlace(zone);
-  if (!place) return null;
-  const hour24 = (hour % 12) + (meridiem === "pm" ? 12 : 0);
-  const time = `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  return { time, place };
+  if (!isIanaTimeZone(timeZone)) return null;
+  return {
+    hour: (hour % 12) + (meridiem === "pm" ? 12 : 0),
+    minute,
+    timeZone,
+  };
 }
 
 function zonePlace(zone: string): string | null {

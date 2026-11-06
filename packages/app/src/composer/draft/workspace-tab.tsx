@@ -26,7 +26,7 @@ import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { useAgentControlCommandCenterActions } from "@/command-center/agent-control-registration";
 import { encodeImages } from "@/utils/encode-images";
-import { selectDistributionTarget } from "@getpaseo/protocol/model-router";
+import { takePinnedRouterEntry, takeRouterEntryTarget } from "@/model-routers/entry-target";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { shouldAutoFocusWorkspaceDraftComposer } from "@/screens/workspace/workspace-draft-pane-focus";
 import {
@@ -131,6 +131,7 @@ function resolveDraftModeId(input: {
 
 async function resolveDraftRouterTarget(
   client: DaemonClient | null,
+  selection: { provider: string; model: string | undefined },
 ): Promise<{ routerId: string; provider: string; model: string | null } | null> {
   if (!client) return null;
   try {
@@ -140,32 +141,22 @@ async function resolveDraftRouterTarget(
       ? settings.routers.find((entry) => entry.id === settings.defaultRouterId)
       : undefined;
     if (!router) return null;
-    // A fallback router starts each new chat on its first configured target.
-    if (router.mode === "fallback") {
+    // The composer already shows this router's model. Keep it, or the next
+    // slot would replace what the user just picked.
+    if (takePinnedRouterEntry(router.id, selection.provider, selection.model)) {
       return {
         routerId: router.id,
-        provider: router.targets[0]?.provider ?? "",
-        model: router.targets[0]?.model ?? null,
+        provider: selection.provider,
+        model: selection.model ?? null,
       };
     }
-    const selection = selectDistributionTarget({
-      router,
-      cursor: draftRouterCursor,
-      installedProviders: new Set(router.targets.map((target) => target.provider)),
-    });
-    if (!selection) return null;
-    draftRouterCursor = selection.cursor;
-    return {
-      routerId: router.id,
-      provider: selection.target.provider,
-      model: selection.target.model ?? null,
-    };
+    const target = takeRouterEntryTarget(router);
+    if (!target) return null;
+    return { routerId: router.id, provider: target.provider, model: target.model };
   } catch {
     return null;
   }
 }
-
-let draftRouterCursor = 0;
 
 function resolveDraftRoute(input: {
   provider: string;
@@ -296,7 +287,12 @@ async function submitDraftCreateRequest(input: {
   });
   // A default router overrides the draft's provider/model so new chats rotate
   // (distribution) or start at the top of the chain (fallback).
-  const routerTarget = autoSubmitConfig ? null : await resolveDraftRouterTarget(client);
+  const routerTarget = autoSubmitConfig
+    ? null
+    : await resolveDraftRouterTarget(client, {
+        provider,
+        model: composerState.effectiveModelId || undefined,
+      });
   const route = resolveDraftRoute({
     provider,
     model: composerState.effectiveModelId || undefined,

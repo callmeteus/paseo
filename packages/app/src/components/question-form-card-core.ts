@@ -23,16 +23,55 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
   return typeof value === "string" ? value : undefined;
 }
 
+function mapStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return strings.length === value.length ? strings : null;
+}
+
+/**
+ * Some ACP providers (Command Code) send AskUserQuestion payloads as a single JSON object
+ * `{ question, options[] }` instead of Codex-style `{ questions: [...] }`. Normalize to the
+ * latter so the UI stays one path.
+ */
+export function normalizeQuestionFormInput(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) {
+    return input;
+  }
+  const record = input as Record<string, unknown>;
+  if (Array.isArray(record.questions)) {
+    return input;
+  }
+  const questionText = record.question;
+  const optionStrings = mapStringArray(record.options);
+  if (typeof questionText !== "string" || !optionStrings || optionStrings.length === 0) {
+    return input;
+  }
+  return {
+    questions: [
+      {
+        question: questionText,
+        header: "answer",
+        options: optionStrings.map((label) => ({ label })),
+        multiSelect: false,
+        allowOther: false,
+        allowEmpty: false,
+      },
+    ],
+  };
+}
+
 export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion[] | null {
+  const normalized = normalizeQuestionFormInput(input);
   if (
-    typeof input !== "object" ||
-    input === null ||
-    !("questions" in input) ||
-    !Array.isArray((input as Record<string, unknown>).questions)
+    typeof normalized !== "object" ||
+    normalized === null ||
+    !("questions" in normalized) ||
+    !Array.isArray((normalized as Record<string, unknown>).questions)
   ) {
     return null;
   }
-  const raw = (input as Record<string, unknown>).questions as unknown[];
+  const raw = (normalized as Record<string, unknown>).questions as unknown[];
   const questions: QuestionFormQuestion[] = [];
   for (const item of raw) {
     if (typeof item !== "object" || item === null) return null;

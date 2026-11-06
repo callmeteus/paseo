@@ -24,6 +24,8 @@ A pressable styled to look like a button is wrong; the button is `<Button>` (`pa
 
 Before adding a new component, read `components/ui/`. The primitive usually exists.
 
+Transcript rows and tool badges (`UserMessage`, `AssistantMessage`, `ExpandableBadge`, `ToolCall`, …) live under `packages/app/src/components/message.tsx` (barrel) with implementations in `message-stream.tsx`, `message-expandable.tsx`, and shared chrome in `message-shared.tsx`. Import from `@/components/message` so call sites keep one stable path.
+
 ---
 
 ## 3. Hierarchy

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { Route } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { disabledModelIdsByProviderFromConfig } from "@getpaseo/protocol/disabled-models";
 import type {
@@ -20,12 +21,16 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
+import { ModelIconGlyph } from "@/model-icons/glyph";
+import { RouterIconField } from "@/model-icons/router-icon-field";
+import { isModelIconId, resolveRouterIconId } from "@/model-icons/resolve";
 import {
   buildRouterPresets,
   buildRouterSummary,
   type RouterPreset,
 } from "@getpaseo/protocol/router-presets";
 import { settingsStyles } from "@/styles/settings";
+import { ICON_SIZE } from "@/styles/theme";
 
 interface DraftTarget {
   key: string;
@@ -36,6 +41,7 @@ interface DraftTarget {
 interface RouterDraft {
   id: string | null;
   name: string;
+  icon: string | null;
   mode: ModelRouterMode;
   targets: DraftTarget[];
 }
@@ -47,7 +53,7 @@ function newKey(): string {
 }
 
 function emptyDraft(): RouterDraft {
-  return { id: null, name: "", mode: "fallback", targets: [] };
+  return { id: null, name: "", icon: null, mode: "fallback", targets: [] };
 }
 
 function newRouterId(): string {
@@ -77,18 +83,21 @@ function RouterRow({
   const handleDelete = useCallback(() => onDelete(router.id), [onDelete, router.id]);
   return (
     <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>
-          {router.name}
-          {isDefault ? ` · ${t("settings.modelRouters.defaultBadge")}` : ""}
-        </Text>
-        <Text style={settingsStyles.rowHint}>
-          {router.mode === "fallback"
-            ? t("settings.modelRouters.modeFallback")
-            : t("settings.modelRouters.modeDistribution")}
-          {" · "}
-          {router.summary ?? buildRouterSummary(router.targets)}
-        </Text>
+      <View style={styles.identity}>
+        <RouterIdentityIcon router={router} />
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {router.name}
+            {isDefault ? ` · ${t("settings.modelRouters.defaultBadge")}` : ""}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {router.mode === "fallback"
+              ? t("settings.modelRouters.modeFallback")
+              : t("settings.modelRouters.modeDistribution")}
+            {" · "}
+            {router.summary ?? buildRouterSummary(router.targets)}
+          </Text>
+        </View>
       </View>
       <View style={styles.actions}>
         <Button variant="outline" size="sm" onPress={handleSetDefault} disabled={disabled}>
@@ -105,6 +114,12 @@ function RouterRow({
       </View>
     </View>
   );
+}
+
+function RouterIdentityIcon({ router }: { router: ModelRouter }) {
+  const iconId = resolveRouterIconId(router);
+  if (!iconId) return <Route size={ICON_SIZE.md} color={styles.icon.color} />;
+  return <ModelIconGlyph id={iconId} size={ICON_SIZE.md} color={styles.icon.color} />;
 }
 
 function presetNameKey(preset: RouterPreset): string {
@@ -256,6 +271,7 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
     setDraft({
       id: router.id,
       name: router.name,
+      icon: router.icon && isModelIconId(router.icon) ? router.icon : null,
       mode: router.mode,
       targets: router.targets.map((target) => ({
         key: newKey(),
@@ -308,6 +324,7 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
       name,
       mode: draft.mode,
       targets,
+      ...(draft.icon ? { icon: draft.icon } : {}),
     };
     const next = draft.id
       ? routers.map((entry) => (entry.id === draft.id ? router : entry))
@@ -361,6 +378,9 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
   }, []);
   const handleNameChange = useCallback((name: string) => {
     setDraft((current) => (current ? { ...current, name } : current));
+  }, []);
+  const handleIconChange = useCallback((icon: string | null) => {
+    setDraft((current) => (current ? { ...current, icon } : current));
   }, []);
 
   if (isLoading || !config) {
@@ -436,6 +456,13 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
               onChangeText={handleNameChange}
               placeholder={t("settings.modelRouters.namePlaceholder")}
               autoFocus
+            />
+            <RouterIconField
+              icon={draft.icon}
+              name={draft.name}
+              targets={draft.targets}
+              disabled={isSaving}
+              onChange={handleIconChange}
             />
             <View style={styles.draftMode}>
               <SegmentedControl
@@ -517,6 +544,16 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     marginTop: theme.spacing[1],
+  },
+  identity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  icon: {
+    color: theme.colors.foregroundMuted,
   },
   draft: {
     flexDirection: "column",

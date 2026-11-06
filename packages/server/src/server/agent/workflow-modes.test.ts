@@ -6,10 +6,20 @@ import {
   isWorkflowModeId,
   resolveDefaultWritableProviderMode,
   stripWorkflowInstruction,
+  workflowChangeNotice,
   WORKFLOW_MODES,
 } from "./workflow-modes.js";
 
 describe("workflow modes", () => {
+  test("changing workflow tells the model the previous mode ended", () => {
+    const notice = workflowChangeNotice("plan", "agent");
+    expect(notice).toContain("Agent mode");
+    expect(notice).toContain("Plan mode has ended");
+    expect(notice).toContain("no longer apply");
+    expect(workflowChangeNotice("agent", "agent")).toBe("");
+    expect(workflowChangeNotice(null, null)).toBe("");
+  });
+
   test("agent is the default and contributes no prompt", () => {
     expect(composeWorkflowPrompt(null, { agentId: "a", cwd: "/repo" })).toBe("");
     expect(composeWorkflowPrompt("unknown", { agentId: "a", cwd: "/repo" })).toBe("");

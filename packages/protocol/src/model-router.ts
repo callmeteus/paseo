@@ -29,6 +29,8 @@ export const ModelRouterSchema = z
   .object({
     id: z.string().min(1).max(128),
     name: z.string().min(1).max(80),
+    /** Model-icon id drawn for this router. When omitted, the app draws the mark of its models. */
+    icon: z.string().min(1).max(64).optional(),
     /** One-line description shown in settings instead of the full target list. */
     summary: z.string().min(1).max(200).optional(),
     mode: ModelRouterModeSchema,
@@ -149,6 +151,28 @@ export function selectFallbackTarget(input: {
   const remaining = targets.slice(index + 1);
   if (remaining.length === 0) return null;
   return firstAllowedTarget(remaining, input.skipProviders);
+}
+
+/**
+ * The model a chat should show when the user binds this router over another model.
+ * Fallback starts on the first target. Distribution takes the next weighted slot.
+ *
+ * @param input - The router and the distribution cursor kept by the caller
+ * @returns The target to run, or null when the router has no target
+ */
+export function selectRouterEntryTarget(input: {
+  router: ModelRouter;
+  cursor: number;
+}): { target: ModelRouterTarget; cursor: number } | null {
+  if (input.router.mode === "fallback") {
+    const target = input.router.targets[0];
+    return target ? { target, cursor: input.cursor } : null;
+  }
+  return selectDistributionTarget({
+    router: input.router,
+    cursor: input.cursor,
+    installedProviders: new Set(input.router.targets.map((target) => target.provider)),
+  });
 }
 
 /** Keeps the stored order; only skips a provider when another one remains. */

@@ -13,7 +13,7 @@ import { useMenuContext } from "@/components/ui/menu";
 import type { Rect } from "@/components/ui/anchor";
 import { isWeb } from "@/constants/platform";
 import { hasInlineChip, parseInlineParts, type InlineChip } from "@getpaseo/protocol/inline-chip";
-import { inlineChipChrome } from "./inline-chip-chrome";
+import { inlineChipChromeFromTheme } from "./inline-chip-chrome";
 
 const PREVIEW_WIDTH = 420;
 const PREVIEW_MAX_HEIGHT = 320;
@@ -165,17 +165,24 @@ function InlineChipSpan({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  chip: {
-    backgroundColor: inlineChipChrome.backgroundColor,
-    color: inlineChipChrome.color,
-    borderRadius: inlineChipChrome.borderRadius,
-    paddingHorizontal: inlineChipChrome.paddingHorizontal,
-    paddingVertical: inlineChipChrome.paddingVertical,
-    ...(isWeb ? { userSelect: "none" as const } : {}),
-  },
   preview: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     ...(isWeb ? { whiteSpace: "pre-wrap" as const, overflowWrap: "anywhere" as const } : {}),
   },
+  chip: (() => {
+    const chrome = inlineChipChromeFromTheme(theme);
+    return {
+      backgroundColor: chrome.backgroundColor,
+      color: chrome.color,
+      borderWidth: chrome.borderWidth,
+      borderColor: chrome.borderColor,
+      borderRadius: chrome.borderRadius,
+      paddingHorizontal: chrome.paddingHorizontal,
+      paddingVertical: chrome.paddingVertical,
+      ...(isWeb ? { userSelect: "none" as const } : {}),
+    };
+  })(),
 }));

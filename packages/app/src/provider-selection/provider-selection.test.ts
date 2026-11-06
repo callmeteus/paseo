@@ -76,6 +76,7 @@ describe("combined model selector data", () => {
               modelLabel: "GPT-5.4",
               description: "gpt-5.4",
               isDefault: undefined,
+              priceTier: 4,
             },
           ],
         },
@@ -145,6 +146,7 @@ describe("combined model selector data", () => {
               modelLabel: "Default",
               description: undefined,
               isDefault: true,
+              priceTier: null,
             },
           ],
         },
@@ -233,6 +235,7 @@ describe("combined model selector data", () => {
       modelId: "opencode-zen/kimi-k2.5",
       modelLabel: "Kimi K2.5",
       description: "OpenCode Zen - kimi",
+      priceTier: null,
     };
 
     expect(matchesModelSearch(row, "kimi zen")).toBe(true);
@@ -249,6 +252,7 @@ describe("combined model selector data", () => {
         providerLabel: "OpenAI",
         modelId: "gpt-4.1",
         modelLabel: "GPT-4.1",
+        priceTier: null,
       },
       {
         favoriteKey: "openai:gpt-5.4",
@@ -256,6 +260,7 @@ describe("combined model selector data", () => {
         providerLabel: "OpenAI",
         modelId: "gpt-5.4",
         modelLabel: "GPT-5.4",
+        priceTier: null,
       },
       {
         favoriteKey: "google:gemini",
@@ -263,6 +268,7 @@ describe("combined model selector data", () => {
         providerLabel: "Google",
         modelId: "gemini",
         modelLabel: "Gemini",
+        priceTier: null,
       },
     ];
 
@@ -281,6 +287,7 @@ describe("combined model selector data", () => {
       modelId: "claude-opus-5",
       modelLabel: "Opus 5",
       description: "claude-opus-5",
+      priceTier: null,
     };
 
     expect(buildProviderQualifiedDescription(row)).toBe("Copilot · claude-opus-5");

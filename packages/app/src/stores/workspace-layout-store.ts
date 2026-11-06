@@ -49,6 +49,7 @@ import {
   splitPaneEmptyInLayout,
   splitWorkspaceRootRightInLayout,
   splitPaneInLayout,
+  keepTabsOpenedBeforeHydration,
   stripEphemeralTabsFromLayout,
   type SplitGroup,
   type SplitNode,
@@ -646,6 +647,15 @@ function getOpenTabPlacement(
   };
 }
 
+function withoutRecordKey<Value>(
+  record: Record<string, Value>,
+  key: string,
+): Record<string, Value> {
+  if (!(key in record)) return record;
+  const { [key]: _removed, ...rest } = record;
+  return rest;
+}
+
 function withoutFocusRestoration(
   state: WorkspaceLayoutStore,
   workspaceKey: string,
@@ -1187,6 +1197,15 @@ export function createWorkspaceLayoutStore(
             ...advancePanelRevision(state, normalizedWorkspaceKey, result.tabId, normalizedTarget),
             // A tab brought to the front dismisses the sheet over it.
             ...(input.intent === "background" ? {} : dismissSheets(state, normalizedWorkspaceKey)),
+            ...(input.intent === "background" ||
+            !(normalizedWorkspaceKey in state.pendingOpenByWorkspace)
+              ? {}
+              : {
+                  pendingOpenByWorkspace: withoutRecordKey(
+                    state.pendingOpenByWorkspace,
+                    normalizedWorkspaceKey,
+                  ),
+                }),
             hiddenAgentIdsByWorkspace:
               normalizedTarget.kind !== "agent"
                 ? state.hiddenAgentIdsByWorkspace
@@ -1588,22 +1607,41 @@ export function createWorkspaceLayoutStore(
             state: tabState,
           });
           if (!result) return null;
-          set((state) => ({
-            ...withoutFocusRestoration(state, normalizedWorkspaceKey),
-            ...advancePanelRevision(state, normalizedWorkspaceKey, result.tabId, normalizedTarget),
-            hiddenAgentIdsByWorkspace:
-              normalizedTarget.kind !== "agent"
-                ? state.hiddenAgentIdsByWorkspace
-                : removeAgentIdFromWorkspaceSet(
-                    state.hiddenAgentIdsByWorkspace,
+          set((state) => {
+            const previousTarget = collectAllTabs(
+              getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey).root,
+            ).find((tab) => tab.tabId === normalizedTabId)?.target;
+            const pinCreatedAgent =
+              previousTarget?.kind === "draft" && normalizedTarget.kind === "agent";
+            return {
+              ...withoutFocusRestoration(state, normalizedWorkspaceKey),
+              ...advancePanelRevision(
+                state,
+                normalizedWorkspaceKey,
+                result.tabId,
+                normalizedTarget,
+              ),
+              hiddenAgentIdsByWorkspace:
+                normalizedTarget.kind !== "agent"
+                  ? state.hiddenAgentIdsByWorkspace
+                  : removeAgentIdFromWorkspaceSet(
+                      state.hiddenAgentIdsByWorkspace,
+                      normalizedWorkspaceKey,
+                      normalizedTarget.agentId,
+                    ),
+              pinnedAgentIdsByWorkspace: pinCreatedAgent
+                ? addAgentIdToWorkspaceSet(
+                    state.pinnedAgentIdsByWorkspace,
                     normalizedWorkspaceKey,
                     normalizedTarget.agentId,
-                  ),
-            layoutByWorkspace: {
-              ...state.layoutByWorkspace,
-              [normalizedWorkspaceKey]: result.layout,
-            },
-          }));
+                  )
+                : state.pinnedAgentIdsByWorkspace,
+              layoutByWorkspace: {
+                ...state.layoutByWorkspace,
+                [normalizedWorkspaceKey]: result.layout,
+              },
+            };
+          });
           return result.tabId;
         },
         setTabState: (workspaceKey, tabId, tabState) => {
@@ -1662,6 +1700,11 @@ export function createWorkspaceLayoutStore(
               : {}),
             hiddenAgentIdsByWorkspace: removeAgentIdFromWorkspaceSet(
               state.hiddenAgentIdsByWorkspace,
+              normalizedWorkspaceKey,
+              normalizedAgentId,
+            ),
+            pinnedAgentIdsByWorkspace: addAgentIdToWorkspaceSet(
+              state.pinnedAgentIdsByWorkspace,
               normalizedWorkspaceKey,
               normalizedAgentId,
             ),
@@ -2317,9 +2360,21 @@ export function createWorkspaceLayoutStore(
               registeredPaneId: explorerSidebarPaneIdByWorkspace[workspaceKey],
               ids,
             });
-            layoutByWorkspace[workspaceKey] = explorerSidebar?.layout ?? restoredLayout;
+            const restoredWithExplorer = explorerSidebar?.layout ?? restoredLayout;
             if (explorerSidebar) {
               explorerSidebarPaneIdByWorkspace[workspaceKey] = explorerSidebar.paneId;
+            }
+            layoutByWorkspace[workspaceKey] = keepTabsOpenedBeforeHydration({
+              persistedLayout: restoredWithExplorer,
+              currentLayout: currentState.layoutByWorkspace[workspaceKey],
+              explorerSidebarPaneId: explorerSidebarPaneIdByWorkspace[workspaceKey] ?? null,
+            });
+          }
+          for (const [workspaceKey, currentLayout] of Object.entries(
+            currentState.layoutByWorkspace,
+          )) {
+            if (!layoutByWorkspace[workspaceKey]) {
+              layoutByWorkspace[workspaceKey] = currentLayout;
             }
           }
           return {

@@ -50,6 +50,7 @@ export {
   normalizeRouterTargets,
   selectDistributionTarget,
   selectFallbackTarget,
+  selectRouterEntryTarget,
   type ModelRouter,
   type ModelRouterMode,
   type ModelRouterSettings,

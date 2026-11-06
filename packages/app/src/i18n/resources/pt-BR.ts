@@ -318,6 +318,8 @@ export const ptBR: TranslationResources = {
       resetsAt:
         "A sessão deste modelo chegou no limite e volta às {{time}} no horário de {{place}}.",
       resetsRaw: "A sessão deste modelo chegou no limite e volta em {{when}}.",
+      resume: "Retomar este chat quando o limite acabar",
+      resumePrompt: "O limite acabou. Continue de onde você parou.",
     },
     providerError: {
       badge: "Erro do provider",
@@ -1946,6 +1948,7 @@ export const ptBR: TranslationResources = {
     editProfilesCount: "Editar perfis ({{count}})",
     modelCount: "{{count}} modelo",
     modelCountPlural: "{{count}} modelos",
+    priceFree: "Grátis",
     retry: "Tentar novamente",
     retrying: "Tentando novamente...",
     noMatches: "Nenhum modelo corresponde à sua busca",
@@ -2632,6 +2635,10 @@ export const ptBR: TranslationResources = {
       cancel: "Cancelar",
       save: "Salvar",
       namePlaceholder: "Nome do roteador",
+      icon: "Ícone",
+      iconAutomatic: "Seguir os modelos",
+      iconSearch: "Buscar ícones",
+      iconEmpty: "Nenhum ícone encontrado",
       invalidTitle: "Roteador incompleto",
       invalidBody: "Dê um nome ao roteador e pelo menos um destino.",
       saveError: "Não foi possível salvar os roteadores",

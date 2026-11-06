@@ -508,11 +508,11 @@ export function QuestionFormCard({
       styles.actionButton,
       {
         backgroundColor: hovered ? theme.colors.surface2 : theme.colors.surface1,
-        borderColor: theme.colors.borderAccent,
+        borderColor: theme.colors.border,
       },
       pressed && styles.optionItemPressed,
     ],
-    [theme.colors.surface2, theme.colors.surface1, theme.colors.borderAccent],
+    [theme.colors.surface2, theme.colors.surface1, theme.colors.border],
   );
 
   const pendingAction = isResponding ? respondingAction : null;
@@ -579,55 +579,57 @@ export function QuestionFormCard({
 
   return (
     <View style={containerStyle} testID="question-form-card">
-      <QuestionNav
-        questions={questions}
-        activeIndex={resolvedActiveQuestionIndex}
-        isAnswered={navIsAnswered}
-        isResponding={isResponding}
-        onSelect={handleSelectQuestion}
-      />
-      <View style={styles.questionHeader}>
-        <View testID="question-form-current-question" style={styles.questionText}>
-          <MarkdownRenderer text={questions[resolvedActiveQuestionIndex].question} compact />
+      <View style={styles.questionContent}>
+        <QuestionNav
+          questions={questions}
+          activeIndex={resolvedActiveQuestionIndex}
+          isAnswered={navIsAnswered}
+          isResponding={isResponding}
+          onSelect={handleSelectQuestion}
+        />
+        <View style={styles.questionHeader}>
+          <View testID="question-form-current-question" style={styles.questionText}>
+            <MarkdownRenderer text={questions[resolvedActiveQuestionIndex].question} compact />
+          </View>
         </View>
-      </View>
 
-      {activeQuestion ? (
-        <View key={activeQuestion.question} style={styles.questionBlock}>
-          {activeQuestion.options.length > 0 ? (
-            <View style={styles.optionsWrap} {...optionsGroupAccessibility}>
-              {activeQuestion.options.map((opt, optIndex) => (
-                <QuestionOptionRow
-                  key={opt.label}
-                  qIndex={resolvedActiveQuestionIndex}
-                  optIndex={optIndex}
-                  option={opt}
-                  isSelected={selected.has(optIndex)}
-                  multiSelect={activeQuestion.multiSelect}
-                  isResponding={isResponding}
-                  onToggle={toggleOption}
-                />
-              ))}
-            </View>
-          ) : null}
-          {showTextInput ? (
-            <QuestionOtherInput
-              qIndex={resolvedActiveQuestionIndex}
-              inputRef={otherInputRef}
-              accessibilityLabel={activeQuestion.question}
-              value={otherText}
-              placeholder={getQuestionInputPlaceholder({
-                question: activeQuestion,
-                answerPlaceholder: t("message.question.answerPlaceholder"),
-                otherPlaceholder: t("message.question.otherPlaceholder"),
-              })}
-              isResponding={isResponding}
-              onChange={setOtherText}
-              onSubmit={handlePrimaryAction}
-            />
-          ) : null}
-        </View>
-      ) : null}
+        {activeQuestion ? (
+          <View key={activeQuestion.question} style={styles.questionBlock}>
+            {activeQuestion.options.length > 0 ? (
+              <View style={styles.optionsWrap} {...optionsGroupAccessibility}>
+                {activeQuestion.options.map((opt, optIndex) => (
+                  <QuestionOptionRow
+                    key={opt.label}
+                    qIndex={resolvedActiveQuestionIndex}
+                    optIndex={optIndex}
+                    option={opt}
+                    isSelected={selected.has(optIndex)}
+                    multiSelect={activeQuestion.multiSelect}
+                    isResponding={isResponding}
+                    onToggle={toggleOption}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {showTextInput ? (
+              <QuestionOtherInput
+                qIndex={resolvedActiveQuestionIndex}
+                inputRef={otherInputRef}
+                accessibilityLabel={activeQuestion.question}
+                value={otherText}
+                placeholder={getQuestionInputPlaceholder({
+                  question: activeQuestion,
+                  answerPlaceholder: t("message.question.answerPlaceholder"),
+                  otherPlaceholder: t("message.question.otherPlaceholder"),
+                })}
+                isResponding={isResponding}
+                onChange={setOtherText}
+                onSubmit={handlePrimaryAction}
+              />
+            ) : null}
+          </View>
+        ) : null}
+      </View>
 
       {responseError ? <Alert variant="error" description={responseError} size="sm" /> : null}
 
@@ -675,9 +677,13 @@ export function QuestionFormCard({
 const styles = StyleSheet.create((theme) => ({
   container: {
     padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
-    borderWidth: 1,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: theme.borderWidth[1],
     gap: theme.spacing[3],
+  },
+  questionContent: {
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
   },
   questionBlock: {
     gap: theme.spacing[2],
@@ -686,9 +692,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[1],
-    flex: 1,
   },
   questionText: {
     flex: 1,
@@ -701,7 +705,6 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[3],
   },
   questionNavButton: {
     flexDirection: "row",
@@ -715,12 +718,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   questionNavText: {
     fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.normal,
+    fontWeight: theme.fontWeight.medium,
   },
   optionItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
   },
@@ -761,10 +763,10 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: 999,
   },
   otherInput: {
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
+    borderWidth: theme.borderWidth[1],
+    borderRadius: theme.borderRadius.md,
     paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     fontSize: theme.fontSize.base,
   },
   actionsContainer: {

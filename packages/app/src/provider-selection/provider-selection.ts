@@ -13,6 +13,7 @@ import {
   type DisabledModelIdsByProvider,
 } from "@getpaseo/protocol/disabled-models";
 import { filterSelectableModels } from "./model-catalog";
+import { resolveModelPriceTier, type PriceTier } from "@/model-pricing/tier";
 
 export interface ProviderSelectionModelRow {
   /**
@@ -28,6 +29,8 @@ export interface ProviderSelectionModelRow {
   modelLabel: string;
   description?: string;
   isDefault?: boolean;
+  /** Null when neither the catalog nor the model name publishes a rate. */
+  priceTier: PriceTier | null;
 }
 
 function buildModelRowKey(provider: string, modelId: string, serverId?: string | null): string {
@@ -77,6 +80,11 @@ function buildModelRows(
     modelLabel: model.label,
     description: model.description ?? model.id,
     isDefault: model.isDefault,
+    priceTier: resolveModelPriceTier({
+      id: model.id,
+      label: model.label,
+      metadata: model.metadata,
+    }),
     serverId,
   }));
 }
@@ -94,6 +102,7 @@ function buildSyntheticDefaultRow(
     modelLabel: i18n.t("providerSelection.defaultModel"),
     description: undefined,
     isDefault: true,
+    priceTier: null,
     serverId,
   };
 }

@@ -27,6 +27,15 @@ echo "  Daemon:  ${DAEMON_ENDPOINT}"
 echo "  Home:    ${PASEO_HOME}"
 echo "══════════════════════════════════════════════════════"
 
+# React Native DevTools is an Electron shell pulled in by the RN toolchain.
+# On some Linux setups the bundled `chrome-sandbox` is not root-owned 4755,
+# which makes Electron abort before Metro finishes its DevTools install step.
+# Disabling the Chromium sandbox for that helper only keeps `npm run dev:app`
+# usable without manual `chown`/`chmod` on the cache binary.
+if [ "$(uname -s)" = "Linux" ] && [ -z "${ELECTRON_DISABLE_SANDBOX+x}" ]; then
+  export ELECTRON_DISABLE_SANDBOX=1
+fi
+
 exec cross-env \
   BROWSER="${BROWSER:-none}" \
   APP_VARIANT=development \

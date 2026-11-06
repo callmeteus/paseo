@@ -102,6 +102,31 @@ function composeMultitaskPrompt(ctx: WorkflowModeContext): string {
 ${choice} The daemon applies that choice when create_agent omits taskAgent. Do not pass provider to override the control. A single task overrides it with taskAgent set to {"kind":"paseo"} or {"kind":"cli","provider":"<id from list_providers>","model":"<id from list_models>"}. Do not invent a model id. If create_agent returns an error for one task, leave the other tasks running and report that error on the failed task.`;
 }
 
+const WORKFLOW_LABEL: Record<string, string> = {
+  agent: "Agent",
+  plan: "Plan",
+  ask: "Ask",
+  debug: "Debug",
+  multitask: "Multitask",
+};
+
+/**
+ * Told to the model when the user changes workflow. Agent mode has no standing
+ * instructions, so without this the previous mode's block stays in the
+ * transcript and the model keeps following it.
+ */
+export function workflowChangeNotice(
+  previousId: string | null | undefined,
+  nextId: string | null | undefined,
+): string {
+  const previous = previousId?.trim() || "agent";
+  const next = nextId?.trim() || "agent";
+  if (previous === next) return "";
+  const previousLabel = WORKFLOW_LABEL[previous] ?? previous;
+  const nextLabel = WORKFLOW_LABEL[next] ?? next;
+  return `The active workflow is now ${nextLabel} mode. ${previousLabel} mode has ended. Follow only ${nextLabel} mode. Instructions from ${previousLabel} mode earlier in this conversation no longer apply, including any instruction to ignore a message that the previous mode ended.`;
+}
+
 const ASK_PROMPT = `You are in Ask mode.
 
 You are a read-only assistant. You may read files, search, and explain. You must
