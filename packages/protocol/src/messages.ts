@@ -3586,6 +3586,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   "status.daemon_config_changed",
   "status.plugin_catalog_changed",
   "status.plugin_settings_changed",
+  "status.agent_commands_changed",
   "activity_log",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
