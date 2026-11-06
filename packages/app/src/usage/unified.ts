@@ -24,12 +24,12 @@ export interface UnifiedWindow {
   shortfallPct: number | null;
 }
 
-/** The mean of the windows, and the window that drives the highest line. */
+/** The tightest limit among the windows, and the window that drives the subtitle line. */
 export interface UnifiedUsage<T extends UnifiedWindow = UnifiedWindow> {
-  /** The mean share, under the user's used/remaining preference. */
+  /** The max used share, under the user's used/remaining preference. */
   percent: number;
   percentText: string;
-  /** The mean share used, independent of the display preference. */
+  /** The max used share among windows, independent of the display preference. */
   usedPercent: number;
   /** The worst tone among the selected windows, escalated when one may run out. */
   tone: UsageTone;
@@ -66,15 +66,14 @@ function toneForPercent(percent: number): UsageTone {
 }
 
 /**
- * Arithmetic mean of the used shares. A window that is not in the list is left out,
- * so a missing rolling, weekly, or monthly window does not count. An empty list is
- * not 100.
+ * Maximum used share across windows: if any limit is exhausted (100%), the unified
+ * row shows 100%. A window not in the list is left out. An empty list is not 100.
  */
-export function meanUsedPercent(windows: readonly { usedPercent: number }[]): number | null {
+export function maxUsedPercent(windows: readonly { usedPercent: number }[]): number | null {
   if (windows.length === 0) return null;
-  let total = 0;
-  for (const window of windows) total += clampPct(window.usedPercent);
-  return total / windows.length;
+  let max = 0;
+  for (const window of windows) max = Math.max(max, clampPct(window.usedPercent));
+  return max;
 }
 
 /** The unified block's fill: the pinned highlight, or the card surface under it. */
@@ -89,15 +88,14 @@ export function unifiedSummarySurface(pinned: boolean): UnifiedSummarySurface {
 }
 
 /**
- * One number for a set of windows: the arithmetic mean of their used shares. It is not
- * their sum, and it is not 100 unless that is the mean. The driver stays the single
- * most-used window.
+ * One number for a set of windows: the maximum of their used shares (the binding limit).
+ * The driver stays the single most-used window (ties break by nearest reset).
  */
 export function resolveUnifiedWindows<T extends UnifiedWindow>(
   windows: readonly T[],
   options: { now?: number; displayAs?: UsageDisplayAs } = {},
 ): UnifiedUsage<T> | null {
-  const used = meanUsedPercent(windows);
+  const used = maxUsedPercent(windows);
   if (used == null) return null;
 
   const now = options.now ?? Date.now();
