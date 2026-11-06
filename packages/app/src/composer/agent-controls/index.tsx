@@ -53,6 +53,12 @@ import {
   useLiveWorkflowModeControl,
   type WorkflowModeControlValue,
 } from "@/composer/agent-controls/workflow-mode-control";
+import {
+  MultitaskTaskTargetControl,
+  useDraftMultitaskTaskTarget,
+  useLiveMultitaskTaskTarget,
+  type MultitaskTaskTargetBinding,
+} from "@/composer/agent-controls/multitask-task-target-control";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -149,6 +155,7 @@ interface ControlledAgentControlsProps {
   isRetryingModelProvider?: boolean;
   modeControl?: AgentModeControlValue | null;
   workflowModeControl?: WorkflowModeControlValue | null;
+  multitaskTaskTarget?: MultitaskTaskTargetBinding | null;
   modelSelectorServerId?: string | null;
   isCompactLayout?: boolean;
   /** Router the chat is bound to (or staged), for the selector subtitle. */
@@ -191,6 +198,8 @@ export interface DraftAgentControlsProps {
   isCompactLayout?: boolean;
   activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
+  /** Draft id used to remember where Multitask tasks run before the chat exists. */
+  multitaskTaskTargetKey?: string | null;
 }
 
 interface AgentControlsProps {
@@ -581,6 +590,7 @@ function ControlledAgentControls({
   isRetryingModelProvider = false,
   modeControl,
   workflowModeControl,
+  multitaskTaskTarget = null,
   modelSelectorServerId = null,
   isCompactLayout,
   activeRouterId,
@@ -869,6 +879,7 @@ function ControlledAgentControls({
             renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
             workflowModeControl={workflowModeControl}
+            multitaskTaskTarget={multitaskTaskTarget}
             presentation={presentation}
             glyphSize={layoutContextValue.glyphSize}
             activeSheet={activeSheet}
@@ -912,6 +923,7 @@ function ControlledAgentControls({
             renderThinkingOption={renderThinkingOption}
             modeControl={modeControl}
             workflowModeControl={workflowModeControl}
+            multitaskTaskTarget={multitaskTaskTarget}
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
@@ -975,6 +987,7 @@ interface DesktopAgentControlsContentProps {
   }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
   workflowModeControl?: WorkflowModeControlValue | null;
+  multitaskTaskTarget?: MultitaskTaskTargetBinding | null;
   presentation: ComposerControlPresentation;
   glyphSize: number;
   activeSheet: ActiveSheet;
@@ -1035,6 +1048,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     renderThinkingOption,
     modeControl,
     workflowModeControl,
+    multitaskTaskTarget,
     presentation,
     glyphSize,
     activeSheet,
@@ -1083,38 +1097,32 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
       ) : null}
 
       {canSelectModel ? (
-        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-          <TooltipTrigger asChild triggerRefProp="ref">
-            <View style={styles.modelControl}>
-              <CombinedModelSelector
-                providers={modelSelectorProviders}
-                selectedProvider={provider}
-                selectedModel={selectedModelId ?? ""}
-                onSelect={handleDesktopModelSelect}
-                profiles={agentProfiles}
-                onApplyProfile={onApplyAgentProfile}
-                onEditProfiles={onEditAgentProfiles}
-                onCreateProfile={onCreateAgentProfile}
-                onEditProfile={onEditAgentProfile}
-                isLoading={isModelLoading}
-                disabled={modelDisabled}
-                onOpen={onModelSelectorOpen}
-                onClose={onDropdownClose}
-                onRetryProvider={onRetryModelProvider}
-                isRetryingProvider={isRetryingModelProvider}
-                serverId={modelSelectorServerId}
-                desktopPlacement="top-start"
-                desktopMinWidth={360}
-                toolbar={modelToolbar}
-                onRouterPicked={onRouterPicked}
-                activeRouterId={activeRouterId}
-              />
-            </View>
-          </TooltipTrigger>
-          <TooltipContent side="top" align="center" offset={8}>
-            <Text style={styles.tooltipText}>{t(getAgentControlHintKey("model"))}</Text>
-          </TooltipContent>
-        </Tooltip>
+        <View style={styles.modelControl}>
+          <CombinedModelSelector
+            providers={modelSelectorProviders}
+            selectedProvider={provider}
+            selectedModel={selectedModelId ?? ""}
+            onSelect={handleDesktopModelSelect}
+            profiles={agentProfiles}
+            onApplyProfile={onApplyAgentProfile}
+            onEditProfiles={onEditAgentProfiles}
+            onCreateProfile={onCreateAgentProfile}
+            onEditProfile={onEditAgentProfile}
+            isLoading={isModelLoading}
+            disabled={modelDisabled}
+            onOpen={onModelSelectorOpen}
+            onClose={onDropdownClose}
+            onRetryProvider={onRetryModelProvider}
+            isRetryingProvider={isRetryingModelProvider}
+            serverId={modelSelectorServerId}
+            desktopPlacement="top-start"
+            desktopMinWidth={360}
+            toolbar={modelToolbar}
+            onRouterPicked={onRouterPicked}
+            activeRouterId={activeRouterId}
+            tooltip={t(getAgentControlHintKey("model"))}
+          />
+        </View>
       ) : null}
 
       {thinkingOptions && thinkingOptions.length > 0 ? (
@@ -1160,6 +1168,9 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
       {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
       {workflowModeControl ? (
         <WorkflowModeControl {...workflowModeControl} onClose={onDropdownClose} />
+      ) : null}
+      {multitaskTaskTarget ? (
+        <MultitaskTaskTargetControl {...multitaskTaskTarget} surface="toolbar" />
       ) : null}
 
       {presentation.aggregateFeatures && features?.length ? (
@@ -1249,6 +1260,7 @@ interface SheetAgentControlsContentProps {
   }) => ReactElement;
   modeControl?: AgentModeControlValue | null;
   workflowModeControl?: WorkflowModeControlValue | null;
+  multitaskTaskTarget?: MultitaskTaskTargetBinding | null;
   glyphSize: number;
   modelSelectorServerId: string | null;
   canSwitchProvider: boolean;
@@ -1291,6 +1303,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     renderThinkingOption,
     modeControl,
     workflowModeControl,
+    multitaskTaskTarget,
     glyphSize,
     modelSelectorServerId,
     canSwitchProvider,
@@ -1350,6 +1363,9 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       {modeControl ? <AgentModeControl {...modeControl} surface="sheet" /> : null}
       {workflowModeControl ? (
         <WorkflowModeControl {...workflowModeControl} surface="sheet" />
+      ) : null}
+      {multitaskTaskTarget ? (
+        <MultitaskTaskTargetControl {...multitaskTaskTarget} surface="sheet" />
       ) : null}
 
       {(features ?? []).map((feature) => (
@@ -2073,6 +2089,32 @@ export const AgentControls = memo(function AgentControls({
     [agent, agentId, agentProvider, serverId, t, toast],
   );
 
+  const liveTaskTarget = useLiveMultitaskTaskTarget(serverId, agentId);
+  const taskSelectorProviders = useMemo(
+    () => buildSelectableProviderSelectorProviders(snapshotEntries ?? undefined, true, serverId),
+    [serverId, snapshotEntries],
+  );
+  const multitaskTaskTarget = useMemo(
+    () =>
+      workflowModeControl?.selectedWorkflowModeId === "multitask"
+        ? {
+            serverId,
+            providers: taskSelectorProviders,
+            disabled: client === null,
+            target: liveTaskTarget.target,
+            onChange: liveTaskTarget.onChange,
+          }
+        : null,
+    [
+      client,
+      liveTaskTarget.onChange,
+      liveTaskTarget.target,
+      serverId,
+      taskSelectorProviders,
+      workflowModeControl?.selectedWorkflowModeId,
+    ],
+  );
+
   if (!agent) {
     return null;
   }
@@ -2107,6 +2149,7 @@ export const AgentControls = memo(function AgentControls({
         disabled={anyTrue(client === null)}
         modeControl={modeControl}
         workflowModeControl={workflowModeControl}
+        multitaskTaskTarget={multitaskTaskTarget}
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
         onRouterPicked={handleRouterPicked}
@@ -2143,6 +2186,7 @@ export function DraftAgentControls({
   disabled = false,
   modelSelectorServerId = null,
   isCompactLayout,
+  multitaskTaskTargetKey = null,
 }: DraftAgentControlsProps) {
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
     return toThinkingControlOptions(thinkingOptions);
@@ -2223,6 +2267,28 @@ export function DraftAgentControls({
         : null,
     [selectedWorkflowMode, onSelectWorkflowMode, disabled, usesPaseoWorkflowModes],
   );
+  const draftTaskTarget = useDraftMultitaskTaskTarget(multitaskTaskTargetKey);
+  const multitaskTaskTarget = useMemo(
+    () =>
+      workflowModeControl && selectedWorkflowMode === "multitask"
+        ? {
+            serverId: modelSelectorServerId,
+            providers: modelSelectorProviders,
+            disabled,
+            target: draftTaskTarget.target,
+            onChange: draftTaskTarget.onChange,
+          }
+        : null,
+    [
+      disabled,
+      draftTaskTarget.onChange,
+      draftTaskTarget.target,
+      modelSelectorProviders,
+      modelSelectorServerId,
+      selectedWorkflowMode,
+      workflowModeControl,
+    ],
+  );
 
   return (
     <>
@@ -2252,6 +2318,7 @@ export function DraftAgentControls({
         disabled={disabled}
         modeControl={modeControl}
         workflowModeControl={workflowModeControl}
+        multitaskTaskTarget={multitaskTaskTarget}
         modelSelectorServerId={modelSelectorServerId}
         isCompactLayout={isCompactLayout}
       />

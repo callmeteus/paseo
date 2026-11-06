@@ -55,6 +55,7 @@ import {
 } from "@/workspace-tabs/model";
 import { openWorkspaceChanges } from "@/workspace-tabs/open-supporting-view";
 import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
+import { draftMultitaskTaskTargetLabels } from "@/composer/agent-controls/multitask-task-target-control";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const DRAFT_CAPABILITIES: AgentCapabilityFlags = {
@@ -183,6 +184,7 @@ function buildDraftCreateOptions(input: {
   clientMessageId: string;
   images?: Awaited<ReturnType<typeof encodeImages>>;
   attachments?: unknown;
+  labels?: Record<string, string>;
 }): CreateAgentRequestOptions {
   const attachments = Array.isArray(input.attachments) ? input.attachments : undefined;
   return {
@@ -194,6 +196,7 @@ function buildDraftCreateOptions(input: {
     clientMessageId: input.clientMessageId,
     ...(input.images && input.images.length > 0 ? { images: input.images } : {}),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    ...(input.labels ? { labels: input.labels } : {}),
   };
 }
 
@@ -320,6 +323,10 @@ async function submitDraftCreateRequest(input: {
     clientMessageId: attempt.clientMessageId,
     images: imagesData,
     attachments,
+    labels: draftMultitaskTaskTargetLabels(
+      input.draftId,
+      workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
+    ),
   });
   const creation = useWorkspaceDraftSubmissionStore.getState().creationByDraftId[input.draftId];
   const result = await createAgentWithThinkingFallback({
@@ -760,8 +767,9 @@ export function WorkspaceDraftAgentTab({
       ...composerState.agentControls,
       onDropdownClose: handleDropdownCloseFocus,
       disabled: isSubmitting,
+      multitaskTaskTargetKey: draftId,
     }),
-    [composerState.agentControls, handleDropdownCloseFocus, isSubmitting],
+    [composerState.agentControls, draftId, handleDropdownCloseFocus, isSubmitting],
   );
   const handleAddSelectionToChat = useCallback(
     (selection: string) => {

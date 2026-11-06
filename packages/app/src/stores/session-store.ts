@@ -91,6 +91,11 @@ export interface Agent {
   currentModeId: string | null;
   /** Daemon-level workflow mode (agent, ask, debug, multitask). */
   workflowModeId?: string | null;
+  /**
+   * Client generation for `workflowModeId`. Snapshots do not carry it.
+   * A choice increments it so a later payload cannot restore the previous mode.
+   */
+  workflowModeRevision?: number;
   availableModes: AgentMode[];
   pendingPermissions: AgentPermissionRequest[];
   persistence: AgentPersistenceHandle | null;

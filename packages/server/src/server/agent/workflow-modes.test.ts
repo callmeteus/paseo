@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
+import { WORKFLOW_MODES as WORKFLOW_MODE_CATALOG } from "@getpaseo/protocol/workflow-modes";
 
 import {
   composeWorkflowPrompt,
   isWorkflowModeId,
   resolveDefaultWritableProviderMode,
-  resolveReadOnlyProviderMode,
   stripWorkflowInstruction,
   WORKFLOW_MODES,
 } from "./workflow-modes.js";
@@ -56,13 +56,10 @@ describe("workflow modes", () => {
     expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
   });
 
-  test("read-only workflow modes resolve the provider's own read-only mode", () => {
-    expect(resolveReadOnlyProviderMode("opencode")).toBe("plan");
-    expect(resolveReadOnlyProviderMode("claude")).toBe("plan");
-    expect(resolveReadOnlyProviderMode("codex")).toBe("read-only");
-    expect(resolveReadOnlyProviderMode("cline")).toBe("plan");
-    expect(resolveReadOnlyProviderMode("cursor")).toBe("plan");
-    expect(resolveReadOnlyProviderMode("pi")).toBeNull();
+  test("ids and colors come from the shared catalog", () => {
+    expect(WORKFLOW_MODES.map((mode) => [mode.id, mode.color])).toEqual(
+      WORKFLOW_MODE_CATALOG.map((mode) => [mode.id, mode.color]),
+    );
   });
 
   test("leaving a read-only workflow restores a writable provider mode", () => {
@@ -70,6 +67,23 @@ describe("workflow modes", () => {
     expect(resolveDefaultWritableProviderMode("claude")).toBe("default");
     expect(resolveDefaultWritableProviderMode("cursor")).toBe("agent");
     expect(resolveDefaultWritableProviderMode("pi")).toBeNull();
+  });
+
+  test("multitask names the stored task target and does not invent a model", () => {
+    const prompt = composeWorkflowPrompt("multitask", {
+      agentId: "a",
+      cwd: "/repo",
+      taskTargetLabel: "cli:opencode/deepseek-v4.1-flash",
+    });
+
+    expect(prompt).toContain("create_agent");
+    expect(prompt).toContain("opencode");
+    expect(prompt).toContain("deepseek-v4.1-flash");
+    expect(prompt).toContain("taskAgent");
+    expect(prompt).not.toContain("Gepsiq");
+    expect(composeWorkflowPrompt("multitask", { agentId: "a", cwd: "/repo" })).toContain(
+      "Paseo agent",
+    );
   });
 
   test("only known ids validate", () => {

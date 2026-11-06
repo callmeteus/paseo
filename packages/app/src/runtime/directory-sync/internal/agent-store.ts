@@ -2,6 +2,7 @@ import equal from "fast-deep-equal";
 import type { FetchAgentsEntry } from "@getpaseo/client/internal/daemon-client";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { acceptAgentDirectoryUpdate } from "@/utils/agent-directory-update-policy";
+import { preserveChosenWorkflowMode } from "@/utils/workflow-mode-selection";
 import { buildAgentDirectoryState, type AgentDirectoryDelta } from "@/utils/agent-directory-sync";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { resolveProjectPlacement } from "@/utils/project-placement";
@@ -29,7 +30,8 @@ function mergeSnapshotTurn(previous: Agent | undefined, incoming: Agent): Agent 
       ? { turnId: incoming.turn.turnId, startedAt: incoming.turn.startedAt }
       : null;
   const turn = reduceTurnLiveness(previous.turn, { type: "snapshot", activeTurn });
-  return turn === incoming.turn ? incoming : { ...incoming, turn };
+  const merged = turn === incoming.turn ? incoming : { ...incoming, turn };
+  return preserveChosenWorkflowMode(previous, merged);
 }
 
 export class AgentStoreProjection {

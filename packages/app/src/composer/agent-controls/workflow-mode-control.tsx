@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Bug, Layers, ListTodo, MessageCircle, Sparkles } from "lucide-react-native";
+import {
+  WORKFLOW_MODES as WORKFLOW_MODE_CATALOG,
+  type WorkflowModeId,
+} from "@getpaseo/protocol/workflow-modes";
 import type { SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,8 +23,12 @@ import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useSessionStore } from "@/stores/session-store";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
+import {
+  reduceWorkflowModeSelection,
+  type WorkflowModeSelection,
+} from "@/utils/workflow-mode-selection";
 
-export type WorkflowModeId = "agent" | "plan" | "ask" | "debug" | "multitask";
+export type { WorkflowModeId };
 
 export interface WorkflowModeDefinition {
   id: WorkflowModeId;
@@ -30,44 +38,50 @@ export interface WorkflowModeDefinition {
   icon: AgentControlIcon;
 }
 
-/** Mirrors the daemon's workflow mode table. Labels and descriptions are translated. */
-export const WORKFLOW_MODES: WorkflowModeDefinition[] = [
-  {
-    id: "agent",
+/**
+ * Translated label and icon for each shared mode id. Colors stay on the catalog.
+ */
+const WORKFLOW_MODE_PRESENTATION: Record<
+  WorkflowModeId,
+  { labelKey: string; descriptionKey: string; icon: AgentControlIcon }
+> = {
+  agent: {
     labelKey: "agentControls.workflowMode.modes.agent.label",
     descriptionKey: "agentControls.workflowMode.modes.agent.description",
-    color: "#3b82f6",
     icon: Sparkles,
   },
-  {
-    id: "plan",
+  plan: {
     labelKey: "agentControls.workflowMode.modes.plan.label",
     descriptionKey: "agentControls.workflowMode.modes.plan.description",
-    color: "#eab308",
     icon: ListTodo,
   },
-  {
-    id: "ask",
+  ask: {
     labelKey: "agentControls.workflowMode.modes.ask.label",
     descriptionKey: "agentControls.workflowMode.modes.ask.description",
-    color: "#8b5cf6",
     icon: MessageCircle,
   },
-  {
-    id: "debug",
+  debug: {
     labelKey: "agentControls.workflowMode.modes.debug.label",
     descriptionKey: "agentControls.workflowMode.modes.debug.description",
-    color: "#f97316",
     icon: Bug,
   },
-  {
-    id: "multitask",
+  multitask: {
     labelKey: "agentControls.workflowMode.modes.multitask.label",
     descriptionKey: "agentControls.workflowMode.modes.multitask.description",
-    color: "#22c55e",
     icon: Layers,
   },
-];
+};
+
+export const WORKFLOW_MODES: WorkflowModeDefinition[] = WORKFLOW_MODE_CATALOG.map((mode) => {
+  const presentation = WORKFLOW_MODE_PRESENTATION[mode.id];
+  return {
+    id: mode.id,
+    color: mode.color,
+    labelKey: presentation.labelKey,
+    descriptionKey: presentation.descriptionKey,
+    icon: presentation.icon,
+  };
+});
 
 const BY_ID = new Map(WORKFLOW_MODES.map((mode) => [mode.id, mode]));
 
@@ -131,16 +145,8 @@ export function WorkflowModeControl({
     `workflow-mode-control:${Math.random().toString(36).slice(2)}`,
   );
   const [open, setOpen] = useState(false);
-  const [optimisticModeId, setOptimisticModeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (optimisticModeId !== null && selectedWorkflowModeId === optimisticModeId) {
-      setOptimisticModeId(null);
-    }
-  }, [optimisticModeId, selectedWorkflowModeId]);
-
-  const activeModeId = optimisticModeId ?? selectedWorkflowModeId;
-  const selected = resolveWorkflowMode(activeModeId);
+  const selected = resolveWorkflowMode(selectedWorkflowModeId);
   const Icon = selected.icon;
   const selectedLabel = t(selected.labelKey);
   const options = useMemo<ComboboxOption[]>(
@@ -154,14 +160,13 @@ export function WorkflowModeControl({
       if (disabled) return false;
       const nextModeId = resolveNextWorkflowModeId({
         modeOptions: WORKFLOW_MODES,
-        selectedMode: activeModeId,
+        selectedMode: selectedWorkflowModeId,
       });
       if (!nextModeId) return false;
-      setOptimisticModeId(nextModeId);
       onSelectWorkflowMode(nextModeId);
       return true;
     },
-    [activeModeId, disabled, onSelectWorkflowMode],
+    [disabled, onSelectWorkflowMode, selectedWorkflowModeId],
   );
 
   useKeyboardActionHandler({
@@ -182,7 +187,6 @@ export function WorkflowModeControl({
   const handlePress = useCallback(() => handleOpenChange(!open), [handleOpenChange, open]);
   const handleSelect = useCallback(
     (id: string) => {
-      setOptimisticModeId(id);
       onSelectWorkflowMode(id);
       handleOpenChange(false);
     },
@@ -249,6 +253,40 @@ export function WorkflowModeControl({
   );
 }
 
+function workflowModeSelectionOf(agent: {
+  workflowModeId?: string | null;
+  workflowModeRevision?: number;
+}): WorkflowModeSelection {
+  return {
+    modeId: agent.workflowModeId ?? null,
+    revision: agent.workflowModeRevision ?? 0,
+  };
+}
+
+function writeWorkflowModeSelection(
+  serverId: string,
+  agentId: string,
+  next: WorkflowModeSelection,
+): void {
+  useSessionStore.getState().setAgents(serverId, (current) => {
+    const agent = current.get(agentId);
+    if (!agent) return current;
+    if (
+      (agent.workflowModeId ?? null) === next.modeId &&
+      (agent.workflowModeRevision ?? 0) === next.revision
+    ) {
+      return current;
+    }
+    const updated = new Map(current);
+    updated.set(agentId, {
+      ...agent,
+      workflowModeId: next.modeId,
+      workflowModeRevision: next.revision,
+    });
+    return updated;
+  });
+}
+
 export function useLiveWorkflowModeControl(
   serverId: string,
   agentId: string,
@@ -269,25 +307,38 @@ export function useLiveWorkflowModeControl(
   const handleSelect = useCallback(
     (workflowModeId: string) => {
       if (!client) return;
+      const agent = useSessionStore.getState().sessions[serverId]?.agents.get(agentId);
+      const current = agent ? workflowModeSelectionOf(agent) : { modeId: null, revision: 0 };
+      const chosen = reduceWorkflowModeSelection(current, {
+        type: "choose",
+        modeId: workflowModeId,
+      });
+      if (agent) writeWorkflowModeSelection(serverId, agentId, chosen);
       const requestId = ++requestSequence.current;
+      const requestRevision = chosen.revision;
+      const previousModeId = current.modeId;
       void client
         .setAgentWorkflowMode(agentId, workflowModeId)
         .then((applied) => {
-          if (requestId !== requestSequence.current) return;
+          if (requestId !== requestSequence.current) return undefined;
           console.log("[WorkflowModeControl] setAgentWorkflowMode result:", applied);
-          const next = applied ?? workflowModeId;
-          useSessionStore.getState().setAgents(serverId, (current) => {
-            const agent = current.get(agentId);
-            if (!agent || agent.workflowModeId === next) return current;
-            const updated = new Map(current);
-            updated.set(agentId, { ...agent, workflowModeId: next });
-            return updated;
-          });
-          return applied;
+          const live = useSessionStore.getState().sessions[serverId]?.agents.get(agentId);
+          const confirmed = reduceWorkflowModeSelection(
+            live ? workflowModeSelectionOf(live) : chosen,
+            { type: "confirm", modeId: applied ?? workflowModeId, revision: requestRevision },
+          );
+          writeWorkflowModeSelection(serverId, agentId, confirmed);
+          return undefined;
         })
         .catch((error: unknown) => {
           if (requestId !== requestSequence.current) return;
           console.warn("[WorkflowModeControl] setAgentWorkflowMode failed", error);
+          const live = useSessionStore.getState().sessions[serverId]?.agents.get(agentId);
+          const rejected = reduceWorkflowModeSelection(
+            live ? workflowModeSelectionOf(live) : chosen,
+            { type: "reject", revision: requestRevision, modeId: previousModeId },
+          );
+          writeWorkflowModeSelection(serverId, agentId, rejected);
           toast.error(toErrorMessage(error));
         });
     },

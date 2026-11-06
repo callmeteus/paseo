@@ -16,6 +16,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Composer } from "@/composer";
 import { ComposerDock } from "@/composer/dock";
 import { resolveForcedAgentModeId, resolveKnownAgentModeId } from "@/agent-controls/policy";
+import { draftMultitaskTaskTargetLabels } from "@/composer/agent-controls/multitask-task-target-control";
 import { useSettings, type WorkflowModeSource } from "@/hooks/use-settings";
 import { useComposerEditingSession, useComposerFullscreen } from "@/composer/editing-session";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -432,6 +433,20 @@ function runCreateChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome>
   return submission;
 }
 
+function workspaceChatAgentTaskLabels(input: {
+  draftId: string | undefined;
+  usesPaseoWorkflowModes: boolean;
+  selectedWorkflowMode: string | null;
+}): { labels: Record<string, string> } | Record<string, never> {
+  if (!input.draftId) return {};
+  const labels = draftMultitaskTaskTargetLabels(
+    input.draftId,
+    input.usesPaseoWorkflowModes ? input.selectedWorkflowMode : "agent",
+  );
+  if (!labels) return {};
+  return { labels };
+}
+
 async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
   const { payload, composerState, workflowModeSource, ensureWorkspace, serverId, clearDraft } =
     input;
@@ -469,6 +484,11 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       composerState.modeOptions,
       usesPaseoWorkflowModes ? forcedModeId : composerState.effectiveModeId || undefined,
     ) ?? undefined;
+  const taskLabelFields = workspaceChatAgentTaskLabels({
+    draftId: input.draftId,
+    usesPaseoWorkflowModes,
+    selectedWorkflowMode: composerState.selectedWorkflowMode,
+  });
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
     config: {
       provider,
@@ -485,6 +505,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
     attachments: wirePayload.attachments?.length ? wirePayload.attachments : undefined,
+    ...taskLabelFields,
   };
   const execute = async (requestedAgent = initialAgent): Promise<AgentSnapshotPayload> => {
     const { agent } = await ensureWorkspace({
@@ -1489,9 +1510,10 @@ export function NewWorkspaceScreen({
         ? {
             ...composerState.agentControls,
             disabled: isPending,
+            multitaskTaskTargetKey: creationIdentity.draftId,
           }
         : undefined,
-    [composerState, isPending],
+    [composerState, creationIdentity.draftId, isPending],
   );
 
   const pickerEmptyText =
