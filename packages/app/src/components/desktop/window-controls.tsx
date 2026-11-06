@@ -177,6 +177,8 @@ const styles = StyleSheet.create((theme) => ({
     right: 0,
     zIndex: 3000,
     flexDirection: "row",
+    // Opaque, same fill as the header, so the header rule does not show through the buttons.
+    backgroundColor: theme.colors.surface0,
   },
   control: {
     height: "100%",

@@ -22,7 +22,9 @@ const PRESENTATION_BY_MODE: Record<
   "custom-windows": {
     controlWidth: 46,
     railHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT,
-    controlHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT - 1,
+    // The header is this tall and draws its rule on the last pixel. A shorter bar
+    // left that rule visible under minimize, maximize and close.
+    controlHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT,
     glyphSize: 16,
     glyphStrokeWidth: 1,
     hoverShape: "control",
@@ -30,7 +32,7 @@ const PRESENTATION_BY_MODE: Record<
   "custom-linux": {
     controlWidth: 36,
     railHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT,
-    controlHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT - 1,
+    controlHeight: DESKTOP_WINDOW_CONTROLS_HEIGHT,
     glyphSize: 14,
     glyphStrokeWidth: 1.5,
     hoverShape: "circle",
