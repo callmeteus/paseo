@@ -375,6 +375,14 @@ async function saveDownloadedBytes({
   return targetFile.uri;
 }
 
+/** Writes a file this client generated. Web and Electron download it; native shares it. */
+export async function saveGeneratedFile(file: DownloadedBytes): Promise<void> {
+  const savedUri = await saveDownloadedBytes(file);
+  if (savedUri !== null) {
+    await shareSavedFile(savedUri, file.mimeType, file.fileName);
+  }
+}
+
 async function shareSavedFile(
   uri: string,
   mimeType: string | null,

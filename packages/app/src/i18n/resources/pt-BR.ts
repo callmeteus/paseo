@@ -804,6 +804,10 @@ export const ptBR: TranslationResources = {
         rename: "Renomear",
         moveToWorkspace: "Mover para workspace",
         promoteToWorkspace: "Promover a workspace",
+        exportChat: "Exportar como JSONL",
+        exportChatPending: "Exportando o chat…",
+        exportChatDone: "{{fileName}} exportado",
+        exportChatFailed: "Não foi possível exportar o chat",
         openContainingDirectory: "Abrir diretório do arquivo",
         deletePermanently: "Excluir chat permanentemente",
         moveWorkspace: {

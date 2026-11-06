@@ -793,6 +793,10 @@ export const ar: TranslationResources = {
         rename: "إعادة تسمية",
         moveToWorkspace: "نقل إلى مساحة العمل",
         promoteToWorkspace: "ترقية إلى مساحة عمل",
+        exportChat: "تصدير كـ JSONL",
+        exportChatPending: "جارٍ تصدير المحادثة…",
+        exportChatDone: "تم تصدير {{fileName}}",
+        exportChatFailed: "تعذر تصدير المحادثة",
         openContainingDirectory: "فتح المجلد المحتوي",
         deletePermanently: "حذف المحادثة نهائيًا",
         moveWorkspace: {

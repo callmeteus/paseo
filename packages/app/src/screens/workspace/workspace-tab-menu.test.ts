@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  clearAgentChatExportRequest,
+  getAgentChatExportRequest,
+} from "@/screens/workspace/agent-chat-export-request";
 import { clearAgentForkRequest, getAgentForkRequest } from "@/screens/workspace/agent-fork-request";
 import {
   buildWorkspaceDesktopTabActions,
@@ -53,6 +57,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       "Promote to workspace",
       "Fork in a new tab",
       "Fork in a new workspace",
+      "Export as JSONL",
       "Close to the left",
       "Close to the right",
       "Close other tabs",
@@ -126,6 +131,17 @@ describe("buildWorkspaceTabMenuEntries", () => {
     forkWorkspace.onSelect();
     expect(getAgentForkRequest()).toMatchObject({ agentId: "agent-123", target: "workspace" });
     clearAgentForkRequest();
+
+    const exportChat = entries.find(
+      (entry) => entry.kind === "item" && entry.key === "export-jsonl",
+    );
+    if (exportChat?.kind !== "item") {
+      throw new Error("expected export menu item");
+    }
+    expect(entries.indexOf(exportChat)).toBe(entries.indexOf(forkWorkspace) + 1);
+    exportChat.onSelect();
+    expect(getAgentChatExportRequest()).toMatchObject({ agentId: "agent-123" });
+    clearAgentChatExportRequest();
   });
 
   it("uses stacked ordering labels for mobile menus", () => {
@@ -155,6 +171,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
       "Promote to workspace",
       "Fork in a new tab",
       "Fork in a new workspace",
+      "Export as JSONL",
       "Close tabs above",
       "Close tabs below",
       "Close other tabs",
@@ -288,6 +305,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(labels).not.toContain("Copy resume command");
     expect(labels).not.toContain("Copy agent id");
     expect(labels).not.toContain("Copy file path");
+    expect(labels).not.toContain("Export as JSONL");
     expect(labels).not.toContain("Reload agent");
 
     const copyTerminalIdEntry = entries.find(
@@ -338,6 +356,7 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(labels).not.toContain("Copy resume command");
     expect(labels).not.toContain("Copy agent id");
     expect(labels).not.toContain("Rename");
+    expect(labels).not.toContain("Export as JSONL");
     expect(labels).not.toContain("Reload agent");
 
     const copyFilePathEntry = entries.find(

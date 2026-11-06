@@ -806,6 +806,10 @@ export const fr: TranslationResources = {
         rename: "Renommer",
         moveToWorkspace: "Déplacer vers un espace de travail",
         promoteToWorkspace: "Promouvoir en espace de travail",
+        exportChat: "Exporter en JSONL",
+        exportChatPending: "Exportation du chat…",
+        exportChatDone: "{{fileName}} exporté",
+        exportChatFailed: "Impossible d’exporter le chat",
         openContainingDirectory: "Ouvrir le dossier parent",
         deletePermanently: "Supprimer définitivement le chat",
         moveWorkspace: {

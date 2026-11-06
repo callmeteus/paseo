@@ -148,6 +148,7 @@ import {
   WorkspaceDesktopTabsRow,
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
+import { AgentChatExportHost } from "@/screens/workspace/agent-chat-export-host";
 import { AgentForkRequestHost } from "@/screens/workspace/agent-fork-request-host";
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
@@ -3993,6 +3994,7 @@ function WorkspaceScreenContent({
       >
         {renderedWorkspaceScreen}
         <AgentForkRequestHost serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
+        <AgentChatExportHost serverId={normalizedServerId} />
         <MoveAgentToWorkspaceSheet />
         <PromoteAgentToWorkspaceSheet />
         <MoveWorkspaceToFolderSheet />

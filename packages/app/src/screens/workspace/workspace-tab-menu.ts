@@ -1,5 +1,6 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
+import { requestAgentChatExport } from "@/screens/workspace/agent-chat-export-request";
 import { requestAgentFork } from "@/screens/workspace/agent-fork-request";
 import { openMoveAgentToWorkspace } from "@/screens/workspace/move-agent-to-workspace-store";
 import { openPromoteAgentToWorkspace } from "@/screens/workspace/promote-agent-to-workspace-store";
@@ -18,6 +19,7 @@ export interface WorkspaceTabMenuLabels {
   promoteToWorkspace: string;
   forkInNewTab: string;
   forkInNewWorkspace: string;
+  exportChat: string;
   closeAbove: string;
   closeBelow: string;
   closeLeft: string;
@@ -40,6 +42,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   promoteToWorkspace: i18n.t("workspace.tabs.menu.promoteToWorkspace"),
   forkInNewTab: i18n.t("message.actions.forkInNewTab"),
   forkInNewWorkspace: i18n.t("message.actions.forkInNewWorkspace"),
+  exportChat: i18n.t("workspace.tabs.menu.exportChat"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
   closeLeft: i18n.t("workspace.tabs.menu.closeLeft"),
@@ -67,6 +70,7 @@ export type WorkspaceTabMenuEntry =
         | "folder-input"
         | "folder-plus"
         | "split"
+        | "download"
         | "trash-2"
         | "x";
       hint?: string;
@@ -337,6 +341,16 @@ export function buildWorkspaceTabMenuEntries(
         testID: `${menuTestIDBase}-fork-new-workspace`,
         onSelect: () => {
           requestAgentFork(agentId, "workspace");
+        },
+      });
+      entries.push({
+        kind: "item",
+        key: "export-jsonl",
+        label: labels.exportChat,
+        icon: "download",
+        testID: `${menuTestIDBase}-export-jsonl`,
+        onSelect: () => {
+          requestAgentChatExport(agentId);
         },
       });
     }

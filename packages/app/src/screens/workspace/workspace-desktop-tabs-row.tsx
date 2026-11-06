@@ -23,6 +23,7 @@ import {
   Rows2,
   Ellipsis,
   FolderInput,
+  Download,
   FolderPlus,
   Split,
   Maximize,
@@ -142,6 +143,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedDownload = withUnistyles(Download);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedColumns2 = withUnistyles(Columns2);
@@ -453,6 +455,8 @@ function TabContextMenuItem({
         return <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />;
       case "split":
         return <ThemedSplit size={16} uniProps={mutedColorMapping} />;
+      case "download":
+        return <ThemedDownload size={16} uniProps={mutedColorMapping} />;
       case "trash-2":
         return <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
       case "x":
@@ -1176,6 +1180,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       promoteToWorkspace: t("workspace.tabs.menu.promoteToWorkspace"),
       forkInNewTab: t("message.actions.forkInNewTab"),
       forkInNewWorkspace: t("message.actions.forkInNewWorkspace"),
+      exportChat: t("workspace.tabs.menu.exportChat"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
       closeLeft: t("workspace.tabs.menu.closeLeft"),

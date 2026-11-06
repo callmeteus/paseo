@@ -791,6 +791,10 @@ export const en = {
         rename: "Rename",
         moveToWorkspace: "Move to workspace",
         promoteToWorkspace: "Promote to workspace",
+        exportChat: "Export as JSONL",
+        exportChatPending: "Exporting chat…",
+        exportChatDone: "Exported {{fileName}}",
+        exportChatFailed: "Couldn't export the chat",
         openContainingDirectory: "Open containing directory",
         deletePermanently: "Delete chat permanently",
         moveWorkspace: {

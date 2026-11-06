@@ -198,6 +198,7 @@ function MobileWorkspaceTabOption({
       promoteToWorkspace: t("workspace.tabs.menu.promoteToWorkspace"),
       forkInNewTab: t("message.actions.forkInNewTab"),
       forkInNewWorkspace: t("message.actions.forkInNewWorkspace"),
+      exportChat: t("workspace.tabs.menu.exportChat"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
       closeLeft: t("workspace.tabs.menu.closeLeft"),

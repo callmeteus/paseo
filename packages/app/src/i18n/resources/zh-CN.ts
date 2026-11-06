@@ -793,6 +793,10 @@ export const zhCN: TranslationResources = {
         rename: "重命名",
         moveToWorkspace: "移动到工作区",
         promoteToWorkspace: "提升为工作区",
+        exportChat: "导出为 JSONL",
+        exportChatPending: "正在导出聊天…",
+        exportChatDone: "已导出 {{fileName}}",
+        exportChatFailed: "无法导出聊天",
         openContainingDirectory: "打开所在文件夹",
         deletePermanently: "永久删除聊天",
         moveWorkspace: {

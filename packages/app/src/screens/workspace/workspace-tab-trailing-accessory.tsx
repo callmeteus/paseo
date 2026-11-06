@@ -8,6 +8,7 @@ import {
   Copy,
   CopyX,
   Ellipsis,
+  Download,
   FolderInput,
   FolderPlus,
   Split,
@@ -38,6 +39,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderPlus = withUnistyles(FolderPlus);
+const ThemedDownload = withUnistyles(Download);
 const ThemedSplit = withUnistyles(Split);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedX = withUnistyles(X);
@@ -76,6 +78,8 @@ function MobileTabDropdownMenuItem({
         return <ThemedFolderPlus size={16} uniProps={mutedColorMapping} />;
       case "split":
         return <ThemedSplit size={16} uniProps={mutedColorMapping} />;
+      case "download":
+        return <ThemedDownload size={16} uniProps={mutedColorMapping} />;
       case "trash-2":
         return <ThemedTrash2 size={16} uniProps={mutedColorMapping} />;
       case "x":

@@ -805,6 +805,10 @@ export const ja: TranslationResources = {
         rename: "名前を変更",
         moveToWorkspace: "ワークスペースへ移動",
         promoteToWorkspace: "ワークスペースへ昇格",
+        exportChat: "JSONLとして書き出す",
+        exportChatPending: "チャットを書き出しています…",
+        exportChatDone: "{{fileName}}を書き出しました",
+        exportChatFailed: "チャットを書き出せませんでした",
         openContainingDirectory: "格納フォルダーを開く",
         deletePermanently: "チャットを完全に削除",
         moveWorkspace: {

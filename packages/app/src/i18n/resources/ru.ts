@@ -804,6 +804,10 @@ export const ru: TranslationResources = {
         rename: "Переименовать",
         moveToWorkspace: "Переместить в рабочее пространство",
         promoteToWorkspace: "Повысить до рабочего пространства",
+        exportChat: "Экспортировать как JSONL",
+        exportChatPending: "Экспорт чата…",
+        exportChatDone: "Экспортирован {{fileName}}",
+        exportChatFailed: "Не удалось экспортировать чат",
         openContainingDirectory: "Открыть содержащую папку",
         deletePermanently: "Удалить чат навсегда",
         moveWorkspace: {

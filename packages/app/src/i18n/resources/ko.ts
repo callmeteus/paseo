@@ -798,6 +798,10 @@ export const ko: TranslationResources = {
         rename: "이름 변경",
         moveToWorkspace: "워크스페이스로 이동",
         promoteToWorkspace: "워크스페이스로 승격",
+        exportChat: "JSONL로 내보내기",
+        exportChatPending: "채팅을 내보내는 중…",
+        exportChatDone: "{{fileName}}을(를) 내보냈습니다",
+        exportChatFailed: "채팅을 내보내지 못했습니다",
         openContainingDirectory: "포함된 폴더 열기",
         deletePermanently: "채팅 영구 삭제",
         moveWorkspace: {
