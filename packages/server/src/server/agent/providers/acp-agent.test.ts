@@ -2831,6 +2831,64 @@ describe("ACPAgentSession slash commands", () => {
       },
     ]);
   });
+
+  test("maps available_commands_update _meta.kind skill for composer highlighting", async () => {
+    const session = new ACPAgentSession(
+      {
+        provider: "claude-acp",
+        cwd: "/tmp/paseo-acp-test",
+      },
+      {
+        provider: "claude-acp",
+        logger: createTestLogger(),
+        defaultCommand: ["claude", "--acp"],
+        defaultModes: [],
+        capabilities: {
+          supportsStreaming: true,
+          supportsSessionPersistence: true,
+          supportsDynamicModes: true,
+          supportsMcpServers: true,
+          supportsReasoningStream: true,
+          supportsToolInvocations: true,
+        },
+        waitForInitialCommands: true,
+        initialCommandsWaitTimeoutMs: 1500,
+      },
+    );
+
+    const listCommandsPromise = session.listCommands();
+
+    asInternals<ACPSessionInternals>(session).translateSessionUpdate({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [
+        {
+          name: "/artdirector",
+          description: "Unified local-first graphic design studio",
+          _meta: { kind: "skill" },
+        },
+        {
+          name: "compact",
+          description: "Compact context",
+          input: { hint: "optional" },
+        },
+      ],
+    });
+
+    expect(await listCommandsPromise).toEqual([
+      {
+        name: "artdirector",
+        description: "Unified local-first graphic design studio",
+        argumentHint: "",
+        kind: "skill",
+      },
+      {
+        name: "compact",
+        description: "Compact context",
+        argumentHint: "optional",
+        kind: "command",
+      },
+    ]);
+  });
 });
 
 describe("ACPAgentSession", () => {

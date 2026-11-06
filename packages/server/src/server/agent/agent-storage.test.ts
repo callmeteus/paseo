@@ -5,7 +5,8 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { promises as fs } from "node:fs";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import { AgentStorage } from "./agent-storage.js";
+import { AgentStorage, parseStoredAgentRecord } from "./agent-storage.js";
+import { MAX_COMPOSED_SYSTEM_PROMPT_CHARS, PORTED_CONTEXT_MARKER } from "./system-prompt.js";
 import { buildConfigOverrides, buildSessionConfig } from "../persistence-hooks.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type {
@@ -193,6 +194,32 @@ describe("AgentStorage", () => {
     const [persisted] = await reloaded.list();
     expect(persisted.cwd).toBe("/tmp/project");
     expect(persisted.config?.providerOptions).toEqual({ allowedTools: ["Read"] });
+  });
+
+  test("parseStoredAgentRecord preserves ported transcript when healing oversize prompts", () => {
+    const keyword = "pindamonhangaba";
+    const portedBlock = `${PORTED_CONTEXT_MARKER} opencode. Continue it as if you had been the assistant.\n\nUser: remember ${keyword}`;
+    const base = "DEFAULT INSTRUCTIONS ".repeat(5_000);
+    const prompt = `${base}\n\n${portedBlock}`;
+    expect(prompt.length).toBeGreaterThan(MAX_COMPOSED_SYSTEM_PROMPT_CHARS);
+
+    const healed = parseStoredAgentRecord({
+      id: "ported-load-test",
+      provider: "commandcode",
+      cwd: "/tmp/project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      labels: {},
+      lastStatus: "closed",
+      config: { model: "cc", systemPrompt: prompt },
+    });
+
+    expect(healed.config?.systemPrompt?.length).toBeLessThanOrEqual(
+      MAX_COMPOSED_SYSTEM_PROMPT_CHARS,
+    );
+    expect(healed.config?.systemPrompt).toContain(keyword);
+    expect(healed.config?.systemPrompt).toContain(PORTED_CONTEXT_MARKER);
+    expect(healed.config?.systemPrompt?.endsWith(portedBlock)).toBe(true);
   });
 
   test("applySnapshot stores and reloads featureValues when present", async () => {

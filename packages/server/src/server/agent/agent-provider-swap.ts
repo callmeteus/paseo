@@ -4,7 +4,11 @@ import type { Logger } from "pino";
 
 import type { AgentTimelineItem, AgentProvider } from "./agent-sdk-types.js";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
-import { clampSystemPrompt } from "./system-prompt.js";
+import {
+  clampSystemPrompt,
+  PORTED_CONTEXT_MARKER,
+  preserveSuffixSystemPrompt,
+} from "./system-prompt.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
 export interface SwapProviderInput {
@@ -37,8 +41,6 @@ export const MAX_PORTED_TRANSCRIPT_CHARS = 24_000;
 /** Long single messages are cut so one paragraph cannot starve the rest of the transcript. */
 const MAX_PORTED_ENTRY_CHARS = 4_000;
 const OMITTED_CONTEXT_MARKER = "[... earlier turns omitted when porting ...]";
-
-const PORTED_CONTEXT_MARKER = "The following conversation was ported from";
 
 /**
  * Timeline rows for the ported agent: the previous conversation followed by a
@@ -192,13 +194,13 @@ function buildPortedSystemPrompt(
   items: readonly AgentTimelineItem[] | undefined,
 ): string | undefined {
   const transcript = items && items.length > 0 ? buildPortingTranscript(items) : "";
-  const portedContext = transcript
-    ? `${PORTED_CONTEXT_MARKER} ${provider}. Continue it as if you had been the assistant.\n\n${transcript}`
-    : "";
-  const prompt = [stripPreviousPortedContext(existingPrompt), portedContext]
-    .filter(Boolean)
-    .join("\n\n");
-  return prompt.length > 0 ? clampSystemPrompt(prompt) : undefined;
+  const base = stripPreviousPortedContext(existingPrompt);
+  if (!transcript) {
+    const prompt = base;
+    return prompt.length > 0 ? clampSystemPrompt(prompt) : undefined;
+  }
+  const portedContext = `${PORTED_CONTEXT_MARKER} ${provider}. Continue it as if you had been the assistant.\n\n${transcript}`;
+  return preserveSuffixSystemPrompt(base, portedContext);
 }
 
 function latestTimestamp(

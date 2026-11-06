@@ -81,6 +81,40 @@ describe("swapAgentProvider", () => {
     expect(ported?.config?.systemPrompt).toContain("ported from opencode");
   });
 
+  it("keeps the ported transcript when the source has a long default system prompt", async () => {
+    const keyword = "pindamonhangaba";
+    await storage.upsert({
+      id: "agent-1",
+      provider: "opencode",
+      cwd: "/tmp/project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      labels: {},
+      lastStatus: "closed",
+      config: {
+        model: "gpt-5.1",
+        systemPrompt: "Provider default instructions ".repeat(4_000),
+      },
+    } as unknown as Parameters<typeof storage.upsert>[0]);
+
+    const result = await swapAgentProvider({
+      storage,
+      agentId: "agent-1",
+      targetProvider: "commandcode",
+      targetModel: "cc-model",
+      previousItems: [
+        { type: "user_message", text: `Remember this keyword: ${keyword}` },
+        { type: "assistant_message", text: "Registered." },
+      ],
+    });
+
+    const ported = await storage.get(result.newAgentId);
+    const prompt = ported?.config?.systemPrompt ?? "";
+    expect(prompt).toContain(keyword);
+    expect(prompt).toContain("ported from opencode");
+    expect(prompt).toContain("User: Remember this keyword:");
+  });
+
   it("keeps an existing system prompt above the ported transcript (happy path)", async () => {
     await storage.upsert({
       id: "agent-1",

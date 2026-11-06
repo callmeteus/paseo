@@ -47,6 +47,7 @@ import {
   type SessionUpdate,
   type TerminalOutputRequest,
   type TerminalOutputResponse,
+  type AvailableCommand,
   type ToolCall,
   type ToolCallContent,
   type ToolCallLocation,
@@ -86,6 +87,7 @@ import {
   type AgentSession,
   type AgentSessionConfig,
   type AgentSlashCommand,
+  type AgentSlashCommandKind,
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentUsage,
@@ -134,6 +136,29 @@ import {
 import { withTimeout } from "../../../utils/promise-timeout.js";
 
 const ACP_AUTO_ACCEPT_FEATURE_ID = "auto_accept";
+
+/**
+ * ACP `AvailableCommand` has no first-class skill/command field; harnesses tag
+ * skills in `_meta` (e.g. `{ "kind": "skill" }`). Without this mapping every
+ * `available_commands_update` row looked like a plain command and the app never
+ * highlighted `/skillname` in the composer.
+ */
+function mapAcpAvailableCommandToSlashCommand(command: AvailableCommand): AgentSlashCommand {
+  const name = command.name.trim().replace(/^\/+/, "");
+  const meta =
+    command._meta && typeof command._meta === "object" && !Array.isArray(command._meta)
+      ? (command._meta as Record<string, unknown>)
+      : null;
+  const kindHint = meta && (meta.kind ?? meta.type);
+  const kind: AgentSlashCommandKind =
+    kindHint === "skill" || kindHint === "prompt" ? "skill" : "command";
+  return {
+    name,
+    description: command.description,
+    argumentHint: command.input?.hint ?? "",
+    kind,
+  };
+}
 
 function assertChildWithPipes(
   child: ChildProcess,
@@ -3559,12 +3584,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleUsageUpdate(update);
         return pendingUserEvents;
       case "available_commands_update":
-        this.cachedCommands = update.availableCommands.map((command) => ({
-          name: command.name,
-          description: command.description,
-          argumentHint: command.input?.hint ?? "",
-          kind: "command",
-        }));
+        this.cachedCommands = update.availableCommands.map(mapAcpAvailableCommandToSlashCommand);
         this.settleCommandsReady();
         return pendingUserEvents;
       default:

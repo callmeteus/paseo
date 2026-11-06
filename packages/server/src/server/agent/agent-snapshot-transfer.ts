@@ -9,7 +9,7 @@ import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import type { AgentManager } from "./agent-manager.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import { MAX_PORTED_TRANSCRIPT_CHARS } from "./agent-provider-swap.js";
-import { clampSystemPrompt } from "./system-prompt.js";
+import { PORTED_CONTEXT_MARKER, preserveSuffixSystemPrompt } from "./system-prompt.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
 type SnapshotAgentManager = Pick<AgentManager, "createAgent" | "getTimeline">;
@@ -149,12 +149,11 @@ export function buildSnapshotTranscript(snapshot: AgentSnapshot): string {
   return transcript.slice(transcript.length - MAX_PORTED_TRANSCRIPT_CHARS);
 }
 
-function buildImportedSystemPrompt(snapshot: AgentSnapshot): string | undefined {
+export function buildImportedSystemPrompt(snapshot: AgentSnapshot): string | undefined {
   const transcript = buildSnapshotTranscript(snapshot);
   if (!transcript) return undefined;
-  return clampSystemPrompt(
-    `The following conversation was ported from ${snapshot.provider}. Continue it as if you had been the assistant.\n\n${transcript}`,
-  );
+  const portedBlock = `${PORTED_CONTEXT_MARKER} ${snapshot.provider}. Continue it as if you had been the assistant.\n\n${transcript}`;
+  return preserveSuffixSystemPrompt("", portedBlock);
 }
 
 function toolCallItem(

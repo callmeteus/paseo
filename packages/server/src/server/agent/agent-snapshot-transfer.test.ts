@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSnapshot } from "@getpaseo/protocol/agent-snapshot";
-import { buildImportedTimelineRows } from "./agent-snapshot-transfer";
+import { buildImportedSystemPrompt, buildImportedTimelineRows } from "./agent-snapshot-transfer";
+import { PORTED_CONTEXT_MARKER } from "./system-prompt";
 
 function snapshot(overrides: Partial<AgentSnapshot> = {}): AgentSnapshot {
   return {
@@ -63,5 +64,27 @@ describe("buildImportedTimelineRows", () => {
         },
       }),
     ]);
+  });
+});
+
+describe("buildImportedSystemPrompt", () => {
+  it("wraps snapshot turns in the ported-from marker block", () => {
+    const keyword = "pindamonhangaba";
+    const prompt = buildImportedSystemPrompt(
+      snapshot({
+        turns: [
+          {
+            role: "user",
+            blocks: [{ type: "text", text: `Remember ${keyword}` }],
+            timestamp: "2026-01-01T00:00:01.000Z",
+          },
+        ],
+      }),
+    );
+    expect(prompt).toBeDefined();
+    expect(prompt).toContain(PORTED_CONTEXT_MARKER);
+    expect(prompt).toContain("cline");
+    expect(prompt).toContain(keyword);
+    expect(prompt).toContain("User: Remember");
   });
 });

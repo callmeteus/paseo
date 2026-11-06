@@ -9,7 +9,10 @@ import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
 import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./agent-owner.js";
-import { clampSystemPrompt, MAX_COMPOSED_SYSTEM_PROMPT_CHARS } from "./system-prompt.js";
+import {
+  healOversizedStoredSystemPrompt,
+  MAX_COMPOSED_SYSTEM_PROMPT_CHARS,
+} from "./system-prompt.js";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
@@ -155,7 +158,7 @@ export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
   if (prompt && prompt.length > MAX_COMPOSED_SYSTEM_PROMPT_CHARS) {
     return {
       ...record,
-      config: { ...record.config, systemPrompt: clampSystemPrompt(prompt) },
+      config: { ...record.config, systemPrompt: healOversizedStoredSystemPrompt(prompt) },
     };
   }
   return record;
