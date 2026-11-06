@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatFileLinkTooltipPath } from "./tooltip-path";
 
 describe("formatFileLinkTooltipPath", () => {
-  it("shows a Windows file path relative to its workspace regardless of separators", () => {
+  it("shows the Windows path the agent wrote, with backslashes", () => {
     expect(
       formatFileLinkTooltipPath({
         target: {
@@ -12,13 +12,13 @@ describe("formatFileLinkTooltipPath", () => {
         },
         workspaceRoot: "C:\\Users\\me\\repo",
       }),
-    ).toBe("src/app.ts:12-20");
+    ).toBe("C:\\Users\\me\\repo\\src\\app.ts:12-20");
     expect(
       formatFileLinkTooltipPath({
         target: { path: "C:/src/app.ts", lineStart: 12 },
         workspaceRoot: "C:\\",
       }),
-    ).toBe("src/app.ts:12");
+    ).toBe("C:\\src\\app.ts:12");
   });
 
   it("shows the workspace root as a dot", () => {
@@ -48,7 +48,7 @@ describe("formatFileLinkTooltipPath", () => {
         target: { path: "C:/Users/me/notes.md", lineStart: 8 },
         workspaceRoot: "C:\\Users\\me\\repo",
       }),
-    ).toBe("C:/Users/me/notes.md:8");
+    ).toBe("C:\\Users\\me\\notes.md:8");
   });
 
   it("keeps the target path when the workspace root is unavailable", () => {

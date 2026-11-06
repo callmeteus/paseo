@@ -79,6 +79,25 @@ it("ignores an older probe after a newer file link opens", async () => {
   expect(opened).toEqual(["second.md"]);
 });
 
+it("opens the Windows spreadsheet at the absolute path the agent wrote", async () => {
+  const { createInlinePathOpener } = await import("./path-open");
+  const spreadsheet =
+    "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
+  const opened: string[] = [];
+  const opener = createInlinePathOpener({
+    workspaceRoot: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\gti-infra",
+    client: null,
+    openFile: (location) => {
+      opened.push(location.path);
+    },
+    openDirectory: () => {
+      opened.push("directory");
+    },
+  });
+  await opener.open({ raw: spreadsheet, path: spreadsheet.replace(/\\/g, "/") }, "preferred");
+  expect(opened).toEqual([spreadsheet]);
+});
+
 it("ignores a pending probe when its view is left", async () => {
   const { createInlinePathOpener } = await import("./path-open");
   let resolveProbe!: (value: unknown) => void;

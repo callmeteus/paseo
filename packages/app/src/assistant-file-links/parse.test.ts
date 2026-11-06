@@ -590,6 +590,40 @@ describe("normalizeInlinePathTarget", () => {
       directory: "packages/app",
     });
   });
+
+  it("keeps a Windows spreadsheet absolute when the agent cwd is its parent", () => {
+    const spreadsheet =
+      "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
+    expect(
+      normalizeInlinePathTarget(
+        spreadsheet.replace(/\\/g, "/"),
+        "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro",
+      ),
+    ).toEqual({
+      directory: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas",
+      file: spreadsheet,
+    });
+  });
+
+  it("keeps a Windows spreadsheet absolute when the workspace is a different folder", () => {
+    const spreadsheet =
+      "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
+    expect(
+      normalizeInlinePathTarget(spreadsheet, "C:/Users/Gio/Documents/Projetos/gti-infra"),
+    ).toEqual({
+      directory: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas",
+      file: spreadsheet,
+    });
+  });
+
+  it("still treats the Windows workspace root as the current directory", () => {
+    expect(
+      normalizeInlinePathTarget(
+        "C:/Users/Gio/Documents/Projetos/Plataformas/zorro",
+        "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\",
+      ),
+    ).toEqual({ directory: "." });
+  });
 });
 
 describe("encoded filename line markers", () => {

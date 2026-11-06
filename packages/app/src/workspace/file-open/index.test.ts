@@ -36,6 +36,14 @@ describe("normalizeWorkspaceFileLocation", () => {
   it("rejects empty paths", () => {
     expect(normalizeWorkspaceFileLocation({ path: " " })).toBeNull();
   });
+
+  it("keeps a Windows absolute path in the form the agent wrote", () => {
+    const spreadsheet =
+      "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
+    expect(normalizeWorkspaceFileLocation({ path: spreadsheet.replace(/\\/g, "/") })).toEqual({
+      path: spreadsheet,
+    });
+  });
 });
 
 describe("workspace file tab targets", () => {

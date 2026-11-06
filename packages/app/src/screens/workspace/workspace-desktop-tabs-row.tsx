@@ -82,6 +82,7 @@ import { RenderProfile } from "@/utils/render-profiler";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { pathBasename } from "@/utils/path";
 import { formatCompactTimeAgoAsProse } from "@/utils/time";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
@@ -644,7 +645,7 @@ function getFallbackTabLabel(
     return labels.terminal;
   }
   if (tab.target.kind === "file") {
-    return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
+    return pathBasename(tab.target.path);
   }
   if (tab.target.kind === "working_diff" || tab.target.kind === "changes_tree") {
     return labels.changes;
@@ -897,9 +898,9 @@ function TabChip({
           </TooltipTrigger>
           <TooltipContent
             side="bottom"
-            align="center"
+            align={tab.target.kind === "file" ? "start" : "center"}
             offset={8}
-            maxWidth={720}
+            maxWidth={tab.target.kind === "file" ? 420 : 720}
             testID={`workspace-tab-tooltip-${testIdentity}`}
           >
             {tab.target.kind === "agent" ? (
@@ -1848,6 +1849,8 @@ const styles = StyleSheet.create((theme) => ({
   newTabTooltipText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
+    maxWidth: 420,
+    ...(isWeb ? { overflowWrap: "anywhere" as const } : {}),
   },
   tooltipAgentContent: {
     gap: theme.spacing[0.5],

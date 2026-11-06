@@ -59,7 +59,7 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
         <InlineLinkTrigger>{anchor}</InlineLinkTrigger>
       </TooltipTrigger>
       {tooltipPath ? (
-        <TooltipContent side="top" align="start" maxWidth={520}>
+        <TooltipContent side="top" align="start" maxWidth={420}>
           <Text selectable={false} style={styles.tooltipPath}>
             {tooltipPath}
           </Text>
@@ -90,6 +90,8 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
+    maxWidth: 420,
+    overflowWrap: "anywhere",
   },
 }));
 

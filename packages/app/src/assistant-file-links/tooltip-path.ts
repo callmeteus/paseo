@@ -1,3 +1,4 @@
+import { restoreWindowsFilePath } from "@/utils/path";
 import {
   isWorkspaceRootPath,
   resolveWorkspaceFilePaths,
@@ -13,13 +14,15 @@ export function formatFileLinkTooltipPath({
   target,
   workspaceRoot,
 }: FormatFileLinkTooltipPathInput): string {
-  const resolvedPaths = workspaceRoot
-    ? resolveWorkspaceFilePaths({ path: target.path, workspaceRoot })
-    : null;
   const isWorkspaceRoot = workspaceRoot
     ? isWorkspaceRootPath({ path: target.path, workspaceRoot })
     : false;
-  let result = isWorkspaceRoot ? "." : (resolvedPaths?.relativePath ?? target.path);
+  const windowsPath = isWorkspaceRoot ? null : restoreWindowsFilePath(target.path);
+  const resolvedPaths =
+    windowsPath || !workspaceRoot
+      ? null
+      : resolveWorkspaceFilePaths({ path: target.path, workspaceRoot });
+  let result = isWorkspaceRoot ? "." : (windowsPath ?? resolvedPaths?.relativePath ?? target.path);
   if (target.lineStart) {
     result += `:${target.lineStart}`;
     if (target.lineEnd && target.lineEnd !== target.lineStart) {

@@ -1,4 +1,4 @@
-import { isAbsolutePath } from "@/utils/path";
+import { isAbsolutePath, restoreWindowsFilePath } from "@/utils/path";
 
 export type OpenFileDisposition = "main" | "preferred" | "side";
 
@@ -22,7 +22,9 @@ export function normalizeWorkspaceFileLocation(
     return null;
   }
 
-  const path = location.path.trim().replace(/\\/g, "/");
+  // A Windows absolute path stays in backslash form so the daemon reads the file
+  // the agent named. Relative paths still use forward slashes.
+  const path = restoreWindowsFilePath(location.path) ?? location.path.trim().replace(/\\/g, "/");
   if (!path) {
     return null;
   }

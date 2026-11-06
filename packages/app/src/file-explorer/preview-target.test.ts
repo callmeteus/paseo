@@ -62,6 +62,29 @@ describe("resolveFilePreviewReadTarget", () => {
     });
   });
 
+  it("asks the daemon for the Windows spreadsheet with the absolute path intact", () => {
+    const spreadsheet =
+      "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
+    expect(
+      resolveFilePreviewReadTarget({
+        path: spreadsheet,
+        workspaceRoot: "C:/Users/Gio/Documents/Projetos/gti-infra",
+      }),
+    ).toEqual({
+      cwd: "C:/",
+      path: spreadsheet,
+    });
+    expect(
+      resolveFilePreviewReadTarget({
+        path: spreadsheet,
+        workspaceRoot: "C:/Users/Gio/Documents/Projetos/Plataformas/zorro",
+      }),
+    ).toEqual({
+      cwd: "C:/Users/Gio/Documents/Projetos/Plataformas/zorro",
+      path: spreadsheet,
+    });
+  });
+
   it("rejects relative paths without an absolute workspace root", () => {
     expect(resolveFilePreviewReadTarget({ path: "src/app.ts" })).toBeNull();
     expect(
