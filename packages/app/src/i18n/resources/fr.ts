@@ -221,6 +221,8 @@ export const fr: TranslationResources = {
       paused: "Objectif en pause",
       edit: "Modifier l'objectif",
       info: "Détails de l'objectif",
+      expandObjective: "Développer le texte de l’objectif",
+      collapseObjective: "Réduire le texte de l’objectif",
       clear: "Supprimer l'objectif",
       collapse: "Masquer l'objectif",
       show: "Afficher l'objectif",

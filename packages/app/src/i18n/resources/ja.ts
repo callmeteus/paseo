@@ -220,6 +220,8 @@ export const ja: TranslationResources = {
       paused: "目標を一時停止中",
       edit: "目標を編集",
       info: "目標の詳細",
+      expandObjective: "目標のテキストを展開",
+      collapseObjective: "目標のテキストを折りたたむ",
       clear: "目標をクリア",
       collapse: "目標を隠す",
       show: "目標を表示",

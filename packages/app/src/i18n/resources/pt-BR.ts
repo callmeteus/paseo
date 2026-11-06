@@ -219,6 +219,8 @@ export const ptBR: TranslationResources = {
       paused: "Meta pausada",
       edit: "Editar meta",
       info: "Detalhes da meta",
+      expandObjective: "Expandir texto da meta",
+      collapseObjective: "Recolher texto da meta",
       clear: "Limpar meta",
       collapse: "Ocultar meta",
       show: "Mostrar meta",

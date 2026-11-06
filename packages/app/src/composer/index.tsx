@@ -894,7 +894,7 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
     setIsCollapsed(false);
     setNow(Date.now());
   }, []);
-  const handleToggleDetails = useCallback(() => {
+  const handleToggleObjectiveExpanded = useCallback(() => {
     setIsDetailsExpanded((prev) => !prev);
   }, []);
   const handleCollapse = useCallback(() => setIsCollapsed(true), []);
@@ -937,9 +937,13 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
           </Pressable>
           <Pressable
             style={styles.goalActionButton}
-            onPress={handleToggleDetails}
+            onPress={handleToggleObjectiveExpanded}
             accessibilityRole="button"
-            accessibilityLabel={t("composer.goal.info")}
+            accessibilityLabel={
+              isDetailsExpanded
+                ? t("composer.goal.collapseObjective")
+                : t("composer.goal.expandObjective")
+            }
           >
             <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
           </Pressable>
@@ -983,13 +987,21 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
           </Pressable>
         </View>
       </View>
-      <Text
-        style={styles.goalText}
-        numberOfLines={isDetailsExpanded ? undefined : 2}
-        ellipsizeMode="tail"
+      <View
+        style={[
+          styles.goalObjectiveOuter,
+          !isDetailsExpanded ? styles.goalObjectiveCollapsedClip : null,
+        ]}
       >
-        {goal.objective}
-      </Text>
+        <Text
+          style={styles.goalText}
+          selectable
+          numberOfLines={isDetailsExpanded ? undefined : 2}
+          ellipsizeMode="tail"
+        >
+          {goal.objective}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -3171,6 +3183,8 @@ const styles = StyleSheet.create((theme: Theme) => ({
   goalRow: {
     flexDirection: "column",
     gap: theme.spacing[1],
+    minWidth: 0,
+    alignSelf: "stretch",
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[2],
     backgroundColor: theme.colors.surface1,
@@ -3211,10 +3225,24 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface1,
   },
+  goalObjectiveOuter: {
+    minWidth: 0,
+    width: "100%",
+  },
+  goalObjectiveCollapsedClip: {
+    maxHeight: Math.round(theme.fontSize.base * 1.4) * 2,
+    overflow: "hidden" as const,
+  },
   goalText: {
-    flex: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
+    ...(isWeb
+      ? {
+          lineHeight: Math.round(theme.fontSize.base * 1.4),
+          overflowWrap: "anywhere" as const,
+          wordBreak: "break-all" as const,
+        }
+      : {}),
   },
   goalBadge: {
     color: theme.colors.accent,

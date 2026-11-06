@@ -217,6 +217,8 @@ export const zhCN: TranslationResources = {
       paused: "目标已暂停",
       edit: "编辑目标",
       info: "目标详情",
+      expandObjective: "展开目标全文",
+      collapseObjective: "收起目标全文",
       clear: "清除目标",
       collapse: "收起目标",
       show: "展开目标",

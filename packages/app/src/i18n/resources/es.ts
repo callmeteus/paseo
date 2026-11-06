@@ -220,6 +220,8 @@ export const es: TranslationResources = {
       paused: "Objetivo en pausa",
       edit: "Editar objetivo",
       info: "Detalles del objetivo",
+      expandObjective: "Expandir texto del objetivo",
+      collapseObjective: "Contraer texto del objetivo",
       clear: "Eliminar objetivo",
       collapse: "Ocultar objetivo",
       show: "Mostrar objetivo",

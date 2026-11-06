@@ -220,6 +220,8 @@ export const ru: TranslationResources = {
       paused: "Цель приостановлена",
       edit: "Изменить цель",
       info: "О цели",
+      expandObjective: "Развернуть текст цели",
+      collapseObjective: "Свернуть текст цели",
       clear: "Убрать цель",
       collapse: "Скрыть цель",
       show: "Показать цель",

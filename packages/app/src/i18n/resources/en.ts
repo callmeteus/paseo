@@ -213,6 +213,8 @@ export const en = {
       paused: "Goal paused",
       edit: "Edit goal",
       info: "Toggle goal details",
+      expandObjective: "Expand goal text",
+      collapseObjective: "Collapse goal text",
       clear: "Clear goal",
       collapse: "Hide goal",
       show: "Show goal",

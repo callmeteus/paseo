@@ -218,6 +218,8 @@ export const ko: TranslationResources = {
       paused: "목표 일시 중지",
       edit: "목표 편집",
       info: "목표 세부정보",
+      expandObjective: "목표 텍스트 펼치기",
+      collapseObjective: "목표 텍스트 접기",
       clear: "목표 지우기",
       collapse: "목표 숨기기",
       show: "목표 표시",

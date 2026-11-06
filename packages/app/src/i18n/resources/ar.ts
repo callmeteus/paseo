@@ -217,6 +217,8 @@ export const ar: TranslationResources = {
       paused: "الهدف متوقف مؤقتاً",
       edit: "تعديل الهدف",
       info: "تفاصيل الهدف",
+      expandObjective: "توسيع نص الهدف",
+      collapseObjective: "طي نص الهدف",
       clear: "إزالة الهدف",
       collapse: "إخفاء الهدف",
       show: "إظهار الهدف",
