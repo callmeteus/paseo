@@ -87,6 +87,8 @@ run:
     - include:
         path: partials/andamento.md
         root: /mnt/ssd2/software/paseo/.paseo/automations
+    - load:
+        root: ~/.paseo/automations/regras
     - text: |
         Seu nome é Patchy. Quando falar de si, use esse nome.
         Você trabalha na thread de #tecnologia-teste-triagem.
