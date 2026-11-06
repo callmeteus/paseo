@@ -141,7 +141,7 @@
     "oxlint": "1.61.0",
     "oxlint-tsgolint": "^0.22.1",
     "patch-package": "^8.0.1",
-    "playwright": "^1.56.1",
+    "playwright": "1.64.1",
     "react-dom": "19.2.3",
     "typescript": "^5.9.3",
     "ws": "^8.20.0"
