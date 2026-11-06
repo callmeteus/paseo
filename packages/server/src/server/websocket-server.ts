@@ -54,6 +54,7 @@ import {
   type SessionOptions,
   type SessionRuntimeMetrics,
 } from "./session.js";
+import type { CursorSkillCatalog } from "./agent/providers/cursor-skill-catalog.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
 import { WorkspaceSetupObservation } from "./workspace-setup-observation.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
@@ -622,6 +623,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly directorySync = new DirectorySyncService();
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
+  private cursorSkillCatalog: CursorSkillCatalog | null = null;
 
   private async validateCompletedCreation(snapshot: CreationSnapshot): Promise<void> {
     if (snapshot.workspace && snapshot.kind === "workspace") {
@@ -1562,6 +1564,16 @@ export class VoiceAssistantWebSocketServer {
     return connection;
   }
 
+  /**
+   * Attaches the process-wide Cursor skill watcher. Sessions opened after this
+   * call refetch slash commands when a skill file changes.
+   *
+   * @param catalog - Monitor started by the daemon.
+   */
+  setCursorSkillCatalog(catalog: CursorSkillCatalog): void {
+    this.cursorSkillCatalog = catalog;
+  }
+
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       connectedHosts: this.connectedHosts,
@@ -1617,6 +1629,7 @@ export class VoiceAssistantWebSocketServer {
       daemonConfigStore: this.daemonConfigStore,
       pluginRuntime: this.pluginRuntime,
       orchestrationSkills: this.orchestrationSkills,
+      cursorSkillCatalog: this.cursorSkillCatalog ?? undefined,
       mcpBaseUrl: this.mcpBaseUrl,
       stt: () => this.speech?.resolveStt() ?? null,
       sttLanguage: this.speech?.resolveSttLanguage() ?? "en",

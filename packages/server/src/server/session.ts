@@ -1,5 +1,6 @@
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import type { AgentMessageDelivery } from "./agent/agent-messages/index.js";
+import type { CursorSkillCatalog } from "./agent/providers/cursor-skill-catalog.js";
 import { AgentDirectory } from "./agent/directory.js";
 import { ConnectedHostSession } from "./connected-hosts/index.js";
 import type { ConnectedHosts } from "./connected-hosts/index.js";
@@ -87,6 +88,7 @@ import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
+import { prepareInlineChipSubmission } from "@getpaseo/protocol/inline-chip";
 import { getAgentStatusPriority } from "@getpaseo/protocol/agent-state-bucket";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
@@ -542,6 +544,8 @@ export interface SessionOptions {
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
   };
   orchestrationSkills?: import("./orchestration-skills/index.js").OrchestrationSkills;
+  /** Watches Cursor skill files and asks open composers to refetch slash commands. */
+  cursorSkillCatalog?: CursorSkillCatalog;
   mcpBaseUrl?: string | null;
   stt: Resolvable<SpeechToTextProvider | null>;
   sttLanguage?: string;
@@ -777,7 +781,9 @@ export class Session {
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
+  private readonly cursorSkillCatalog: SessionOptions["cursorSkillCatalog"];
   private unsubscribeAgentEvents: (() => void) | null = null;
+  private unsubscribeSkillCatalog: (() => void) | null = null;
   private unsubscribeProjectMutations: (() => void) | null = null;
   private unsubscribePluginChanges: (() => void) | null = null;
   private unsubscribeWorkspaceMutations: (() => void) | null = null;
@@ -930,6 +936,7 @@ export class Session {
     this.worktreesRoot = worktreesRoot;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
+    this.cursorSkillCatalog = options.cursorSkillCatalog;
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -1110,6 +1117,7 @@ export class Session {
           this.unsubscribeProjectMutations,
           this.unsubscribeWorkspaceMutations,
           this.unsubscribePluginChanges,
+          this.unsubscribeSkillCatalog,
           this.unsubscribeTerminalWorkspaceContributionEvents,
           this.providerCatalogSession.isObserving,
           this.hubExecutionController?.isObserving,
@@ -1786,6 +1794,12 @@ export class Session {
     else {
       this.unsubscribePluginChanges?.();
       this.unsubscribePluginChanges = null;
+    }
+    if (legacy || this.wantsEvent("status.agent_commands_changed"))
+      this.unsubscribeSkillCatalog ??= this.subscribeToSkillCatalog();
+    else {
+      this.unsubscribeSkillCatalog?.();
+      this.unsubscribeSkillCatalog = null;
     }
   }
 
@@ -2873,6 +2887,14 @@ export class Session {
       catalog();
       settings?.();
     };
+  }
+
+  private subscribeToSkillCatalog(): (() => void) | null {
+    const catalog = this.cursorSkillCatalog;
+    if (!catalog) return null;
+    return catalog.subscribe(() => {
+      this.emit({ type: "status", payload: { status: "agent_commands_changed" } });
+    });
   }
 
   private dispatchVoiceAndControlMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -4984,6 +5006,19 @@ export class Session {
       );
       createdAgentId = snapshot.id;
       await this.agentUpdates.forwardLiveAgent(snapshot);
+      try {
+        await this.workspaceAutoName.adoptWorkspaceTitleForAgent({
+          workspaceId: resolvedIntent.intent.workspaceId,
+          agentId: snapshot.id,
+          promptTitle: workspacePromptTitle,
+          agentTitle: provisionalTitle,
+        });
+      } catch (error) {
+        this.sessionLogger.warn(
+          { err: error, agentId: snapshot.id },
+          "Failed to apply the workspace title to the new agent",
+        );
+      }
       if (resolvedIntent.createdDirectoryWorkspace && trimmedPrompt) {
         this.workspaceAutoName.scheduleForDirectory(
           {
@@ -5602,6 +5637,9 @@ export class Session {
       }
 
       if (!agent && draftConfig) {
+        if (draftConfig.provider === "cursor") {
+          this.cursorSkillCatalog?.noteWorkspace(expandTilde(draftConfig.cwd));
+        }
         const sessionConfig: AgentSessionConfig = {
           provider: draftConfig.provider,
           cwd: expandTilde(draftConfig.cwd),
@@ -9090,13 +9128,14 @@ export class Session {
     try {
       const agentId = resolved.agentId;
 
-      const prompt = buildAgentPrompt(msg.text, msg.images, msg.attachments);
+      const submission = prepareInlineChipSubmission(msg.text);
+      const prompt = buildAgentPrompt(submission.promptText, msg.images, msg.attachments);
       this.sessionLogger.trace(
         {
           agentId,
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior,
-          textPrefix: msg.text.slice(0, 80),
+          textPrefix: submission.promptText.slice(0, 80),
         },
         "agent.session.send_agent_message",
       );
@@ -9106,6 +9145,14 @@ export class Session {
       });
       let deliveryStatus: "queued" | undefined;
       const idleTimeoutMs = await this.automationIdleTimeoutMs(agentId);
+      const runOptions = {
+        ...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
+        ...(submission.submittedPromptText === undefined
+          ? {}
+          : { submittedPromptText: submission.submittedPromptText }),
+      };
+      const hasRunOptions =
+        idleTimeoutMs !== undefined || submission.submittedPromptText !== undefined;
       const send = async () => {
         if (msg.sourceAgentId) {
           const receipt = this.agentMessages.enqueue({
@@ -9138,7 +9185,7 @@ export class Session {
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           sessionMode: msg.sessionMode,
           clearPendingPermissions: true,
-          ...(idleTimeoutMs === undefined ? {} : { runOptions: { idleTimeoutMs } }),
+          ...(hasRunOptions ? { runOptions } : {}),
           logger: this.sessionLogger,
         });
         if (result.disposition === "turn_started") {
@@ -9162,7 +9209,9 @@ export class Session {
                 msg.activeTurnBehavior ?? (msg.sourceAgentId ? "steer" : "interrupt"),
             },
             prepare: async () => {
-              if (!msg.sourceAgentId) await this.prepareAgentMessage(agentId, msg.text);
+              if (!msg.sourceAgentId) {
+                await this.prepareAgentMessage(agentId, submission.promptText);
+              }
             },
             send,
           })
@@ -9544,6 +9593,8 @@ export class Session {
     this.unsubscribeProjectMutations = null;
     this.unsubscribePluginChanges?.();
     this.unsubscribePluginChanges = null;
+    this.unsubscribeSkillCatalog?.();
+    this.unsubscribeSkillCatalog = null;
     this.unsubscribeWorkspaceMutations?.();
     this.unsubscribeWorkspaceMutations = null;
     this.agentUpdates.dispose();
@@ -9639,6 +9690,8 @@ function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubs
           return "status.plugin_catalog_changed";
         case "plugin_settings_changed":
           return "status.plugin_settings_changed";
+        case "agent_commands_changed":
+          return "status.agent_commands_changed";
         default:
           return null;
       }
