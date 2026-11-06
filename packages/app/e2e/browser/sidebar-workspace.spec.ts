@@ -394,7 +394,9 @@ test.describe("Sidebar workspace list", () => {
     }
   });
 
-  test("workspace hover card shows host as metadata", async ({ page }) => {
+  test("workspace hover card shows the chat title and not the connection status", async ({
+    page,
+  }) => {
     const workspace = await seedWorkspace({ repoPrefix: "sidebar-hover-host-" });
 
     try {
@@ -402,7 +404,8 @@ test.describe("Sidebar workspace list", () => {
       await waitForSidebarProject(page, path.basename(workspace.repoPath));
 
       const hoverCard = await openWorkspaceHoverCard(page, workspace.workspaceId);
-      await expect(page.getByTestId("hover-card-workspace-host")).toHaveText("localhost");
+      await expect(page.getByTestId("hover-card-workspace-name")).toBeVisible();
+      await expect(page.getByTestId("hover-card-workspace-host")).toHaveCount(0);
       await expect(hoverCard).not.toContainText(/\b(Online|Connecting|Offline|Error|Idle)\b/);
     } finally {
       await workspace.cleanup();
