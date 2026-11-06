@@ -114,6 +114,52 @@ describe("tool call detail-level projection", () => {
     },
   );
 
+  it("keeps a multitask task out of the generic tool group", () => {
+    const task = toolCall(
+      "1",
+      {
+        type: "unknown",
+        input: {
+          _toolName: "task",
+          prompt: "Answer why OpenCode did not compact the context",
+          description: "Por que não compactou o contexto",
+        },
+        output: null,
+      },
+      { name: "other", status: "running" },
+    );
+    const shell = toolCall("2", { type: "shell", command: "ls" }, { status: "running" });
+    const tail = [task, shell];
+
+    expect(project({ level: "detailed", tail }).tail).toEqual([shell]);
+    expect(tail).toEqual([task, shell]);
+
+    const overview = project({ level: "overview", head: [task, shell], isTurnActive: true });
+    expect(overview.groupsByHostId.size).toBe(1);
+    expect(overview.groupsByHostId.get(task.id)).toBeUndefined();
+    expect(overview.groupsByHostId.get(shell.id)?.run.calls.map((call) => call.id)).toEqual(["2"]);
+    expect(overview.head.some((item) => item.id === task.id)).toBe(false);
+
+    const plainOther = toolCall(
+      "3",
+      { type: "unknown", input: { command: "ls" }, output: null },
+      { name: "other" },
+    );
+    expect(project({ level: "detailed", tail: [plainOther] }).tail).toEqual([plainOther]);
+
+    const explore = toolCall(
+      "4",
+      {
+        type: "sub_agent",
+        subAgentType: "Explore",
+        description: "Inspect repository structure",
+        log: "",
+      },
+      { name: "task", status: "running" },
+    );
+    expect(project({ level: "detailed", tail: [explore] }).tail).toEqual([explore]);
+  });
+
   it("passes detailed timelines through without grouping work", () => {
     const tail = [toolCall("1", { type: "shell", command: "one" })];
     const head = [toolCall("2", { type: "shell", command: "two" })];

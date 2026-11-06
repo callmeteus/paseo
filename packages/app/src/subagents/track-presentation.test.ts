@@ -1,4 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import {
+  readTaskWorkerCall,
+  taskWorkerStatus,
+  taskWorkerSubagentId,
+} from "@getpaseo/protocol/task-worker";
 import { i18n } from "@/i18n/i18next";
 import type { PaseoSubagentRow, ProviderSubagentRow, SubagentRow } from "./select";
 import {
@@ -18,7 +23,7 @@ function row(
     provider: overrides.provider ?? "codex",
     title: overrides.title ?? `Agent ${overrides.id}`,
     description: null,
-    subtitle: null,
+    subtitle: overrides.subtitle ?? null,
     status: overrides.status ?? "idle",
     turn:
       overrides.turn ??
@@ -199,6 +204,18 @@ describe("buildSubagentRowPresentationData", () => {
     );
   });
 
+  it("shows a Paseo child's error under the task title", () => {
+    const presentation = buildSubagentRowPresentationData(
+      row({
+        id: "a",
+        title: "Open the report",
+        subtitle: "OpenCode is not available (not installed).",
+      }),
+    );
+    expect(presentation.label).toBe("Open the report");
+    expect(presentation.subtitle).toBe("OpenCode is not available (not installed).");
+  });
+
   it("ignores requiresAttention on the source row when computing the bucket", () => {
     expect(
       buildSubagentRowPresentationData(row({ id: "a", status: "idle", requiresAttention: true }))
@@ -296,5 +313,63 @@ describe("provider-owned row subtitles", () => {
         providerRow({ description: null, subtitle: null, title: "general-purpose" }),
       ).subtitle,
     ).toBe("");
+  });
+});
+
+describe("multitask task workers", () => {
+  function providerRow(overrides: Partial<ProviderSubagentRow> = {}): ProviderSubagentRow {
+    return {
+      kind: "provider",
+      id: overrides.id ?? "task:call-1",
+      parentAgentId: "parent",
+      provider: "cursor",
+      title: "title" in overrides ? (overrides.title ?? null) : null,
+      description: overrides.description ?? null,
+      subtitle: overrides.subtitle ?? null,
+      status: overrides.status ?? "running",
+      requiresAttention: false,
+      createdAt: new Date("2026-07-26T00:00:00.000Z"),
+    };
+  }
+
+  const facts = readTaskWorkerCall({
+    callId: "call-1",
+    name: "other",
+    detail: {
+      type: "unknown",
+      input: {
+        _toolName: "task",
+        prompt: "Answer why OpenCode did not compact the context",
+        description: "Por que não compactou o contexto",
+      },
+      output: null,
+    },
+  });
+
+  it("names the track row with the task description and a status, not Other", () => {
+    if (!facts) {
+      throw new Error("expected the task tool to be a worker");
+    }
+    const running = buildSubagentRowPresentationData(
+      providerRow({
+        id: taskWorkerSubagentId(facts.toolCallId),
+        description: facts.description,
+        status: taskWorkerStatus("running"),
+      }),
+    );
+    expect(running.label).toBe("Por que não compactou o contexto");
+    expect(running.label).not.toBe("Other");
+    expect(running.statusBucket).toBe("running");
+
+    expect(
+      buildSubagentRowPresentationData(
+        providerRow({ description: facts.description, status: taskWorkerStatus("failed") }),
+      ).statusBucket,
+    ).toBe("failed");
+    expect(
+      buildSubagentRowPresentationData(
+        providerRow({ description: facts.description, status: taskWorkerStatus("completed") }),
+      ).statusBucket,
+    ).toBe("done");
   });
 });

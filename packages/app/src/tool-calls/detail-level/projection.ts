@@ -1,3 +1,4 @@
+import { readTaskWorkerCall } from "@getpaseo/protocol/task-worker";
 import type { StreamItem } from "@/types/stream";
 import {
   groupLiveToolCalls,
@@ -29,6 +30,18 @@ function visibleToolCallItems(items: StreamItem[]): StreamItem[] {
   const visible = items.filter((item) => {
     if (item.kind !== "tool_call" || item.payload.source !== "agent") return true;
     const data = item.payload.data;
+    // A multitask task is a sub-worker on the composer track. Leaving it here
+    // renders the raw input as "Other".
+    if (
+      readTaskWorkerCall({
+        callId: data.callId,
+        name: data.name,
+        detail: data.detail,
+        error: data.status === "failed" ? data.error : null,
+      })
+    ) {
+      return false;
+    }
     return (
       data.name !== "ExitPlanMode" && !(data.name === "plan_approval" && data.status === "running")
     );

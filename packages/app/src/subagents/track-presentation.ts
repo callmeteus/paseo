@@ -29,8 +29,8 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
   const description = resolveRowLabel(row.description);
   const title = resolveRowLabel(row.title);
   const label = description ?? title;
-  const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
-  const subtitle = providerSubtitle ?? (description ? title : null);
+  const explicitSubtitle = resolveRowLabel(row.subtitle);
+  const subtitle = explicitSubtitle ?? (description ? title : null);
   const status = presentationStatus(row);
   return {
     key: `${row.kind}_subagent_${row.id}`,

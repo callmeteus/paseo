@@ -4,6 +4,7 @@ import {
   buildPaseoToolDisplay,
 } from "./paseo-tool-presentation/index.js";
 import { stripCwdPrefix } from "./path-utils.js";
+import { readTaskWorkerCall } from "./task-worker.js";
 
 export type ToolCallDisplayInput = Pick<
   ToolCallTimelineItem,
@@ -162,6 +163,19 @@ export function buildToolCallDisplayModel(input: ToolCallDisplayInput): ToolCall
     return {
       displayName: paseoDisplay.displayName,
       ...(paseoDisplay.summary ? { summary: paseoDisplay.summary } : {}),
+      ...(errorText ? { errorText } : {}),
+    };
+  }
+  const taskWorker = readTaskWorkerCall({
+    callId: input.name,
+    name: input.name,
+    detail: input.detail,
+    error: input.status === "failed" ? input.error : null,
+  });
+  if (taskWorker) {
+    return {
+      displayName: taskWorker.description,
+      ...(taskWorker.subAgentType ? { summary: taskWorker.subAgentType } : {}),
       ...(errorText ? { errorText } : {}),
     };
   }
