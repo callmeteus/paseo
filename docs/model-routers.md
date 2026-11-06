@@ -36,3 +36,28 @@ refresh. The first sync runs after the daemon's startup warmup settles.
 `packages/server/src/server/agent/open-weight-routers.ts` watches the catalogue and
 writes them. The open-weight and free classifiers live in
 `packages/protocol/src/open-weight-models.ts` so the app presets and the daemon agree.
+
+## Automatic provider routers
+
+The built-in `provider-routers` plugin keeps a second automatic set under the
+`auto-provider:` id prefix, rebuilt from the live catalogue:
+
+- One `distribution` router per active provider, free targets first.
+- One `fallback` router per model that two or more providers offer, grouped by
+  model identity and ordered free first. This is the open-weight rule applied to
+  every model, so an open-weight model appears in both this set and the daemon's
+  `auto-open-weight:` set.
+- `Premium Free` and `Open Weight Free` fallback routers, built from the same
+  presets the app's settings card offers (`packages/protocol/src/router-presets.ts`).
+
+Every sync replaces the `auto-provider:` set and preserves every other router,
+including the daemon's `auto-open-weight:` set, and skips the config patch when
+nothing changed.
+
+A per-model router sets `hideModelsInSearch`, so the models it covers leave the
+cross-provider model search instead of appearing twice. Browsing a single
+provider still lists them; the flag only affects the general search list.
+
+The plugin starts the catalogue watcher from its contribution, so the routers
+exist once the daemon has settled, and then follows `paseo.providers`. A `sync`
+RPC rebuilds the set on demand.

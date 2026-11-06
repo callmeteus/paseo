@@ -1,85 +1,64 @@
 import type { PaseoApi } from "@getpaseo/client";
-import type { ModelRouter } from "@getpaseo/protocol/model-router";
-import { omitDisabledModels } from "@getpaseo/protocol/disabled-models";
+import {
+  buildProviderRouters,
+  disabledModelIdsByProviderFromConfig,
+  isAutoProviderRouter,
+  mergeAutoProviderRouters,
+} from "@getpaseo/plugin/server";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-
-export const AUTO_PROVIDER_ROUTER_PREFIX = "auto-provider:";
+import type { ModelRouter } from "@getpaseo/protocol/model-router";
 
 export interface SyncResult {
   providers: string[];
   routers: ModelRouter[];
 }
 
-function isAutoProviderRouter(router: { id: string }): boolean {
-  return router.id.startsWith(AUTO_PROVIDER_ROUTER_PREFIX);
-}
-
-function slug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[-.]+|[-.]+$/g, "");
-}
-
-function uniqueId(base: string, used: Set<string>): string {
-  if (!used.has(base)) return base;
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base.slice(0, 120)}-${suffix}`;
-    if (!used.has(candidate)) return candidate;
-  }
-}
-
+/**
+ * Rebuilds every `auto-provider:` router from the live provider catalogue and
+ * writes the set to the daemon config, preserving user routers and the daemon's
+ * own automatic routers. The patch is skipped when nothing changed, so watching
+ * the catalogue cannot loop.
+ */
 export async function syncProviderRouters(paseo: PaseoApi): Promise<SyncResult> {
   const snapshot = await paseo.providers.waitForReady({ timeoutMs: 30000 });
-  const configResponse = await paseo.config.get();
-  const config = configResponse.config;
+  const { config } = await paseo.config.get();
 
-  const existingRouters = config.modelRouters?.routers ?? [];
-  const preserved = existingRouters.filter((router) => !isAutoProviderRouter(router));
-  const usedIds = new Set(preserved.map((router) => router.id));
+  const entries = snapshot.entries as ProviderSnapshotEntry[];
+  const generated = buildProviderRouters(
+    entries,
+    disabledModelIdsByProviderFromConfig(config.providers),
+  );
 
-  const activeProviders: string[] = [];
-  const generated: ModelRouter[] = [];
+  const current = config.modelRouters;
+  const existing = current?.routers ?? [];
+  const providers = availableProviders(entries);
+  if (sameAutoRouters(existing, generated)) return { providers, routers: generated };
 
-  for (const entry of snapshot.entries as ProviderSnapshotEntry[]) {
-    if (!entry.enabled || entry.status !== "ready") continue;
-    const disabledIds = config.providers?.[entry.provider]?.disabledModelIds;
-    const models = omitDisabledModels(entry.models ?? null, disabledIds) ?? [];
-    const selectable = models.filter((model) => model.isSelectable !== false);
-    if (selectable.length === 0) continue;
-
-    activeProviders.push(entry.provider);
-
-    const targets = selectable
-      .slice(0, 32)
-      .map((model) => ({ provider: entry.provider, model: model.id }));
-
-    const base = `${AUTO_PROVIDER_ROUTER_PREFIX}${slug(entry.provider) || "provider"}`.slice(
-      0,
-      128,
-    );
-    const id = uniqueId(base, usedIds);
-    usedIds.add(id);
-
-    generated.push({
-      id,
-      name: (entry.label ?? entry.provider).slice(0, 80),
-      summary: `${selectable.length} models from ${entry.label ?? entry.provider}`.slice(0, 200),
-      mode: "distribution",
-      targets,
-    });
-  }
-
-  const nextRouters = [...preserved, ...generated];
   await paseo.config.patch({
     modelRouters: {
-      routers: nextRouters,
-      ...(config.modelRouters?.defaultRouterId !== undefined
-        ? { defaultRouterId: config.modelRouters.defaultRouterId }
+      routers: mergeAutoProviderRouters(existing, generated),
+      ...(current?.defaultRouterId !== undefined
+        ? { defaultRouterId: current.defaultRouterId }
         : {}),
     },
   });
 
-  return { providers: activeProviders, routers: generated };
+  return { providers, routers: generated };
+}
+
+function availableProviders(entries: readonly ProviderSnapshotEntry[]): string[] {
+  const providers: string[] = [];
+  for (const entry of entries) {
+    if (!entry.enabled || entry.status !== "ready") continue;
+    if (!(entry.models ?? []).some((model) => model.isSelectable !== false)) continue;
+    providers.push(entry.provider);
+  }
+  return providers;
+}
+
+function sameAutoRouters(
+  existing: readonly ModelRouter[],
+  generated: readonly ModelRouter[],
+): boolean {
+  return JSON.stringify(existing.filter(isAutoProviderRouter)) === JSON.stringify(generated);
 }

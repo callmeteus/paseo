@@ -33,10 +33,31 @@ export const ModelRouterSchema = z
     summary: z.string().min(1).max(200).optional(),
     mode: ModelRouterModeSchema,
     targets: z.array(ModelRouterTargetSchema).min(1).max(32),
+    /**
+     * Drops this router's targets from cross-provider model search. Browsing a
+     * single provider still lists them, so the router replaces the model in the
+     * general list and nowhere else.
+     */
+    hideModelsInSearch: z.boolean().optional(),
   })
   .strict();
 
 export type ModelRouter = z.infer<typeof ModelRouterSchema>;
+
+/**
+ * `provider::model` keys hidden from cross-provider search by the routers that
+ * ask for it. Provider-scoped lists ignore this.
+ */
+export function hiddenSearchModelKeys(routers: readonly ModelRouter[]): Set<string> {
+  const keys = new Set<string>();
+  for (const router of routers) {
+    if (!router.hideModelsInSearch) continue;
+    for (const target of router.targets) {
+      if (target.model) keys.add(`${target.provider}::${target.model}`);
+    }
+  }
+  return keys;
+}
 
 export const ModelRouterSettingsSchema = z
   .object({

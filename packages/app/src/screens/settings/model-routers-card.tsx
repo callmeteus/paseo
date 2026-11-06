@@ -20,7 +20,11 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
-import { buildRouterPresets, buildRouterSummary, type RouterPreset } from "@/model-routers/presets";
+import {
+  buildRouterPresets,
+  buildRouterSummary,
+  type RouterPreset,
+} from "@getpaseo/protocol/router-presets";
 import { settingsStyles } from "@/styles/settings";
 
 interface DraftTarget {

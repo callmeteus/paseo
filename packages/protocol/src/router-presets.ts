@@ -1,14 +1,7 @@
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import {
-  omitDisabledModels,
-  type DisabledModelIdsByProvider,
-} from "@getpaseo/protocol/disabled-models";
-import type { ModelRouter, ModelRouterTarget } from "@getpaseo/protocol/model-router";
-import {
-  isFreeModel,
-  isFreeProvider,
-  isOpenWeightModel,
-} from "@getpaseo/protocol/open-weight-models";
+import type { ProviderSnapshotEntry } from "./agent-types.js";
+import { omitDisabledModels, type DisabledModelIdsByProvider } from "./disabled-models.js";
+import type { ModelRouter, ModelRouterTarget } from "./model-router.js";
+import { isFreeModel, isFreeProvider, isOpenWeightModel } from "./open-weight-models.js";
 
 export interface RouterModelCandidate {
   provider: string;
@@ -168,9 +161,4 @@ export function buildRouterPresets(
     buildPremiumFreePreset(entries, disabledModelIdsByProvider),
     buildOpenWeightFreePreset(entries, disabledModelIdsByProvider),
   ].filter((preset): preset is RouterPreset => preset !== null);
-}
-
-/** Human-readable target summary for settings rows. */
-export function describeRouterTarget(target: ModelRouterTarget): string {
-  return target.model ? `${target.provider} · ${target.model}` : `${target.provider} · padrão`;
 }

@@ -60,15 +60,20 @@ export function resolveModelBrowserAllView({
   providers,
   normalizedQuery,
   isSearchFocused,
+  hiddenSearchKeys,
 }: {
   providers: ProviderSelectorProvider[];
   normalizedQuery: string;
   isSearchFocused: boolean;
+  /** `provider::model` keys routers keep out of the cross-provider list. */
+  hiddenSearchKeys?: ReadonlySet<string>;
 }): ModelBrowserAllView {
   if (!normalizedQuery && !isSearchFocused) {
     return { kind: "browse" };
   }
-  const allRows = getAllProviderModelRows(providers);
+  const allRows = getAllProviderModelRows(providers).filter(
+    (row) => !hiddenSearchKeys?.has(`${row.provider}::${row.modelId}`),
+  );
   const rows = normalizedQuery ? filterAndRankModelRows(allRows, normalizedQuery) : allRows;
   if (rows.length === 0) {
     return { kind: "noSearchMatches" };

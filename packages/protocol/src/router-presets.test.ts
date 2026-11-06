@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import type { ProviderSnapshotEntry } from "./agent-types.js";
 import {
   buildOpenWeightFreePreset,
   buildPremiumFreePreset,
   buildRouterPresets,
-  describeRouterTarget,
-} from "./presets";
+} from "./router-presets.js";
 
 function entry(
   provider: string,
@@ -72,11 +71,6 @@ describe("router presets", () => {
 
   it("returns no presets when nothing installed qualifies", () => {
     expect(buildRouterPresets([entry("codex", [{ id: "gpt-5.6", label: "GPT-5.6" }])])).toEqual([]);
-  });
-
-  it("describes a target with and without a model", () => {
-    expect(describeRouterTarget({ provider: "codex", model: "gpt-5.6" })).toBe("codex · gpt-5.6");
-    expect(describeRouterTarget({ provider: "codex", model: null })).toBe("codex · padrão");
   });
 });
 

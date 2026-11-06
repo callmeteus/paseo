@@ -263,14 +263,14 @@ Classify every SDK export before adding it. All client entry points and implemen
 Zod schemas, and functions that run in both runtimes. A type-only import is still an architectural
 dependency; shared types must not refer to React components, hooks, Node APIs, or server contexts.
 
-| Entry                                             | Owns                                                                       | May depend on          |
-| ------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
-| `@getpaseo/plugin`                                | Shared data, schemas, RPC/settings definitions, runtime-neutral helpers    | Shared code only       |
-| `@getpaseo/plugin/server`                         | Server contexts, lifecycle contracts, and CLI process launch               | Shared and server code |
-| `@getpaseo/plugin/server/provider`, `/server/acp` | Server provider contracts and adapters                                     | Shared and server code |
-| `@getpaseo/plugin/client`                         | Client contribution contexts, hooks, navigation, and UI contribution types | Shared and client code |
-| `@getpaseo/plugin/client/ui`                      | Host-provided UI components                                                | Shared and client code |
-| `@getpaseo/plugin/client/host`                    | App-owned rendering integration; not a plugin-author entry                 | Shared and client code |
+| Entry                                             | Owns                                                                                                                                                                                                        | May depend on          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `@getpaseo/plugin`                                | Shared data, schemas, RPC/settings definitions, runtime-neutral helpers                                                                                                                                     | Shared code only       |
+| `@getpaseo/plugin/server`                         | Server contexts, lifecycle contracts, CLI process launch, and the model-router helpers (`buildProviderRouters`, `mergeAutoProviderRouters`, `isAutoProviderRouter`, `disabledModelIdsByProviderFromConfig`) | Shared and server code |
+| `@getpaseo/plugin/server/provider`, `/server/acp` | Server provider contracts and adapters                                                                                                                                                                      | Shared and server code |
+| `@getpaseo/plugin/client`                         | Client contribution contexts, hooks, navigation, and UI contribution types                                                                                                                                  | Shared and client code |
+| `@getpaseo/plugin/client/ui`                      | Host-provided UI components                                                                                                                                                                                 | Shared and client code |
+| `@getpaseo/plugin/client/host`                    | App-owned rendering integration; not a plugin-author entry                                                                                                                                                  | Shared and client code |
 
 Server code imports shared helpers from the root and server capabilities from `/server`. Client
 code imports shared helpers from the root and client capabilities from `/client`. Neither runtime
@@ -363,7 +363,8 @@ workspaces, agents, terminals, providers, and daemon config. They do not expose 
 
 `usePaseo()` is the plugin's one client: `InstalledPlugin.paseo`, created with the installation in
 `packages/app/src/plugins/registry.ts` over the host's existing connection and passed to setup as
-`client.paseo`. Authors release their subscriptions in their own cleanup, and teardown (disable,
+`client.paseo`. The server entry receives the same API as `server.paseo`, so backend work can start
+with the contribution instead of waiting for a hook. Authors release their subscriptions in their own cleanup, and teardown (disable,
 reload, removal, host removal) disposes the client, which ends the rest; nothing is created or
 disposed per mounted surface. See the
 [public example](../public-docs/plugins/reference.md#use-the-paseo-sdk). Switching the screen's host

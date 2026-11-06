@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { ModelRouter, ModelRouterMode } from "@getpaseo/protocol/model-router";
+import {
+  hiddenSearchModelKeys,
+  type ModelRouter,
+  type ModelRouterMode,
+} from "@getpaseo/protocol/model-router";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 
 export interface RouterPickerRow {
@@ -13,6 +17,8 @@ interface RouterPicker {
   rows: RouterPickerRow[];
   selectedRouterId: string | null;
   getRouter: (routerId: string) => ModelRouter | undefined;
+  /** `provider::model` keys the routers keep out of cross-provider search. */
+  hiddenSearchKeys: ReadonlySet<string>;
   select: (routerId: string | null) => Promise<void>;
 }
 
@@ -51,6 +57,8 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
     [routers],
   );
 
+  const hiddenSearchKeys = useMemo(() => hiddenSearchModelKeys(routers), [routers]);
+
   const select = useCallback(
     async (routerId: string | null) => {
       if (routerId === (config?.modelRouters?.defaultRouterId ?? null)) return;
@@ -73,6 +81,7 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
     rows,
     selectedRouterId: config?.modelRouters?.defaultRouterId ?? null,
     getRouter,
+    hiddenSearchKeys,
     select,
   };
 }

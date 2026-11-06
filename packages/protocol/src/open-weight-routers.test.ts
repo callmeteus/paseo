@@ -4,6 +4,7 @@ import type { AgentModelDefinition, ProviderSnapshotEntry } from "./agent-types.
 import type { ModelRouter } from "./model-router.js";
 import {
   AUTO_OPEN_WEIGHT_ROUTER_ID_PREFIX,
+  buildModelFallbackRouters,
   buildOpenWeightRouters,
   mergeAutoOpenWeightRouters,
 } from "./open-weight-routers.js";
@@ -150,6 +151,43 @@ describe("buildOpenWeightRouters", () => {
       { provider: "opencode", model: "qwen3-coder" },
     ]);
     expect(routers[0]!.summary).toBe("OpenCode · Qwen3 Coder → Qwen3 Coder");
+  });
+});
+
+describe("buildModelFallbackRouters", () => {
+  it("groups any model across providers when include matches everything", () => {
+    const routers = buildModelFallbackRouters(
+      [
+        entry("codex", "Codex", [model("codex", "gpt-5.6", "GPT-5.6", PAID)]),
+        entry("copilot", "Copilot", [model("copilot", "gpt-5.6:free", "GPT-5.6 (free)", FREE)]),
+      ],
+      { idPrefix: "auto-provider:model:", include: () => true },
+    );
+
+    expect(routers).toEqual([
+      {
+        id: "auto-provider:model:gpt-5.6",
+        name: "GPT-5.6",
+        summary: "Copilot → Codex",
+        mode: "fallback",
+        targets: [
+          { provider: "copilot", model: "gpt-5.6:free" },
+          { provider: "codex", model: "gpt-5.6" },
+        ],
+      },
+    ]);
+  });
+
+  it("honours the include predicate", () => {
+    const routers = buildModelFallbackRouters(
+      [
+        entry("a", "A", [model("a", "llama-4", "Llama 4")]),
+        entry("b", "B", [model("b", "llama-4", "Llama 4")]),
+      ],
+      { idPrefix: "x:", include: () => false },
+    );
+
+    expect(routers).toEqual([]);
   });
 });
 
