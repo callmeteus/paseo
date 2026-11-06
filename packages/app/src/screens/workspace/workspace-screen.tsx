@@ -148,6 +148,7 @@ import {
   WorkspaceDesktopTabsRow,
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
+import { AgentForkRequestHost } from "@/screens/workspace/agent-fork-request-host";
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
 import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
@@ -3991,6 +3992,7 @@ function WorkspaceScreenContent({
         toast={toast}
       >
         {renderedWorkspaceScreen}
+        <AgentForkRequestHost serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
         <MoveAgentToWorkspaceSheet />
         <PromoteAgentToWorkspaceSheet />
         <MoveWorkspaceToFolderSheet />

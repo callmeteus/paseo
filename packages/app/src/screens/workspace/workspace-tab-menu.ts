@@ -1,5 +1,6 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
+import { requestAgentFork } from "@/screens/workspace/agent-fork-request";
 import { openMoveAgentToWorkspace } from "@/screens/workspace/move-agent-to-workspace-store";
 import { openPromoteAgentToWorkspace } from "@/screens/workspace/promote-agent-to-workspace-store";
 import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
@@ -15,6 +16,8 @@ export interface WorkspaceTabMenuLabels {
   rename: string;
   moveToWorkspace: string;
   promoteToWorkspace: string;
+  forkInNewTab: string;
+  forkInNewWorkspace: string;
   closeAbove: string;
   closeBelow: string;
   closeLeft: string;
@@ -35,6 +38,8 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   rename: i18n.t("workspace.tabs.menu.rename"),
   moveToWorkspace: i18n.t("workspace.tabs.menu.moveToWorkspace"),
   promoteToWorkspace: i18n.t("workspace.tabs.menu.promoteToWorkspace"),
+  forkInNewTab: i18n.t("message.actions.forkInNewTab"),
+  forkInNewWorkspace: i18n.t("message.actions.forkInNewWorkspace"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
   closeLeft: i18n.t("workspace.tabs.menu.closeLeft"),
@@ -61,6 +66,7 @@ export type WorkspaceTabMenuEntry =
         | "pencil"
         | "folder-input"
         | "folder-plus"
+        | "split"
         | "trash-2"
         | "x";
       hint?: string;
@@ -311,6 +317,26 @@ export function buildWorkspaceTabMenuEntries(
         testID: `${menuTestIDBase}-promote-to-workspace`,
         onSelect: () => {
           openPromoteAgentToWorkspace(agentId);
+        },
+      });
+      entries.push({
+        kind: "item",
+        key: "fork-new-tab",
+        label: labels.forkInNewTab,
+        icon: "split",
+        testID: `${menuTestIDBase}-fork-new-tab`,
+        onSelect: () => {
+          requestAgentFork(agentId, "tab");
+        },
+      });
+      entries.push({
+        kind: "item",
+        key: "fork-new-workspace",
+        label: labels.forkInNewWorkspace,
+        icon: "split",
+        testID: `${menuTestIDBase}-fork-new-workspace`,
+        onSelect: () => {
+          requestAgentFork(agentId, "workspace");
         },
       });
     }
