@@ -424,7 +424,10 @@ const KILO_STDIN_KEEPALIVE_INTERVAL_MS = 2_000;
 const KILO_BINARY_NAMES = new Set(["kilo", "kilocode"]);
 
 function isKiloLaunchCommand(command: string): boolean {
-  const base = path
+  // Use `path.win32` for the basename so Windows paths like `C:\tools\kilo.exe`
+  // resolve correctly when the daemon runs on Linux and `process.platform` is
+  // mocked to `win32` in tests (POSIX `basename` treats `\` as a literal char).
+  const base = path.win32
     .basename(command)
     .replace(/\.(exe|cmd|bat|ps1|com)$/i, "")
     .toLowerCase();

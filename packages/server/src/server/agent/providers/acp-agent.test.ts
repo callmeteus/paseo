@@ -682,6 +682,7 @@ describe("startKiloStdinKeepalive", () => {
     expect(startKiloStdinKeepalive("kilocode", child)).not.toBeNull();
     expect(startKiloStdinKeepalive("kilo.cmd", child)).not.toBeNull();
     expect(startKiloStdinKeepalive("C:\\tools\\kilo.exe", child)).not.toBeNull();
+    expect(startKiloStdinKeepalive("C:/tools/kilocode.exe", child)).not.toBeNull();
 
     Object.defineProperty(process, "platform", { value: "linux", configurable: true });
     expect(startKiloStdinKeepalive("kilo", child)).toBeNull();
