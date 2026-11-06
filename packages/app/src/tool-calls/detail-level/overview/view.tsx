@@ -13,7 +13,7 @@ import { IndentRail } from "@/components/indent-rail";
 import { ExpandableBadge, type ExpandableBadgeLabelContext } from "@/components/message";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
-import { useOverviewSummaryDisplay } from "./label";
+import { layoutOverviewLabelSegments, useOverviewSummaryDisplay } from "./label";
 import type { OverviewToolCallGroup } from "./model";
 import { OverviewToolCallGroupSheet } from "./sheet";
 
@@ -89,10 +89,11 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
 
   const renderLabel = useCallback(
     ({ pass, textStyle, onFlowLayout, buildSegmentShimmer }: ExpandableBadgeLabelContext) => {
+      const segments = layoutOverviewLabelSegments(label.segments);
       return (
         <View style={styles.labelFlow} onLayout={onFlowLayout}>
-          {label.segments.map((segment, index) => {
-            const isLast = index === label.segments.length - 1;
+          {segments.map((segment, index) => {
+            const isLast = index === segments.length - 1;
             // Each segment carries its own slice of one gradient, so the shine crosses the
             // whole sentence instead of restarting inside every part.
             const shimmer = buildSegmentShimmer?.(segmentOffsets[index] ?? 0) ?? null;
@@ -110,8 +111,16 @@ export const OverviewToolCallGroupView = memo(function OverviewToolCallGroupView
             if (!segment.icon) {
               return <React.Fragment key={key}>{textNode}</React.Fragment>;
             }
+            // The comma already sits on the previous word. This row is the glyph and its label.
             return (
-              <View key={key} style={styles.labelSegmentWithIcon}>
+              <View
+                key={key}
+                style={
+                  isLast
+                    ? [styles.labelSegmentWithIcon, styles.labelIconSegmentTrailing]
+                    : styles.labelSegmentWithIcon
+                }
+              >
                 {pass === "mask" ? (
                   // The native mask is a MaskedView element, which does not take an Svg.
                   // A block of the same size keeps the masked text on the real glyphs.
@@ -206,10 +215,16 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     overflow: "hidden",
   },
+  // spacing[2] (8px) on both sides of the glyph: after the comma, and before the label.
   labelSegmentWithIcon: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    marginLeft: theme.spacing[2],
+    gap: theme.spacing[2],
+  },
+  labelIconSegmentTrailing: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   labelIconPlaceholder: {
     width: 11,
@@ -217,5 +232,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   labelTrailingSegment: {
     flexShrink: 1,
+    minWidth: 0,
   },
 }));

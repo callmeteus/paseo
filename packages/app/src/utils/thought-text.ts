@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 /**
  * Cursor renders a reasoning block as `Thought 2s`, or as the block's own title when
  * the model opens with a bold line or a heading. Both helpers feed the same badge, so
@@ -70,15 +72,20 @@ export function stripThoughtHeader(text: string): string {
 }
 
 /**
- * Collapses a duration the way the badge shows it: sub-half-second reads as "briefly",
- * otherwise whole seconds, or one decimal when the block lasted under a second.
+ * Collapses a duration the way the badge shows it. Under half a second there is no
+ * whole second to show, so the label comes from `toolCallGroup.briefly` in the active
+ * language. Otherwise it is whole seconds, or one decimal when the rounded second
+ * would be zero.
  */
-export function formatThoughtDuration(durationMs: number | undefined): string | undefined {
+export function formatThoughtDuration(
+  durationMs: number | undefined,
+  t: TFunction,
+): string | undefined {
   if (durationMs === undefined || durationMs <= 0) {
     return undefined;
   }
   if (durationMs < 500) {
-    return "briefly";
+    return t("toolCallGroup.briefly");
   }
   const seconds = Math.round(durationMs / 1000);
   return seconds > 0 ? `${seconds}s` : `${(durationMs / 1000).toFixed(1)}s`;

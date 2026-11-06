@@ -12,6 +12,7 @@ import React, {
   type ComponentProps,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   View,
@@ -44,6 +45,8 @@ import {
 import { PlanCard } from "@/components/plan-card";
 import { ProviderErrorCard } from "@/components/provider-error-card";
 import { readProviderErrorText } from "@/agent-stream/provider-error";
+import { sessionLimitWarning } from "@/agent-stream/session-limit";
+import { Alert } from "@/components/ui/alert";
 import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
@@ -57,7 +60,6 @@ import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
 import { useRevealedText } from "@/hooks/use-revealed-text";
 import {
-  formatThoughtDuration,
   parseThoughtHeader,
   resolveThoughtDuration,
   stripThoughtHeader,
@@ -72,10 +74,15 @@ import { ToolCallDetailsContent } from "@/components/tool-call-details";
 import { QuestionFormCard } from "@/components/question-form-card";
 import { ToolCallSheetProvider } from "@/components/tool-call-sheet";
 import { createStreamPresentation } from "./presentation";
+import { reasoningRowPresentation } from "@/tool-calls/detail-level/overview/label";
 import { OverviewToolCallGroupView } from "@/tool-calls/detail-level/overview/view";
-import type { OverviewToolCallGroup } from "@/tool-calls/detail-level/overview/model";
+import {
+  countSummarizedToolCalls,
+  type OverviewToolCallGroup,
+} from "@/tool-calls/detail-level/overview/model";
 import type { GroupableStep } from "@/tool-calls/detail-level/grouping";
 import { IndentRail } from "@/components/indent-rail";
+import { thoughtIdsInTurnsWithTools } from "./turn-collapse/model";
 import { TurnSummaryLine } from "./turn-collapse/summary-line";
 import { type AgentStreamRenderModel, buildAgentStreamRenderModel } from "./model";
 import { resolveStreamRenderStrategy } from "./strategy-resolver";
@@ -331,6 +338,12 @@ function resolveBottomOverlayControlOffset(clearance: number | undefined): numbe
   return Math.max(16, clearance ?? 0);
 }
 
+function renderSessionLimitWarning(text: string, t: TFunction): ReactNode | null {
+  const warning = sessionLimitWarning(text, t);
+  if (!warning) return null;
+  return <Alert variant="warning" size="sm" title={warning} testID="session-limit-warning" />;
+}
+
 const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamViewProps>(
   function AgentStreamView(
     {
@@ -555,6 +568,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         autoExpandReasoning,
       ],
     );
+    const thoughtIdsBesideTools = useMemo(
+      () =>
+        thoughtIdsInTurnsWithTools([...presentation.tail, ...presentation.head], (itemId) => {
+          const group = presentation.groupsByHostId.get(itemId);
+          return group ? countSummarizedToolCalls(group.summary) : undefined;
+        }),
+      [presentation.groupsByHostId, presentation.head, presentation.tail],
+    );
     const {
       start: historyWindowStart,
       hasLocalHistory,
@@ -776,6 +797,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
+        // Cursor prints a spent session as assistant text. It is a warning, not the reply.
+        const sessionLimit = renderSessionLimitWarning(item.text, t);
+        if (sessionLimit) return sessionLimit;
         const errorText = readProviderErrorText(item.text);
         if (errorText !== null) {
           return <ProviderErrorCard provider={context.provider} message={errorText} />;
@@ -812,6 +836,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         context.provider,
         handleInlinePathPress,
         resolvedServerId,
+        t,
         toast,
         workspaceRoot,
       ],
@@ -828,10 +853,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             isLastInSequence={layoutItem.isLastInToolSequence}
             defaultExpanded={autoExpandReasoning}
             durationMs={resolveThoughtDuration(item)}
+            embeddedInToolWork={thoughtIdsBesideTools.has(item.id)}
           />
         );
       },
-      [autoExpandReasoning, setInlineDetailsExpanded],
+      [autoExpandReasoning, setInlineDetailsExpanded, thoughtIdsBesideTools],
     );
 
     const renderSingleToolCallItem = useCallback(
@@ -905,7 +931,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
 
     const renderGroupedStep = useCallback(
-      (layoutItem: StreamLayoutItem, step: GroupableStep, isLast: boolean) => {
+      (
+        layoutItem: StreamLayoutItem,
+        step: GroupableStep,
+        isLast: boolean,
+        embeddedInToolWork: boolean,
+      ) => {
         if (step.kind === "thought") {
           return (
             <ThoughtSlot
@@ -916,6 +947,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               isLastInSequence={isLast}
               defaultExpanded={autoExpandReasoning}
               durationMs={resolveThoughtDuration(step)}
+              embeddedInToolWork={embeddedInToolWork}
+              maxDetailHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
             />
           );
         }
@@ -936,6 +969,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       (layoutItem: StreamLayoutItem, group: OverviewToolCallGroup) => {
         const expanded = expandedToolCallGroupIds.has(group.run.id);
         const lastIndex = group.run.steps.length - 1;
+        // The group header is already the activity line. A bare "Pensei" inside it
+        // would be a second summary, so those thoughts render as text.
+        const embeddedInToolWork =
+          countSummarizedToolCalls(group.summary) > 0 || thoughtIdsBesideTools.has(group.run.id);
         return (
           <OverviewToolCallGroupView
             group={group}
@@ -946,14 +983,19 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             {expanded
               ? group.run.steps.map((step, index) => (
                   <React.Fragment key={step.id}>
-                    {renderGroupedStep(layoutItem, step, index === lastIndex)}
+                    {renderGroupedStep(layoutItem, step, index === lastIndex, embeddedInToolWork)}
                   </React.Fragment>
                 ))
               : null}
           </OverviewToolCallGroupView>
         );
       },
-      [expandedToolCallGroupIds, renderGroupedStep, setToolCallGroupExpanded],
+      [
+        expandedToolCallGroupIds,
+        renderGroupedStep,
+        setToolCallGroupExpanded,
+        thoughtIdsBesideTools,
+      ],
     );
 
     const renderStreamItemContent = useCallback(
@@ -978,8 +1020,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           case "tool_call":
             return renderToolCallItem(layoutItem, item);
 
-          case "notification":
+          case "notification": {
+            const sessionLimit = renderSessionLimitWarning(item.message, t);
+            if (sessionLimit) return sessionLimit;
             return <Notification level={item.level} message={item.message} />;
+          }
 
           case "todo_list":
             return <TodoListCard items={item.items} activity={item.activity} />;
@@ -1014,6 +1059,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         renderThoughtItem,
         renderToolCallItem,
         resolvedServerId,
+        t,
       ],
     );
 
@@ -1434,9 +1480,16 @@ interface ThoughtSlotProps {
   isLastInSequence: boolean;
   defaultExpanded: boolean;
   durationMs?: number;
+  /** The same group or turn already has an activity line for a shell, search, or tool. */
+  embeddedInToolWork?: boolean;
+  maxDetailHeight?: number;
 }
 
 // Reasoning text is paced the same way assistant text is; see @/hooks/use-revealed-text.
+function thinkingDetail(bodyText: string) {
+  return { type: "unknown" as const, input: bodyText, output: null };
+}
+
 function ThoughtSlot({
   itemId,
   onInlineDetailsExpandedChangeByItemId,
@@ -1445,6 +1498,8 @@ function ThoughtSlot({
   isLastInSequence,
   defaultExpanded,
   durationMs,
+  embeddedInToolWork = false,
+  maxDetailHeight,
 }: ThoughtSlotProps) {
   const { t } = useTranslation();
   const revealedText = useRevealedText(text, status === "ready" ? "complete" : "streaming");
@@ -1452,8 +1507,23 @@ function ThoughtSlot({
   // then drops that line so the badge does not repeat it.
   const header = parseThoughtHeader(revealedText);
   const bodyText = header.title ? stripThoughtHeader(revealedText) : revealedText;
-  const label = header.title || t("toolCallGroup.thought");
-  const secondaryLabel = header.title ? undefined : formatThoughtDuration(durationMs);
+  const row = reasoningRowPresentation({ title: header.title, durationMs, embeddedInToolWork }, t);
+  if (row.kind === "text") {
+    if (!bodyText.trim()) {
+      return null;
+    }
+    // The group or turn line already names the shell, search, or tool. This is the
+    // reasoning itself, not a second summary labeled only "Pensei".
+    return (
+      <View style={isLastInSequence ? stylesheet.thoughtTextLast : stylesheet.thoughtText}>
+        <ToolCallDetailsContent
+          toolName="thinking"
+          detail={thinkingDetail(bodyText)}
+          maxHeight={maxDetailHeight}
+        />
+      </View>
+    );
+  }
   return (
     <ToolCallSlot
       itemId={itemId}
@@ -1464,8 +1534,9 @@ function ThoughtSlot({
       isLastInSequence={isLastInSequence}
       defaultExpanded={defaultExpanded}
       forceInline={defaultExpanded}
-      labelOverride={label}
-      secondaryLabelOverride={secondaryLabel}
+      labelOverride={row.label}
+      secondaryLabelOverride={row.secondaryLabel}
+      maxDetailHeight={maxDetailHeight}
     />
   );
 }
@@ -1800,6 +1871,12 @@ const stylesheet = StyleSheet.create((theme) => ({
     maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
+  },
+  thoughtText: {
+    marginBottom: theme.spacing[1],
+  },
+  thoughtTextLast: {
+    marginBottom: theme.spacing[4],
   },
   emptyState: {
     flex: 1,
