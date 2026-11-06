@@ -245,29 +245,33 @@ function HostProjectSection({
           style={rowStyle}
           testID={`sidebar-host-project-toggle-${host.serverId}`}
         >
-          <View style={styles.hostHeaderLeft}>
+          <View
+            style={
+              showChevron
+                ? [styles.hostHeaderLeft, styles.hostHeaderLeftWithActions]
+                : styles.hostHeaderLeft
+            }
+          >
             <HostStatusDot serverId={host.serverId} />
             <Text style={titleStyle} numberOfLines={1}>
               {host.label}
             </Text>
           </View>
-          <View style={styles.hostHeaderTrailing}>
-            {showChevron ? (
+          {showChevron ? (
+            <View style={styles.hostHeaderTrailing} pointerEvents="box-none">
               <NewWorktreeButton
                 displayName={host.label}
                 onPress={handleNewWorkspace}
                 visible
                 testID={`sidebar-host-new-workspace-${host.serverId}`}
               />
-            ) : null}
-            {showChevron ? (
               <DensityIcon
                 icon={collapsed ? ChevronRight : ChevronDown}
                 size="xs"
                 color="foregroundMuted"
               />
-            ) : null}
-          </View>
+            </View>
+          ) : null}
         </SidebarHostContextMenu>
       </View>
       {collapsed ? null : <View style={styles.hostSectionBody}>{children}</View>}
@@ -2892,12 +2896,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[3],
   },
   hostHeaderRow: {
-    minHeight: density.rowHeight,
+    position: "relative",
+    height: density.rowHeight,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing[2],
@@ -2916,11 +2919,21 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
   },
+  // Reserves the plus (24) and the chevron without growing the row. The actions themselves
+  // are absolutely positioned, so this padding only keeps a long host name out from under them.
+  hostHeaderLeftWithActions: {
+    paddingRight: 40,
+  },
   hostHeaderTrailing: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: theme.spacing[2],
+    margin: 0,
+    padding: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    flexShrink: 0,
   },
   hostHeaderTitle: {
     color: theme.colors.foregroundMuted,
