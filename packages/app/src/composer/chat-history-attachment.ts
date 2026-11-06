@@ -1,7 +1,12 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { WorkspaceComposerAttachment } from "@/attachments/types";
+import type { ChatHistoryContextAttachment } from "@/attachments/types";
 
 type AgentForkContextPayload = Awaited<ReturnType<DaemonClient["buildAgentForkContext"]>>;
+
+/** The inline mention chip uses this id, so the tray can tell it from a fork pill. */
+export function chatMentionAttachmentId(agentId: string): string {
+  return `chat_history:mention:${agentId}`;
+}
 
 interface BuildChatHistoryAttachmentInput {
   /** Stable per source chat: the attachments store replaces on a repeated id. */
@@ -18,7 +23,7 @@ interface BuildChatHistoryAttachmentInput {
  */
 export function buildChatHistoryAttachment(
   input: BuildChatHistoryAttachmentInput,
-): WorkspaceComposerAttachment {
+): ChatHistoryContextAttachment {
   if (!input.payload.attachment) {
     throw new Error(input.missingAttachmentMessage);
   }
@@ -45,10 +50,10 @@ interface CreateChatMentionAttachmentInput {
 
 export async function createChatMentionAttachment(
   input: CreateChatMentionAttachmentInput,
-): Promise<WorkspaceComposerAttachment> {
+): Promise<ChatHistoryContextAttachment> {
   const payload = await input.client.buildAgentForkContext(input.agentId);
   return buildChatHistoryAttachment({
-    id: `chat_history:mention:${input.agentId}`,
+    id: chatMentionAttachmentId(input.agentId),
     serverId: input.serverId,
     agentId: input.agentId,
     payload,

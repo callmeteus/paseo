@@ -31,6 +31,12 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type { AgentCapabilityFlags, ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import {
+  expandInlineChips,
+  hasInlineChip,
+  mentionChipCoversAttachment,
+} from "@getpaseo/protocol/inline-chip";
+import { InlineMessageText } from "@/composer/inline-context-chip";
 import MaskedView from "@react-native-masked-view/masked-view";
 import {
   Check,
@@ -414,7 +420,16 @@ export const UserMessage = memo(function UserMessage({
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
   const hasText = message.trim().length > 0;
   const hasImages = images.length > 0;
-  const hasAttachments = attachments.length > 0;
+  const visibleAttachments = useMemo(
+    () =>
+      attachments.filter((attachment) => {
+        if (attachment.type !== "text" || attachment.contextKind !== "chat_history") return true;
+        return !mentionChipCoversAttachment(message, attachment.text);
+      }),
+    [attachments, message],
+  );
+  const hasAttachments = visibleAttachments.length > 0;
+  const messageHasChip = hasInlineChip(message);
   const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
@@ -424,7 +439,7 @@ export const UserMessage = memo(function UserMessage({
 
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
-  const getMessageContent = useCallback(() => message, [message]);
+  const getMessageContent = useCallback(() => expandInlineChips(message, "copy"), [message]);
   const handleRewind = useCallback(
     (input: { mode: RewindMode; rewoundText: string }) => {
       return rewindMutation.rewindAgent(input);
@@ -467,6 +482,23 @@ export const UserMessage = memo(function UserMessage({
     [showTrailingRow],
   );
 
+  let messageText: React.ReactNode = null;
+  if (hasText && messageHasChip) {
+    messageText = (
+      <InlineMessageText
+        text={message}
+        style={userMessageStylesheet.text}
+        dataSet={MESSAGE_TEXT_DATASET}
+      />
+    );
+  } else if (hasText) {
+    messageText = (
+      <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
+        {message}
+      </Text>
+    );
+  }
+
   return (
     <View style={containerStyle} testID="user-message" aria-busy={isPending}>
       <View
@@ -489,7 +521,7 @@ export const UserMessage = memo(function UserMessage({
           ) : null}
           {hasAttachments ? (
             <View style={attachmentPreviewContainerStyle}>
-              {attachments.map((attachment, index) => {
+              {visibleAttachments.map((attachment, index) => {
                 const content = getAgentAttachmentPillContent(attachment, t);
                 return (
                   <AttachmentFrame
@@ -505,11 +537,7 @@ export const UserMessage = memo(function UserMessage({
               })}
             </View>
           ) : null}
-          {hasText ? (
-            <Text selectable style={userMessageStylesheet.text} dataSet={MESSAGE_TEXT_DATASET}>
-              {message}
-            </Text>
-          ) : null}
+          {messageText}
         </View>
         {hasText ? (
           <View
