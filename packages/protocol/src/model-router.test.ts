@@ -6,6 +6,8 @@ import {
   normalizeRouterTargets,
   selectDistributionTarget,
   selectFallbackTarget,
+  selectRouterEntryTarget,
+  ModelRouterSchema,
   type ModelRouter,
 } from "./model-router";
 
@@ -24,6 +26,25 @@ function router(overrides: Partial<ModelRouter> = {}): ModelRouter {
     ...overrides,
   };
 }
+
+describe("selectRouterEntryTarget", () => {
+  it("starts a fallback router on its first target", () => {
+    expect(selectRouterEntryTarget({ router: router(), cursor: 4 })?.target).toEqual({
+      provider: "opencode",
+      model: "qwen3",
+    });
+  });
+
+  it("walks a distribution router instead of staying on the previous model", () => {
+    const distributed = router({ mode: "distribution" });
+    expect(selectRouterEntryTarget({ router: distributed, cursor: 0 })?.target.provider).toBe(
+      "opencode",
+    );
+    expect(selectRouterEntryTarget({ router: distributed, cursor: 1 })?.target.provider).toBe(
+      "cline",
+    );
+  });
+});
 
 describe("selectDistributionTarget", () => {
   it("rotates through every target and wraps around", () => {
@@ -174,6 +195,20 @@ describe("isRetryableRouterFailure", () => {
     expect(
       isRetryableRouterFailure({ error: "failed", diagnostic: "credit balance is too low" }),
     ).toBe(true);
+  });
+});
+
+describe("ModelRouterSchema", () => {
+  it("stores an optional icon and rejects an empty one", () => {
+    const stored = {
+      id: "router-1",
+      name: "Claude",
+      mode: "fallback" as const,
+      targets: [{ provider: "claude", model: "claude-haiku" }],
+    };
+    expect(ModelRouterSchema.parse({ ...stored, icon: "claude" }).icon).toBe("claude");
+    expect(ModelRouterSchema.parse(stored).icon).toBeUndefined();
+    expect(ModelRouterSchema.safeParse({ ...stored, icon: "" }).success).toBe(false);
   });
 });
 

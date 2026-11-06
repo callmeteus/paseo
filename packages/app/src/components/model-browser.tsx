@@ -41,6 +41,10 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useProviderIcon } from "@/components/provider-icons";
+import { ModelIconGlyph } from "@/model-icons/glyph";
+import { resolveModelIconId } from "@/model-icons/resolve";
+import { PriceMarks } from "@/model-pricing/marks";
+import { summarizePriceTiers } from "@/model-pricing/tier";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import {
@@ -712,16 +716,25 @@ function ModelRow({
 }) {
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
-  const leadingSlot = useMemo(
-    () => (
+  const modelIconId = resolveModelIconId({ id: row.modelId, label: row.modelLabel });
+  const leadingSlot = useMemo(() => {
+    if (modelIconId) {
+      return (
+        <ModelIconGlyph
+          id={modelIconId}
+          size={ICON_SIZE.sm}
+          color={styles.providerIconMuted.color}
+        />
+      );
+    }
+    return (
       <ModelProviderGlyph
         provider={row.provider}
         serverId={row.serverId ?? serverId}
         size={ICON_SIZE.sm}
       />
-    ),
-    [row.provider, row.serverId, serverId],
-  );
+    );
+  }, [modelIconId, row.provider, row.serverId, serverId]);
 
   const description = showProviderLabel ? buildProviderQualifiedDescription(row) : row.description;
   const primary = profiledRows[profiledRows.length - 1];
@@ -841,6 +854,9 @@ function ModelRow({
             ) : null}
           </View>
           <View style={styles.browserRowTrailing}>
+            {row.priceTier !== null ? (
+              <PriceMarks minTier={row.priceTier} maxTier={row.priceTier} />
+            ) : null}
             <View style={styles.browserRowSelection}>
               {isSelected ? (
                 <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
@@ -1015,6 +1031,14 @@ function RouterPickerRowView({
     () => onSelect(selected ? null : row.id),
     [onSelect, row.id, selected],
   );
+  const leadingSlot = useMemo(() => {
+    if (!row.iconId) {
+      return <ThemedRoute size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />;
+    }
+    return (
+      <ModelIconGlyph id={row.iconId} size={ICON_SIZE.sm} color={styles.providerIconMuted.color} />
+    );
+  }, [row.iconId]);
   return (
     <ModelBrowserRow
       label={row.name}
@@ -1022,7 +1046,7 @@ function RouterPickerRowView({
       tone="elevated"
       selected={selected}
       selectionIndicator
-      leadingSlot={null}
+      leadingSlot={leadingSlot}
       onPress={handlePress}
       testID={`model-router-row-${row.id}`}
     />
@@ -1122,15 +1146,19 @@ function GroupProviderButton({
     () => <ModelProviderGlyph provider={provider.id} serverId={serverId} size={ICON_SIZE.sm} />,
     [provider.id, serverId],
   );
-  const trailingSlot = useMemo(
-    () => (
+  const trailingSlot = useMemo(() => {
+    const priceSpan =
+      selection.kind === "models"
+        ? summarizePriceTiers(selection.rows.map((row) => row.priceTier))
+        : null;
+    return (
       <View style={styles.drillDownTrailing}>
+        {priceSpan ? <PriceMarks minTier={priceSpan.min} maxTier={priceSpan.max} /> : null}
         {stateNode}
         <ThemedChevronRight size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
       </View>
-    ),
-    [stateNode],
-  );
+    );
+  }, [selection, stateNode]);
 
   return (
     <ModelBrowserRow

@@ -7,6 +7,8 @@ is bound to.
 - `fallback` starts a chat on the first target and moves to the next when a provider
   reports a credits, quota, or rate-limit failure.
 - `distribution` spreads new chats across targets with weighted round-robin.
+- `icon` stores a model-icon id, and the app draws that mark for the router. With `icon`
+  unset, the app draws the mark of the router's models.
 
 Fallback execution runs in the app
 (`packages/app/src/model-routers/use-router-fallback.ts`). The daemon only stores the

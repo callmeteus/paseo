@@ -5,6 +5,7 @@ import {
   requiresProviderPort,
   resolveDisplayModelId,
   resolveDisplayProvider,
+  resolveDisplayRouterId,
   resolveStagedRouterTarget,
   stageProviderSwitch,
   takeProviderSwitch,
@@ -206,5 +207,31 @@ describe("staged router display", () => {
 
     expect(resolveDisplayProvider(pending, "cline", target)).toBe("cline");
     expect(resolveDisplayModelId(pending, "cline-pro", target)).toBe("cline-pro");
+  });
+});
+
+describe("router pick display", () => {
+  const staged = {
+    kind: "model" as const,
+    targetServerId: "srv_a",
+    provider: "opencode",
+    modelId: "deepseek-v4-flash",
+    clearRouter: false,
+    routerId: "router_deepseek",
+  };
+
+  it("shows the router's model instead of the model that was already selected", () => {
+    expect(resolveDisplayModelId(staged, "beam-free")).toBe("deepseek-v4-flash");
+    expect(resolveDisplayProvider(staged, "opencode")).toBe("opencode");
+    expect(resolveDisplayRouterId(staged, null)).toBe("router_deepseek");
+  });
+
+  it("keeps a router-only stage from changing the model", () => {
+    expect(
+      resolveDisplayModelId(
+        { kind: "router", targetServerId: "srv_a", routerId: "router_deepseek" },
+        "beam-free",
+      ),
+    ).toBe("beam-free");
   });
 });

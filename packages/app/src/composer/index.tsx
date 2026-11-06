@@ -141,7 +141,9 @@ import {
   stageProviderSwitch,
   takeProviderSwitch,
   type PendingProviderSwitch,
+  type StagedModelTarget,
 } from "@/composer/agent-controls/pending-provider-switch";
+import { routerPickAsModel } from "@/model-routers/entry-target";
 import {
   finishPortingActivity,
   startPortingActivity,
@@ -296,8 +298,8 @@ interface AppliedStagedTarget {
 
 /**
  * Commits the target the user picked before this message. Same-provider picks
- * apply in place; provider changes port the conversation; a router pick either
- * starts the port at its first target or just binds the chat.
+ * apply in place; provider changes port the conversation; a router pick runs
+ * the router's entry model, the first target or the next distribution slot.
  */
 async function applyStagedTarget(input: {
   client: DaemonClient;
@@ -313,53 +315,17 @@ async function applyStagedTarget(input: {
     console.warn("[Composer] persist ported provider preference failed", error);
   };
 
-  if (pending.kind === "router") {
-    const { config } = await client.getDaemonConfig();
-    const router = config.modelRouters?.routers.find((entry) => entry.id === pending.routerId);
-    if (!router) {
-      throw new Error(`Router ${pending.routerId} not found`);
+  const staged = await stagedModelTarget(client, pending);
+  if (staged.targetServerId === serverId && staged.provider === input.currentProvider) {
+    if (staged.modelId) {
+      await client.setAgentModel(agentId, staged.modelId);
     }
-    if (router.mode !== "fallback") {
-      await client.setAgentModelRouter(agentId, pending.routerId);
-      return { client, serverId, agentId, switched: false };
-    }
-    const first = router.targets[0];
-    if (!first) {
-      throw new Error("This router has no target");
-    }
-    const applied = await applyProviderSwitch({
-      sourceClient: client,
-      sourceServerId: serverId,
-      agentId,
-      workspaceId: input.workspaceId,
-      pending: {
-        kind: "model",
-        targetServerId: pending.targetServerId,
-        provider: first.provider,
-        modelId: first.model ?? "",
-        clearRouter: true,
-        routerId: pending.routerId,
-      },
-      persistPreference: input.persistPreference,
-      onPreferencePersistError: onPersistError,
-    });
-    return {
-      client: applied.client,
-      serverId: applied.serverId,
-      agentId: applied.agentId,
-      switched: true,
-      finish: applied.finalize,
-    };
-  }
-
-  if (pending.targetServerId === serverId && pending.provider === input.currentProvider) {
-    if (pending.modelId) {
-      await client.setAgentModel(agentId, pending.modelId);
-    }
-    if (pending.clearRouter) {
+    if (staged.routerId !== undefined) {
+      await client.setAgentModelRouter(agentId, staged.routerId);
+    } else if (staged.clearRouter) {
       await client.setAgentModelRouter(agentId, null);
     }
-    await input.persistPreference(pending.provider, pending.modelId);
+    await input.persistPreference(staged.provider, staged.modelId);
     return { client, serverId, agentId, switched: false };
   }
 
@@ -368,7 +334,7 @@ async function applyStagedTarget(input: {
     sourceServerId: serverId,
     agentId,
     workspaceId: input.workspaceId,
-    pending,
+    pending: staged,
     persistPreference: input.persistPreference,
     onPreferencePersistError: onPersistError,
   });
@@ -379,6 +345,34 @@ async function applyStagedTarget(input: {
     switched: true,
     finish: applied.finalize,
   };
+}
+
+/**
+ * Turns a staged router into the model it should run. A model stage is already
+ * that choice, so it passes through.
+ *
+ * @param client - The daemon that owns the router catalog
+ * @param pending - The pick waiting for the next message
+ * @returns The model target to commit
+ */
+async function stagedModelTarget(
+  client: DaemonClient,
+  pending: PendingProviderSwitch,
+): Promise<StagedModelTarget> {
+  if (pending.kind === "model") return pending;
+  const { config } = await client.getDaemonConfig();
+  const router = config.modelRouters?.routers.find((entry) => entry.id === pending.routerId);
+  const staged = router
+    ? routerPickAsModel({
+        targetServerId: pending.targetServerId,
+        routerId: pending.routerId,
+        router,
+      })
+    : null;
+  if (!staged) {
+    throw new Error(router ? "This router has no target" : `Router ${pending.routerId} not found`);
+  }
+  return staged;
 }
 
 function resolveCheckoutRemoteUrl(

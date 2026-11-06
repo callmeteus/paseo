@@ -43,6 +43,7 @@ import {
 } from "@/provider-selection/resolve-agent-form";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { pinRouterEntry, routerPickAsModel } from "@/model-routers/entry-target";
 import type { MaterializedAgentProfile } from "@/agent-profiles";
 
 export type { FormInitialValues } from "@/provider-selection/resolve-agent-form";
@@ -83,6 +84,8 @@ export interface UseAgentFormStateResult {
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
   setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
+  /** Binds a router and switches the draft to that router's entry model. */
+  applyRouterFromUser: (routerId: string | null) => void;
   applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
   clearProviderSelectionFromUser: () => void;
   workingDirIsEmpty: boolean;
@@ -323,8 +326,8 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     unavailableProviders,
   ]);
 
-  const setProviderAndModelFromUser = useCallback(
-    (provider: AgentProvider, modelId: string) => {
+  const applySelectedProviderAndModel = useCallback(
+    (provider: AgentProvider, modelId: string, keepRouter: boolean) => {
       if (!selectableProviderDefinitionMap.has(provider)) {
         return;
       }
@@ -344,7 +347,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       });
       // A new chat runs on a model or on a router, never both: picking a model
       // stops the default router from overriding it on creation.
-      if (isCreateFlow && config?.modelRouters?.defaultRouterId) {
+      if (!keepRouter && isCreateFlow && config?.modelRouters?.defaultRouterId) {
         void patchConfig({
           modelRouters: {
             routers: config.modelRouters.routers ?? [],
@@ -372,6 +375,47 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       patchConfig,
       selectableProviderDefinitionMap,
       updateCurrentPreferences,
+    ],
+  );
+  const setProviderAndModelFromUser = useCallback(
+    (provider: AgentProvider, modelId: string) => {
+      applySelectedProviderAndModel(provider, modelId, false);
+    },
+    [applySelectedProviderAndModel],
+  );
+
+  const applyRouterFromUser = useCallback(
+    (routerId: string | null) => {
+      const settings = config?.modelRouters;
+      const routers = settings?.routers ?? [];
+      if (!routerId) {
+        void patchConfig({ modelRouters: { routers, defaultRouterId: null } }).catch(
+          (error: unknown) => {
+            console.warn("[AgentForm] failed to clear the default router", error);
+          },
+        );
+        return;
+      }
+      const router = routers.find((entry) => entry.id === routerId);
+      const staged = router
+        ? routerPickAsModel({ targetServerId: serverId ?? "", routerId, router })
+        : null;
+      if (staged && selectableProviderDefinitionMap.has(staged.provider as AgentProvider)) {
+        pinRouterEntry(routerId, staged.provider, staged.modelId || null);
+        applySelectedProviderAndModel(staged.provider as AgentProvider, staged.modelId, true);
+      }
+      void patchConfig({ modelRouters: { routers, defaultRouterId: routerId } }).catch(
+        (error: unknown) => {
+          console.warn("[AgentForm] failed to set the default router", error);
+        },
+      );
+    },
+    [
+      config?.modelRouters,
+      patchConfig,
+      selectableProviderDefinitionMap,
+      applySelectedProviderAndModel,
+      serverId,
     ],
   );
 
@@ -572,6 +616,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      applyRouterFromUser,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
@@ -605,6 +650,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      applyRouterFromUser,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,

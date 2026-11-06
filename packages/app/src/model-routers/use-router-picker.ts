@@ -2,11 +2,14 @@ import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ModelRouter, ModelRouterMode } from "@getpaseo/protocol/model-router";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import type { ModelIconId } from "@/model-icons/icons";
+import { resolveRouterIconId } from "@/model-icons/resolve";
 
 export interface RouterPickerRow {
   id: string;
   name: string;
   description: string;
+  iconId: ModelIconId | null;
 }
 
 interface RouterPicker {
@@ -43,6 +46,7 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
       description: router.summary
         ? `${modeLabel(router.mode, t)} · ${router.summary}`
         : modeLabel(router.mode, t),
+      iconId: resolveRouterIconId(router),
     }));
   }, [routers, t]);
 
@@ -77,13 +81,21 @@ export function useRouterPicker(serverId: string | null): RouterPicker {
   };
 }
 
+/** Router a chat is bound to, or the default router when the chat has not picked one. */
+export function useActiveRouter(
+  serverId: string | null,
+  routerId?: string | null,
+): ModelRouter | null {
+  const { getRouter, selectedRouterId } = useRouterPicker(serverId);
+  const resolvedId = routerId === undefined ? selectedRouterId : routerId;
+  if (!resolvedId) return null;
+  return getRouter(resolvedId) ?? null;
+}
+
 /** Name of the router a chat is bound to (or the default), or null when none. */
 export function useActiveRouterName(
   serverId: string | null,
   routerId?: string | null,
 ): string | null {
-  const { rows, selectedRouterId } = useRouterPicker(serverId);
-  const resolvedId = routerId === undefined ? selectedRouterId : routerId;
-  if (!resolvedId) return null;
-  return rows.find((row) => row.id === resolvedId)?.name ?? null;
+  return useActiveRouter(serverId, routerId)?.name ?? null;
 }

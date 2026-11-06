@@ -34,6 +34,7 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
+import { resolveModelPriceTier } from "@/model-pricing/tier";
 import {
   disabledModelIdsByProviderFromConfig,
   omitDisabledModels,
@@ -124,6 +125,7 @@ import {
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useStagedRouterTarget } from "@/model-routers/use-staged-router-target";
+import { routerPickAsModel } from "@/model-routers/entry-target";
 
 interface AgentControlOption {
   id: string;
@@ -415,6 +417,7 @@ function buildFallbackModelSelectorProviders(
           providerLabel: provider,
           modelId: option.id,
           modelLabel: option.label,
+          priceTier: resolveModelPriceTier({ id: option.id, label: option.label }),
         })),
       },
     },
@@ -2107,13 +2110,17 @@ export const AgentControls = memo(function AgentControls({
         return;
       }
       if (routerId) {
-        // Router picks are staged like model picks: the port happens on the
-        // next send, never under the user's cursor.
-        stageProviderSwitch(serverId, agentId, {
-          kind: "router",
-          targetServerId: serverId,
-          routerId,
-        });
+        // The trigger shows the router's entry model now. The next send commits
+        // that model and keeps the chat bound to the router.
+        const pickedRouter = config?.modelRouters?.routers.find((entry) => entry.id === routerId);
+        const staged = pickedRouter
+          ? routerPickAsModel({ targetServerId: serverId, routerId, router: pickedRouter })
+          : null;
+        stageProviderSwitch(
+          serverId,
+          agentId,
+          staged ?? { kind: "router", targetServerId: serverId, routerId },
+        );
       } else {
         if (!agentProvider) {
           return;
@@ -2128,7 +2135,7 @@ export const AgentControls = memo(function AgentControls({
       }
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent, agentId, agentProvider, serverId, t, toast],
+    [agent, agentId, agentProvider, config?.modelRouters?.routers, serverId, t, toast],
   );
 
   const liveTaskTarget = useLiveMultitaskTaskTarget(serverId, agentId);
@@ -2235,6 +2242,7 @@ export function DraftAgentControls({
   onModelSelectorOpen,
   onRetryModelProvider,
   isRetryingModelProvider = false,
+  onRouterPicked,
   disabled = false,
   modelSelectorServerId = null,
   isCompactLayout,
@@ -2373,6 +2381,7 @@ export function DraftAgentControls({
         multitaskTaskTarget={multitaskTaskTarget}
         modelSelectorServerId={modelSelectorServerId}
         isCompactLayout={isCompactLayout}
+        onRouterPicked={onRouterPicked}
       />
     </>
   );

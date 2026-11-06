@@ -1937,6 +1937,7 @@ export const en = {
     editProfilesCount: "Edit profiles ({{count}})",
     modelCount: "{{count}} model",
     modelCountPlural: "{{count}} models",
+    priceFree: "Free",
     retry: "Retry",
     retrying: "Retrying...",
     noMatches: "No models match your search",
@@ -2721,6 +2722,10 @@ export const en = {
       cancel: "Cancel",
       save: "Save",
       namePlaceholder: "Router name",
+      icon: "Icon",
+      iconAutomatic: "Match the models",
+      iconSearch: "Search icons",
+      iconEmpty: "No matching icon",
       targetCount: "{{count}} targets",
       usePreset: "Use preset",
       wizard: {

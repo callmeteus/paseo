@@ -127,8 +127,9 @@ export function resolveDisplayRouterId(
   if (pending?.kind === "router") {
     return pending.routerId;
   }
-  if (pending?.kind === "model" && pending.clearRouter) {
-    return null;
+  if (pending?.kind === "model") {
+    if (pending.routerId !== undefined) return pending.routerId;
+    if (pending.clearRouter) return null;
   }
   return boundRouterId ?? null;
 }

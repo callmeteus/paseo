@@ -35,6 +35,7 @@ function modelRow(
     modelId,
     modelLabel,
     description: modelId,
+    priceTier: null,
   };
 }
 

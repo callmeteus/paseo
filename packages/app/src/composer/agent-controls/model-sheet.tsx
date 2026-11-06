@@ -9,10 +9,13 @@ import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { useProviderIcon } from "@/components/provider-icons";
 import { ModelBrowser, useModelBrowser } from "@/components/model-browser";
 import { resolveModelBrowserScrolling } from "@/components/model-browser-view";
+import type { AgentControlIcon } from "@/agent-controls/icons";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
 import { resolveModelSheetOpening } from "@/composer/agent-controls/model-sheet-flow";
-import { useActiveRouterName } from "@/model-routers/use-router-picker";
+import { ModelIconGlyph } from "@/model-icons/glyph";
+import { resolveChoiceIconId } from "@/model-icons/resolve";
+import { useActiveRouter } from "@/model-routers/use-router-picker";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
@@ -135,8 +138,22 @@ export function CompactModelSheet({
     profiles,
     serverId,
   });
-  const ModelIcon = useProviderIcon(selectedProvider, serverId);
-  const activeRouterName = useActiveRouterName(serverId, activeRouterId);
+  const ProviderIcon = useProviderIcon(selectedProvider, serverId);
+  const activeRouter = useActiveRouter(serverId, activeRouterId);
+  const activeRouterName = activeRouter?.name ?? null;
+  const choiceIconId = resolveChoiceIconId({
+    modelId: selectedModel,
+    modelLabel: rootBrowser.selectedModelLabel,
+    router: activeRouter,
+  });
+  const ChoiceIcon = useMemo<AgentControlIcon>(() => {
+    if (!choiceIconId) return ProviderIcon;
+    const iconId = choiceIconId;
+    function ChoiceModelIcon({ size, color }: { size: number; color: string }) {
+      return <ModelIconGlyph id={iconId} size={size} color={color} />;
+    }
+    return ChoiceModelIcon;
+  }, [ProviderIcon, choiceIconId]);
   const hasSelectedProvider = selectedProvider.trim().length > 0;
   const rootHeader = useMemo(
     () => ({
@@ -250,7 +267,7 @@ export function CompactModelSheet({
       <View style={styles.mobileRootContent} testID="agent-controls-settings-list">
         <View style={styles.controlsContent}>
           <AgentControlTrigger
-            icon={ModelIcon}
+            icon={ChoiceIcon}
             surface="sheet"
             label={t("modelSelector.model")}
             value={rootBrowser.selectedModelLabel}
@@ -265,7 +282,7 @@ export function CompactModelSheet({
         </View>
       </View>
     ),
-    [ModelIcon, children, disabled, openModelBrowser, rootBrowser.selectedModelLabel, t],
+    [ChoiceIcon, children, disabled, openModelBrowser, rootBrowser.selectedModelLabel, t],
   );
 
   return (
@@ -282,9 +299,9 @@ export function CompactModelSheet({
         testID="combined-model-selector"
         chevron={null}
       >
-        {hasSelectedProvider ? (
+        {choiceIconId || hasSelectedProvider ? (
           <ComposerToolbarGlyph size={glyphSize}>
-            <ModelIcon size={glyphSize} color={styles.providerIcon.color} />
+            <ChoiceIcon size={glyphSize} color={styles.providerIcon.color} />
           </ComposerToolbarGlyph>
         ) : null}
         <View style={styles.triggerLabels}>

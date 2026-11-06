@@ -41,6 +41,7 @@ export function buildDraftAgentControls(input: {
     modelSelectorProviders: formState.modelSelectorProviders,
     isAllModelsLoading: formState.isAllModelsLoading,
     onSelectProviderAndModel: formState.setProviderAndModelFromUser,
+    onRouterPicked: formState.applyRouterFromUser,
     thinkingOptions: formState.availableThinkingOptions,
     selectedThinkingOptionId: formState.selectedThinkingOptionId,
     onSelectThinkingOption: formState.setThinkingOptionFromUser,
