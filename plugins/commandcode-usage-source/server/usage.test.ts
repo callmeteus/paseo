@@ -37,20 +37,23 @@ function whoamiBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function creditsBody(overrides: Record<string, unknown> = {}) {
+function creditsBody(input: { credits?: Record<string, unknown>; windowLimits?: unknown } = {}) {
   return {
     credits: {
       planId: "pro",
       monthlyCredits: 42.5,
       purchasedCredits: 10,
       freeCredits: 2,
-      windowLimits: {
-        limited: true,
-        fiveHour: { used: 6, cap: 16, resetAt: FIVE_HOUR_RESET_MS },
-        weekly: { used: 20, cap: 40, resetAt: WEEKLY_RESET_MS },
-      },
-      ...overrides,
+      ...input.credits,
     },
+    windowLimits:
+      input.windowLimits === undefined
+        ? {
+            limited: true,
+            fiveHour: { used: 6, cap: 16, resetAt: FIVE_HOUR_RESET_MS },
+            weekly: { used: 20, cap: 40, resetAt: WEEKLY_RESET_MS },
+          }
+        : input.windowLimits,
   };
 }
 
@@ -159,6 +162,83 @@ describe("Command Code usage source", () => {
     expect(report).toMatchObject({ status: "available", windows: [] });
   });
 
+  it("reports the monthly credit percentage from the plan allowance", async () => {
+    process.env["COMMAND_CODE_API_KEY"] = "cmd_key";
+    const handlers = successHandlers();
+    handlers[1] = [
+      "https://api.commandcode.ai/alpha/billing/credits",
+      () =>
+        jsonResponse(
+          creditsBody({
+            credits: {
+              planId: "individual-go-v1",
+              monthlyCredits: 7,
+              purchasedCredits: 0,
+              freeCredits: 0,
+            },
+            windowLimits: { limited: false },
+          }),
+        ),
+    ];
+    handlers[2] = [
+      "https://api.commandcode.ai/alpha/billing/subscriptions",
+      () =>
+        jsonResponse({
+          data: {
+            planId: "individual-go-v1",
+            status: "active",
+            currentPeriodStart: "2026-11-06T04:36:52.000Z",
+            currentPeriodEnd: "2026-12-06T04:36:52.000Z",
+          },
+        }),
+    ];
+
+    const report = await fetchUsage(
+      { store: "env", locator: "COMMAND_CODE_API_KEY" },
+      mockFetch(handlers),
+    );
+
+    expect(report).toMatchObject({
+      status: "available",
+      planLabel: "Go",
+      windows: [
+        expect.objectContaining({
+          id: "monthly",
+          label: "Monthly",
+          usedPct: 30,
+          resetsAt: "2026-12-06T04:36:52.000Z",
+        }),
+      ],
+      balances: [expect.objectContaining({ id: "monthly_credits", remaining: 7 })],
+    });
+  });
+
+  it("omits the monthly percentage when the plan allowance is unknown", async () => {
+    process.env["COMMAND_CODE_API_KEY"] = "cmd_key";
+    const handlers = successHandlers();
+    handlers[1] = [
+      "https://api.commandcode.ai/alpha/billing/credits",
+      () =>
+        jsonResponse(
+          creditsBody({
+            credits: { planId: "mystery", monthlyCredits: 7 },
+            windowLimits: { limited: false },
+          }),
+        ),
+    ];
+    handlers[2] = [
+      "https://api.commandcode.ai/alpha/billing/subscriptions",
+      () => jsonResponse({ data: { planId: "mystery", status: "active" } }),
+    ];
+
+    const report = await fetchUsage(
+      { store: "env", locator: "COMMAND_CODE_API_KEY" },
+      mockFetch(handlers),
+    );
+
+    expect(report).toMatchObject({ status: "available", planLabel: "mystery", windows: [] });
+  });
+
   it("accepts an ISO reset timestamp instead of failing the card", async () => {
     process.env["COMMAND_CODE_API_KEY"] = "cmd_key";
     const handlers = successHandlers();
@@ -262,6 +342,8 @@ describe("Command Code usage source", () => {
   it("labels known plans and keeps unknown plan ids", () => {
     expect(commandCodePlanLabel("max-20x")).toBe("Max 20×");
     expect(commandCodePlanLabel("goat")).toBe("GOAT");
+    expect(commandCodePlanLabel("individual-go-v1")).toBe("Go");
+    expect(commandCodePlanLabel("individual_pro_v1")).toBe("Pro");
     expect(commandCodePlanLabel("enterprise-pool")).toBe("enterprise-pool");
     expect(commandCodePlanLabel(undefined)).toBeUndefined();
   });
