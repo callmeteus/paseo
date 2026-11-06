@@ -69,6 +69,32 @@ Linux produces the `paseo-desktop` launcher and desktop entry. macOS produces
 Electron runtime and the checkout's built daemon, client, and renderer rather
 than downloading a published desktop release.
 
+### Linux desktop packaging from the repo
+
+From the repo root, `npm run build:desktop` runs Expo export for Electron and
+then `electron-builder` in `packages/desktop`. On Linux, the default recipe
+includes AppImage, `.deb`, `.rpm`, and `.tar.gz`. **`rpmbuild` is required only
+for the RPM**: the desktop build script omits the `rpm` target when
+`rpmbuild` is missing (typical Debian/Ubuntu installs), so the command finishes
+successfully and still writes `.deb` and the other targets. Install the
+`rpm` package (`sudo apt-get install rpm` on Ubuntu) when you need a local
+`.rpm` or to match CI’s full artifact set.
+
+After a local build, install the `.deb` with a **graphical PolicyKit prompt** (the
+system “authenticate” dialog) using the repo helper:
+
+```bash
+npm run reinstall:desktop:linux
+```
+
+It prefers `pkexec apt-get install -y <deb>`. On headless SSH there is no
+graphical agent, so use `sudo apt install -y` on the `.deb` path instead.
+
+To check the packaged `electron-builder` revision without running a build,
+from `packages/desktop` run `node ./scripts/run-electron-builder.mjs -- --help`
+(or `--version`). Passing only those flags skips the repo config overlay and
+does not start packaging.
+
 ### PASEO_HOME
 
 `PASEO_HOME` is the directory that holds runtime state (agents, worktrees, workspace config, sockets, daemon log). Resolution rules:
