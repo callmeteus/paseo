@@ -219,6 +219,7 @@ function createSessionWithConfig(
   config: {
     provider?: string;
     modeId?: string | null;
+    workflowModeId?: string;
     model?: string | null;
     featureValues?: Record<string, unknown>;
     toolPolicy?: ToolPolicy;
@@ -230,6 +231,7 @@ function createSessionWithConfig(
       provider: config.provider ?? "claude-acp",
       cwd: "/tmp/paseo-acp-test",
       modeId: config.modeId ?? undefined,
+      workflowModeId: config.workflowModeId,
       model: config.model ?? undefined,
       featureValues: config.featureValues,
       toolPolicy: config.toolPolicy,
@@ -1433,6 +1435,42 @@ describe("ACPAgentSession Zed parity", () => {
     await expect(permission).resolves.toEqual({
       outcome: { outcome: "selected", optionId: "allow-once" },
     });
+  });
+
+  test("auto-selects enter plan mode when Paseo workflow is already plan", async () => {
+    const session = createSessionWithConfig({
+      provider: "commandcode-acp",
+      modeId: "plan",
+      workflowModeId: "plan",
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+
+    const permission = session.requestPermission({
+      sessionId: "session-1",
+      toolCall: {
+        toolCallId: "switch-1",
+        title: "Plan Mode",
+        kind: "switch_mode",
+        status: "pending",
+        rawInput: {
+          command: "enter_plan_mode",
+          args: [],
+        },
+      },
+      options: [
+        { optionId: "yes", name: "Yes (Recommended)", kind: "allow_once" },
+        { optionId: "no", name: "No", kind: "reject_once" },
+      ],
+    } satisfies RequestPermissionRequest);
+
+    await expect(permission).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "yes" },
+    });
+
+    expect(events.some((event) => event.type === "permission_requested")).toBe(false);
   });
 
   test("preserves ACP chooser actions and returns the selected option", async () => {
