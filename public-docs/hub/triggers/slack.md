@@ -8,7 +8,7 @@ category: Hub
 
 # Slack triggers
 
-`slack.mention` fires when the bot is mentioned in a channel where it is present. Direct messages, slash commands, and interactive components do not produce this trigger.
+`slack.mention` fires when the bot is mentioned in a channel where it is present. Direct messages and slash commands do not produce this trigger.
 
 `.paseo/workflows/slack-help.yml`:
 
@@ -55,3 +55,9 @@ Hub consumes consecutive declared headers and exposes the remainder as `${{ pase
 | `channels`   | Channel name → **About**. The channel ID is at the bottom of the panel and starts with `C`. |
 
 [Guided setup](/docs/hub/quickstart) fills `workspace` from the Slack app you connected and asks you for your member ID, so a generated starter already carries both.
+
+## Plan feedback
+
+`slack_agent.feedback: true` lets the agent put choices on the card. The agent sends them with `slack_finish`, and it chooses the labels. Omit `choices` and the card has no buttons. A click is a new arrival on the same thread, and the prompt names the option the person picked. A `conversation` continuation sends it to the same agent, including in the middle of a turn. Text, regex, and the mention token do not apply. `from_users`, `channels`, `workspace`, and the connection still do.
+
+The Slack app has to have interactivity turned on. See [Slack for Hub](/docs/hub/self-hosting/slack-app).

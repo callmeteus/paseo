@@ -6,7 +6,7 @@ nav: Slack
 
 # Slack 触发器 {#slack-triggers}
 
-当机器人在它所在的频道中被提及时，`slack.mention` 会触发。私信、斜杠命令和交互组件不会产生这个触发器。
+当机器人在它所在的频道中被提及时，`slack.mention` 会触发。私信和斜杠命令不会产生这个触发器。
 
 `.paseo/workflows/slack-help.yml`：
 
@@ -53,3 +53,9 @@ Hub 会读取连续的已声明头部，并把剩余部分作为 `${{ paseo.prom
 | `channels`   | 频道名称 → **About**。频道 ID 位于面板底部，以 `C` 开头。                  |
 
 [引导式设置](/docs/hub/quickstart)会根据你连接的 Slack 应用填好 `workspace`，并询问你的成员 ID，因此生成的起步配置已经包含这两项。
+
+## 计划反馈 {#plan-feedback}
+
+`slack_agent.feedback: true` 允许 Agent 在卡片上放选项。Agent 通过 `slack_finish` 发送这些选项，并自己写标签。不传 `choices` 时，卡片上没有按钮。点击是同一子区的一次新到达，提示词会写出对方选中的选项。`conversation` 延续会把它发给同一个 Agent，包括回合进行中。文本、正则和提及标记不再参与匹配。`from_users`、`channels`、`workspace` 和连接仍然有效。
+
+Slack 应用必须打开交互功能。参见 [在 Hub 中使用 Slack](/docs/hub/self-hosting/slack-app)。

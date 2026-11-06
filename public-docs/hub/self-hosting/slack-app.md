@@ -45,12 +45,15 @@ The Apps guide gives you a webhook manifest and asks for the App ID, Client ID, 
 
 Slack calls:
 
-| Provider setting | Hub URL                                               |
-| ---------------- | ----------------------------------------------------- |
-| Redirect URL     | `<PASEO_HUB_APP_URL>/api/integrations/slack/callback` |
-| Request URL      | `<PASEO_HUB_APP_URL>/api/integrations/slack/events`   |
+| Provider setting          | Hub URL                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| Redirect URL              | `<PASEO_HUB_APP_URL>/api/integrations/slack/callback`      |
+| Request URL               | `<PASEO_HUB_APP_URL>/api/integrations/slack/events`        |
+| Interactivity Request URL | `<PASEO_HUB_APP_URL>/api/integrations/slack/interactivity` |
 
 Start the installation from Hub. An installation started only from Slack is not bound to a Hub organization.
+
+An app created before interactivity was part of the manifest does not pick the change up. In **Interactivity & Shortcuts**, turn interactivity on. Socket Mode has no request URL. A webhook app uses the Interactivity Request URL above. No new scope is required, so the app does not need to be reinstalled.
 
 ## Configure from environment
 

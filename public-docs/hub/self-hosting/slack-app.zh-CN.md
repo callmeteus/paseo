@@ -43,12 +43,15 @@ Apps 指南会给出一份 webhook manifest，并要求填写 App ID、Client ID
 
 Slack 调用：
 
-| Provider 设置 | Hub URL                                               |
-| ------------- | ----------------------------------------------------- |
-| Redirect URL  | `<PASEO_HUB_APP_URL>/api/integrations/slack/callback` |
-| Request URL   | `<PASEO_HUB_APP_URL>/api/integrations/slack/events`   |
+| Provider 设置             | Hub URL                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| Redirect URL              | `<PASEO_HUB_APP_URL>/api/integrations/slack/callback`      |
+| Request URL               | `<PASEO_HUB_APP_URL>/api/integrations/slack/events`        |
+| Interactivity Request URL | `<PASEO_HUB_APP_URL>/api/integrations/slack/interactivity` |
 
 请从 Hub 发起安装。只从 Slack 发起的安装不会绑定到任何 Hub 组织。
+
+在交互成为 manifest 的一部分之前创建的应用不会自动带上这项设置。在 **Interactivity & Shortcuts** 中打开交互。Socket Mode 没有请求 URL。Webhook 应用使用上面的 Interactivity Request URL。没有新增 scope，因此不需要重新安装应用。
 
 ## 通过环境变量配置 {#configure-from-environment}
 
