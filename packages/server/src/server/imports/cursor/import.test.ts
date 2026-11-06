@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
-import { importCursorChats } from "./import.js";
+import { CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL, importCursorChats } from "./import.js";
 import {
   cleanupFixtureDirectories,
   createCursorFixtureDb,
@@ -128,6 +128,7 @@ describe("importCursorChats", () => {
     expect(parent?.portedTimeline?.length).toBeGreaterThan(0);
     expect(child?.workspaceId).toBe(parent?.workspaceId);
     expect(child?.labels[PARENT_AGENT_ID_LABEL]).toBe(parent?.id);
+    expect(child?.labels[CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL]).toBe(parentId);
   });
 
   test("creates one workspace per root chat even when they share a directory", async () => {
@@ -200,5 +201,38 @@ describe("importCursorChats", () => {
     expect(result.chats[0]?.error).toContain("workspace folder");
     expect(storage.records.size).toBe(0);
     expect(provisioning.created).toHaveLength(0);
+  });
+
+  test("names an untitled chat from the first line, cut at 60 characters", async () => {
+    const composerId = "44444444-4444-4444-8444-444444444444";
+    const firstLine = `${"A".repeat(70)}   extra`;
+    const dbPath = createCursorFixtureDb(
+      [
+        mainFixtureChat({
+          composerId,
+          name: null,
+          bubbles: [
+            {
+              bubbleId: "b1",
+              type: 1,
+              text: `${firstLine}\nsecond line that must stay out of the title`,
+              createdAt: "2026-10-21T22:41:11.656Z",
+            },
+          ],
+        }),
+      ],
+      directories,
+    );
+    const storage = new FakeAgentStorage();
+    const provisioning = fakeProvisioning();
+
+    const result = await importCursorChats(
+      importInput(dbPath, storage, [composerId], provisioning),
+    );
+
+    const expected = "A".repeat(60);
+    expect(provisioning.created[0]?.title).toBe(expected);
+    const agent = storage.records.get(result.chats[0]!.agentId as string);
+    expect(agent?.title).toBe(expected);
   });
 });
