@@ -1,0 +1,1 @@
+{ "id": "provider-routers", "requirements": { "paseo": ">=0.11.0" } }

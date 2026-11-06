@@ -3,6 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const builtinPlugins = [
+  "provider-routers",
+  "model-routers",
+  "auto-routers",
   "antigravity-provider",
   "claude-usage-source",
   "codex-usage-source",
