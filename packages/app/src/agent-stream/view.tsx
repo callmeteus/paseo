@@ -1544,9 +1544,10 @@ function ThoughtSlot({
   if (row.kind === "text" && !bodyText.trim()) {
     return null;
   }
-  // Beside a shell or a search the row is still "Pensei" and the sentence under it.
-  // Open that sentence: the previous path painted it as a tool-detail card.
-  const openBody = row.kind === "text" || defaultExpanded;
+  // Beside a shell or a search the row uses `kind: "text"` so the badge is not a second
+  // activity line — the sentence still lives in the expandable body and obeys
+  // autoExpandReasoning like every other thought.
+  const openBody = defaultExpanded;
   return (
     <ToolCallSlot
       itemId={itemId}
@@ -1556,7 +1557,7 @@ function ThoughtSlot({
       status={status === "ready" ? "completed" : "executing"}
       isLastInSequence={isLastInSequence}
       defaultExpanded={openBody}
-      forceInline={openBody}
+      forceInline
       labelOverride={row.kind === "badge" ? row.label : t("toolCallGroup.thought")}
       secondaryLabelOverride={row.kind === "badge" ? row.secondaryLabel : undefined}
     />
