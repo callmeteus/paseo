@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -69,9 +69,11 @@ function providerLabel(provider: AgentProvider | undefined, fallback: string): s
 export function ProviderErrorCard({
   message,
   provider,
+  children,
 }: {
   message: string;
   provider?: AgentProvider;
+  children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -92,6 +94,7 @@ export function ProviderErrorCard({
       </View>
       <Text style={styles.title}>{t(keys.title)}</Text>
       <Text style={styles.description}>{t(keys.description, { provider: providerName })}</Text>
+      {children}
       <PressHighlight
         onPress={toggleDetails}
         accessibilityRole="button"

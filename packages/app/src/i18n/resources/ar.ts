@@ -313,6 +313,8 @@ export const ar: TranslationResources = {
       reached: "بلغت جلسة هذا النموذج حدها.",
       resetsAt: "بلغت جلسة هذا النموذج حدها وتعود عند {{time}} بتوقيت {{place}}.",
       resetsRaw: "بلغت جلسة هذا النموذج حدها وتعود عند {{when}}.",
+      resume: "استئناف هذه المحادثة عند انتهاء الحد",
+      resumePrompt: "انتهى الحد. أكمل من حيث توقفت.",
     },
     providerError: {
       badge: "خطأ في provider",

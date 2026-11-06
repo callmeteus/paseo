@@ -316,6 +316,8 @@ export const ja: TranslationResources = {
       reached: "このモデルのセッションは上限に達しました。",
       resetsAt: "このモデルのセッションは上限に達しました。{{place}}時間の{{time}}に戻ります。",
       resetsRaw: "このモデルのセッションは上限に達しました。戻りは {{when}} です。",
+      resume: "制限が終わったらこのチャットを再開する",
+      resumePrompt: "制限が解除されました。途中から続けてください。",
     },
     providerError: {
       badge: "Provider エラー",

@@ -318,6 +318,8 @@ export const ptBR: TranslationResources = {
       resetsAt:
         "A sessão deste modelo chegou no limite e volta às {{time}} no horário de {{place}}.",
       resetsRaw: "A sessão deste modelo chegou no limite e volta em {{when}}.",
+      resume: "Retomar este chat quando o limite acabar",
+      resumePrompt: "O limite acabou. Continue de onde você parou.",
     },
     providerError: {
       badge: "Erro do provider",

@@ -310,6 +310,8 @@ export const en = {
       resetsAt:
         "This model's session has hit its limit and comes back at {{time}}, {{place}} time.",
       resetsRaw: "This model's session has hit its limit and comes back at {{when}}.",
+      resume: "Resume this chat when the limit ends",
+      resumePrompt: "The limit has reset. Continue from where you stopped.",
     },
     providerError: {
       badge: "Provider error",

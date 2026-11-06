@@ -314,6 +314,8 @@ export const ko: TranslationResources = {
       reached: "이 모델의 세션이 한도에 도달했습니다.",
       resetsAt: "이 모델의 세션이 한도에 도달했고 {{place}} 시간 {{time}}에 돌아옵니다.",
       resetsRaw: "이 모델의 세션이 한도에 도달했고 {{when}}에 돌아옵니다.",
+      resume: "한도가 끝나면 이 채팅을 다시 시작",
+      resumePrompt: "한도가 끝났습니다. 멈춘 곳부터 계속하세요.",
     },
     providerError: {
       badge: "Provider 오류",

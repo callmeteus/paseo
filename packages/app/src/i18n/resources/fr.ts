@@ -319,6 +319,8 @@ export const fr: TranslationResources = {
       resetsAt:
         "La session de ce modèle a atteint sa limite et revient à {{time}}, heure de {{place}}.",
       resetsRaw: "La session de ce modèle a atteint sa limite et revient à {{when}}.",
+      resume: "Reprendre ce chat quand la limite se termine",
+      resumePrompt: "La limite est terminée. Reprends là où tu t'étais arrêté.",
     },
     providerError: {
       badge: "Erreur du provider",

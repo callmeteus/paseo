@@ -12,7 +12,6 @@ import React, {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   View,
@@ -45,8 +44,9 @@ import {
 import { PlanCard } from "@/components/plan-card";
 import { ProviderErrorCard } from "@/components/provider-error-card";
 import { readProviderErrorText } from "@/agent-stream/provider-error";
-import { sessionLimitWarning } from "@/agent-stream/session-limit";
-import { Alert } from "@/components/ui/alert";
+import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
+import { readSessionLimitNotice } from "@/agent-stream/session-limit";
+import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
 import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
@@ -338,10 +338,10 @@ function resolveBottomOverlayControlOffset(clearance: number | undefined): numbe
   return Math.max(16, clearance ?? 0);
 }
 
-function renderSessionLimitWarning(text: string, t: TFunction): ReactNode | null {
-  const warning = sessionLimitWarning(text, t);
-  if (!warning) return null;
-  return <Alert variant="warning" size="sm" title={warning} testID="session-limit-warning" />;
+function limitResumeItemText(item: StreamItem): string | null {
+  if (item.kind === "assistant_message") return item.text;
+  if (item.kind === "notification") return item.message;
+  return null;
 }
 
 const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamViewProps>(
@@ -541,6 +541,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     // the component reads the current (fresh) streamItems/streamHead from props.
     const effectiveStreamItems = useRetainedValue(streamItems, isActive);
     const effectiveStreamHead = useRetainedValue(streamHead, isActive);
+    const limitResumeItemId = useMemo(
+      () =>
+        latestLimitResumeItemId(
+          [...effectiveStreamItems, ...(effectiveStreamHead ?? [])].map((item) => ({
+            id: item.id,
+            text: limitResumeItemText(item),
+          })),
+        ),
+      [effectiveStreamHead, effectiveStreamItems],
+    );
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
     const isTurnActive = effectiveTurnPresentation.isActive;
     const presentStream = useMemo(() => createStreamPresentation(), []);
@@ -798,11 +808,31 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
         // Cursor prints a spent session as assistant text. It is a warning, not the reply.
-        const sessionLimit = renderSessionLimitWarning(item.text, t);
-        if (sessionLimit) return sessionLimit;
+        if (readSessionLimitNotice(item.text)) {
+          return (
+            <SessionLimitNotice
+              text={item.text}
+              agentId={agentId}
+              serverId={resolvedServerId}
+              provider={context.provider}
+              offer={item.id === limitResumeItemId}
+            />
+          );
+        }
         const errorText = readProviderErrorText(item.text);
         if (errorText !== null) {
-          return <ProviderErrorCard provider={context.provider} message={errorText} />;
+          return (
+            <ProviderErrorCard provider={context.provider} message={errorText}>
+              {item.id === limitResumeItemId ? (
+                <LimitResumeOffer
+                  agentId={agentId}
+                  serverId={resolvedServerId}
+                  provider={context.provider}
+                  text={errorText}
+                />
+              ) : null}
+            </ProviderErrorCard>
+          );
         }
         return (
           <AssistantFileLinkResolverProvider
@@ -835,8 +865,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         client,
         context.provider,
         handleInlinePathPress,
+        limitResumeItemId,
         resolvedServerId,
-        t,
         toast,
         workspaceRoot,
       ],
@@ -1020,8 +1050,17 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             return renderToolCallItem(layoutItem, item);
 
           case "notification": {
-            const sessionLimit = renderSessionLimitWarning(item.message, t);
-            if (sessionLimit) return sessionLimit;
+            if (readSessionLimitNotice(item.message)) {
+              return (
+                <SessionLimitNotice
+                  text={item.message}
+                  agentId={agentId}
+                  serverId={resolvedServerId}
+                  provider={context.provider}
+                  offer={item.id === limitResumeItemId}
+                />
+              );
+            }
             return <Notification level={item.level} message={item.message} />;
           }
 
@@ -1058,7 +1097,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         renderThoughtItem,
         renderToolCallItem,
         resolvedServerId,
-        t,
+        context.provider,
+        limitResumeItemId,
       ],
     );
 

@@ -313,6 +313,8 @@ export const zhCN: TranslationResources = {
       reached: "这个模型的会话已达到上限。",
       resetsAt: "这个模型的会话已达到上限，{{place}}时间 {{time}} 恢复。",
       resetsRaw: "这个模型的会话已达到上限，恢复时间是 {{when}}。",
+      resume: "额度结束后自动继续这个聊天",
+      resumePrompt: "额度已经恢复。请从停下的地方继续。",
     },
     providerError: {
       badge: "Provider 错误",
