@@ -83,6 +83,26 @@ describe("combined model selector data", () => {
     ]);
   });
 
+  it("hides a disabled model and keeps a model whose isSelectable flag is omitted", () => {
+    const plainModel: AgentModelDefinition = {
+      ...codexModel,
+      id: "gpt-5.4-mini",
+      label: "GPT-5.4 mini",
+    };
+
+    const [provider] = buildSelectableProviderSelectorProviders(
+      [snapshotEntry({ provider: "codex", models: [codexModel, plainModel] })],
+      true,
+      null,
+      { codex: [codexModel.id] },
+    );
+
+    expect(provider?.modelSelection).toMatchObject({
+      kind: "models",
+      rows: [{ modelId: "gpt-5.4-mini" }],
+    });
+  });
+
   it("hides compatibility-only model entries from new clients", () => {
     const compatibilityModel: AgentModelDefinition = {
       ...codexModel,

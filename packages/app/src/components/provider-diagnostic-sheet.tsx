@@ -11,6 +11,7 @@ import {
   type SheetHeader,
 } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollableCodeSurface, SurfaceCard } from "@/components/ui/scrollable-code-surface";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -50,25 +51,72 @@ function rankModels<T>(items: T[], query: string, fields: (item: T) => string[])
   return scored.map((entry) => entry.item);
 }
 
-function DiscoveredModelRow({ model }: { model: AgentModelDefinition }) {
+function ModelEnableSwitch({
+  modelId,
+  modelLabel,
+  enabled,
+  onToggle,
+}: {
+  modelId: string;
+  modelLabel: string;
+  enabled: boolean;
+  onToggle: (modelId: string, enabled: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const handleChange = useCallback(
+    (value: boolean) => onToggle(modelId, value),
+    [modelId, onToggle],
+  );
+  return (
+    <Switch
+      value={enabled}
+      onValueChange={handleChange}
+      accessibilityLabel={t("settings.providers.models.enableModel", { name: modelLabel })}
+    />
+  );
+}
+
+function DiscoveredModelRow({
+  model,
+  enabled,
+  onToggle,
+}: {
+  model: AgentModelDefinition;
+  enabled: boolean;
+  onToggle: (modelId: string, enabled: boolean) => void;
+}) {
+  const { t } = useTranslation();
   return (
     <View style={sheetStyles.modelRow}>
-      <Text style={sheetStyles.modelTitle} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={sheetStyles.monoHint}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      {model.description ? (
-        <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
-          {model.description}
+      <View style={sheetStyles.modelRowText}>
+        <Text style={sheetStyles.modelTitle} numberOfLines={1}>
+          {model.label}
         </Text>
-      ) : null}
+        <Text
+          style={sheetStyles.monoHint}
+          numberOfLines={1}
+          selectable
+          dataSet={CODE_SURFACE_DATASET}
+        >
+          {model.id}
+        </Text>
+        {model.description ? (
+          <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
+            {model.description}
+          </Text>
+        ) : null}
+        {enabled ? null : (
+          <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
+            {t("settings.providers.statuses.disabled")}
+          </Text>
+        )}
+      </View>
+      <ModelEnableSwitch
+        modelId={model.id}
+        modelLabel={model.label}
+        enabled={enabled}
+        onToggle={onToggle}
+      />
     </View>
   );
 }
@@ -76,10 +124,14 @@ function DiscoveredModelRow({ model }: { model: AgentModelDefinition }) {
 function CustomModelRow({
   model,
   deleting,
+  enabled,
+  onToggle,
   onDelete,
 }: {
   model: ProviderProfileModel;
   deleting: boolean;
+  enabled: boolean;
+  onToggle: (modelId: string, enabled: boolean) => void;
   onDelete: (modelId: string) => void;
 }) {
   const { t } = useTranslation();
@@ -96,18 +148,30 @@ function CustomModelRow({
 
   return (
     <View style={sheetStyles.modelRow}>
-      <Text style={[sheetStyles.modelTitle, sheetStyles.customModelText]} numberOfLines={1}>
-        {model.label}
-      </Text>
-      <Text
-        style={[sheetStyles.monoHint, sheetStyles.customModelText]}
-        numberOfLines={1}
-        selectable
-        dataSet={CODE_SURFACE_DATASET}
-      >
-        {model.id}
-      </Text>
-      <View style={sheetStyles.modelRowFiller} />
+      <View style={sheetStyles.modelRowText}>
+        <Text style={[sheetStyles.modelTitle, sheetStyles.customModelText]} numberOfLines={1}>
+          {model.label}
+        </Text>
+        <Text
+          style={[sheetStyles.monoHint, sheetStyles.customModelText]}
+          numberOfLines={1}
+          selectable
+          dataSet={CODE_SURFACE_DATASET}
+        >
+          {model.id}
+        </Text>
+        {enabled ? null : (
+          <Text style={sheetStyles.descriptionInline} numberOfLines={1}>
+            {t("settings.providers.statuses.disabled")}
+          </Text>
+        )}
+      </View>
+      <ModelEnableSwitch
+        modelId={model.id}
+        modelLabel={model.label}
+        enabled={enabled}
+        onToggle={onToggle}
+      />
       <Pressable
         onPress={handleDelete}
         disabled={deleting}
@@ -403,8 +467,10 @@ interface ProviderModalBodyProps {
   searchActive: boolean;
   filteredDiscovered: AgentModelDefinition[];
   filteredCustom: ProviderProfileModel[];
+  disabledModelIds: readonly string[];
   deletingModelId: string | null;
   onRefresh: () => void;
+  onToggleModel: (modelId: string, enabled: boolean) => void;
   onDeleteCustom: (modelId: string) => void;
   theme: { iconSize: { md: number }; colors: { foregroundMuted: string } };
 }
@@ -502,8 +568,10 @@ function ProviderModalBody(props: ProviderModalBodyProps) {
     searchActive,
     filteredDiscovered,
     filteredCustom,
+    disabledModelIds,
     deletingModelId,
     onRefresh,
+    onToggleModel,
     onDeleteCustom,
     theme,
   } = props;
@@ -553,7 +621,12 @@ function ProviderModalBody(props: ProviderModalBodyProps) {
           />
           <View style={settingsStyles.card}>
             {filteredDiscovered.map((model) => (
-              <DiscoveredModelRow key={model.id} model={model} />
+              <DiscoveredModelRow
+                key={model.id}
+                model={model}
+                enabled={!disabledModelIds.includes(model.id)}
+                onToggle={onToggleModel}
+              />
             ))}
           </View>
         </View>
@@ -570,6 +643,8 @@ function ProviderModalBody(props: ProviderModalBodyProps) {
                 key={model.id}
                 model={model}
                 deleting={deletingModelId === model.id}
+                enabled={!disabledModelIds.includes(model.id)}
+                onToggle={onToggleModel}
                 onDelete={onDeleteCustom}
               />
             ))}
@@ -603,6 +678,10 @@ export function ProviderDiagnosticSheet({
   );
   const additionalModels = useMemo(
     () => config?.providers?.[provider]?.additionalModels ?? [],
+    [config?.providers, provider],
+  );
+  const disabledModelIds = useMemo(
+    () => config?.providers?.[provider]?.disabledModelIds ?? [],
     [config?.providers, provider],
   );
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
@@ -649,6 +728,25 @@ export function ProviderDiagnosticSheet({
   const handleCloseAddSheet = useCallback(() => setAddSheetOpen(false), []);
   const handleOpenDiagSheet = useCallback(() => setDiagSheetOpen(true), []);
   const handleCloseDiagSheet = useCallback(() => setDiagSheetOpen(false), []);
+
+  const handleToggleModel = useCallback(
+    (modelId: string, enabled: boolean) => {
+      let next: string[];
+      if (enabled) {
+        next = disabledModelIds.filter((id) => id !== modelId);
+      } else if (disabledModelIds.includes(modelId)) {
+        next = [...disabledModelIds];
+      } else {
+        next = [...disabledModelIds, modelId];
+      }
+      void patchConfig({
+        providers: {
+          [provider]: { disabledModelIds: next },
+        },
+      });
+    },
+    [disabledModelIds, patchConfig, provider],
+  );
 
   const handleDeleteCustom = useCallback(
     (modelId: string) => {
@@ -708,8 +806,10 @@ export function ProviderDiagnosticSheet({
           searchActive={Boolean(q)}
           filteredDiscovered={filteredDiscovered}
           filteredCustom={filteredCustom}
+          disabledModelIds={disabledModelIds}
           deletingModelId={deletingModelId}
           onRefresh={handleRefreshModels}
+          onToggleModel={handleToggleModel}
           onDeleteCustom={handleDeleteCustom}
           theme={theme}
         />
@@ -804,6 +904,13 @@ const sheetStyles = StyleSheet.create((theme) => ({
     gap: theme.spacing[3],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+  },
+  modelRowText: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
   },
   modelTitle: {
     color: theme.colors.foreground,

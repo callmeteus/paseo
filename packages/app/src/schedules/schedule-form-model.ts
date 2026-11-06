@@ -4,6 +4,10 @@ import type {
   AgentProvider,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
+import {
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
@@ -54,6 +58,7 @@ export interface ScheduleFormSnapshot {
 
 export interface ScheduleFormProviderSnapshot {
   entries: ProviderSnapshotEntry[];
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }
 
 export interface ScheduleDisclosureState {
@@ -219,10 +224,19 @@ function resolveProjectDisplay(input: {
   return buildStoredProjectDisplay(input.cwd);
 }
 
-function buildProviderModelsByProvider(entries: ProviderSnapshotEntry[]): ProviderModelsByProvider {
+function buildProviderModelsByProvider(
+  entries: ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
+): ProviderModelsByProvider {
   const map: ProviderModelsByProvider = new Map();
   for (const entry of entries) {
-    map.set(entry.provider, filterSelectableModels(entry.models ?? null));
+    map.set(
+      entry.provider,
+      omitDisabledModels(
+        filterSelectableModels(entry.models ?? null),
+        disabledModelIdsByProvider?.[entry.provider],
+      ),
+    );
   }
   return map;
 }
@@ -247,8 +261,23 @@ function resolveModeOptions(
 function resolveAvailableModels(
   entries: readonly ProviderSnapshotEntry[],
   provider: AgentProvider | null,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): AgentModelDefinition[] | null {
-  return filterSelectableModels(resolveSelectedEntry(entries, provider)?.models ?? null);
+  return omitDisabledModels(
+    filterSelectableModels(resolveSelectedEntry(entries, provider)?.models ?? null),
+    provider ? disabledModelIdsByProvider?.[provider] : undefined,
+  );
+}
+
+function findSelectableModelById(
+  entries: readonly ProviderSnapshotEntry[],
+  provider: AgentProvider | null,
+  modelId: string,
+): AgentModelDefinition | null {
+  const id = modelId.trim();
+  if (!provider || !id) return null;
+  const models = filterSelectableModels(resolveSelectedEntry(entries, provider)?.models ?? null);
+  return models?.find((model) => model.id === id) ?? null;
 }
 
 function resolveEffectiveModel(
@@ -271,8 +300,14 @@ function resolveThinkingOptions(
   entries: readonly ProviderSnapshotEntry[],
   provider: AgentProvider | null,
   modelId: string,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): NonNullable<AgentModelDefinition["thinkingOptions"]> {
-  const model = resolveEffectiveModel(resolveAvailableModels(entries, provider), modelId);
+  const listed = findSelectableModelById(entries, provider, modelId);
+  if (listed) return listed.thinkingOptions ?? [];
+  const model = resolveEffectiveModel(
+    resolveAvailableModels(entries, provider, disabledModelIdsByProvider),
+    modelId,
+  );
   return model?.thinkingOptions ?? [];
 }
 
@@ -280,13 +315,16 @@ function resolveModelDisplay(input: {
   entries: readonly ProviderSnapshotEntry[];
   provider: AgentProvider | null;
   modelId: string;
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): ScheduleFormDisplay | null {
   const modelId = input.modelId.trim();
   if (!modelId) {
     return null;
   }
+  const listed = findSelectableModelById(input.entries, input.provider, modelId);
+  if (listed) return { label: listed.label };
   const model = resolveEffectiveModel(
-    resolveAvailableModels(input.entries, input.provider),
+    resolveAvailableModels(input.entries, input.provider, input.disabledModelIdsByProvider),
     modelId,
   );
   return { label: model?.label ?? modelId };
@@ -569,12 +607,14 @@ function updateDerivedState(input: {
   hosts: readonly ScheduleFormHost[];
   targets: readonly ScheduleProjectTarget[];
   providerEntries: readonly ProviderSnapshotEntry[];
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): ScheduleFormState {
   const modeOptions = resolveModeOptions(input.providerEntries, input.state.selectedProvider);
   const availableThinkingOptions = resolveThinkingOptions(
     input.providerEntries,
     input.state.selectedProvider,
     input.state.selectedModel,
+    input.disabledModelIdsByProvider,
   );
   const canUseWorktreeIsolation = resolveCanUseWorktreeIsolation({
     state: input.state,
@@ -610,6 +650,7 @@ function updateDerivedState(input: {
       entries: input.providerEntries,
       provider: input.state.selectedProvider,
       modelId: input.state.selectedModel,
+      disabledModelIdsByProvider: input.disabledModelIdsByProvider,
     }),
     selectedModeDisplay: resolveModeDisplay({ modeOptions, modeId: input.state.selectedMode }),
     selectedThinkingDisplay: resolveThinkingDisplay({
@@ -733,6 +774,7 @@ function resolveSnapshotSelection(input: {
   preferences: FormPreferences | null;
   providerEntries: ProviderSnapshotEntry[];
   userModified: UserModifiedFields;
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): ScheduleFormState {
   const providerDefinitions = buildProviderDefinitions(input.providerEntries);
   const allowedProviderMap = buildProviderDefinitionMapForStatuses({
@@ -743,7 +785,7 @@ function resolveSnapshotSelection(input: {
   const resolved = resolveFormStateFromProviderModels(
     input.initialValues,
     input.preferences,
-    buildProviderModelsByProvider(input.providerEntries),
+    buildProviderModelsByProvider(input.providerEntries, input.disabledModelIdsByProvider),
     input.userModified,
     toFormState(input.state),
     allowedProviderMap,
@@ -776,12 +818,15 @@ function pickModelForProvider(input: {
   entries: readonly ProviderSnapshotEntry[];
   provider: AgentProvider;
   modelId: string;
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): string {
   const normalizedModelId = input.modelId.trim();
   if (normalizedModelId) {
     return normalizedModelId;
   }
-  return resolveDefaultModelId(resolveAvailableModels(input.entries, input.provider));
+  return resolveDefaultModelId(
+    resolveAvailableModels(input.entries, input.provider, input.disabledModelIdsByProvider),
+  );
 }
 
 function thinkingDraftKey(provider: AgentProvider, modelId: string): string {
@@ -809,9 +854,13 @@ function seedThinkingDrafts(
 function canonicalizeThinkingDrafts(
   drafts: Map<string, string>,
   entries: readonly ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): void {
   for (const entry of entries) {
-    const models = filterSelectableModels(entry.models ?? null);
+    const models = omitDisabledModels(
+      filterSelectableModels(entry.models ?? null),
+      disabledModelIdsByProvider?.[entry.provider],
+    );
     if (!models) {
       continue;
     }
@@ -859,6 +908,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
     );
   }
   let providerEntries: ProviderSnapshotEntry[] = [];
+  let disabledModelIdsByProvider: DisabledModelIdsByProvider = {};
   let userModified = { ...INITIAL_USER_MODIFIED, isolation: false };
   const timezone = snapshot.defaults.timezone ?? DEFAULT_TIMEZONE;
   let state = buildInitialState(snapshot);
@@ -872,6 +922,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       hosts,
       targets: projectTargets,
       providerEntries,
+      disabledModelIdsByProvider,
     });
     for (const listener of listeners) {
       listener();
@@ -899,6 +950,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
 
   function clearProviderSelection(nextState: ScheduleFormState): ScheduleFormState {
     providerEntries = [];
+    disabledModelIdsByProvider = {};
     return {
       ...nextState,
       selectedProvider: null,
@@ -934,6 +986,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       preferences: preferencesForSnapshotResolution(snapshot, preferences),
       providerEntries,
       userModified,
+      disabledModelIdsByProvider,
     });
   }
 
@@ -980,7 +1033,8 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         return;
       }
       providerEntries = providerSnapshot.entries;
-      canonicalizeThinkingDrafts(thinkingDrafts, providerEntries);
+      disabledModelIdsByProvider = providerSnapshot.disabledModelIdsByProvider ?? {};
+      canonicalizeThinkingDrafts(thinkingDrafts, providerEntries, disabledModelIdsByProvider);
       const isPendingResolution = state.providerSnapshotRequest?.serverId === serverId;
       const resolved =
         state.targetKind === "new-agent"
@@ -991,6 +1045,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
               preferences: preferencesForSnapshotResolution(snapshot, preferences),
               providerEntries,
               userModified,
+              disabledModelIdsByProvider,
             })
           : state;
       const providerResolutionByServerId: Record<string, ProviderResolutionStatus> = {
@@ -1001,7 +1056,12 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       }
       publish({
         ...resolved,
-        modelSelectorProviders: buildSelectableProviderSelectorProviders(providerEntries),
+        modelSelectorProviders: buildSelectableProviderSelectorProviders(
+          providerEntries,
+          true,
+          undefined,
+          disabledModelIdsByProvider,
+        ),
         providerResolutionByServerId,
         providerSnapshotRequest: isPendingResolution ? null : state.providerSnapshotRequest,
       });
@@ -1051,8 +1111,17 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (closed) {
         return;
       }
-      const selectedModel = pickModelForProvider({ entries: providerEntries, provider, modelId });
-      const availableModels = resolveAvailableModels(providerEntries, provider);
+      const selectedModel = pickModelForProvider({
+        entries: providerEntries,
+        provider,
+        modelId,
+        disabledModelIdsByProvider,
+      });
+      const availableModels = resolveAvailableModels(
+        providerEntries,
+        provider,
+        disabledModelIdsByProvider,
+      );
       const selectedThinkingOptionId = resolveThinkingOptionId({
         availableModels,
         modelId: selectedModel,

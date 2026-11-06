@@ -3355,6 +3355,7 @@ export const es: TranslationResources = {
         retrying: "Reintentando...",
         noSearchMatches: "Ningún modelo coincide con tu búsqueda",
         noneDetected: "No se detectaron modelos",
+        enableModel: "Habilitar{{name}}",
         discovered: "descubierto",
         custom: "Modelos personalizados",
         updated: "{{time}}actualizado",

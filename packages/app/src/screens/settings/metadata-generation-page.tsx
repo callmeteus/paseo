@@ -3,6 +3,7 @@ import { Alert, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import { disabledModelIdsByProviderFromConfig } from "@getpaseo/protocol/disabled-models";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { ExternalLink } from "@/components/ui/external-link";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -20,9 +21,19 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { config, isLoading: isConfigLoading, patchConfig } = useDaemonConfig(serverId);
   const snapshot = useProvidersSnapshot(serverId);
+  const disabledModelIdsByProvider = useMemo(
+    () => disabledModelIdsByProviderFromConfig(config?.providers),
+    [config?.providers],
+  );
   const providers = useMemo(
-    () => buildSelectableProviderSelectorProviders(snapshot.entries),
-    [snapshot.entries],
+    () =>
+      buildSelectableProviderSelectorProviders(
+        snapshot.entries,
+        true,
+        undefined,
+        disabledModelIdsByProvider,
+      ),
+    [disabledModelIdsByProvider, snapshot.entries],
   );
   const configuredProviders = config?.metadataGeneration.providers;
   const configuredProvider = configuredProviders?.[0] ?? null;

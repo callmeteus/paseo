@@ -59,6 +59,8 @@ export const ProviderOverrideSchema = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
   models: z.array(ProviderProfileModelSchema).optional(),
   additionalModels: z.array(ProviderProfileModelSchema).optional(),
+  // Ids the person turned off. The catalogue still lists them; pickers do not.
+  disabledModelIds: z.array(z.string()).optional(),
   disallowedTools: z.array(z.string()).optional(),
   paseoTools: ProviderPaseoToolsPolicySchema.optional(),
   enabled: z.boolean().optional(),

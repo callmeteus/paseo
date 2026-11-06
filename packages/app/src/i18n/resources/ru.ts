@@ -3345,6 +3345,7 @@ export const ru: TranslationResources = {
         retrying: "Повторная попытка...",
         noSearchMatches: "Ни одна модель не соответствует вашему запросу",
         noneDetected: "Модели не обнаружены",
+        enableModel: "Включить {{name}}",
         discovered: "Обнаруженные модели",
         custom: "Пользовательские модели",
         updated: "Обновлено {{time}}",

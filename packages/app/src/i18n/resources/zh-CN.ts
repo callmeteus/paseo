@@ -3251,6 +3251,7 @@ export const zhCN: TranslationResources = {
         retrying: "正在重试...",
         noSearchMatches: "没有匹配搜索的 Model",
         noneDetected: "未检测到 Model",
+        enableModel: "启用 {{name}}",
         discovered: "已发现",
         custom: "自定义 Models",
         updated: "已更新 {{time}}",

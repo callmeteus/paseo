@@ -34,8 +34,14 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
+import {
+  disabledModelIdsByProviderFromConfig,
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { useSessionStore } from "@/stores/session-store";
+import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostFeature } from "@/runtime/host-features";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -517,6 +523,23 @@ function resolveSnapshotSelectedEntry(
     return null;
   }
   return snapshotEntries.find((e) => e.provider === agentProvider) ?? null;
+}
+
+function selectableModelsForEntry(
+  entry: ReturnType<typeof resolveSnapshotSelectedEntry>,
+  config: { providers?: Parameters<typeof disabledModelIdsByProviderFromConfig>[0] } | null,
+): {
+  disabledModelIdsByProvider: DisabledModelIdsByProvider;
+  models: AgentModelDefinition[] | null;
+} {
+  const disabledModelIdsByProvider = disabledModelIdsByProviderFromConfig(config?.providers);
+  return {
+    disabledModelIdsByProvider,
+    models: omitDisabledModels(
+      filterSelectableModels(entry?.models ?? null),
+      entry ? disabledModelIdsByProvider[entry.provider] : undefined,
+    ),
+  };
 }
 
 function resolveSnapshotModeIds(
@@ -1693,11 +1716,15 @@ function optionalNonEmpty<T>(value: T[]): T[] | undefined {
       const hostClient = getHostRuntimeStore().getClient(host.serverId ?? "");
       if (!hostClient) return [] as ProviderSelectorProvider[];
       try {
-        const snapshot = await hostClient.getProvidersSnapshot({ cwd: input.cwd ?? undefined });
+        const [snapshot, configResult] = await Promise.all([
+          hostClient.getProvidersSnapshot({ cwd: input.cwd ?? undefined }),
+          hostClient.getDaemonConfig().catch(() => null),
+        ]);
         return buildSelectableProviderSelectorProviders(
           snapshot.entries,
           true,
           host.serverId ?? null,
+          disabledModelIdsByProviderFromConfig(configResult?.config.providers),
         );
       } catch {
         return [] as ProviderSelectorProvider[];
@@ -1715,21 +1742,29 @@ function buildModelSelectorProviders(input: {
   modelsByProvider: Map<string, AgentModelDefinition[]>;
   supportsSnapshotTransfer: boolean;
   crossHostProviders: ProviderSelectorProvider[];
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): ProviderSelectorProvider[] {
   let base: ProviderSelectorProvider[];
   if (input.snapshotEntries) {
-    base = buildSelectableProviderSelectorProviders(input.snapshotEntries, true, input.serverId);
+    base = buildSelectableProviderSelectorProviders(
+      input.snapshotEntries,
+      true,
+      input.serverId,
+      input.disabledModelIdsByProvider,
+    );
   } else if (input.snapshotSelectedEntry) {
     base = buildSelectableProviderSelectorProviders(
       [input.snapshotSelectedEntry],
       true,
       input.serverId,
+      input.disabledModelIdsByProvider,
     );
   } else {
     base = buildProviderSelectorProviders({
       providerDefinitions: input.providerDefinitions,
       modelsByProvider: input.modelsByProvider,
       serverId: input.serverId,
+      disabledModelIdsByProvider: input.disabledModelIdsByProvider,
     });
   }
   if (input.supportsSnapshotTransfer && input.crossHostProviders.length > 0) {
@@ -1778,8 +1813,11 @@ export const AgentControls = memo(function AgentControls({
     () => resolveSnapshotSelectedEntry(snapshotEntries, agent?.provider),
     [snapshotEntries, agent?.provider],
   );
-
-  const models = filterSelectableModels(snapshotSelectedEntry?.models ?? null);
+  const { config } = useDaemonConfig(serverId);
+  const { disabledModelIdsByProvider, models } = useMemo(
+    () => selectableModelsForEntry(snapshotSelectedEntry, config),
+    [config, snapshotSelectedEntry],
+  );
   const selectedProviderIsLoading = snapshotSelectedEntry?.status === "loading";
 
   const agentProviderDefinitions = useMemo(
@@ -1800,11 +1838,13 @@ export const AgentControls = memo(function AgentControls({
       modelsByProvider: agentProviderModels,
       supportsSnapshotTransfer,
       crossHostProviders,
+      disabledModelIdsByProvider,
     });
   }, [
     agentProviderDefinitions,
     agentProviderModels,
     crossHostProviders,
+    disabledModelIdsByProvider,
     serverId,
     snapshotEntries,
     snapshotSelectedEntry,
@@ -2091,8 +2131,14 @@ export const AgentControls = memo(function AgentControls({
 
   const liveTaskTarget = useLiveMultitaskTaskTarget(serverId, agentId);
   const taskSelectorProviders = useMemo(
-    () => buildSelectableProviderSelectorProviders(snapshotEntries ?? undefined, true, serverId),
-    [serverId, snapshotEntries],
+    () =>
+      buildSelectableProviderSelectorProviders(
+        snapshotEntries ?? undefined,
+        true,
+        serverId,
+        disabledModelIdsByProvider,
+      ),
+    [disabledModelIdsByProvider, serverId, snapshotEntries],
   );
   const multitaskTaskTarget = useMemo(
     () =>

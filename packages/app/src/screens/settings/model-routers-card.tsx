@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
+import { disabledModelIdsByProviderFromConfig } from "@getpaseo/protocol/disabled-models";
 import type {
   ModelRouter,
   ModelRouterMode,
@@ -188,11 +189,24 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { config, isLoading, patchConfig } = useDaemonConfig(serverId);
   const snapshot = useProvidersSnapshot(serverId);
-  const providers = useMemo(
-    () => buildSelectableProviderSelectorProviders(snapshot.entries),
-    [snapshot.entries],
+  const disabledModelIdsByProvider = useMemo(
+    () => disabledModelIdsByProviderFromConfig(config?.providers),
+    [config?.providers],
   );
-  const presets = useMemo(() => buildRouterPresets(snapshot.entries ?? []), [snapshot.entries]);
+  const providers = useMemo(
+    () =>
+      buildSelectableProviderSelectorProviders(
+        snapshot.entries,
+        true,
+        undefined,
+        disabledModelIdsByProvider,
+      ),
+    [disabledModelIdsByProvider, snapshot.entries],
+  );
+  const presets = useMemo(
+    () => buildRouterPresets(snapshot.entries ?? [], disabledModelIdsByProvider),
+    [disabledModelIdsByProvider, snapshot.entries],
+  );
   const routers = useMemo(
     () => config?.modelRouters?.routers ?? [],
     [config?.modelRouters?.routers],

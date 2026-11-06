@@ -3402,6 +3402,7 @@ export const en = {
         notInstalled: "Not installed",
       },
       models: {
+        enableModel: "Enable {{name}}",
         one: "1 model",
         many: "{{count}} models",
         addModel: "Add model",

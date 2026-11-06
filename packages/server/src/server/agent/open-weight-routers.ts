@@ -1,3 +1,4 @@
+import { omitDisabledModels } from "@getpaseo/protocol/disabled-models";
 import type { ModelRouter } from "@getpaseo/protocol/model-router";
 import {
   buildOpenWeightRouters,
@@ -14,6 +15,16 @@ import type {
 import { GLOBAL_PROVIDER_SNAPSHOT_KEY } from "./provider-snapshot-manager.js";
 
 const DEFAULT_SYNC_DEBOUNCE_MS = 200;
+
+function entryHidingDisabledModels(
+  entry: ProviderSnapshotRecord["entry"],
+  disabledIds: readonly string[] | undefined,
+): ProviderSnapshotRecord["entry"] {
+  if (!entry.models || !disabledIds?.length) return entry;
+  const models = omitDisabledModels(entry.models, disabledIds);
+  if (!models) return entry;
+  return { ...entry, models };
+}
 
 export interface OpenWeightRouterSyncDeps {
   store: Pick<DaemonConfigStore, "get" | "patch">;
@@ -46,9 +57,15 @@ export function createOpenWeightRouterSync(deps: OpenWeightRouterSyncDeps): Open
     const snapshot = deps.snapshotManager.getSnapshot();
     if (!isSnapshotSettled(snapshot.records)) return false;
 
-    const current = deps.store.get().modelRouters;
+    const config = deps.store.get();
+    const current = config.modelRouters;
     const existing = current?.routers ?? [];
-    const generated = buildOpenWeightRouters(snapshot.records.map(({ entry }) => entry));
+    const providers = config.providers;
+    const generated = buildOpenWeightRouters(
+      snapshot.records.map(({ entry }) =>
+        entryHidingDisabledModels(entry, providers?.[entry.provider]?.disabledModelIds),
+      ),
+    );
     const next = mergeAutoOpenWeightRouters(existing, generated);
     if (sameRouters(existing, next)) return false;
 

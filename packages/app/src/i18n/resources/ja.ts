@@ -3326,6 +3326,7 @@ export const ja: TranslationResources = {
         retrying: "再試行中...",
         noSearchMatches: "検索に一致するモデルがありません",
         noneDetected: "モデルが検出されませんでした",
+        enableModel: "{{name}}を有効にする",
         discovered: "検出済み",
         custom: "カスタムモデル",
         updated: "{{time}}に更新",
