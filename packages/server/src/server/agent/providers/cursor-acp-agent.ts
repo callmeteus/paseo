@@ -1,5 +1,6 @@
 import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.gen.js";
 import type { Logger } from "pino";
+import { homedir } from "node:os";
 import { z } from "zod";
 
 import type {
@@ -7,7 +8,10 @@ import type {
   FetchCatalogOptions,
   ProviderMcpLoginResult,
   ProviderMcpServerInfo,
+  ProviderRefreshContext,
 } from "../agent-sdk-types.js";
+import { CLI_MODEL_REFRESH_TIMEOUT_MS, cursorModelsArgv } from "../cli-model-refresh.js";
+import { execCommand } from "../../../utils/spawn.js";
 import {
   deriveSelectorOptions,
   type ACPCatalogModelResolverContext,
@@ -15,6 +19,7 @@ import {
 } from "./acp-agent.js";
 import { createCursorMcpConfigBridge } from "./cursor-mcp-config.js";
 import {
+  cursorCliEnv,
   disposeCursorMcpLogins,
   listCursorMcpServers,
   loginCursorMcpServer,
@@ -152,5 +157,16 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
     // One probe covers every workspace. Refreshing each cwd at once opened
     // several session/new calls, and those probes stalled past the deadline.
     return "cursor-host";
+  }
+
+  async refreshOwnedModelList(context?: ProviderRefreshContext): Promise<void> {
+    const invocation = cursorModelsArgv(this.cliCommand);
+    await execCommand(invocation.command, invocation.args, {
+      cwd: homedir(),
+      env: cursorCliEnv(this.cliEnv),
+      timeout: CLI_MODEL_REFRESH_TIMEOUT_MS,
+      signal: context?.signal,
+      maxBuffer: 2 * 1024 * 1024,
+    });
   }
 }

@@ -26,7 +26,11 @@ const AUTH_PATTERN =
   /(unauthori[sz]ed|\bauth(?:enticat|oriz)?\w*|oauth|api[ _-]?key|credential|login|sign[ -]?in|forbidden|(?:^|[^\d])(?:401|403)(?:[^\d]|$))/i;
 const MODEL_PATTERN =
   /(model.*(?:not found|not available|unavailable|invalid)|invalid model|unknown model)/i;
-const CRASH_PATTERN =
+/**
+ * A dead helper or a dropped transport. The error card and the model router
+ * both use this pattern, so the nine terms cannot drift apart.
+ */
+export const CRASH_PATTERN =
   /(helper server exited|process exited|exited \(\d+\)|transport|econnreset|epipe|socket hang up|connection reset|terminated unexpectedly)/i;
 
 /**

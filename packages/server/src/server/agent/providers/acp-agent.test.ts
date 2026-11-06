@@ -25,6 +25,8 @@ import {
   ACPAgentClient,
   ACPAgentSession,
   ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS,
+  isRetriableAbortedReadError,
+  isRetriableProviderError,
   type SpawnedACPProcess,
   type SessionStateResponse,
   buildACPClientCapabilities,
@@ -3812,6 +3814,278 @@ describe("ACPAgentSession", () => {
       expect(prompt).toHaveBeenCalledTimes(2);
       expect(events.find((event) => event.type === "turn_completed")).toBeDefined();
       expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("classifies only the short aborted-read failure as retriable", () => {
+    expect(
+      isRetriableAbortedReadError("\n\nError: RetriableError: [aborted] read ECONNRESET"),
+    ).toBe(true);
+    expect(isRetriableAbortedReadError("Internal error: [aborted] read ECONNRESET")).toBe(true);
+    expect(isRetriableProviderError("Internal error: [aborted] read ECONNRESET")).toBe(true);
+    expect(isRetriableProviderError("read ECONNRESET")).toBe(false);
+    expect(
+      isRetriableAbortedReadError("The socket log says read ECONNRESET but the deploy finished."),
+    ).toBe(false);
+    expect(isRetriableAbortedReadError("Error: NonRetriableError: permission denied")).toBe(false);
+    expect(isRetriableAbortedReadError("Error: NonRetriableError: [aborted] read ECONNRESET")).toBe(
+      false,
+    );
+    expect(isRetriableProviderError("Error: NonRetriableError: [aborted] read ECONNRESET")).toBe(
+      false,
+    );
+    expect(isRetriableAbortedReadError("RetriableError: [resource_exhausted] Error")).toBe(false);
+    expect(
+      isRetriableAbortedReadError(
+        `${"Error: RetriableError: [aborted] read ECONNRESET".padEnd(401, ".")}`,
+      ),
+    ).toBe(false);
+  });
+
+  test("retries a Cursor turn when an aborted read is written as assistant text", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      let attempts = 0;
+      const failure = "\n\nError: RetriableError: [aborted] read ECONNRESET";
+      const prompt = vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          await session.sessionUpdate({
+            sessionId: "session-1",
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: failure },
+            } as SessionUpdate,
+          });
+        } else {
+          await session.sessionUpdate({
+            sessionId: "session-1",
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "Still here." },
+            } as SessionUpdate,
+          });
+        }
+        return { stopReason: "end_turn" } as PromptResponse;
+      });
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(events.find((event) => event.type === "turn_completed")).toBeUndefined();
+      expect(
+        events.some(
+          (event) =>
+            event.type === "timeline" &&
+            event.item.type === "assistant_message" &&
+            event.item.text.includes("ECONNRESET"),
+        ),
+      ).toBe(false);
+      expect(
+        events.find((event) => event.type === "timeline" && event.transient === true),
+      ).toMatchObject({
+        item: { type: "error", message: expect.stringContaining("temporarily unavailable") },
+      });
+
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(2);
+      expect(events.find((event) => event.type === "turn_completed")).toMatchObject({
+        type: "turn_completed",
+        turnId,
+      });
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(
+        events.some(
+          (event) =>
+            event.type === "timeline" &&
+            event.item.type === "assistant_message" &&
+            event.item.text === "Still here.",
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps the aborted read error after the Cursor retries are exhausted", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const failure = "Error: RetriableError: [aborted] read ECONNRESET";
+      const prompt = vi.fn(async () => {
+        await session.sessionUpdate({
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: failure },
+          } as SessionUpdate,
+        });
+        return { stopReason: "end_turn" } as PromptResponse;
+      });
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      const { turnId } = await session.startTurn("hello");
+      for (const delayMs of ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS) {
+        await vi.advanceTimersByTimeAsync(delayMs);
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        type: "turn_failed",
+        turnId,
+        error: failure,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not retry an assistant message that only mentions ECONNRESET", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      const text = "The socket log says read ECONNRESET but the deploy finished.";
+      const prompt = vi.fn(async () => {
+        await session.sessionUpdate({
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text },
+          } as SessionUpdate,
+        });
+        return { stopReason: "end_turn" } as PromptResponse;
+      });
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(events.find((event) => event.type === "turn_completed")).toBeDefined();
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+      expect(
+        events.some(
+          (event) =>
+            event.type === "timeline" &&
+            event.item.type === "assistant_message" &&
+            event.item.text === text,
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not retry an aborted read that belongs to another provider", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      const failure = "Error: RetriableError: [aborted] read ECONNRESET";
+      const prompt = vi.fn(async () => {
+        await session.sessionUpdate({
+          sessionId: "session-1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: failure },
+          } as SessionUpdate,
+        });
+        return { stopReason: "end_turn" } as PromptResponse;
+      });
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(events.find((event) => event.type === "turn_completed")).toBeDefined();
+      expect(
+        events.some(
+          (event) =>
+            event.type === "timeline" &&
+            event.item.type === "assistant_message" &&
+            event.item.text === failure,
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("does not retry an aborted read rejected by another provider", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession();
+      const events: AgentStreamEvent[] = [];
+      const prompt = vi.fn(() =>
+        Promise.reject(new Error("Internal error: [aborted] read ECONNRESET")),
+      );
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+        error: "Internal error: [aborted] read ECONNRESET",
+      });
+      expect(events.find((event) => event.type === "turn_completed")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("retries a Cursor prompt rejected with an aborted read internal error", async () => {
+    vi.useFakeTimers();
+    try {
+      const session = createSession({ provider: "claude-acp", providerId: "cursor" });
+      const events: AgentStreamEvent[] = [];
+      let attempts = 0;
+      const prompt = vi.fn(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Promise.reject(new Error("Internal error: [aborted] read ECONNRESET"));
+        }
+        return Promise.resolve({ stopReason: "end_turn" } as PromptResponse);
+      });
+
+      asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+      asInternals<ACPSessionInternals>(session).connection = { prompt, cancel: async () => {} };
+      session.subscribe((event) => events.push(event));
+
+      await session.startTurn("hello");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[0]);
+
+      expect(prompt).toHaveBeenCalledTimes(2);
+      expect(events.find((event) => event.type === "turn_completed")).toBeDefined();
     } finally {
       vi.useRealTimers();
     }

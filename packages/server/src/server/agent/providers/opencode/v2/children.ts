@@ -47,6 +47,10 @@ export class SessionChildren {
         limit: 100,
       });
       for (const child of page.data) {
+        // The follow-up page sends the cursor and not parentID. The cursor is
+        // supposed to repeat the filter; a page that does not must not pull
+        // another chat's transcript into this one.
+        if (child.parentID !== parentID) continue;
         await this.reconcileChild(child);
         await this.reconcile(child.id);
       }

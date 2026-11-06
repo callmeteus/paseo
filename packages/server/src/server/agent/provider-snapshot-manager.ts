@@ -22,6 +22,7 @@ import {
   type ProviderMcpServerInfo,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
+import { refreshCliThenRead } from "./cli-model-refresh.js";
 import {
   raceProviderRefreshAbort,
   runProviderRefreshWithDeadline,
@@ -1153,7 +1154,22 @@ export class ProviderSnapshotManager {
             return null;
           }
 
-          return await definition.fetchCatalog(catalogOptions, client, context);
+          // The CLI refresh is not a second catalog. Its failure is logged and
+          // the read below still runs; a failed read keeps the last good entry.
+          return await refreshCliThenRead({
+            signal: context.signal,
+            refreshCli: client.refreshOwnedModelList
+              ? () =>
+                  context.runActivity("cli.models", () => client.refreshOwnedModelList!(context))
+              : null,
+            onRefreshError: (error) => {
+              this.logger.warn(
+                { err: error, provider },
+                "CLI model refresh failed; reading the list already available",
+              );
+            },
+            read: () => definition.fetchCatalog(catalogOptions, client, context),
+          });
         },
       });
       if (!catalog) {

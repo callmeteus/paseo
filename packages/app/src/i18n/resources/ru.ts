@@ -193,6 +193,12 @@ export const ru: TranslationResources = {
       openReview: "Открыть вложение проверки",
       removeReview: "Удалить вложение проверки",
     },
+    inlineChip: {
+      pastedWord: "Вставлено",
+      line_one: "строка",
+      line_other: "строк",
+      mentionLoading: "Загрузка этого чата…",
+    },
     errors: {
       failedToSend: "Не удалось отправить сообщение",
       failedToCreateAgent: "Не удалось создать агента.",
@@ -286,6 +292,13 @@ export const ru: TranslationResources = {
       title: "Рабочий режим",
       hint: "Изменить режим работы чата",
       selectWithValue: "Выбрать режим работы ({{value}})",
+      taskTarget: {
+        label: "Задачи",
+        hint: "Каждая задача использует этого агента или этот CLI.",
+        paseoName: "Агент Paseo",
+        paseoDescription: "Субагент Paseo на том же CLI, что и этот чат.",
+        selectWithValue: "Задачи: {{value}}",
+      },
     },
     hints: {
       thinking: "Режим рассуждений",
@@ -299,6 +312,11 @@ export const ru: TranslationResources = {
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",
     messageCapped: "Это сообщение было обрезано ({{bytes}} байт).",
+    sessionLimit: {
+      reached: "Сессия этой модели достигла лимита.",
+      resetsAt: "Сессия этой модели достигла лимита и вернётся в {{time}} по времени {{place}}.",
+      resetsRaw: "Сессия этой модели достигла лимита и вернётся в {{when}}.",
+    },
     providerError: {
       badge: "Ошибка provider",
       unknownProvider: "Provider",
@@ -593,6 +611,8 @@ export const ru: TranslationResources = {
       copyPath: "Копировать путь",
       copyBranchName: "Копировать имя ветки",
       copied: "Скопировано",
+      local: "Локальный",
+      remote: "Удалённый",
     },
     fileActions: {
       openFile: "Открыть файл",
@@ -1405,6 +1425,22 @@ export const ru: TranslationResources = {
       noHost: "Нет хоста",
       switchTitle: "Сменить хост",
       searchPlaceholder: "Поиск хостов...",
+      actions: {
+        menu: "Действия хоста",
+        rename: "Переименовать хост",
+        color: "Цвет",
+        remove: "Удалить хост",
+      },
+      confirmations: {
+        removeTitle: "Удалить хост?",
+        removeMessage:
+          "Удалить «{{name}}» с этого устройства? Сохранённые подключения уйдут вместе с ним.",
+        removeLocalMessage:
+          "Удалить «{{name}}» с этого устройства? Подключение localhost уйдёт, и встроенный демон остановится. Остальные хосты останутся подключёнными.",
+        removeWorkspaces: "Рабочие области этого хоста тоже уйдут.",
+        removeConfirm: "Удалить",
+        cancel: "Отмена",
+      },
     },
     actions: {
       addProject: "Добавить проект",
@@ -1470,6 +1506,7 @@ export const ru: TranslationResources = {
       description:
         "Добавьте команды настройки для автоматической установки зависимостей и подготовки новых worktree.",
       openProjectSettings: "Открыть настройки проекта",
+      dontShowAgain: "Больше не показывать",
     },
     project: {
       actions: {
@@ -2324,6 +2361,7 @@ export const ru: TranslationResources = {
       },
     },
     thought: "Размышление",
+    briefly: "ненадолго",
     editedFiles: {
       one: "изменён {{count}} файл",
       other: "изменены файлы ({{count}})",

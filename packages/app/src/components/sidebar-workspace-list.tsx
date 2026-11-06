@@ -97,13 +97,14 @@ import { ProjectLeadingVisual } from "@/components/sidebar/project-leading-visua
 import { useToast } from "@/contexts/toast-context";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import { toWorktreeArchiveRisk } from "@/git/worktree-archive-warning";
-import { hasVisibleOrderChanged, mergeWithRemainder } from "@/utils/sidebar-reorder";
+import { applyDraggedOrder } from "@/utils/sidebar-reorder";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { SidebarStatusWorkspaceList } from "@/components/sidebar/sidebar-status-list";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import { hostGroupKey } from "@/components/sidebar/sidebar-labels";
 import type { SidebarHostProjectGroup } from "@/components/sidebar/sidebar-projection";
+import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import {
   SidebarWorkspaceContextMenu,
   SidebarWorkspaceMenu,
@@ -163,7 +164,9 @@ import {
 import { getDesktopHost } from "@/desktop/host";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
-import type { HostBadgeModel } from "@/hosts/appearance";
+import { HOST_COLORS, type HostBadgeModel, type HostColor } from "@/hosts/appearance";
+import { hostHeaderTitleColor } from "@/hosts/host-menu";
+import type { MenuTriggerState } from "@/components/ui/menu";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
@@ -182,7 +185,6 @@ const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspac
 
 const projectViewKeyExtractor = (project: SidebarProjectEntry) => project.viewKey;
 const EMPTY_HOST_BADGE_MAP: ReadonlyMap<string, HostBadgeModel> = new Map();
-const noopDrag = () => {};
 
 function HostProjectSection({
   host,
@@ -195,6 +197,7 @@ function HostProjectSection({
   onToggleHost: (key: string) => void;
   children: ReactNode;
 }) {
+  const hosts = useHosts();
   const [isHovered, setIsHovered] = useState(false);
   const isCompact = useIsCompactFormFactor();
   const showChevron = isHovered || platformIsNative || isCompact;
@@ -202,10 +205,20 @@ function HostProjectSection({
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const accessibilityState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
   const handleToggle = useCallback(() => onToggleHost(host.key), [host.key, onToggleHost]);
+  const color = useMemo(
+    () => hosts.find((entry) => entry.serverId === host.serverId)?.appearance.color ?? "none",
+    [host.serverId, hosts],
+  );
+  // The status dot stays the connection. A chosen identity color paints the name.
+  const titleStyle = useMemo(
+    () =>
+      color === "none" ? styles.hostHeaderTitle : [styles.hostHeaderTitle, hostTitleStyles[color]],
+    [color],
+  );
   const rowStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType) => [
+    ({ pressed, open }: MenuTriggerState) => [
       styles.hostHeaderRow,
-      isHovered && styles.hostHeaderRowHovered,
+      (isHovered || open) && styles.hostHeaderRowHovered,
       pressed && styles.hostHeaderRowPressed,
     ],
     [isHovered],
@@ -214,7 +227,10 @@ function HostProjectSection({
   return (
     <View testID={`sidebar-host-project-group-${host.serverId}`}>
       <View onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
-        <Pressable
+        <SidebarHostContextMenu
+          serverId={host.serverId}
+          label={host.label}
+          color={color}
           accessibilityRole={platformIsWeb ? undefined : "button"}
           accessibilityLabel={host.label}
           accessibilityState={accessibilityState}
@@ -224,7 +240,7 @@ function HostProjectSection({
         >
           <View style={styles.hostHeaderLeft}>
             <HostStatusDot serverId={host.serverId} />
-            <Text style={styles.hostHeaderTitle} numberOfLines={1}>
+            <Text style={titleStyle} numberOfLines={1}>
               {host.label}
             </Text>
           </View>
@@ -235,7 +251,7 @@ function HostProjectSection({
               color="foregroundMuted"
             />
           ) : null}
-        </Pressable>
+        </SidebarHostContextMenu>
       </View>
       {collapsed ? null : <View style={styles.hostSectionBody}>{children}</View>}
     </View>
@@ -893,24 +909,80 @@ function NewWorkspaceGhostRow({
       }) as Href,
     );
   }, [displayName, onWorkspacePress, worktreeTarget]);
+
+  return (
+    <NewWorkspaceGhostPressable
+      testID={`sidebar-project-new-workspace-row-${project.viewKey}`}
+      accessibilityLabel={t("sidebar.workspace.actions.createWorkspaceFor", {
+        projectName: displayName,
+      })}
+      indented
+      onPress={handlePress}
+    />
+  );
+}
+
+/**
+ * The New workspace row for one host. It opens the same New workspace screen a project row
+ * opens, with this host already selected, and sits in that host's workspace list.
+ */
+function HostNewWorkspaceRow({
+  serverId,
+  hostLabel,
+  onWorkspacePress,
+}: {
+  serverId: string;
+  hostLabel: string;
+  onWorkspacePress?: () => void;
+}) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => {
+    onWorkspacePress?.();
+    router.navigate(buildNewWorkspaceRoute({ serverId }) as Href);
+  }, [onWorkspacePress, serverId]);
+
+  return (
+    <NewWorkspaceGhostPressable
+      testID={`sidebar-host-new-workspace-${serverId}`}
+      accessibilityLabel={t("sidebar.workspace.actions.createWorkspaceFor", {
+        projectName: hostLabel,
+      })}
+      indented={false}
+      onPress={handlePress}
+    />
+  );
+}
+
+/** Shared row for "New workspace": indented under a project, or aligned with the host's projects. */
+function NewWorkspaceGhostPressable({
+  testID,
+  accessibilityLabel,
+  indented,
+  onPress,
+}: {
+  testID: string;
+  accessibilityLabel: string;
+  indented: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.newWorkspaceGhostRow,
+      !indented && styles.newWorkspaceGhostRowHost,
       hovered && !pressed && styles.newWorkspaceGhostRowHovered,
       pressed && styles.newWorkspaceGhostRowPressed,
     ],
-    [],
+    [indented],
   );
 
   return (
     <Pressable
       accessibilityRole={platformIsWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.workspace.actions.createWorkspaceFor", {
-        projectName: displayName,
-      })}
-      onPress={handlePress}
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
       style={rowStyle}
-      testID={`sidebar-project-new-workspace-row-${project.viewKey}`}
+      testID={testID}
     >
       {({ hovered, pressed }) => (
         <>
@@ -2081,23 +2153,13 @@ export function SidebarWorkspaceList({
   const setPinnedWorkspaceOrder = useSidebarOrderStore((state) => state.setPinnedWorkspaceOrder);
   const handlePinnedWorkspaceReorder = useCallback(
     (reorderedWorkspaces: SidebarWorkspacePlacement[]) => {
-      const reorderedWorkspaceKeys = reorderedWorkspaces.map((workspace) => workspace.workspaceKey);
-      const currentOrder = getPinnedWorkspaceOrder();
-      if (
-        !hasVisibleOrderChanged({
-          currentOrder,
-          reorderedVisibleKeys: reorderedWorkspaceKeys,
-        })
-      ) {
-        return;
-      }
-
-      setPinnedWorkspaceOrder(
-        mergeWithRemainder({
-          currentOrder,
-          reorderedVisibleKeys: reorderedWorkspaceKeys,
-        }),
-      );
+      const nextOrder = applyDraggedOrder({
+        currentOrder: getPinnedWorkspaceOrder(),
+        reorderedVisibleKeys: reorderedWorkspaces.map((workspace) => workspace.workspaceKey),
+        preserveOtherSlots: false,
+      });
+      if (!nextOrder) return;
+      setPinnedWorkspaceOrder(nextOrder);
     },
     [getPinnedWorkspaceOrder, setPinnedWorkspaceOrder],
   );
@@ -2390,6 +2452,9 @@ function ProjectModeList({
   const setWorkspaceOrder = useSidebarOrderStore((state) => state.setWorkspaceOrder);
   const getProjectOrder = useSidebarOrderStore((state) => state.getProjectOrder);
   const setProjectOrder = useSidebarOrderStore((state) => state.setProjectOrder);
+  // Host sections drag only the rows on that server. The flat list still
+  // appends whatever the filter hid.
+  const orderWithinServer = hostProjects != null;
 
   const isWorkspaceRoute = useMemo(
     () => Boolean(pathname && parseHostWorkspaceRouteFromPathname(pathname)),
@@ -2464,51 +2529,44 @@ function ProjectModeList({
     });
   }, [creatingWorkspaceIds, projects]);
 
-  const handleProjectDragEnd = useCallback(
-    (reorderedProjects: SidebarProjectEntry[]) => {
-      const reorderedProjectKeys = reorderedProjects.map((project) => project.viewKey);
-      const currentProjectOrder = getProjectOrder();
-      if (
-        !hasVisibleOrderChanged({
-          currentOrder: currentProjectOrder,
-          reorderedVisibleKeys: reorderedProjectKeys,
-        })
-      ) {
-        return;
-      }
-
-      setProjectOrder(
-        mergeWithRemainder({
-          currentOrder: currentProjectOrder,
-          reorderedVisibleKeys: reorderedProjectKeys,
-        }),
-      );
+  const saveProjectOrder = useCallback(
+    (reorderedProjects: SidebarProjectEntry[], preserveOtherSlots: boolean) => {
+      const nextOrder = applyDraggedOrder({
+        currentOrder: getProjectOrder(),
+        reorderedVisibleKeys: reorderedProjects.map((project) => project.viewKey),
+        preserveOtherSlots,
+      });
+      if (!nextOrder) return;
+      setProjectOrder(nextOrder);
     },
     [getProjectOrder, setProjectOrder],
   );
 
+  const handleProjectDragEnd = useCallback(
+    (reorderedProjects: SidebarProjectEntry[]) => {
+      saveProjectOrder(reorderedProjects, false);
+    },
+    [saveProjectOrder],
+  );
+
+  const handleHostProjectDragEnd = useCallback(
+    (reorderedProjects: SidebarProjectEntry[]) => {
+      saveProjectOrder(reorderedProjects, true);
+    },
+    [saveProjectOrder],
+  );
+
   const handleWorkspaceReorder = useCallback(
     (projectViewKey: string, reorderedWorkspaces: SidebarWorkspacePlacement[]) => {
-      const reorderedWorkspaceKeys = reorderedWorkspaces.map((workspace) => workspace.workspaceKey);
-      const currentWorkspaceOrder = getWorkspaceOrder(projectViewKey);
-      if (
-        !hasVisibleOrderChanged({
-          currentOrder: currentWorkspaceOrder,
-          reorderedVisibleKeys: reorderedWorkspaceKeys,
-        })
-      ) {
-        return;
-      }
-
-      setWorkspaceOrder(
-        projectViewKey,
-        mergeWithRemainder({
-          currentOrder: currentWorkspaceOrder,
-          reorderedVisibleKeys: reorderedWorkspaceKeys,
-        }),
-      );
+      const nextOrder = applyDraggedOrder({
+        currentOrder: getWorkspaceOrder(projectViewKey),
+        reorderedVisibleKeys: reorderedWorkspaces.map((workspace) => workspace.workspaceKey),
+        preserveOtherSlots: orderWithinServer,
+      });
+      if (!nextOrder) return;
+      setWorkspaceOrder(projectViewKey, nextOrder);
     },
-    [getWorkspaceOrder, setWorkspaceOrder],
+    [getWorkspaceOrder, orderWithinServer, setWorkspaceOrder],
   );
 
   const handleWorktreeCreated = useCallback((workspaceId: string) => {
@@ -2684,13 +2742,27 @@ function ProjectModeList({
             collapsed={collapsed}
             onToggleHost={toggleHostCollapsed}
           >
-            {host.projects.map((project) =>
-              renderProjectBlock(project, {
-                drag: noopDrag,
-                isDragging: false,
-                dragHandleProps: undefined,
-              }),
-            )}
+            <HostNewWorkspaceRow
+              serverId={host.serverId}
+              hostLabel={host.label}
+              onWorkspacePress={onWorkspacePress}
+            />
+            {/* The new-workspace row stays outside this list. It is not a
+                workspace, and a drag must not write it into the stored order. */}
+            <DraggableList
+              testID={`sidebar-host-project-order-${host.serverId}`}
+              data={host.projects}
+              keyExtractor={projectViewKeyExtractor}
+              renderItem={renderProject}
+              onDragEnd={handleHostProjectDragEnd}
+              extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
+              scrollEnabled={false}
+              useDragHandle
+              nestable={platformIsNative}
+              simultaneousGestureRef={parentGestureRef}
+              gestureHostPresented={dragGestureHostActive}
+              containerStyle={styles.projectListContainer}
+            />
           </HostProjectSection>
         );
       })}
@@ -2789,6 +2861,17 @@ function ProjectModeList({
   );
 }
 
+const hostTitleStyles = StyleSheet.create((theme) => {
+  const named = {} as Record<Exclude<HostColor, "none">, { color: string }>;
+  for (const name of HOST_COLORS) {
+    if (name === "none") continue;
+    named[name] = {
+      color: hostHeaderTitleColor(name, theme.colorScheme) ?? theme.colors.foreground,
+    };
+  }
+  return named;
+});
+
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
@@ -2872,6 +2955,13 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     userSelect: "none",
+  },
+  // A host row is a sibling of the projects under that host, so it uses the project row's
+  // horizontal padding. The extra left inset on `newWorkspaceGhostRow` would nest it under
+  // whichever project happened to sit above it.
+  newWorkspaceGhostRowHost: {
+    paddingLeft: theme.spacing[2],
+    paddingRight: theme.spacing[2],
   },
   newWorkspaceGhostRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,

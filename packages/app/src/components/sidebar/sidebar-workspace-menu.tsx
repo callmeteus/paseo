@@ -21,7 +21,13 @@ import {
   Tag,
   Trash2,
 } from "lucide-react-native";
-import { isWeb } from "@/constants/platform";
+import { getIsElectron, isWeb } from "@/constants/platform";
+import {
+  isWorkspaceMenuSeparator,
+  workspaceMenuRows,
+  workspacePinAction,
+  type WorkspaceMenuAction,
+} from "@/components/sidebar/workspace-menu-model";
 import { openMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
@@ -206,108 +212,151 @@ function SidebarWorkspaceMenuItems({
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
     [],
   );
+  const pinAction = workspacePinAction(isPinned === true);
+  const rows = workspaceMenuRows({
+    archive: Boolean(onArchive),
+    pin: Boolean(onTogglePin),
+    rename: Boolean(onRename),
+    labels: Boolean(serverId && workspaceId),
+    "mark-as-read": Boolean(onMarkAsRead),
+    "mark-as-unread": Boolean(onMarkAsUnread),
+    move: Boolean(serverId && workspaceId),
+    "copy-path": Boolean(onCopyPath),
+    "copy-branch": Boolean(onCopyBranchName),
+    "open-folder": getIsElectron() && Boolean(openInFileManagerPath?.trim()),
+    delete: Boolean(onDelete),
+  });
 
-  return (
-    <>
-      {onCopyPath ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-copy-path-${workspaceKey}`}
-          leading={copyLeadingIcon}
-          onSelect={onCopyPath}
-        >
-          {t("sidebar.workspace.actions.copyPath")}
-        </WorkspaceMenuItem>
-      ) : null}
-      {onCopyBranchName ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-copy-branch-name-${workspaceKey}`}
-          leading={copyLeadingIcon}
-          onSelect={onCopyBranchName}
-        >
-          {t("sidebar.workspace.actions.copyBranchName")}
-        </WorkspaceMenuItem>
-      ) : null}
-      {onRename ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-rename-${workspaceKey}`}
-          leading={renameLeadingIcon}
-          onSelect={onRename}
-        >
-          {t("sidebar.workspace.actions.rename")}
-        </WorkspaceMenuItem>
-      ) : null}
-      {serverId && workspaceId ? (
-        <MoveWorkspaceToFolderMenuItem
-          surface={surface}
-          workspaceKey={workspaceKey}
-          serverId={serverId}
-          workspaceId={workspaceId}
-        />
-      ) : null}
-      {onMarkAsRead ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-mark-as-read-${workspaceKey}`}
-          leading={markAsReadLeadingIcon}
-          onSelect={onMarkAsRead}
-        >
-          Mark as read
-        </WorkspaceMenuItem>
-      ) : null}
-      {onMarkAsUnread ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-mark-as-unread-${workspaceKey}`}
-          leading={markAsUnreadLeadingIcon}
-          onSelect={onMarkAsUnread}
-        >
-          Mark as unread
-        </WorkspaceMenuItem>
-      ) : null}
-      {onTogglePin ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-pin-${workspaceKey}`}
-          leading={isPinned ? unpinLeadingIcon : pinLeadingIcon}
-          onSelect={onTogglePin}
-        >
-          {isPinned ? t("sidebar.workspace.actions.unpin") : t("sidebar.workspace.actions.pin")}
-        </WorkspaceMenuItem>
-      ) : null}
-      {serverId && workspaceId ? (
-        <DropdownMenuSubTrigger
-          id={WORKSPACE_LABEL_PAGE_ID}
-          leading={labelLeading}
-          testID={`sidebar-workspace-menu-labels-${workspaceKey}`}
-        >
-          {t("workspaceLabels.title")}
-        </DropdownMenuSubTrigger>
-      ) : null}
-      <OpenInFileManagerMenuItem
-        surface={surface}
-        path={openInFileManagerPath}
-        testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
-      />
-      {onArchive ? (
-        <WorkspaceMenuItem
-          surface={surface}
-          testID={`sidebar-workspace-menu-archive-${workspaceKey}`}
-          leading={archiveLeadingIcon}
-          trailing={archiveTrailing}
-          status={archiveStatus}
-          pendingLabel={archivePendingLabel}
-          onSelect={onArchive}
-        >
-          {archiveLabel ?? t("sidebar.workspace.actions.archive")}
-        </WorkspaceMenuItem>
-      ) : null}
-      {onDelete ? (
-        <>
-          <WorkspaceMenuSeparator surface={surface} />
+  function renderChatAction(action: WorkspaceMenuAction): ReactNode {
+    switch (action) {
+      case "archive":
+        return onArchive ? (
           <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-archive-${workspaceKey}`}
+            leading={archiveLeadingIcon}
+            trailing={archiveTrailing}
+            status={archiveStatus}
+            pendingLabel={archivePendingLabel}
+            onSelect={onArchive}
+          >
+            {archiveLabel ?? t("sidebar.workspace.actions.archive")}
+          </WorkspaceMenuItem>
+        ) : null;
+      case "pin":
+        return onTogglePin ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-pin-${workspaceKey}`}
+            leading={pinAction === "unpin" ? unpinLeadingIcon : pinLeadingIcon}
+            onSelect={onTogglePin}
+          >
+            {t(`sidebar.workspace.actions.${pinAction}`)}
+          </WorkspaceMenuItem>
+        ) : null;
+      case "rename":
+        return onRename ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-rename-${workspaceKey}`}
+            leading={renameLeadingIcon}
+            onSelect={onRename}
+          >
+            {t("sidebar.workspace.actions.rename")}
+          </WorkspaceMenuItem>
+        ) : null;
+      case "labels":
+        return serverId && workspaceId ? (
+          <DropdownMenuSubTrigger
+            key={action}
+            id={WORKSPACE_LABEL_PAGE_ID}
+            leading={labelLeading}
+            testID={`sidebar-workspace-menu-labels-${workspaceKey}`}
+          >
+            {t("workspaceLabels.title")}
+          </DropdownMenuSubTrigger>
+        ) : null;
+      case "mark-as-read":
+        return onMarkAsRead ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-mark-as-read-${workspaceKey}`}
+            leading={markAsReadLeadingIcon}
+            onSelect={onMarkAsRead}
+          >
+            Mark as read
+          </WorkspaceMenuItem>
+        ) : null;
+      case "mark-as-unread":
+        return onMarkAsUnread ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-mark-as-unread-${workspaceKey}`}
+            leading={markAsUnreadLeadingIcon}
+            onSelect={onMarkAsUnread}
+          >
+            Mark as unread
+          </WorkspaceMenuItem>
+        ) : null;
+      default:
+        return null;
+    }
+  }
+
+  function renderFileAction(action: WorkspaceMenuAction): ReactNode {
+    switch (action) {
+      case "move":
+        return serverId && workspaceId ? (
+          <MoveWorkspaceToFolderMenuItem
+            key={action}
+            surface={surface}
+            workspaceKey={workspaceKey}
+            serverId={serverId}
+            workspaceId={workspaceId}
+          />
+        ) : null;
+      case "copy-path":
+        return onCopyPath ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-copy-path-${workspaceKey}`}
+            leading={copyLeadingIcon}
+            onSelect={onCopyPath}
+          >
+            {t("sidebar.workspace.actions.copyPath")}
+          </WorkspaceMenuItem>
+        ) : null;
+      case "copy-branch":
+        return onCopyBranchName ? (
+          <WorkspaceMenuItem
+            key={action}
+            surface={surface}
+            testID={`sidebar-workspace-menu-copy-branch-name-${workspaceKey}`}
+            leading={copyLeadingIcon}
+            onSelect={onCopyBranchName}
+          >
+            {t("sidebar.workspace.actions.copyBranchName")}
+          </WorkspaceMenuItem>
+        ) : null;
+      case "open-folder":
+        return (
+          <OpenInFileManagerMenuItem
+            key={action}
+            surface={surface}
+            path={openInFileManagerPath}
+            testID={`sidebar-workspace-menu-open-folder-${workspaceKey}`}
+          />
+        );
+      case "delete":
+        return onDelete ? (
+          <WorkspaceMenuItem
+            key={action}
             surface={surface}
             testID={`sidebar-workspace-menu-delete-${workspaceKey}`}
             leading={deleteLeadingIcon}
@@ -316,8 +365,34 @@ function SidebarWorkspaceMenuItems({
           >
             {t("sidebar.workspace.actions.deletePermanently")}
           </WorkspaceMenuItem>
-        </>
-      ) : null}
+        ) : null;
+      default:
+        return null;
+    }
+  }
+
+  function renderAction(action: WorkspaceMenuAction): ReactNode {
+    if (
+      action === "move" ||
+      action === "copy-path" ||
+      action === "copy-branch" ||
+      action === "open-folder" ||
+      action === "delete"
+    ) {
+      return renderFileAction(action);
+    }
+    return renderChatAction(action);
+  }
+
+  return (
+    <>
+      {rows.map((row) =>
+        isWorkspaceMenuSeparator(row) ? (
+          <WorkspaceMenuSeparator key={row} surface={surface} />
+        ) : (
+          renderAction(row)
+        ),
+      )}
     </>
   );
 }

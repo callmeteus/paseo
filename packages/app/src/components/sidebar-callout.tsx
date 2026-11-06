@@ -196,12 +196,12 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   actionRow: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: theme.spacing[2],
     marginTop: theme.spacing[2],
   },
   actionButton: {
-    flex: 1,
+    width: "100%",
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
     borderRadius: theme.borderRadius.md,

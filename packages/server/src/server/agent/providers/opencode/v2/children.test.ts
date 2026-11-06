@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@opencode/client";
+import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent } from "../../../agent-sdk-types.js";
@@ -68,6 +68,59 @@ describe("OpenCode v2 child presentation", () => {
       "worker · worker-model · Extra High · 18.8k tokens",
       "worker · next-model · Low · 20k tokens",
     ]);
+  });
+
+  test("does not load another chat when a later page drops the parent filter", async () => {
+    const harness = new V2Harness();
+    const child: SessionInfo = {
+      ...harness.info,
+      id: "child",
+      parentID: "session",
+      title: "Check the worker model",
+    };
+    const otherChat: SessionInfo = {
+      ...harness.info,
+      id: "other-chat",
+      parentID: "other-parent",
+      title: "Deploy",
+    };
+    const phrase = "acesso Tailscale obrigatório";
+    const listed: string[] = [];
+    harness.api.session.list = async (input) => {
+      if (input?.cursor === "widened") return { data: [otherChat, child], cursor: {} };
+      if (input?.parentID === "session") return { data: [], cursor: { next: "widened" } };
+      return { data: [], cursor: {} };
+    };
+    harness.api.message.list = async (input) => {
+      listed.push(input.sessionID);
+      return {
+        data:
+          input.sessionID === otherChat.id
+            ? [
+                {
+                  id: "b1",
+                  type: "user",
+                  time: { created: 1 },
+                  text: phrase,
+                } as SessionMessageInfo,
+              ]
+            : [],
+        cursor: {},
+      };
+    };
+    const events: AgentStreamEvent[] = [];
+    const children = new SessionChildren({
+      client: () => harness.api,
+      id: "session",
+      emit: (event) => events.push(event),
+      reconcilePermissions: async () => {},
+    });
+
+    await children.reconcile("session");
+
+    expect(listed).toEqual(["child"]);
+    expect(JSON.stringify(events)).not.toContain(phrase);
+    expect(JSON.stringify(events)).not.toContain(otherChat.id);
   });
 
   test("keeps available agent information before a child has a model or token usage", async () => {

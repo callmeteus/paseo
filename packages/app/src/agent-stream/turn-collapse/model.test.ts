@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StreamItem, ToolCallItem } from "@/types/stream";
-import { collapseTurns, type CollapseTurnsInput } from "./model";
+import { collapseTurns, thoughtIdsInTurnsWithTools, type CollapseTurnsInput } from "./model";
 
 const at = new Date("2026-01-01T00:00:00.000Z");
 
@@ -46,6 +46,44 @@ function collapse(tail: StreamItem[], options: Partial<CollapseTurnsInput> = {})
 }
 
 const ids = (items: StreamItem[]) => items.map((item) => item.id);
+
+describe("thoughtIdsInTurnsWithTools", () => {
+  it("marks a thought that shares its turn with a shell", () => {
+    const marked = thoughtIdsInTurnsWithTools(
+      [user("u1"), thought("t1"), shell("c1"), reply("r1")],
+      () => undefined,
+    );
+
+    expect([...marked]).toEqual(["t1"]);
+  });
+
+  it("leaves a thought-only turn unmarked", () => {
+    const marked = thoughtIdsInTurnsWithTools(
+      [user("u1"), thought("t1"), reply("r1")],
+      () => undefined,
+    );
+
+    expect(marked.size).toBe(0);
+  });
+
+  it("does not carry a shell from the next turn back onto the previous thought", () => {
+    const marked = thoughtIdsInTurnsWithTools(
+      [user("u1"), thought("t1"), reply("r1"), user("u2"), shell("c1")],
+      () => undefined,
+    );
+
+    expect(marked.size).toBe(0);
+  });
+
+  it("counts a grouped host only when that group ran a tool", () => {
+    const marked = thoughtIdsInTurnsWithTools(
+      [user("u1"), thought("t1"), shell("host")],
+      (itemId) => (itemId === "host" ? 0 : undefined),
+    );
+
+    expect(marked.size).toBe(0);
+  });
+});
 
 describe("collapseTurns", () => {
   it("folds a finished turn's work into its user message and keeps the reply", () => {

@@ -2,6 +2,11 @@ import type { Logger } from "pino";
 
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
 
+/**
+ * How often a running daemon refreshes provider catalogs: 30 minutes.
+ * Each cycle asks a CLI to update its own model list when that CLI has a
+ * command for it, then re-reads the catalog Paseo already stores.
+ */
 export const PROVIDER_CATALOG_REFRESH_INTERVAL_MS = 30 * 60_000;
 const PROVIDER_CATALOG_REFRESH_INTERVAL_ENV = "PASEO_PROVIDER_CATALOG_REFRESH_INTERVAL_MS";
 const MAX_TIMER_DELAY_MS = 2_147_483_647;

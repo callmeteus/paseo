@@ -720,6 +720,11 @@ export interface AgentSession {
   ): Promise<AgentPermissionResult | void>;
   describePersistence(): AgentPersistenceHandle | null;
   /**
+   * Reports a provider session title that replaced the prompt the session
+   * started with. The initial prompt is not reported.
+   */
+  observeSessionTitle?(listener: (title: string) => void): void;
+  /**
    * Resolve once every foreground turn that predates this call can no longer run or become active.
    * Calling while already idle is a successful no-op. Reject only when foreground ownership is
    * still uncertain.
@@ -827,6 +832,12 @@ export interface AgentClient {
    * Include the execution environment and effective configuration; omit to use target identity.
    * force must not affect identity. Resolve before every cache lookup. */
   getCatalogCacheKey?(options: FetchCatalogOptions): Promise<string | undefined>;
+  /**
+   * Ask this CLI to refresh its own model list before the catalog is read.
+   * Omit it when the CLI has no refresh command. Failure is not a catalog:
+   * the snapshot manager still reads, and a failed read keeps the last good list.
+   */
+  refreshOwnedModelList?(context?: ProviderRefreshContext): Promise<void>;
   /**
    * Discover models and modes together. Implementations may use one upstream
    * process, separate upstream calls, static modes, or private helpers; callers

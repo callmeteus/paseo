@@ -1,62 +1,36 @@
-import {
-  useCallback,
-  useState,
-  type PropsWithChildren,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { type PropsWithChildren, type ReactElement, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  FileDiff,
-  Folder,
-  GitBranch,
-  Server,
-} from "lucide-react-native";
-import { getForgePresentation, normalizeForge } from "@/git/forge";
-import { ForgeBrandIcon } from "@/git/forge-icon";
-import type { Theme } from "@/styles/theme";
-import { DiffStat } from "@/components/diff-stat";
-import { Pressable } from "react-native";
-import type { GestureResponderEvent } from "react-native";
+import { Folder, GitBranch, Monitor, Server } from "lucide-react-native";
+import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
-import type { PrHint } from "@/git/use-pr-status-query";
-import { openExternalUrl } from "@/utils/open-external-url";
-import { copyToClipboard } from "@/utils/copy-to-clipboard";
-import { PrBadge } from "@/components/sidebar-workspace-list";
+import { useAppSettings } from "@/hooks/use-settings";
+import { useLocalDaemonServerIdState } from "@/hooks/use-is-local-daemon";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { useHosts } from "@/runtime/host-runtime";
+import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import {
-  COUNTED_CHECK_PRESENTATIONS,
-  countCheckPresentations,
-  type CountedCheckPresentation,
-} from "@/git/check-presentation";
-import { formatCheckPresentationCountsLabel } from "@/git/check-presentation-copy";
-import { CheckPresentationIcon, getCheckPresentationTone } from "@/git/check-presentation.view";
-import { buildForgeChecksUrl } from "@/git/forge-url";
+  workspaceHoverPreview,
+  workspaceHoverRemoteUrl,
+  type WorkspaceHoverLocality,
+} from "@/components/sidebar/workspace-hover-preview";
+import { useWorkspaceFields } from "@/stores/session-store-hooks";
 
 const HOVER_CARD_WIDTH = 260;
 
 interface WorkspaceHoverCardProps {
   workspace: SidebarWorkspaceEntry;
-  prHint: PrHint | null;
   isDragging: boolean;
   disabled?: boolean;
 }
 
 export function WorkspaceHoverCard({
   workspace,
-  prHint,
   isDragging,
   disabled = false,
   children,
 }: PropsWithChildren<WorkspaceHoverCardProps>): ReactNode {
-  const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
 
   if (isCompact) {
@@ -68,12 +42,11 @@ export function WorkspaceHoverCard({
       <HoverCardTrigger>{children}</HoverCardTrigger>
       <HoverCardContent
         placement="right"
-        role="menu"
-        accessibilityLabel={t("workspace.hoverCard.scriptsAccessibility")}
+        accessibilityLabel={workspace.name}
         testID="workspace-hover-card"
         style={styles.card}
       >
-        <WorkspaceHoverCardContent workspace={workspace} prHint={prHint} />
+        <WorkspaceHoverCardContent workspace={workspace} />
       </HoverCardContent>
     </HoverCard>
   );
@@ -81,53 +54,59 @@ export function WorkspaceHoverCard({
 
 function WorkspaceHoverCardContent({
   workspace,
-  prHint,
 }: {
   workspace: SidebarWorkspaceEntry;
-  prHint: PrHint | null;
 }): ReactElement {
   const { t } = useTranslation();
+  const {
+    settings: { workspaceTitleSource },
+  } = useAppSettings();
+  const remoteUrl = useWorkspaceFields(workspace.serverId, workspace.workspaceId, (record) =>
+    workspaceHoverRemoteUrl({
+      gitRemoteUrl: record.gitRuntime?.remoteUrl,
+      projectRemoteUrl: record.project?.checkout.remoteUrl,
+    }),
+  );
+  const localDaemon = useLocalDaemonServerIdState();
+  const preview = workspaceHoverPreview({
+    title: resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource }),
+    remoteUrl,
+    branch: workspace.currentBranch,
+    path: workspace.workspaceDirectoryLabel,
+    serverId: workspace.serverId,
+    localServerId: localDaemon.status === "resolved" ? localDaemon.serverId : null,
+    localityPending: localDaemon.status === "loading",
+  });
+
   return (
     <>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle} testID="hover-card-workspace-name">
-          {workspace.name}
-        </Text>
-      </View>
-      {prHint ? <PrBadge hint={prHint} style={styles.cardInfoRow} /> : null}
-      {workspace.diffStat ? (
-        <View style={styles.cardInfoRow}>
-          <ThemedFileDiff size={12} uniProps={foregroundMutedColorMapping} />
-          <DiffStat
-            additions={workspace.diffStat.additions}
-            deletions={workspace.diffStat.deletions}
-          />
+      {preview.title ? (
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle} numberOfLines={2} testID="hover-card-workspace-name">
+            {preview.title}
+          </Text>
         </View>
       ) : null}
-      <HostRow serverId={workspace.serverId} />
-      {workspace.currentBranch ? (
-        <CopyableInfoRow
-          icon={ThemedGitBranch}
-          value={workspace.currentBranch}
-          copyValue={workspace.currentBranch}
-          copyLabel={t("workspace.hoverCard.copyBranchName")}
-          testID="hover-card-workspace-branch"
-        />
+      {preview.repoLine ? (
+        <RepoLine repo={preview.repoLine.repo} branch={preview.repoLine.branch} />
       ) : null}
-      {workspace.workspaceDirectoryLabel ? (
-        <CopyableInfoRow
-          icon={ThemedFolder}
-          value={workspace.workspaceDirectoryLabel}
-          copyValue={workspace.workspaceDirectory}
-          copyLabel={t("workspace.hoverCard.copyPath")}
-          testID="hover-card-workspace-cwd"
-        />
+      {preview.path ? (
+        <View style={styles.cardInfoRow}>
+          <ThemedFolder size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
+          <Text style={styles.cardInfoText} numberOfLines={1} testID="hover-card-workspace-cwd">
+            {preview.path}
+          </Text>
+        </View>
       ) : null}
-      {prHint?.checks && prHint.checks.length > 0 ? (
-        <>
-          <View style={styles.separator} />
-          <ChecksSummaryPressable checks={prHint.checks} url={prHint.url} forge={prHint.forge} />
-        </>
+      {preview.locality ? (
+        <LocalityRow
+          locality={preview.locality}
+          label={
+            preview.locality === "local"
+              ? t("workspace.hoverCard.local")
+              : t("workspace.hoverCard.remote")
+          }
+        />
       ) : null}
     </>
   );
@@ -135,218 +114,49 @@ function WorkspaceHoverCardContent({
 
 const ThemedGitBranch = withUnistyles(GitBranch);
 const ThemedFolder = withUnistyles(Folder);
+const ThemedMonitor = withUnistyles(Monitor);
 const ThemedServer = withUnistyles(Server);
-const ThemedFileDiff = withUnistyles(FileDiff);
 
-type CardInfoIcon = React.ComponentType<React.ComponentProps<typeof ThemedGitBranch>>;
-
-function HostRow({ serverId }: { serverId: string }): ReactElement | null {
-  const hosts = useHosts();
-  const host = hosts.find((h) => h.serverId === serverId);
-  const label = host?.label?.trim() || serverId;
-
-  return <InfoRow icon={ThemedServer} value={label} testID="hover-card-workspace-host" />;
-}
-
-const ThemedExternalLink = withUnistyles(ExternalLink);
-const ThemedCopy = withUnistyles(Copy);
-const ThemedCheck = withUnistyles(Check);
-
-const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function InfoRow({
-  icon: Icon,
-  value,
-  testID,
+function RepoLine({ repo, branch }: { repo: string | null; branch: string | null }): ReactElement {
+  return (
+    <View style={styles.cardInfoRow} testID="hover-card-workspace-repo">
+      <ThemedGitBranch size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
+      {repo ? (
+        <Text style={styles.repoName} numberOfLines={1} testID="hover-card-workspace-repo-name">
+          {repo}
+        </Text>
+      ) : null}
+      {branch ? (
+        <Text
+          style={repo ? [styles.branchName, styles.branchAside] : styles.branchName}
+          numberOfLines={1}
+          testID="hover-card-workspace-branch"
+        >
+          {branch}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function LocalityRow({
+  locality,
+  label,
 }: {
-  icon: CardInfoIcon;
-  value: string;
-  testID: string;
-}) {
+  locality: WorkspaceHoverLocality;
+  label: string;
+}): ReactElement {
+  const Icon = locality === "local" ? ThemedMonitor : ThemedServer;
   return (
     <View style={styles.cardInfoRow}>
-      <Icon size={12} uniProps={foregroundMutedColorMapping} />
-      <Text style={styles.cardInfoText} numberOfLines={1} testID={testID}>
-        {value}
+      <Icon size={ICON_SIZE.xs} uniProps={foregroundMutedColorMapping} />
+      <Text style={styles.cardInfoText} numberOfLines={1} testID="hover-card-workspace-locality">
+        {label}
       </Text>
     </View>
   );
-}
-
-function renderChecksSummaryForgeIcon(icon: string, iconUniProps: typeof foregroundColorMapping) {
-  return <ForgeBrandIcon iconKind={icon} size={12} uniProps={iconUniProps} />;
-}
-
-function CopyableInfoRow({
-  icon: Icon,
-  value,
-  copyValue,
-  copyLabel,
-  testID,
-}: {
-  icon: CardInfoIcon;
-  value: string;
-  copyValue: string;
-  copyLabel: string;
-  testID: string;
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handlePressIn = useCallback((event: GestureResponderEvent) => {
-    event.stopPropagation();
-  }, []);
-
-  const handlePress = useCallback(() => {
-    void copyToClipboard(copyValue);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
-  }, [copyValue]);
-
-  const handleHoverIn = useCallback(() => setIsHovered(true), []);
-  const handleHoverOut = useCallback(() => setIsHovered(false), []);
-
-  let iconUniProps = foregroundMutedColorMapping;
-  if (copied || isHovered) {
-    iconUniProps = foregroundColorMapping;
-  }
-  const textStyle =
-    copied || isHovered ? [styles.cardInfoText, styles.cardInfoTextHovered] : styles.cardInfoText;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={copyLabel}
-      style={styles.cardInfoRow}
-      hitSlop={4}
-      onPressIn={handlePressIn}
-      onPress={handlePress}
-      onHoverIn={handleHoverIn}
-      onHoverOut={handleHoverOut}
-    >
-      {(() => {
-        if (copied) {
-          return <ThemedCheck size={12} uniProps={iconUniProps} />;
-        }
-        if (isHovered) {
-          return <ThemedCopy size={12} uniProps={iconUniProps} />;
-        }
-        return <Icon size={12} uniProps={iconUniProps} />;
-      })()}
-      <Text style={textStyle} numberOfLines={1} testID={testID}>
-        {value}
-      </Text>
-    </Pressable>
-  );
-}
-
-function ChecksSummaryPill({
-  count,
-  presentation,
-}: {
-  count: number;
-  presentation: CountedCheckPresentation;
-}) {
-  if (count === 0) return null;
-  return (
-    <View style={styles.checksSummaryPill}>
-      <CheckPresentationIcon presentation={presentation} size={12} />
-      <Text style={checksSummaryTextStyle(presentation)}>{count}</Text>
-    </View>
-  );
-}
-
-function checksSummaryTextStyle(presentation: CountedCheckPresentation) {
-  const tone = getCheckPresentationTone(presentation);
-  if (tone === "success") return styles.checksStatusTextPassed;
-  if (tone === "danger") return styles.checksStatusTextFailed;
-  if (tone === "warning") return styles.checksStatusTextPending;
-  return styles.checksStatusTextMuted;
-}
-
-function ChecksSummaryContent({
-  checks,
-  forge,
-  hovered,
-}: {
-  checks: NonNullable<PrHint["checks"]>;
-  forge: PrHint["forge"];
-  hovered: boolean;
-}) {
-  const { t } = useTranslation();
-  const counts = countCheckPresentations(checks);
-
-  const labelStyle = hovered
-    ? [styles.checksSummaryLabel, styles.checksSummaryLabelHovered]
-    : styles.checksSummaryLabel;
-  const iconUniProps = hovered ? foregroundColorMapping : foregroundMutedColorMapping;
-  const icon = getForgePresentation(normalizeForge(forge)).icon;
-
-  return (
-    <>
-      {hovered ? (
-        <ThemedExternalLink size={12} uniProps={iconUniProps} />
-      ) : (
-        renderChecksSummaryForgeIcon(icon, iconUniProps)
-      )}
-      <Text style={labelStyle}>{t("workspace.git.pr.sections.checks")}</Text>
-      <View style={styles.checksSummaryCounts}>
-        {COUNTED_CHECK_PRESENTATIONS.map((presentation) => (
-          <ChecksSummaryPill
-            key={presentation}
-            count={counts[presentation]}
-            presentation={presentation}
-          />
-        ))}
-      </View>
-    </>
-  );
-}
-
-function ChecksSummaryPressable({
-  checks,
-  forge,
-  url,
-}: {
-  checks: NonNullable<PrHint["checks"]>;
-  forge: PrHint["forge"];
-  url: string;
-}) {
-  const { t } = useTranslation();
-  const counts = countCheckPresentations(checks);
-  const accessibilityLabel = formatCheckPresentationCountsLabel(
-    counts,
-    t("workspace.git.pr.sections.checks"),
-    t,
-  );
-  const handlePress = useCallback(() => {
-    void openExternalUrl(buildForgeChecksUrl(forge, url) ?? url);
-  }, [forge, url]);
-
-  const renderChildren = useCallback(
-    ({ hovered }: { pressed: boolean; hovered?: boolean }) => (
-      <ChecksSummaryContent checks={checks} forge={forge} hovered={Boolean(hovered)} />
-    ),
-    [checks, forge],
-  );
-
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="link"
-      style={checksSummaryPressableStyle}
-      onPress={handlePress}
-    >
-      {renderChildren}
-    </Pressable>
-  );
-}
-
-function checksSummaryPressableStyle({ hovered = false }: { pressed: boolean; hovered?: boolean }) {
-  return [styles.checksSummaryRow, hovered && styles.listRowHovered];
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -391,62 +201,21 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
   },
-  cardInfoTextHovered: {
-    color: theme.colors.foreground,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: theme.colors.border,
-  },
-  listRowHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  checksSummaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: 6,
-    minHeight: 28,
-  },
-  checksSummaryLabel: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
+  repoName: {
+    flexShrink: 1,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
-  },
-  checksSummaryLabelHovered: {
-    color: theme.colors.foreground,
-  },
-  checksSummaryCounts: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  checksSummaryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  checksStatusTextFailed: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
-    color: theme.colors.statusDanger,
   },
-  checksStatusTextPending: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
-    color: theme.colors.statusWarning,
-  },
-  checksStatusTextPassed: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
-    color: theme.colors.statusSuccess,
-  },
-  checksStatusTextMuted: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
+  branchName: {
+    flexShrink: 1,
+    minWidth: 0,
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.normal,
+  },
+  branchAside: {
+    marginLeft: "auto",
   },
 }));

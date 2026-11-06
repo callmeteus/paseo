@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
+import { formatPct } from "./format";
 import type { PinnedUsageSource, PinnedUsageWindow } from "./pinned";
 import type { UsageWindow } from "./types";
 import {
+  meanUsedPercent,
   resolveReportUnifiedUsage,
   resolveUnifiedUsage,
   resolveUnifiedUsageBySource,
+  unifiedSummarySurface,
 } from "./unified";
 
 function window(
@@ -38,7 +41,7 @@ function source(windows: PinnedUsageWindow[], key = "source"): PinnedUsageSource
 }
 
 describe("resolveUnifiedUsage", () => {
-  it("combines the windows instead of repeating the largest", () => {
+  it("averages the windows instead of repeating the largest", () => {
     const unified = resolveUnifiedUsage([
       source([
         window({ key: "session", usedPercent: 20, tone: "ok" }),
@@ -48,13 +51,14 @@ describe("resolveUnifiedUsage", () => {
     ]);
 
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBeCloseTo(97.12, 2);
-    expect(unified?.usedPercent).toBeCloseTo(97.12, 2);
+    expect(unified?.percent).toBeCloseTo((20 + 95 + 28) / 3, 5);
+    expect(unified?.usedPercent).toBeCloseTo((20 + 95 + 28) / 3, 5);
+    expect(unified?.percent).not.toBe(95);
     expect(unified?.tone).toBe("danger");
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["weekly", "monthly", "session"]);
   });
 
-  it("shows the combined remaining share when the preference is remaining", () => {
+  it("shows the mean remaining share when the preference is remaining", () => {
     const unified = resolveUnifiedUsage(
       [
         source([
@@ -66,20 +70,38 @@ describe("resolveUnifiedUsage", () => {
     );
 
     expect(unified?.driver.key).toBe("weekly");
-    expect(unified?.percent).toBeCloseTo(4, 2);
+    expect(unified?.percent).toBeCloseTo(100 - (20 + 95) / 2, 5);
   });
 
-  it("combines the rolling, weekly and monthly windows above the largest one", () => {
+  it("averages rolling, weekly and monthly instead of lifting them to one limit", () => {
     const unified = resolveUnifiedUsage([
       source([
-        window({ key: "rolling", usedPercent: 14 }),
-        window({ key: "weekly", usedPercent: 69 }),
-        window({ key: "monthly", usedPercent: 37 }),
+        window({ key: "rolling", usedPercent: 24 }),
+        window({ key: "weekly", usedPercent: 93 }),
+        window({ key: "monthly", usedPercent: 97 }),
       ]),
     ]);
 
-    expect(unified?.percent).toBeCloseTo(83.2, 1);
-    expect(unified?.driver.key).toBe("weekly");
+    const mean = (24 + 93 + 97) / 3;
+    expect(unified?.percent).toBeCloseTo(mean, 5);
+    expect(unified?.usedPercent).toBeCloseTo(mean, 5);
+    expect(unified?.percent).not.toBe(100);
+    expect(formatPct(unified?.percent ?? Number.NaN, "en")).toBe("71%");
+    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("71%");
+    expect(unified?.driver.key).toBe("monthly");
+  });
+
+  it("averages the windows that exist when one of the three is missing", () => {
+    const unified = resolveUnifiedUsage([
+      source([
+        window({ key: "rolling", usedPercent: 24 }),
+        window({ key: "monthly", usedPercent: 97 }),
+      ]),
+    ]);
+
+    expect(unified?.percent).toBeCloseTo((24 + 97) / 2, 5);
+    expect(unified?.percent).not.toBe(100);
+    expect(unified?.driver.key).toBe("monthly");
   });
 
   it("breaks ties by the nearest reset", () => {
@@ -118,8 +140,17 @@ describe("resolveUnifiedUsage", () => {
   });
 
   it("returns nothing when no window has a percentage", () => {
+    expect(meanUsedPercent([])).toBeNull();
+    expect(meanUsedPercent([])).not.toBe(100);
     expect(resolveUnifiedUsage([])).toBeNull();
     expect(resolveUnifiedUsage([{ key: "source", icon: null, windows: [] }])).toBeNull();
+  });
+});
+
+describe("unifiedSummarySurface", () => {
+  it("uses the light surface only while the block is pinned", () => {
+    expect(unifiedSummarySurface(true)).toBe("pinned");
+    expect(unifiedSummarySurface(false)).toBe("card");
   });
 });
 
@@ -141,8 +172,8 @@ describe("resolveUnifiedUsageBySource", () => {
 
     const bySource = items.map((item) => [item.source.key, item.unified.percent] as const);
     expect(bySource[0]?.[0]).toBe("claude");
-    expect(bySource[0]?.[1]).toBeCloseTo(75.2, 2);
-    expect(bySource[1]).toEqual(["cursor", 100]);
+    expect(bySource[0]?.[1]).toBeCloseTo((20 + 69) / 2, 5);
+    expect(bySource[1]).toEqual(["cursor", 55]);
     expect(items[0]?.unified.driver.key).toBe("weekly");
     expect(items[1]?.unified.driver.key).toBe("total");
   });
@@ -162,9 +193,30 @@ describe("resolveReportUnifiedUsage", () => {
       t: i18n.t,
     });
 
-    expect(unified?.percent).toBe(69);
+    expect(unified?.percent).toBe(34.5);
     expect(unified?.driver.key).toBe("weekly");
     expect(unified?.windows.map((entry) => entry.key)).toEqual(["weekly", "session"]);
+  });
+
+  it("averages an OpenCode Go card instead of showing 100", () => {
+    const windows: UsageWindow[] = [
+      { id: "rolling", label: "Rolling", usedPct: 24 },
+      { id: "weekly", label: "Weekly", usedPct: 93 },
+      { id: "monthly", label: "Monthly", usedPct: 97 },
+    ];
+
+    const unified = resolveReportUnifiedUsage({
+      windows,
+      displayAs: "used",
+      t: i18n.t,
+    });
+
+    expect(unified?.percent).toBeCloseTo((24 + 93 + 97) / 3, 5);
+    expect(unified?.percent).not.toBe(100);
+    expect(formatPct(unified?.percent ?? Number.NaN, "pt-BR")).toBe("71%");
+    expect(unified?.driver.key).toBe("monthly");
+    expect(unified?.driver.percent).toBe(97);
+    expect(unified?.windows.map((entry) => entry.key)).toEqual(["monthly", "weekly", "rolling"]);
   });
 
   it("returns nothing without a percentage", () => {

@@ -3922,6 +3922,89 @@ test("automatic refresh keeps the last good catalog on discovery failure", async
   }
 });
 
+test("CLI model refresh runs before the read and a CLI failure does not erase the catalog", async () => {
+  const order: string[] = [];
+  let failCli = false;
+  let failRead = false;
+  const fetchCatalog = vi.fn(async () => {
+    order.push("read");
+    if (failRead) throw new Error("read failed");
+    return {
+      models: [
+        {
+          provider: "codex" as const,
+          id: failCli ? "after-cli-failure" : "kept",
+          label: "Kept",
+        },
+      ],
+      modes: [],
+    };
+  });
+  const fetchClaude = vi.fn(async () => ({
+    models: [{ provider: "claude" as const, id: "claude-kept", label: "Claude" }],
+    modes: [],
+  }));
+  const manager = new ProviderSnapshotManager({
+    logger: createTestLogger(),
+    providerOverrides: {
+      ...PUBLICATION_PROVIDERS,
+      claude: { enabled: true },
+    },
+    extraClients: {
+      codex: createExtraClient("codex", {
+        isAvailable: async () => true,
+        refreshOwnedModelList: async () => {
+          order.push("cli");
+          if (failCli) throw new Error("cli failed");
+        },
+        fetchCatalog,
+      }),
+      claude: createExtraClient("claude", {
+        isAvailable: async () => true,
+        fetchCatalog: fetchClaude,
+      }),
+    },
+  });
+  const cwd = "/tmp/cli-model-refresh";
+  const readProvider = (provider: string) =>
+    manager.getSnapshot(cwd).records.find(({ entry }) => entry.provider === provider)!.entry;
+  try {
+    await manager.warmUpSnapshotForCwd({ cwd });
+    expect(order).toEqual(["cli", "read"]);
+    expect(readProvider("codex").models?.map((model) => model.id)).toEqual(["kept"]);
+    expect(readProvider("claude").models?.map((model) => model.id)).toEqual(["claude-kept"]);
+    expect(fetchClaude).toHaveBeenCalledTimes(1);
+
+    order.length = 0;
+    failCli = true;
+    await manager.refreshSnapshotForCwd({
+      cwd,
+      providers: ["codex"],
+      keepLastGoodOnError: true,
+    });
+    expect(order).toEqual(["cli", "read"]);
+    expect(readProvider("codex").models?.map((model) => model.id)).toEqual(["after-cli-failure"]);
+    expect(readProvider("claude").status).toBe("ready");
+    expect(readProvider("claude").models?.map((model) => model.id)).toEqual(["claude-kept"]);
+
+    const kept = readProvider("codex");
+    order.length = 0;
+    failRead = true;
+    await manager.refreshSnapshotForCwd({
+      cwd,
+      providers: ["codex"],
+      keepLastGoodOnError: true,
+    });
+    expect(order).toEqual(["cli", "read"]);
+    expect(readProvider("codex")).toBe(kept);
+    expect(readProvider("codex").models?.map((model) => model.id)).toEqual(["after-cli-failure"]);
+    expect(readProvider("claude").models?.map((model) => model.id)).toEqual(["claude-kept"]);
+  } finally {
+    await manager.shutdown();
+    manager.destroy();
+  }
+});
+
 test("refreshStaleSnapshots leaves an in-flight warmup alone", async () => {
   let finishFetch!: (catalog: { models: AgentModelDefinition[]; modes: AgentMode[] }) => void;
   const fetchCatalog = vi.fn(

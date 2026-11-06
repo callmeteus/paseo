@@ -191,6 +191,12 @@ export const zhCN: TranslationResources = {
       openReview: "打开 review 附件",
       removeReview: "移除 review 附件",
     },
+    inlineChip: {
+      pastedWord: "已粘贴",
+      line_one: "行",
+      line_other: "行",
+      mentionLoading: "正在加载此对话…",
+    },
     errors: {
       failedToSend: "发送消息失败",
       failedToCreateAgent: "创建 Agent 失败",
@@ -283,6 +289,13 @@ export const zhCN: TranslationResources = {
       title: "工作流",
       hint: "更改此对话的工作方式",
       selectWithValue: "选择工作流模式 ({{value}})",
+      taskTarget: {
+        label: "任务",
+        hint: "每个任务使用此代理或此 CLI。",
+        paseoName: "Paseo 代理",
+        paseoDescription: "与此对话相同 CLI 的 Paseo 子代理。",
+        selectWithValue: "任务：{{value}}",
+      },
     },
     hints: {
       thinking: "Thinking mode",
@@ -296,6 +309,11 @@ export const zhCN: TranslationResources = {
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",
     messageCapped: "此消息已被截断（{{bytes}} 字节）。",
+    sessionLimit: {
+      reached: "这个模型的会话已达到上限。",
+      resetsAt: "这个模型的会话已达到上限，{{place}}时间 {{time}} 恢复。",
+      resetsRaw: "这个模型的会话已达到上限，恢复时间是 {{when}}。",
+    },
     providerError: {
       badge: "Provider 错误",
       unknownProvider: "Provider",
@@ -584,6 +602,8 @@ export const zhCN: TranslationResources = {
       copyPath: "复制路径",
       copyBranchName: "复制分支名称",
       copied: "已复制",
+      local: "本地",
+      remote: "远程",
     },
     fileActions: {
       openFile: "打开文件",
@@ -1374,6 +1394,21 @@ export const zhCN: TranslationResources = {
       noHost: "没有 Host",
       switchTitle: "切换 Host",
       searchPlaceholder: "搜索 Hosts...",
+      actions: {
+        menu: "主机操作",
+        rename: "重命名主机",
+        color: "颜色",
+        remove: "移除主机",
+      },
+      confirmations: {
+        removeTitle: "移除主机？",
+        removeMessage: "从这台设备移除「{{name}}」？已保存的连接会一起离开。",
+        removeLocalMessage:
+          "从这台设备移除「{{name}}」？localhost 连接会离开，内置守护进程会停止。其他主机保持连接。",
+        removeWorkspaces: "此主机的工作区也会一起离开。",
+        removeConfirm: "移除",
+        cancel: "取消",
+      },
     },
     actions: {
       addProject: "添加 project",
@@ -1437,6 +1472,7 @@ export const zhCN: TranslationResources = {
       title: "设置 worktree scripts",
       description: "添加 setup 命令，让新的 worktree 自动安装依赖并完成准备。",
       openProjectSettings: "打开 project 设置",
+      dontShowAgain: "不再显示",
     },
     project: {
       actions: {
@@ -2263,6 +2299,7 @@ export const zhCN: TranslationResources = {
       },
     },
     thought: "思考",
+    briefly: "片刻",
     editedFiles: {
       one: "编辑了 {{count}} 个文件",
       other: "编辑了 {{count}} 个文件",

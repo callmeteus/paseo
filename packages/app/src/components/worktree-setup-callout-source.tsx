@@ -49,6 +49,12 @@ export function WorktreeSetupCalloutSource() {
         : null,
     [activeProject, readQuery.data],
   );
+  const dismissCallout = useStableEvent(() => {
+    if (!calloutPolicy) {
+      return;
+    }
+    callouts.dismiss(calloutPolicy.id);
+  });
 
   useEffect(() => {
     if (!calloutPolicy) {
@@ -63,10 +69,11 @@ export function WorktreeSetupCalloutSource() {
       description: calloutPolicy.description,
       actions: [
         { label: calloutPolicy.actionLabel, onPress: openProjectSettings, variant: "primary" },
+        { label: calloutPolicy.dismissLabel, onPress: dismissCallout, variant: "secondary" },
       ],
       testID: calloutPolicy.testID,
     });
-  }, [calloutPolicy, callouts, openProjectSettings]);
+  }, [calloutPolicy, callouts, dismissCallout, openProjectSettings]);
 
   return null;
 }

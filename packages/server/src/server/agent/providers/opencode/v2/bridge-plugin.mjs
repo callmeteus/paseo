@@ -1,11 +1,75 @@
 import { registerStructuredOutput, STRUCTURED_OUTPUT_TOOL } from "./structured-output-plugin.mjs";
 
+function ownsMessage(sessionID, message) {
+  if (!message || typeof message !== "object") return false;
+  const owner = message.sessionID ?? message.sessionId;
+  return typeof owner !== "string" || owner.length === 0 || owner === sessionID;
+}
+
+function asModelMessage(message) {
+  if (message.role && message.content !== undefined) return message;
+  const text =
+    typeof message.text === "string"
+      ? message.text
+      : typeof message.summary === "string"
+        ? message.summary
+        : "";
+  if (!text) return null;
+  const role = message.type === "assistant" ? "assistant" : "user";
+  return { id: message.id, role, content: text };
+}
+
+function asModelMessages(messages) {
+  return messages.flatMap((message) => {
+    const modelMessage = asModelMessage(message);
+    return modelMessage ? [modelMessage] : [];
+  });
+}
+
+/**
+ * The compaction request must be this session's history. A message that names
+ * another session is dropped. If every id in the request belongs to some other
+ * history, the canonical history for this session replaces it.
+ */
+export function scopeCompactionMessages(sessionID, messages, canonical) {
+  const source = Array.isArray(messages) ? messages : [];
+  const owned = source.filter((message) => ownsMessage(sessionID, message));
+  const canonicalMessages = Array.isArray(canonical)
+    ? canonical.filter((message) => ownsMessage(sessionID, message))
+    : [];
+  const ids = new Set(
+    canonicalMessages.flatMap((message) => (typeof message?.id === "string" ? [message.id] : [])),
+  );
+  if (ids.size === 0) return owned;
+  const identified = owned.filter((message) => typeof message?.id === "string");
+  if (identified.length === 0) return owned.length > 0 ? owned : asModelMessages(canonicalMessages);
+  if (!identified.some((message) => ids.has(message.id))) return asModelMessages(canonicalMessages);
+  const kept = owned.filter((message) => typeof message?.id !== "string" || ids.has(message.id));
+  return kept.length > 0 ? kept : asModelMessages(canonicalMessages);
+}
+
 export default {
   id: "paseo",
   async setup(context) {
     const disposeStructuredOutput = await registerStructuredOutput(context);
+    const compaction = await context.session.hook("compaction", async (input) => {
+      if (!input?.sessionID || !Array.isArray(input.messages)) return;
+      let canonical;
+      try {
+        canonical = await context.session.context({ sessionID: input.sessionID });
+      } catch {
+        canonical = undefined;
+      }
+      input.messages = scopeCompactionMessages(input.sessionID, input.messages, canonical);
+    });
+    const disposeCompaction = () => compaction.dispose();
     const { baseUrl, token } = context.options;
-    if (!baseUrl || !token) return disposeStructuredOutput;
+    if (!baseUrl || !token) {
+      return async () => {
+        await disposeStructuredOutput();
+        await disposeCompaction();
+      };
+    }
     async function request(pathname, body, allowMissing = false) {
       const response = await fetch(new URL(`/_internal/opencode${pathname}`, baseUrl), {
         method: body === undefined ? "GET" : "POST",
@@ -65,6 +129,9 @@ export default {
       }
     });
     const filtering = await context.session.hook("context", async (input) => {
+      if (Array.isArray(input.messages)) {
+        input.messages = input.messages.filter((message) => ownsMessage(input.sessionID, message));
+      }
       const binding = await scope(input.sessionID);
       const allowed = new Set(binding.tools.map((name) => `paseo_${name}`));
       for (const name of Object.keys(input.tools)) {
@@ -74,6 +141,7 @@ export default {
     });
     return async () => {
       await disposeStructuredOutput();
+      await disposeCompaction();
       await filtering.dispose();
       await registration.dispose();
     };

@@ -1,4 +1,5 @@
 import equal from "fast-deep-equal";
+import { applyStoredOrdering } from "@/hooks/sidebar-workspaces-view-model";
 import {
   buildWorkspaceStructureProjects,
   type WorkspaceSort,
@@ -35,53 +36,6 @@ export const workspaceEqualityFns = {
   identity: Object.is as (a: unknown, b: unknown) => boolean,
   deep: equal as (a: unknown, b: unknown) => boolean,
 };
-
-function applyStoredOrdering<T>(input: {
-  items: T[];
-  storedOrder: readonly string[];
-  getKey: (item: T) => string;
-}): T[] {
-  if (input.items.length <= 1 || input.storedOrder.length === 0) {
-    return input.items;
-  }
-
-  const itemByKey = new Map<string, T>();
-  for (const item of input.items) {
-    itemByKey.set(input.getKey(item), item);
-  }
-
-  const prunedOrder: string[] = [];
-  const seen = new Set<string>();
-  for (const key of input.storedOrder) {
-    if (!itemByKey.has(key) || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    prunedOrder.push(key);
-  }
-
-  if (prunedOrder.length === 0) {
-    return input.items;
-  }
-
-  const orderedSet = new Set(prunedOrder);
-  const ordered: T[] = [];
-  let orderedIndex = 0;
-
-  for (const item of input.items) {
-    const key = input.getKey(item);
-    if (!orderedSet.has(key)) {
-      ordered.push(item);
-      continue;
-    }
-
-    const targetKey = prunedOrder[orderedIndex] ?? key;
-    orderedIndex += 1;
-    ordered.push(itemByKey.get(targetKey) ?? item);
-  }
-
-  return ordered;
-}
 
 export function selectWorkspace(
   state: SessionsSnapshot,

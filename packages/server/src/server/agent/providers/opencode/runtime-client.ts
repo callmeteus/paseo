@@ -16,6 +16,7 @@ import {
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
 } from "../../provider-launch-config.js";
+import { CLI_MODEL_REFRESH_TIMEOUT_MS, modelsSubcommandArgs } from "../../cli-model-refresh.js";
 import { execCommand } from "../../../../utils/spawn.js";
 import { OpenCodeAgentClient } from "../opencode-agent.js";
 import type { OpenCodeV2AgentClient } from "./v2/agent.js";
@@ -160,6 +161,20 @@ export class OpenCodeRuntimeClient implements AgentClient {
   }
   async fetchCatalog(options: FetchCatalogOptions, context?: ProviderRefreshContext) {
     return (await this.client()).fetchCatalog(options, context);
+  }
+  async refreshOwnedModelList(context?: ProviderRefreshContext): Promise<void> {
+    const launch = await resolveProviderLaunch({
+      commandConfig: this.settings?.command,
+      defaultBinary: "opencode",
+    });
+    const args = modelsSubcommandArgs(launch.args);
+    // `opencode serve` is the server, not the model command. The HTTP read still runs.
+    if (!args) return;
+    await execCommand(launch.command, args, {
+      ...createProviderEnvSpec({ runtimeSettings: this.settings }),
+      timeout: CLI_MODEL_REFRESH_TIMEOUT_MS,
+      signal: context?.signal,
+    });
   }
   async listCommands(config: AgentSessionConfig) {
     return (await this.client()).listCommands(config);

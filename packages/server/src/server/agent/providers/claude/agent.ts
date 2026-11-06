@@ -144,6 +144,10 @@ import {
 import { withTimeout } from "../../../../utils/promise-timeout.js";
 import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
 import { execCommand } from "../../../../utils/spawn.js";
+import {
+  CLI_MODEL_REFRESH_TIMEOUT_MS,
+  cliHelpListsModelsCommand,
+} from "../../cli-model-refresh.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
 
 const fsPromises = promises;
@@ -1701,6 +1705,23 @@ export class ClaudeAgentClient implements AgentClient {
       models,
       ...modeCatalog,
     };
+  }
+
+  async refreshOwnedModelList(context?: ProviderRefreshContext): Promise<void> {
+    const binary = await this.resolveBinary();
+    const help = await execCommand(binary, ["--help"], {
+      ...createProviderEnvSpec({ runtimeSettings: this.runtimeSettings }),
+      timeout: 5_000,
+      signal: context?.signal,
+    });
+    // Run `claude models` only when help lists that command. Otherwise the word
+    // is a prompt. fetchCatalog remains the list Paseo saves.
+    if (!cliHelpListsModelsCommand(`${help.stdout}\n${help.stderr}`)) return;
+    await execCommand(binary, ["models"], {
+      ...createProviderEnvSpec({ runtimeSettings: this.runtimeSettings }),
+      timeout: CLI_MODEL_REFRESH_TIMEOUT_MS,
+      signal: context?.signal,
+    });
   }
 
   async resolveDefaultModeId({ env: launchEnv }: ResolveAgentDefaultModeInput): Promise<string> {

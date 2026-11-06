@@ -26,9 +26,16 @@ export interface WorktreeSetupCalloutPolicy {
   title: string;
   description: string;
   actionLabel: string;
+  dismissLabel: string;
   projectSettingsRoute: ReturnType<typeof buildProjectSettingsRoute>;
   testID: string;
 }
+
+/**
+ * Shared by every project. Dismissing the callout writes this key into the
+ * sidebar dismissal store, so the prompt stays hidden on this machine.
+ */
+export const WORKTREE_SETUP_CALLOUT_DISMISSAL_KEY = "worktree-setup-missing";
 
 export function selectActiveGitWorkspaceProject(
   serverId: string,
@@ -58,11 +65,12 @@ export function buildWorktreeSetupCalloutPolicy(
 
   return {
     id: calloutKey,
-    dismissalKey: calloutKey,
+    dismissalKey: WORKTREE_SETUP_CALLOUT_DISMISSAL_KEY,
     priority: 100,
     title: i18n.t("sidebar.worktreeSetup.title"),
     description: i18n.t("sidebar.worktreeSetup.description"),
     actionLabel: i18n.t("sidebar.worktreeSetup.openProjectSettings"),
+    dismissLabel: i18n.t("sidebar.worktreeSetup.dontShowAgain"),
     projectSettingsRoute: buildProjectSettingsRoute(project.serverId, project.projectId),
     testID: `worktree-setup-callout-${project.projectId}`,
   };

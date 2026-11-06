@@ -341,20 +341,58 @@ const ACP_CURSOR_TURN_IDLE_TIMEOUT_MS = 10 * 60_000;
 // pass, and give up after the last delay.
 export const ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const;
 
+/**
+ * Cursor's `RetriableError` class name. `NonRetriableError` contains the same
+ * letters, so a substring check would retry a failure Cursor already refused.
+ *
+ * @param normalized - Lowercased error text
+ * @returns Whether the text names the retriable class
+ */
+function hasRetriableErrorClass(normalized: string): boolean {
+  return /(?:^|[^a-z])retriableerror/.test(normalized);
+}
+
 export function isRetriableProviderError(message: string): boolean {
   const normalized = message.toLowerCase();
   // Cursor's RetriableError class already says the provider wants another
   // attempt. Include it so `[unavailable] PING timed out` and similar transport
   // failures take the same backoff path as resource exhaustion.
   return (
-    normalized.includes("retriableerror") ||
+    hasRetriableErrorClass(normalized) ||
     normalized.includes("resource_exhausted") ||
     normalized.includes("resource exhausted") ||
     normalized.includes("ping timed out") ||
     normalized.includes("connection stalled") ||
     normalized.includes("deadline_exceeded") ||
     normalized.includes("[unavailable]") ||
-    normalized.includes("high load")
+    normalized.includes("high load") ||
+    isRetriableAbortedReadError(message)
+  );
+}
+
+/**
+ * Cursor does not reject `session/prompt` when an upstream read is reset.
+ * Its ACP adapter writes one assistant chunk,
+ * `Error: RetriableError: [aborted] read ECONNRESET`, and then ends the turn.
+ * The ACP SDK form of the same failure, if the prompt is rejected instead, is
+ * `Internal error: [aborted] read ECONNRESET`.
+ *
+ * A longer answer that only mentions the syscall is left alone.
+ *
+ * @param message - Assistant chunk or prompt error text
+ * @returns Whether the text is that retriable aborted read
+ */
+export function isRetriableAbortedReadError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  // The failure is one short line. A transcript that quotes it is not a retry.
+  if (normalized.length === 0 || normalized.length > 400) return false;
+  const mentionsReset = normalized.includes("econnreset") || normalized.includes("[aborted] read");
+  if (!mentionsReset) return false;
+  if (hasRetriableErrorClass(normalized)) return true;
+  return (
+    normalized.startsWith("internal error") &&
+    normalized.includes("[aborted] read") &&
+    normalized.includes("econnreset")
   );
 }
 
@@ -1899,6 +1937,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private availableModels: AvailableACPModel[] | null = null;
   private thinkingOptionId: string | null = null;
   private currentTitle: string | null = null;
+  /** Title the session was opened with. A later session title is what we publish. */
+  private baselineTitle: string | null = null;
+  private titleListener: ((title: string) => void) | null = null;
+  private lastPublishedTitle: string | null = null;
   private lastActivityAt: string | null = null;
   private configOptions: SessionConfigOption[] = [];
   private cachedCommands: AgentSlashCommand[] = [];
@@ -1911,6 +1953,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly providerId: string;
   private activeForegroundTurnId: string | null = null;
   private turnCancelRequested = false;
+  private retriableAssistantFailure: string | null = null;
   private wakePromptRetryWait: (() => void) | null = null;
   private turnIdleTimeout: ReturnType<typeof setTimeout> | null = null;
   private turnIdleLimitMs = ACP_TURN_IDLE_TIMEOUT_MS;
@@ -1962,6 +2005,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentModel = config.model ?? null;
     this.thinkingOptionId = config.thinkingOptionId ?? null;
     this.currentTitle = config.title ?? null;
+    this.baselineTitle = this.currentTitle?.trim() || null;
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
@@ -2180,8 +2224,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   /**
    * Cursor rejects a long turn with `RetriableError: [resource_exhausted]` when
    * its provider is briefly out of capacity, after its own retries are spent.
-   * Keep the turn open through a short backoff instead of failing work the user
-   * already watched run.
+   * An aborted upstream read is the same kind of failure, but Cursor writes it
+   * as assistant text and then resolves the prompt. Keep the turn open through
+   * a short backoff instead of failing work the user already watched run.
    */
   private async runPromptWithRetries(input: {
     turnId: string;
@@ -2192,23 +2237,34 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       const connection = this.connection;
       const sessionId = this.sessionId;
       if (!connection || !sessionId) return;
+      this.retriableAssistantFailure = null;
       try {
         const response = await connection.prompt({
           sessionId,
           messageId: input.messageId,
           prompt: input.prompt,
         });
+        if (this.activeForegroundTurnId !== input.turnId) return;
+        const abortedRead = this.retriableAssistantFailure;
+        this.retriableAssistantFailure = null;
+        if (abortedRead && !this.closed && !this.turnCancelRequested) {
+          throw new Error(abortedRead);
+        }
         this.handlePromptResponse(response, input.turnId);
         return;
       } catch (error) {
         if (this.activeForegroundTurnId !== input.turnId) return;
         const summary = summarizeACPRequestError(error);
         const retryDelayMs = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[attempt];
+        // An aborted upstream read is how Cursor reports ECONNRESET. Another
+        // provider that rejects with the same text is a real failure.
+        const abortedRead = isRetriableAbortedReadError(summary.message);
         const shouldRetry =
           retryDelayMs !== undefined &&
           !this.closed &&
           !this.turnCancelRequested &&
-          isRetriableProviderError(summary.message);
+          isRetriableProviderError(summary.message) &&
+          (this.providerId === "cursor" || !abortedRead);
         if (!shouldRetry) {
           this.finishTurn({
             type: "turn_failed",
@@ -3557,6 +3613,22 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return [this.wrapTimeline(mapToolSnapshotToTimeline(snapshot, this.terminalEntries))];
   }
 
+  /**
+   * Cursor reports an aborted upstream read as assistant text, then resolves
+   * the prompt. Hold that line off the timeline so the prompt retry can run
+   * before the turn is shown as a dead provider.
+   *
+   * @param text - Assistant chunk that would otherwise be shown
+   * @returns Whether the chunk was held for retry
+   */
+  private holdRetriableAbortedRead(text: string): boolean {
+    if (this.replayingHistory || this.activeForegroundTurnId === null) return false;
+    if (this.providerId !== "cursor") return false;
+    if (!isRetriableAbortedReadError(text)) return false;
+    this.retriableAssistantFailure = text.trim();
+    return true;
+  }
+
   private createMessageTimelineItem(
     type: "assistant_message" | "reasoning",
     update: Extract<
@@ -3574,6 +3646,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (type === "assistant_message") {
       const text = this.assistantTextTransform ? this.assistantTextTransform(chunkText) : chunkText;
       if (text === null || text.length === 0) {
+        return null;
+      }
+      if (this.holdRetriableAbortedRead(text)) {
         return null;
       }
       return {
@@ -3636,9 +3711,31 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return events;
   }
 
+  /**
+   * Reports a session title that replaced the prompt this ACP session started with.
+   * Cloud and the other ACP providers send that title through `session_info_update`.
+   */
+  observeSessionTitle(listener: (title: string) => void): void {
+    this.titleListener = listener;
+    this.publishSessionTitle(this.currentTitle);
+  }
+
+  private publishSessionTitle(title: string | null): void {
+    const normalized = title?.trim() ?? "";
+    if (!normalized || !this.titleListener || normalized === this.baselineTitle) {
+      return;
+    }
+    if (normalized === this.lastPublishedTitle) {
+      return;
+    }
+    this.lastPublishedTitle = normalized;
+    this.titleListener(normalized);
+  }
+
   private handleSessionInfoUpdate(update: SessionInfoUpdate): void {
     if ("title" in update) {
       this.currentTitle = update.title ?? null;
+      this.publishSessionTitle(this.currentTitle);
     }
     if ("updatedAt" in update) {
       this.lastActivityAt = update.updatedAt ?? null;
@@ -3849,6 +3946,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private finishTurn(
     event: Extract<AgentStreamEvent, { type: "turn_completed" | "turn_failed" | "turn_canceled" }>,
   ): void {
+    this.retriableAssistantFailure = null;
     this.clearTurnIdleTimeout();
     this.clearTurnFirstActivityTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());

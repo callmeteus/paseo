@@ -39,6 +39,50 @@ const EMPTY_TURNS: ReadonlyMap<string, CollapsedTurn> = new Map();
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 const EMPTY_HOSTS: ReadonlyMap<string, string> = new Map();
 
+/**
+ * Reasoning rows that share a turn with a shell, search, command, or other tool.
+ * A bare "Pensei" on those rows would read as if the turn only thought.
+ * Grouped thoughts are not listed here: their group already carries the activity line.
+ */
+export function thoughtIdsInTurnsWithTools(
+  items: readonly StreamItem[],
+  toolCountForItem: (itemId: string) => number | undefined,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  let thoughtIds: string[] = [];
+  let turnHasTools = false;
+
+  const flush = () => {
+    if (turnHasTools) {
+      for (const id of thoughtIds) {
+        ids.add(id);
+      }
+    }
+    thoughtIds = [];
+    turnHasTools = false;
+  };
+
+  for (const item of items) {
+    if (item.kind === "user_message") {
+      flush();
+      continue;
+    }
+    if (item.kind === "thought") {
+      thoughtIds.push(item.id);
+      continue;
+    }
+    if (item.kind === "tool_call") {
+      const groupedCount = toolCountForItem(item.id);
+      const count = groupedCount === undefined ? 1 : groupedCount;
+      if (count > 0) {
+        turnHasTools = true;
+      }
+    }
+  }
+  flush();
+  return ids;
+}
+
 function summarizeTurn(
   items: readonly StreamItem[],
   getGroupedCalls: CollapseTurnsInput["getGroupedCalls"],

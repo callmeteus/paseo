@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { formatThoughtDuration } from "@/utils/thought-text";
 import { countSummarizedToolCalls, type OverviewSummary } from "./model";
@@ -106,52 +107,114 @@ export interface OverviewLabel {
  * One line describing a stretch of agent work, such as
  * "Explored 8 files, 8 searches, 1 tool" or "Edited 2 files, explored 9 files".
  *
+ * A stretch that only thought uses the thought label: a short measured duration,
+ * whole seconds, or the bare word when nothing was measured.
+ * A shell, search, command, or other tool in the same stretch uses the activity
+ * sentence instead. The thought does not add a second line.
+ *
  * `leadingParts` lets a collapsed turn put its message count first, so the same
  * sentence serves both a tool-call group and a whole turn. Segments are only split
  * when there is a single sentence to split; a turn summary is joined with "and" and
  * stays one run of text.
  */
+export function buildOverviewSummaryDisplay(
+  summary: OverviewSummary,
+  t: TFunction,
+  leadingParts: readonly string[] = [],
+): OverviewLabel {
+  if (
+    countSummarizedToolCalls(summary) === 0 &&
+    summary.thoughtCount > 0 &&
+    leadingParts.length === 0
+  ) {
+    const duration = formatThoughtDuration(summary.thinkingDurationMs, t);
+    const text = duration
+      ? `${t("toolCallGroup.thought")} ${duration}`
+      : t("toolCallGroup.thought");
+    return { text, segments: [{ text }] };
+  }
+
+  const plan = planGroupLabel(summary);
+  const parts = plan.parts.map((part) => ({
+    kind: part.key,
+    text: t(`toolCallGroup.parts.${part.key}.${part.count === 1 ? "one" : "other"}`, {
+      count: part.count,
+    }),
+  }));
+
+  const action = t(`toolCallGroup.actions.${plan.action}`);
+  const groupSentence = buildGroupSentence(action, parts, plan.fileChangeStats);
+
+  if (leadingParts.length === 0) {
+    return groupSentence;
+  }
+
+  const firstCharacter = leadingParts[0]?.[0];
+  const capitalized = firstCharacter
+    ? `${firstCharacter.toLocaleUpperCase()}${(leadingParts[0] ?? "").slice(1)}`
+    : "";
+  const sections = [capitalized, ...leadingParts.slice(1), lowercaseFirst(groupSentence.text)];
+  const text = joinSections(sections, t("toolCallGroup.and"));
+  return { text, segments: [{ text }] };
+}
+
 export function useOverviewSummaryDisplay(
   summary: OverviewSummary,
   leadingParts: readonly string[] = [],
 ): OverviewLabel {
   const { t } = useTranslation();
-  return useMemo(() => {
-    if (
-      countSummarizedToolCalls(summary) === 0 &&
-      summary.thoughtCount > 0 &&
-      leadingParts.length === 0
-    ) {
-      const duration = formatThoughtDuration(summary.thinkingDurationMs);
-      const text = duration
-        ? `${t("toolCallGroup.thought")} ${duration}`
-        : t("toolCallGroup.thought");
-      return { text, segments: [{ text }] };
+  return useMemo(
+    () => buildOverviewSummaryDisplay(summary, t, leadingParts),
+    [leadingParts, summary, t],
+  );
+}
+
+export type ReasoningRowPresentation =
+  | {
+      kind: "badge";
+      label: string;
+      secondaryLabel?: string;
     }
+  | {
+      /**
+       * The row sits in a group or turn that already has an activity line.
+       * A bare "Thought" here would be a second summary and would hide that work.
+       */
+      kind: "text";
+    };
 
-    const plan = planGroupLabel(summary);
-    const parts = plan.parts.map((part) => ({
-      kind: part.key,
-      text: t(`toolCallGroup.parts.${part.key}.${part.count === 1 ? "one" : "other"}`, {
-        count: part.count,
-      }),
-    }));
-
-    const action = t(`toolCallGroup.actions.${plan.action}`);
-    const groupSentence = buildGroupSentence(action, parts, plan.fileChangeStats);
-
-    if (leadingParts.length === 0) {
-      return groupSentence;
-    }
-
-    const firstCharacter = leadingParts[0]?.[0];
-    const capitalized = firstCharacter
-      ? `${firstCharacter.toLocaleUpperCase()}${(leadingParts[0] ?? "").slice(1)}`
-      : "";
-    const sections = [capitalized, ...leadingParts.slice(1), lowercaseFirst(groupSentence.text)];
-    const text = joinSections(sections, t("toolCallGroup.and"));
-    return { text, segments: [{ text }] };
-  }, [leadingParts, summary, t]);
+/**
+ * How one reasoning row is labeled.
+ *
+ * A title, or a measured duration, still names the thought. The bare word is only
+ * for a stretch that really only thought.
+ * When the same group or turn also ran a shell, search, command, or other tool,
+ * the row is not another activity line: that stretch already has one.
+ */
+export function reasoningRowPresentation(
+  input: {
+    title: string;
+    durationMs?: number;
+    /** True when the same group or turn ran a shell, search, command, or other tool. */
+    embeddedInToolWork: boolean;
+  },
+  t: TFunction,
+): ReasoningRowPresentation {
+  if (input.title) {
+    return { kind: "badge", label: input.title };
+  }
+  const duration = formatThoughtDuration(input.durationMs, t);
+  if (duration) {
+    return {
+      kind: "badge",
+      label: t("toolCallGroup.thought"),
+      secondaryLabel: duration,
+    };
+  }
+  if (input.embeddedInToolWork) {
+    return { kind: "text" };
+  }
+  return { kind: "badge", label: t("toolCallGroup.thought") };
 }
 
 // React Native trims leading whitespace in a standalone <Text> node, and each
@@ -182,6 +245,27 @@ export function buildGroupSentence(
       .replaceAll(SEGMENT_SPACE, " "),
     segments,
   };
+}
+
+/**
+ * The comma is stored at the start of the next segment (`", 2 ferramentas"`) so the
+ * joined accessibility text stays a normal sentence. Painting an icon at the start
+ * of that segment would put the glyph between the previous word and the comma.
+ * This moves that comma onto the previous word and leaves the icon segment as its
+ * label only, so the line reads "2 buscas, [icon] 2 ferramentas".
+ */
+export function layoutOverviewLabelSegments(
+  segments: readonly OverviewLabelSegment[],
+): readonly OverviewLabelSegment[] {
+  return segments.map((segment, index) => {
+    const next = segments[index + 1];
+    const comma = next?.icon && next.text.startsWith(",") ? "," : "";
+    if (!segment.icon) {
+      return comma ? { text: `${segment.text}${comma}` } : segment;
+    }
+    const label = segment.text.replace(/^,[\s\u00A0]*/, "").replace(/^[\s\u00A0]+/, "");
+    return { text: `${label}${comma}`, icon: segment.icon };
+  });
 }
 
 /** One line describing a stretch of agent work, as a plain string. */
