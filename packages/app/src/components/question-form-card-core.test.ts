@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   areQuestionsAnswered,
   buildQuestionFormAnswers,
+  normalizeQuestionFormInput,
   parseQuestionFormQuestions,
   questionShowsTextInput,
   resolveDismissLabel,
@@ -171,5 +172,40 @@ describe("question form card core", () => {
       { label: "Tabs", description: "One tab per section", preview: "<Tabs>\n  <Tab />\n</Tabs>" },
       { label: "Single page", description: undefined, preview: undefined },
     ]);
+  });
+
+  test("leaves Codex-style { questions: [...] } payloads unchanged", () => {
+    const raw = {
+      questions: [
+        {
+          question: "Existing shape",
+          header: "answer",
+          options: [{ label: "Yes" }],
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: false,
+        },
+      ],
+    };
+
+    expect(normalizeQuestionFormInput(raw)).toBe(raw);
+  });
+
+  test("normalizes ACP-style flat { question, options } into questions array", () => {
+    const questions = parseQuestionFormQuestions(
+      normalizeQuestionFormInput({
+        question: "Enter plan mode?",
+        options: ["Yes (Recommended)", "No"],
+      }),
+    );
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(questions).toHaveLength(1);
+    expect(questions[0]?.question).toBe("Enter plan mode?");
+    expect(questions[0]?.options.map((o) => o.label)).toEqual(["Yes (Recommended)", "No"]);
+    expect(areQuestionsAnswered(questions, { 0: new Set([0]) }, {})).toBe(true);
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([0]) }, {})).toEqual({
+      answer: "Yes (Recommended)",
+    });
   });
 });
