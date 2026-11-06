@@ -28,6 +28,11 @@ export interface PluginSettings<Schema extends ZodType> {
 }
 
 export interface PluginServerContext extends PluginLifecycleRegistration {
+  /**
+   * The same daemon client handlers receive as `{ paseo }`, available while the
+   * contribution runs. Start work here instead of waiting for the first hook.
+   */
+  readonly paseo: PaseoApi;
   registerSettings<Schema extends ZodType>(
     definition: import("../settings.js").SettingsDefinition<Schema>,
   ): PluginSettings<Schema>;

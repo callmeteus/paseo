@@ -15,7 +15,7 @@ const MAX_ROUTER_TARGETS = 32;
 const MAX_ROUTER_NAME_LENGTH = 80;
 const MAX_ROUTER_SUMMARY_LENGTH = 200;
 
-interface OpenWeightTarget {
+interface ModelTarget {
   provider: string;
   providerLabel: string;
   providerOrder: number;
@@ -24,23 +24,35 @@ interface OpenWeightTarget {
   isFree: boolean;
 }
 
+export interface ModelFallbackRouterOptions {
+  /** Id prefix for the generated routers. */
+  idPrefix: string;
+  /** Which catalogue models take part in a router. */
+  include: (model: { id: string; label?: string | null }) => boolean;
+  /** Hide each router's targets from cross-provider search. */
+  hideModelsInSearch?: boolean;
+}
+
 export function isAutoOpenWeightRouter(router: Pick<ModelRouter, "id">): boolean {
   return router.id.startsWith(AUTO_OPEN_WEIGHT_ROUTER_ID_PREFIX);
 }
 
 /**
- * One fallback router per open-weight model, with every free target before the
+ * One fallback router per model identity, with every free target before the
  * first paid one. A model offered by a single target has nothing to fall back
  * to, so it is skipped.
  */
-export function buildOpenWeightRouters(entries: readonly ProviderSnapshotEntry[]): ModelRouter[] {
-  const groups = new Map<string, OpenWeightTarget[]>();
+export function buildModelFallbackRouters(
+  entries: readonly ProviderSnapshotEntry[],
+  options: ModelFallbackRouterOptions,
+): ModelRouter[] {
+  const groups = new Map<string, ModelTarget[]>();
 
   entries.forEach((entry, providerOrder) => {
     if (!entry.enabled || entry.status !== "ready") return;
     for (const model of entry.models ?? []) {
       if (model.isSelectable === false) continue;
-      if (!isOpenWeightModel({ id: model.id, label: model.label })) continue;
+      if (!options.include({ id: model.id, label: model.label })) continue;
       const identity = normalizeModelIdentity(model.id);
       if (!identity) continue;
       const targets = groups.get(identity) ?? [];
@@ -64,7 +76,7 @@ export function buildOpenWeightRouters(entries: readonly ProviderSnapshotEntry[]
     const targets = dedupeTargets(rawTargets);
     if (targets.length < 2) continue;
     const ordered = targets.sort(compareTargets).slice(0, MAX_ROUTER_TARGETS);
-    const id = uniqueRouterId(identity, usedIds);
+    const id = uniqueRouterId(options.idPrefix, identity, usedIds);
     usedIds.add(id);
     routers.push({
       id,
@@ -72,10 +84,19 @@ export function buildOpenWeightRouters(entries: readonly ProviderSnapshotEntry[]
       summary: truncate(buildRouterSummary(ordered), MAX_ROUTER_SUMMARY_LENGTH),
       mode: "fallback",
       targets: ordered.map(({ provider, model }): ModelRouterTarget => ({ provider, model })),
+      ...(options.hideModelsInSearch ? { hideModelsInSearch: true } : {}),
     });
   }
 
   return routers.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** One fallback router per open-weight model across the provider catalogue. */
+export function buildOpenWeightRouters(entries: readonly ProviderSnapshotEntry[]): ModelRouter[] {
+  return buildModelFallbackRouters(entries, {
+    idPrefix: AUTO_OPEN_WEIGHT_ROUTER_ID_PREFIX,
+    include: (model) => isOpenWeightModel(model),
+  });
 }
 
 /** Preserves user routers and replaces the previous automatic set. */
@@ -86,9 +107,9 @@ export function mergeAutoOpenWeightRouters(
   return [...existing.filter((router) => !isAutoOpenWeightRouter(router)), ...generated];
 }
 
-function dedupeTargets(targets: readonly OpenWeightTarget[]): OpenWeightTarget[] {
+function dedupeTargets(targets: readonly ModelTarget[]): ModelTarget[] {
   const seen = new Set<string>();
-  const unique: OpenWeightTarget[] = [];
+  const unique: ModelTarget[] = [];
   for (const target of targets) {
     const key = `${target.provider}::${target.model}`;
     if (seen.has(key)) continue;
@@ -98,13 +119,13 @@ function dedupeTargets(targets: readonly OpenWeightTarget[]): OpenWeightTarget[]
   return unique;
 }
 
-function compareTargets(left: OpenWeightTarget, right: OpenWeightTarget): number {
+function compareTargets(left: ModelTarget, right: ModelTarget): number {
   if (left.isFree !== right.isFree) return left.isFree ? -1 : 1;
   if (left.providerOrder !== right.providerOrder) return left.providerOrder - right.providerOrder;
   return left.model.localeCompare(right.model);
 }
 
-function resolveRouterName(targets: readonly OpenWeightTarget[], identity: string): string {
+function resolveRouterName(targets: readonly ModelTarget[], identity: string): string {
   const labels = targets
     .map((target) => cleanModelLabel(target.modelLabel))
     .filter((label) => label.length > 0);
@@ -125,7 +146,7 @@ function cleanModelLabel(label: string): string {
     .trim();
 }
 
-function buildRouterSummary(targets: readonly OpenWeightTarget[]): string {
+function buildRouterSummary(targets: readonly ModelTarget[]): string {
   const providers: string[] = [];
   for (const target of targets) {
     if (!providers.includes(target.providerLabel)) providers.push(target.providerLabel);
@@ -135,11 +156,8 @@ function buildRouterSummary(targets: readonly OpenWeightTarget[]): string {
   return `${providers[0] ?? targets[0]!.provider} · ${models.join(" → ")}`;
 }
 
-function uniqueRouterId(identity: string, usedIds: ReadonlySet<string>): string {
-  const base = `${AUTO_OPEN_WEIGHT_ROUTER_ID_PREFIX}${routerIdSlug(identity) || "model"}`.slice(
-    0,
-    128,
-  );
+function uniqueRouterId(idPrefix: string, identity: string, usedIds: ReadonlySet<string>): string {
+  const base = `${idPrefix}${routerIdSlug(identity) || "model"}`.slice(0, 128);
   if (!usedIds.has(base)) return base;
   for (let suffix = 2; ; suffix += 1) {
     const candidate = `${base.slice(0, 120)}-${suffix}`;

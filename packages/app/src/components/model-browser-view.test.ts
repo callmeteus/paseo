@@ -192,6 +192,20 @@ describe("model browser all view", () => {
     ]);
   });
 
+  it("drops the models a router hides from the general list", () => {
+    const view = resolveModelBrowserAllView({
+      providers,
+      normalizedQuery: "opus",
+      isSearchFocused: true,
+      hiddenSearchKeys: new Set(["copilot::claude-opus-5"]),
+    });
+
+    expect(view.kind).toBe("searchResults");
+    expect(view.kind === "searchResults" ? view.rows.map((row) => row.favoriteKey) : []).toEqual([
+      "claude:opus-5",
+    ]);
+  });
+
   it("matches models by their provider label", () => {
     const view = resolveModelBrowserAllView({
       providers,

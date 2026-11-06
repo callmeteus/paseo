@@ -69,10 +69,11 @@ test("built output compiles and starts every listed built-in", async () => {
       await runtime.startBuiltinPlugin({ id, directory });
       assert.ok(runtime.catalog().some((plugin) => plugin.id === id));
       if (id.endsWith("-usage-source")) {
-        const sourceId = id.slice(0, -"-usage-source".length);
+        // A usage-source plugin owns one or more sources; `local-cli-usage-source`
+        // registers several and none matches its directory id.
         assert.ok(
-          runtime.getUsageSourceRegistrations(id).some((source) => source.id === sourceId),
-          `${id} must register usage source ${sourceId}`,
+          runtime.getUsageSourceRegistrations(id).length > 0,
+          `${id} must register at least one usage source`,
         );
       }
     }

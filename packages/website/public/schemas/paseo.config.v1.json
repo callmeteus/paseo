@@ -616,6 +616,9 @@
                       "required": ["provider"],
                       "additionalProperties": false
                     }
+                  },
+                  "hideModelsInSearch": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["id", "name", "mode", "targets"],

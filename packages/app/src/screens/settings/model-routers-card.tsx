@@ -24,7 +24,11 @@ import {
 import { ModelIconGlyph } from "@/model-icons/glyph";
 import { RouterIconField } from "@/model-icons/router-icon-field";
 import { isModelIconId, resolveRouterIconId } from "@/model-icons/resolve";
-import { buildRouterPresets, buildRouterSummary, type RouterPreset } from "@/model-routers/presets";
+import {
+  buildRouterPresets,
+  buildRouterSummary,
+  type RouterPreset,
+} from "@getpaseo/protocol/router-presets";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE } from "@/styles/theme";
 

@@ -274,6 +274,7 @@ export function createPluginWorker(options: {
       transportFactory,
     });
     paseo = createPaseoApi(daemonClient);
+    const api = paseo;
     await daemonClient.connect();
     settingsStore = message.settingsDirectory
       ? new PluginSettingsStore(message.settingsDirectory, (settingsId) =>
@@ -281,6 +282,7 @@ export function createPluginWorker(options: {
         )
       : null;
     const contributedCleanup = contribute({
+      paseo: api,
       handle: (contract, handler) =>
         register(contract, (input, context) => handler(contract.input.parse(input), context)),
       registerProvider,

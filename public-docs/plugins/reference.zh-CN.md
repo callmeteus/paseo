@@ -205,6 +205,8 @@ Paseo 从对应的入口构建每个包。把 `client/` 导入 daemon 的包、�
 
 SDK 根入口（`@getpaseo/plugin`）只包含共享数据、schema 和与运行时无关的辅助函数。从 `/client` 导入客户端 context 和 hook，从 `/server` 导入服务端 context 和生命周期契约，从 `/client/ui` 导入 UI。这些规则同样适用于类型导入和传递依赖。`/client/host` 是应用宿主的私有模块；插件不能导入它。
 
+`@getpaseo/protocol` 对插件代码而言仅限类型：在打包后的宿主中，运行时导入会失败，因为插件 bundle 是在没有 `node_modules` 的情况下编译的。需要 Paseo 模型路由辅助函数的服务端代码请从 `/server` 导入：`buildProviderRouters`、`mergeAutoProviderRouters`、`isAutoProviderRouter` 和 `disabledModelIdsByProviderFromConfig`。
+
 ### 客户端运行时 {#client-runtime}
 
 Paseo 为客户端代码提供以下模块：
@@ -2237,7 +2239,7 @@ export default function contribute(server: PluginServerContext) {
 
 输入和输出在两端都会校验。RPC 名称以小写字母开头，由小写字母、数字、点、连字符或下划线组成。`useRpc()` 返回一个带类型的异步函数。请求状态、缓存和变更请使用 TanStack Query。
 
-后端处理函数以 `{ paseo }` 的形式收到同样的 `PaseoApi`。它们的连接属于子进程，并在插件停止时关闭。在插件代码订阅之前，它不会订阅时间线或目录事件。清理和时间线替换请遵循 [SDK 事件契约](/docs/sdk/events)。后端代码可以使用 Node API 以及安装在插件目录中的依赖。
+后端处理函数以 `{ paseo }` 的形式收到同样的 `PaseoApi`；服务端入口也会以 `server.paseo` 收到它，因此后台工作可以在贡献函数中直接启动，不必等待钩子。它们的连接属于子进程，并在插件停止时关闭。在插件代码订阅之前，它不会订阅时间线或目录事件。清理和时间线替换请遵循 [SDK 事件契约](/docs/sdk/events)。后端代码可以使用 Node API 以及安装在插件目录中的依赖。
 
 ## 调试后端输出 {#debug-backend-output}
 

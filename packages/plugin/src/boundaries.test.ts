@@ -91,8 +91,16 @@ function typeErrors(code: string): string[] {
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
 }
 describe("plugin SDK import boundaries", () => {
-  it("publishes process capabilities without their Windows implementation helpers", () => {
-    expect(Object.keys(server).sort()).toEqual(["execCommand", "spawnProcess", "terminateProcess"]);
+  it("publishes the server capabilities without their implementation helpers", () => {
+    expect(Object.keys(server).sort()).toEqual([
+      "buildProviderRouters",
+      "disabledModelIdsByProviderFromConfig",
+      "execCommand",
+      "isAutoProviderRouter",
+      "mergeAutoProviderRouters",
+      "spawnProcess",
+      "terminateProcess",
+    ]);
   });
 
   it("classifies every published entry", () => {

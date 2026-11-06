@@ -237,6 +237,11 @@ Import client contexts and hooks from `/client`, server contexts and lifecycle c
 `/server`, and UI from `/client/ui`. These rules include type imports and transitive
 dependencies. `/client/host` is private to the app host; plugins cannot import it.
 
+`@getpaseo/protocol` is types-only for plugin code: a runtime import fails in a packaged host, where
+the plugin bundle is compiled without `node_modules`. Server code that needs Paseo's model-router
+helpers imports them from `/server`: `buildProviderRouters`, `mergeAutoProviderRouters`,
+`isAutoProviderRouter`, and `disabledModelIdsByProviderFromConfig`.
+
 ### Client runtime
 
 Paseo provides these modules to client code:
@@ -2553,7 +2558,7 @@ export default function contribute(server: PluginServerContext) {
 
 Inputs and outputs are validated on both sides. RPC names start with a lowercase letter and contain lowercase letters, numbers, dots, hyphens, or underscores. `useRpc()` returns a typed async function. Use TanStack Query for request state, caching, and mutations.
 
-Backend handlers receive the same `PaseoApi` as `{ paseo }`. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Follow the [SDK event contract](/docs/sdk/events) for cleanup and timeline replacements. Backend code can use Node APIs and dependencies installed in the plugin directory.
+Backend handlers receive the same `PaseoApi` as `{ paseo }`; the server entry also receives it as `server.paseo`, so background work can start with the contribution instead of waiting for a hook. Their connection belongs to the subprocess and closes when the plugin stops. It does not subscribe to timelines or catalog events until plugin code subscribes. Follow the [SDK event contract](/docs/sdk/events) for cleanup and timeline replacements. Backend code can use Node APIs and dependencies installed in the plugin directory.
 
 ## Debug backend output
 

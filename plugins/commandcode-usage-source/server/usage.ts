@@ -87,11 +87,12 @@ const CreditsSchema = z
         monthlyCredits: ApiOptionalNumberSchema,
         purchasedCredits: ApiOptionalNumberSchema,
         freeCredits: ApiOptionalNumberSchema,
-        windowLimits: WindowLimitsSchema.nullish(),
-        sandboxMinutes: SandboxMinutesSchema.nullish(),
       })
       .passthrough()
       .nullish(),
+    // The CLI reads windowLimits and sandboxMinutes beside `credits`, not inside it.
+    windowLimits: WindowLimitsSchema.nullish(),
+    sandboxMinutes: SandboxMinutesSchema.nullish(),
   })
   .passthrough();
 
@@ -130,10 +131,21 @@ const SummarySchema = z
   .passthrough();
 
 type WindowLimit = z.infer<typeof WindowLimitSchema>;
+type WindowLimits = z.infer<typeof WindowLimitsSchema>;
 type SandboxMinutes = z.infer<typeof SandboxMinutesSchema>;
 type Credits = z.infer<typeof CreditsSchema>["credits"];
 
+// Plan ids and their monthly credit allowances, as the Command Code CLI's getPlanInfo().
 const PLAN_LABELS: Record<string, string> = {
+  "individual-go": "Go",
+  "individual-go-v1": "Go",
+  "individual-goat": "GOAT",
+  "individual-pro": "Pro",
+  "individual-pro-v1": "Pro",
+  "individual-provider": "Provider",
+  "individual-max": "Max",
+  "individual-ultra": "Ultra",
+  "teams-pro": "Teams Pro",
   go: "Go",
   goat: "GOAT",
   pro: "Pro",
@@ -144,7 +156,22 @@ const PLAN_LABELS: Record<string, string> = {
   provider: "Provider",
 };
 
+const PLAN_MONTHLY_CREDITS: Record<string, number> = {
+  "individual-go": 10,
+  "individual-go-v1": 10,
+  "individual-goat": 70,
+  "individual-pro": 30,
+  "individual-pro-v1": 80,
+  "individual-provider": 15,
+  "individual-max": 150,
+  "individual-ultra": 300,
+  "teams-pro": 40,
+};
+
 const PLAN_PREFIXES = Object.keys(PLAN_LABELS).sort((left, right) => right.length - left.length);
+const CREDIT_PLAN_PREFIXES = Object.keys(PLAN_MONTHLY_CREDITS).sort(
+  (left, right) => right.length - left.length,
+);
 
 function commandCodeApiBase(env: NodeJS.ProcessEnv): string {
   const override = env["COMMANDCODE_API_URL"]?.trim();
@@ -158,13 +185,27 @@ function commandCodeAuthPath(env: Record<string, string | undefined>): string {
   return join(home, AUTH_FILE_DIRECTORY, AUTH_FILE_NAME);
 }
 
+function normalizePlanId(planId: string): string {
+  return planId.toLowerCase().replace(/_/g, "-");
+}
+
 export function commandCodePlanLabel(planId: string | undefined): string | undefined {
   if (!planId) return undefined;
-  const normalized = planId.toLowerCase();
+  const normalized = normalizePlanId(planId);
   const exact = PLAN_LABELS[normalized];
   if (exact) return exact;
   const prefix = PLAN_PREFIXES.find((candidate) => normalized.startsWith(candidate));
   return prefix ? PLAN_LABELS[prefix] : planId;
+}
+
+/** The plan's monthly credit allowance, or null when the plan is unknown. */
+function commandCodePlanMonthlyCredits(planId: string | undefined): number | null {
+  if (!planId) return null;
+  const normalized = normalizePlanId(planId);
+  const exact = PLAN_MONTHLY_CREDITS[normalized];
+  if (exact !== undefined) return exact;
+  const prefix = CREDIT_PLAN_PREFIXES.find((candidate) => normalized.startsWith(candidate));
+  return prefix ? PLAN_MONTHLY_CREDITS[prefix]! : null;
 }
 
 function queryString(params: Record<string, string | null | undefined>): string {
@@ -208,11 +249,59 @@ function windowFromLimit(input: {
   });
 }
 
-function usageWindows(credits: Credits): UsageWindow[] {
-  const limits = credits?.windowLimits;
-  // `limited: false` marks pay-as-you-go and enterprise pools, which have no windows.
-  if (!limits || limits.limited === false) return [];
+interface MonthlyCreditUsage {
+  remaining: number | null;
+  usedPct: number | null;
+  resetsAt: string | null;
+}
+
+/**
+ * The monthly allowance comes from the plan id, the same mapping the CLI uses for its
+ * usage overlay. Usage is the allowance minus what is still there; a plan without a
+ * known allowance gets no percentage rather than a made-up limit.
+ */
+function monthlyCreditUsage(input: {
+  credits: Credits;
+  planId: string | undefined;
+  status: string | undefined;
+  currentPeriodEnd: string | undefined;
+}): MonthlyCreditUsage {
+  const remaining = input.credits?.monthlyCredits ?? null;
+  const allowance = input.status === "active" ? commandCodePlanMonthlyCredits(input.planId) : null;
+  const usedPct =
+    remaining !== null && allowance !== null
+      ? usedPctOf(Math.max(0, allowance - remaining), allowance)
+      : null;
+  return {
+    remaining,
+    usedPct,
+    resetsAt: isoFromDateString(input.currentPeriodEnd),
+  };
+}
+
+function usageWindows(input: {
+  limits: WindowLimits | null | undefined;
+  monthly: MonthlyCreditUsage;
+}): UsageWindow[] {
   const windows: UsageWindow[] = [];
+  const monthlyPct = input.monthly.usedPct;
+  if (monthlyPct !== null) {
+    windows.push(
+      windowFromUsedPct({
+        id: "monthly",
+        label: "Monthly",
+        shortLabel: "mo",
+        summary: true,
+        utilizationPct: monthlyPct,
+        resetsAt: input.monthly.resetsAt,
+        tone: toneFromUsedPct(monthlyPct),
+      }),
+    );
+  }
+
+  const limits = input.limits;
+  // `limited: false` marks pay-as-you-go and enterprise pools, which have no windows.
+  if (!limits || limits.limited === false) return windows;
   const fiveHour = windowFromLimit({
     limit: limits.fiveHour,
     id: "five_hour",
@@ -465,15 +554,23 @@ export async function fetchUsage(
   if (summaryOutcome?.kind === "rejected") return rejectedReport(summaryOutcome.status);
   const summary = summaryOutcome?.kind === "ok" ? summaryOutcome.data : null;
 
+  const planId = subscription.data?.planId ?? credits.credits?.planId;
+  const monthly = monthlyCreditUsage({
+    credits: credits.credits,
+    planId,
+    status: subscription.data?.status,
+    currentPeriodEnd: subscription.data?.currentPeriodEnd,
+  });
+
   return {
     status: "available",
-    planLabel: commandCodePlanLabel(subscription.data?.planId ?? credits.credits?.planId),
-    windows: usageWindows(credits.credits),
+    planLabel: commandCodePlanLabel(planId),
+    windows: usageWindows({ limits: credits.windowLimits, monthly }),
     balances: creditBalances(credits.credits),
     details: usageDetails({
       subscription: subscription.data,
       summary,
-      sandbox: credits.credits?.sandboxMinutes,
+      sandbox: credits.sandboxMinutes,
       orgLogin: whoami.org?.login,
       now: Date.now(),
     }),

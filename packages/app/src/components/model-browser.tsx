@@ -1614,8 +1614,9 @@ function ModelBrowserContent({
         providers,
         normalizedQuery,
         isSearchFocused: searchAllOnFocus && isSearchFocused,
+        hiddenSearchKeys: routerPicker.hiddenSearchKeys,
       }),
-    [isSearchFocused, normalizedQuery, providers, searchAllOnFocus],
+    [isSearchFocused, normalizedQuery, providers, routerPicker.hiddenSearchKeys, searchAllOnFocus],
   );
   const hasResults = useMemo(
     () =>
