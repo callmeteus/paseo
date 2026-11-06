@@ -190,6 +190,10 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   // catalog only counts hosts that are online, so a host dropping off would otherwise take away
   // the only way back to a filter that is still hiding workspaces.
   const showLabelFilter = labels.length > 0 || hasActiveSidebarLabelFilter(preferences.labelFilter);
+  // Host grouping still lists each project's workspaces, so it uses the same
+  // sort as project grouping. Status rows are ordered by their bucket instead.
+  const workspaceSortVisible =
+    preferences.grouping === "project" || preferences.grouping === "host";
 
   const pages = useMemo<MenuPageDefinition[]>(() => {
     const definitions: MenuPageDefinition[] = [
@@ -242,7 +246,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
       },
     ];
 
-    if (preferences.grouping === "project") {
+    if (workspaceSortVisible) {
       definitions.push({
         id: "sort",
         title: t("sidebar.display.sort.label"),
@@ -294,6 +298,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
     showLabelFilter,
     labels,
     openManager,
+    workspaceSortVisible,
   ]);
 
   return (
@@ -321,7 +326,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
           >
             {t("sidebar.display.grouping.label")}
           </MenuSubTrigger>
-          {preferences.grouping === "project" ? (
+          {workspaceSortVisible ? (
             <MenuSubTrigger
               id="sort"
               value={

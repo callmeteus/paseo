@@ -473,7 +473,7 @@ export function shouldShowSidebarHostLabels(projects: SidebarProjectEntry[]): bo
 
 export function applyStoredOrdering<T>(input: {
   items: T[];
-  storedOrder: string[];
+  storedOrder: readonly string[];
   getKey: (item: T) => string;
 }): T[] {
   if (input.items.length <= 1 || input.storedOrder.length === 0) {

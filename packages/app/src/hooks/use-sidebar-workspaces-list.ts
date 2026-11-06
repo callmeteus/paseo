@@ -144,8 +144,12 @@ export function useSidebarWorkspacesList(options?: {
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const sortSupport = useHostFeatureMap(directoryServerIds, "workspaceSortTimes");
   const workspaceSortSupported = [...sortSupport.values()].every(Boolean);
+  // Status grouping orders rows by status, so a workspace sort would fight the
+  // buckets. Host grouping still lists each project's workspaces, and those
+  // rows keep the same order they have in project grouping, including a drag.
   const sort =
-    groupMode === "project" && (workspaceSort === "manual" || workspaceSortSupported)
+    (groupMode === "project" || groupMode === "host") &&
+    (workspaceSort === "manual" || workspaceSortSupported)
       ? workspaceSort
       : undefined;
   const { projects: hostProjects } = useWorkspaceStructure(directoryServerIds, sort);

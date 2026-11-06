@@ -54,6 +54,7 @@ import {
 import { ProvidersSection } from "@/screens/settings/providers-section";
 import { HostUsageSection } from "@/usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
+import { removeSavedHost } from "@/hosts/remove-saved-host";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -1183,45 +1184,22 @@ function RemoveHostSection({
     setIsConfirming(false);
   }, [isRemoving]);
   const handleCancel = useCallback(() => setIsConfirming(false), []);
-  const rollbackLocalhostRemoval = useCallback(
-    async (shouldRestartDaemon: boolean) => {
-      await updateSettings({ daemon: { manageBuiltInDaemon: true } });
-      if (!shouldRestartDaemon) {
-        return;
-      }
-      setStatus(await startDesktopDaemon());
-    },
-    [setStatus, updateSettings],
-  );
   const handleConfirmRemove = useCallback(() => {
     setIsRemoving(true);
-    const remove = async () => {
-      let didDisableDaemonManagement = false;
-      let didStopDaemon = false;
-      if (isLocalDaemon) {
-        try {
-          await updateSettings({ daemon: { manageBuiltInDaemon: false } });
-          didDisableDaemonManagement = true;
-          if (daemonStatus?.status === "running" && daemonStatus.ownedByDesktop) {
-            setStatus(await stopDesktopDaemon("host_remove"));
-            didStopDaemon = true;
-          }
-          await removeHost(host.serverId);
-        } catch (error) {
-          if (didDisableDaemonManagement) {
-            try {
-              await rollbackLocalhostRemoval(didStopDaemon);
-            } catch (rollbackError) {
-              console.error("[HostPage] Failed to roll back localhost removal", rollbackError);
-            }
-          }
-          throw error;
-        }
-        return;
-      }
-      await removeHost(host.serverId);
-    };
-    void remove()
+    void removeSavedHost(
+      {
+        serverId: host.serverId,
+        isLocalDaemon,
+        daemon: daemonStatus,
+      },
+      {
+        removeHost,
+        updateSettings,
+        stopDaemon: () => stopDesktopDaemon("host_remove"),
+        startDaemon: startDesktopDaemon,
+        setDaemonStatus: setStatus,
+      },
+    )
       .then(() => {
         setIsConfirming(false);
         onRemoved?.();
@@ -1243,7 +1221,6 @@ function RemoveHostSection({
     isLocalDaemon,
     onRemoved,
     removeHost,
-    rollbackLocalhostRemoval,
     setStatus,
     t,
     updateSettings,
