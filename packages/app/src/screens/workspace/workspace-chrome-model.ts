@@ -36,6 +36,14 @@ export interface ActivityRailTabRef {
 
 export type ActivityRailActivation = { kind: "focus"; tabId: string } | { kind: "open" };
 
+export type ActivityRailPresentation = "rail" | "canvas" | "hidden";
+
+/**
+ * The conversation lives in the middle without occupying it. A file, terminal, browser,
+ * diff or any other editor tab does, and the large grid gives that space back.
+ */
+const MIDDLE_CONVERSATION_TAB_KINDS = new Set(["agent", "draft", "new_tab", "provider_subagent"]);
+
 const ACTIVITY_RAIL_TAB_KINDS: Record<ActivityRailEntryId, readonly string[]> = {
   // Changes is the explorer changes tree. The separate diff tab is a different view.
   changes: ["changes_tree"],
@@ -79,6 +87,59 @@ export function tabLineHostsWorkspaceChrome(input: {
   if (input.host !== "main") return false;
   if (input.soleMainRow) return true;
   return input.chromePaneId !== null && input.paneId === input.chromePaneId;
+}
+
+/**
+ * Kinds of the tabs in main panes. The explorer dock is not the middle, so its files
+ * and changes tree do not count as an editor tab sitting beside the chat.
+ */
+export function workspaceMiddleTabKinds(input: {
+  panes: readonly { id: string; tabIds: readonly string[] }[];
+  explorerPaneId: string | null;
+  kindByTabId: ReadonlyMap<string, string>;
+}): string[] {
+  const kinds: string[] = [];
+  for (const pane of input.panes) {
+    if (input.explorerPaneId !== null && pane.id === input.explorerPaneId) continue;
+    for (const tabId of pane.tabIds) {
+      const kind = input.kindByTabId.get(tabId);
+      if (kind) kinds.push(kind);
+    }
+  }
+  return kinds;
+}
+
+export function workspaceMiddleHasEditorTab(kinds: readonly string[]): boolean {
+  return kinds.some((kind) => !MIDDLE_CONVERSATION_TAB_KINDS.has(kind));
+}
+
+const SIDEBAR_CONVERSATION_TAB_KINDS = new Set(["agent", "draft", "provider_subagent"]);
+
+/**
+ * The sidebar is empty when it has no conversation. A new-tab launcher is still empty.
+ * The large grid is that empty state, not a pane beside a chat.
+ */
+export function workspaceSidebarIsEmpty(kinds: readonly string[]): boolean {
+  return !kinds.some((kind) => SIDEBAR_CONVERSATION_TAB_KINDS.has(kind));
+}
+
+/**
+ * The side column only exists while the left sidebar is closed and no changes, file,
+ * terminal or browser is open. The large grid is the empty sidebar. A chat with the
+ * sidebar open does not grow a second column beside it.
+ */
+export function resolveActivityRailPresentation(input: {
+  enabled: boolean;
+  sidebarOpen: boolean;
+  sidebarEmpty: boolean;
+  middleHasEditorTab: boolean;
+  entryCount: number;
+}): ActivityRailPresentation {
+  if (!input.enabled || input.entryCount === 0) return "hidden";
+  if (input.middleHasEditorTab) return "hidden";
+  if (!input.sidebarOpen) return "rail";
+  if (input.sidebarEmpty) return "canvas";
+  return "hidden";
 }
 
 /** Drops a rail entry whose view the product cannot open. Order matches the Cursor rail. */

@@ -23,6 +23,7 @@ const RAIL_ICONS = {
 } as const;
 
 interface WorkspaceActivityRailProps {
+  variant?: "rail" | "canvas";
   contextLabel: string | null;
   entries: readonly ActivityRailEntryId[];
   activeEntry: ActivityRailEntryId | null;
@@ -30,10 +31,12 @@ interface WorkspaceActivityRailProps {
 }
 
 /**
- * Narrow right edge. Each entry opens a view the workspace already has:
- * Changes and Files through the explorer, Browser and Terminal through their tabs.
+ * The four destinations the workspace already opens. `rail` is the side column used
+ * when the left sidebar is closed and no file view is open. `canvas` is the large grid
+ * shown only when that sidebar is open and has no conversation.
  */
 export function WorkspaceActivityRail({
+  variant = "rail",
   contextLabel,
   entries,
   activeEntry,
@@ -47,11 +50,28 @@ export function WorkspaceActivityRail({
     terminal: t("workspace.tabs.fallback.terminal"),
     files: t("panels.files.label"),
   };
+  if (variant === "canvas") {
+    return (
+      <View style={styles.canvas} testID="workspace-activity-canvas">
+        <View style={styles.canvasGrid}>
+          {entries.map((entry) => (
+            <ActivityCanvasEntryButton
+              key={entry}
+              entry={entry}
+              label={labels[entry]}
+              active={entry === activeEntry}
+              onActivate={onActivate}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.rail} testID="workspace-activity-rail">
       <WindowChromeSafeArea placement="below" />
       {contextLabel ? (
-        <Text style={styles.context} numberOfLines={3} testID="workspace-activity-rail-context">
+        <Text style={styles.context} numberOfLines={1} testID="workspace-activity-rail-context">
           {contextLabel}
         </Text>
       ) : null}
@@ -102,7 +122,49 @@ function ActivityRailEntryButton({
       style={pressableStyle}
     >
       <Icon size={16} strokeWidth={1.5} uniProps={active ? mutedRailIcon : extraMutedRailIcon} />
-      <Text style={[styles.entryLabel, active ? styles.entryLabelActive : null]} numberOfLines={2}>
+      <Text style={[styles.entryLabel, active ? styles.entryLabelActive : null]} numberOfLines={1}>
+        {label}
+      </Text>
+    </PressHighlight>
+  );
+}
+
+function ActivityCanvasEntryButton({
+  entry,
+  label,
+  active,
+  onActivate,
+}: {
+  entry: ActivityRailEntryId;
+  label: string;
+  active: boolean;
+  onActivate: (entry: ActivityRailEntryId) => void;
+}) {
+  const Icon = RAIL_ICONS[entry];
+  const handlePress = useCallback(() => onActivate(entry), [entry, onActivate]);
+  const accessibilityState = useMemo(() => ({ selected: active }), [active]);
+  const pressableStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.canvasEntry,
+      (hovered || pressed) && !active ? styles.canvasEntryHovered : null,
+      active ? styles.canvasEntryActive : null,
+    ],
+    [active],
+  );
+  return (
+    <PressHighlight
+      testID={`workspace-activity-canvas-${entry}`}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={accessibilityState}
+      onPress={handlePress}
+      style={pressableStyle}
+    >
+      <Icon size={22} strokeWidth={1.5} uniProps={active ? mutedRailIcon : extraMutedRailIcon} />
+      <Text
+        style={[styles.canvasEntryLabel, active ? styles.entryLabelActive : null]}
+        numberOfLines={2}
+      >
         {label}
       </Text>
     </PressHighlight>
@@ -111,7 +173,7 @@ function ActivityRailEntryButton({
 
 const styles = StyleSheet.create((theme) => ({
   rail: {
-    width: 72,
+    width: 220,
     flexShrink: 0,
     alignSelf: "stretch",
     backgroundColor: theme.colors.surfaceSidebar,
@@ -119,25 +181,26 @@ const styles = StyleSheet.create((theme) => ({
     borderLeftColor: theme.colors.border,
   },
   context: {
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize["2xs"],
-    lineHeight: 13,
-    textAlign: "center",
-    paddingHorizontal: theme.spacing[1],
-    paddingTop: theme.spacing[2],
-    paddingBottom: theme.spacing[1],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    lineHeight: 20,
+    textAlign: "left",
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
     userSelect: "none",
   },
   entries: {
     gap: theme.spacing[0.5],
+    paddingHorizontal: theme.spacing[2],
   },
   entry: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: theme.spacing[0.5],
-    marginHorizontal: theme.spacing[1],
+    justifyContent: "flex-start",
+    gap: theme.spacing[2],
     paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[0.5],
+    paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
   },
   entryHovered: {
@@ -147,13 +210,56 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surfaceSidebarSelected,
   },
   entryLabel: {
-    color: theme.colors.foregroundExtraMuted,
-    fontSize: theme.fontSize["2xs"],
-    lineHeight: 12,
-    textAlign: "center",
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+    textAlign: "left",
     userSelect: "none",
   },
   entryLabelActive: {
     color: theme.colors.foregroundMuted,
+  },
+  canvas: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.surface0,
+    borderLeftWidth: theme.borderWidth[1],
+    borderLeftColor: theme.colors.border,
+  },
+  canvasGrid: {
+    width: "100%",
+    maxWidth: 340,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: theme.spacing[4],
+    paddingHorizontal: theme.spacing[6],
+  },
+  canvasEntry: {
+    width: "48%",
+    height: 108,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing[2],
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  canvasEntryHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  canvasEntryActive: {
+    backgroundColor: theme.colors.surface2,
+  },
+  canvasEntryLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    lineHeight: 18,
+    textAlign: "center",
+    userSelect: "none",
   },
 }));

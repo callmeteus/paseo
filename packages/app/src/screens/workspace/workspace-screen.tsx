@@ -82,6 +82,7 @@ import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   canDismissPaneInLayout,
+  collectAllPanes,
   collectAllTabs,
   DEFAULT_PANE_ID,
   findPaneById,
@@ -165,6 +166,10 @@ import {
   resolveActivityRailActivation,
   resolveActivityRailContextLabel,
   resolveActivityRailEntries,
+  resolveActivityRailPresentation,
+  workspaceMiddleHasEditorTab,
+  workspaceMiddleTabKinds,
+  workspaceSidebarIsEmpty,
   type ActivityRailEntryId,
 } from "@/screens/workspace/workspace-chrome-model";
 import { useHasWindowChromeObstruction } from "@/utils/desktop-window";
@@ -1024,6 +1029,19 @@ function useLastMainPane(input: {
 
 function shouldRenderDesktopSplitContent(isMobile: boolean, desktopSplitContent: unknown): boolean {
   return !isMobile && desktopSplitContent !== null;
+}
+
+function WorkspaceCenterBody({ content, canvas }: { content: ReactNode; canvas: ReactNode }) {
+  return (
+    <View
+      style={canvas ? [styles.centerContent, styles.centerContentWithCanvas] : styles.centerContent}
+    >
+      <View style={canvas ? [styles.content, styles.contentBesideCanvas] : styles.content}>
+        {content}
+      </View>
+      {canvas}
+    </View>
+  );
 }
 
 function WorkspaceScreenContent({
@@ -3655,6 +3673,73 @@ function WorkspaceScreenContent({
     composerFullscreen: useComposerTabFullscreen(workspacePanelKey, activeTabId),
   });
 
+  const desktopSidebarOpen = usePanelStore((state) =>
+    selectIsAgentListOpen(state, { isCompact: isMobile }),
+  );
+  const activityChrome = useMemo(() => {
+    const entries = resolveActivityRailEntries({
+      changes: isGitCheckout,
+      browser: showCreateBrowserTab,
+      terminal: true,
+      files: true,
+    });
+    const kindByTabId = new Map(uiTabs.map((tab) => [tab.tabId, tab.target.kind]));
+    const middleKinds = workspaceMiddleTabKinds({
+      panes: workspaceLayout ? collectAllPanes(workspaceLayout.root) : [],
+      explorerPaneId: explorerSidebarPaneId,
+      kindByTabId,
+    });
+    let explorerKind: string | null = null;
+    if (isExplorerSidebarShowing && workspaceLayout && explorerSidebarPaneId) {
+      const focusedTabId = findPaneById(workspaceLayout.root, explorerSidebarPaneId)?.focusedTabId;
+      explorerKind = focusedTabId
+        ? (uiTabs.find((tab) => tab.tabId === focusedTabId)?.target.kind ?? null)
+        : null;
+    }
+    const presentation = resolveActivityRailPresentation({
+      enabled: !isMobile && !desktopFocusModeEnabled,
+      sidebarOpen: desktopSidebarOpen,
+      sidebarEmpty: workspaceSidebarIsEmpty(middleKinds),
+      middleHasEditorTab:
+        workspaceMiddleHasEditorTab(middleKinds) ||
+        (explorerKind !== null && workspaceMiddleHasEditorTab([explorerKind])),
+      entryCount: entries.length,
+    });
+    if (presentation === "hidden") {
+      return { rail: null, canvas: null };
+    }
+    const view = (
+      <WorkspaceActivityRail
+        variant={presentation}
+        contextLabel={resolveActivityRailContextLabel({
+          projectName: workspaceHeaderSubtitle,
+          workspaceName: workspaceHeaderTitle,
+        })}
+        entries={entries}
+        activeEntry={resolveActiveActivityRailEntry({
+          focusedKind: activeTabDescriptor?.kind ?? null,
+          explorerKind,
+        })}
+        onActivate={handleActivityRailActivate}
+      />
+    );
+    return presentation === "rail" ? { rail: view, canvas: null } : { rail: null, canvas: view };
+  }, [
+    activeTabDescriptor?.kind,
+    desktopFocusModeEnabled,
+    desktopSidebarOpen,
+    explorerSidebarPaneId,
+    handleActivityRailActivate,
+    isExplorerSidebarShowing,
+    isGitCheckout,
+    isMobile,
+    showCreateBrowserTab,
+    uiTabs,
+    workspaceHeaderSubtitle,
+    workspaceHeaderTitle,
+    workspaceLayout,
+  ]);
+
   // Compact sheets escape to the app overlay host, above both sidebars.
   const workspaceCenterColumn = isMobile ? (
     <View style={styles.centerColumn}>
@@ -3712,9 +3797,7 @@ function WorkspaceScreenContent({
         </WorkspaceTabLineChromeProvider>
       ) : null}
 
-      <View style={styles.centerContent}>
-        <View style={styles.content}>{desktopContent}</View>
-      </View>
+      <WorkspaceCenterBody content={desktopContent} canvas={activityChrome.canvas} />
     </View>
   );
 
@@ -3836,51 +3919,6 @@ function WorkspaceScreenContent({
     },
   );
 
-  const activityRail = useMemo(() => {
-    if (isMobile || desktopFocusModeEnabled) return null;
-    const entries = resolveActivityRailEntries({
-      changes: isGitCheckout,
-      browser: showCreateBrowserTab,
-      terminal: true,
-      files: true,
-    });
-    if (entries.length === 0) return null;
-    const explorerTabId =
-      isExplorerSidebarShowing && workspaceLayout && explorerSidebarPaneId
-        ? (findPaneById(workspaceLayout.root, explorerSidebarPaneId)?.focusedTabId ?? null)
-        : null;
-    const explorerKind = explorerTabId
-      ? (uiTabs.find((tab) => tab.tabId === explorerTabId)?.target.kind ?? null)
-      : null;
-    return (
-      <WorkspaceActivityRail
-        contextLabel={resolveActivityRailContextLabel({
-          projectName: workspaceHeaderSubtitle,
-          workspaceName: workspaceHeaderTitle,
-        })}
-        entries={entries}
-        activeEntry={resolveActiveActivityRailEntry({
-          focusedKind: activeTabDescriptor?.kind ?? null,
-          explorerKind,
-        })}
-        onActivate={handleActivityRailActivate}
-      />
-    );
-  }, [
-    activeTabDescriptor?.kind,
-    desktopFocusModeEnabled,
-    explorerSidebarPaneId,
-    handleActivityRailActivate,
-    isExplorerSidebarShowing,
-    isGitCheckout,
-    isMobile,
-    showCreateBrowserTab,
-    uiTabs,
-    workspaceHeaderSubtitle,
-    workspaceHeaderTitle,
-    workspaceLayout,
-  ]);
-
   const renderedWorkspaceScreen = (
     <RenderProfile id="WorkspaceScreenContent">
       <View style={containerStyle}>
@@ -3910,7 +3948,7 @@ function WorkspaceScreenContent({
             >
               {workspaceCenterColumn}
               {sharedExplorer}
-              {activityRail}
+              {activityChrome.rail}
             </WorkspaceTabDragScope>
           </FloatingPanelPortalHostNameProvider>
           <FloatingPanelPortalHost name={workspaceFloatingPanelPortalHostName} />
@@ -4093,6 +4131,13 @@ const styles = StyleSheet.create((theme) => ({
   centerContent: {
     flex: 1,
     minHeight: 0,
+  },
+  centerContentWithCanvas: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  contentBesideCanvas: {
+    minWidth: 0,
   },
   tab: {
     paddingHorizontal: theme.spacing[3],

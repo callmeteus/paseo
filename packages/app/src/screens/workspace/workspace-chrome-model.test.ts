@@ -4,9 +4,13 @@ import {
   resolveActivityRailActivation,
   resolveActivityRailContextLabel,
   resolveActivityRailEntries,
+  resolveActivityRailPresentation,
   resolveWorkspaceChromeBand,
   resolveWorkspaceChromePaneId,
   tabLineHostsWorkspaceChrome,
+  workspaceMiddleHasEditorTab,
+  workspaceMiddleTabKinds,
+  workspaceSidebarIsEmpty,
   type WorkspaceChromePaneNode,
 } from "./workspace-chrome-model";
 
@@ -196,6 +200,100 @@ describe("resolveActivityRailContextLabel", () => {
     ).toBe("Servidor Local");
     expect(resolveActivityRailContextLabel({ projectName: "", workspaceName: " " })).toBeNull();
     expect(resolveActivityRailContextLabel({})).toBeNull();
+  });
+});
+
+describe("workspaceMiddleTabKinds", () => {
+  const kindByTabId = new Map([
+    ["agent", "agent"],
+    ["file", "file"],
+    ["explorer-files", "files"],
+    ["explorer-changes", "changes_tree"],
+  ]);
+
+  it("ignores the explorer dock and keeps the main panes", () => {
+    expect(
+      workspaceMiddleTabKinds({
+        panes: [
+          { id: "main", tabIds: ["agent", "file"] },
+          { id: "explorer", tabIds: ["explorer-files", "explorer-changes"] },
+        ],
+        explorerPaneId: "explorer",
+        kindByTabId,
+      }),
+    ).toEqual(["agent", "file"]);
+  });
+});
+
+describe("workspaceMiddleHasEditorTab", () => {
+  it("treats the conversation as an empty middle", () => {
+    expect(workspaceMiddleHasEditorTab([])).toBe(false);
+    expect(workspaceMiddleHasEditorTab(["agent", "draft", "new_tab", "provider_subagent"])).toBe(
+      false,
+    );
+  });
+
+  it("treats a file, terminal or diff as occupying the middle", () => {
+    expect(workspaceMiddleHasEditorTab(["agent", "file"])).toBe(true);
+    expect(workspaceMiddleHasEditorTab(["terminal"])).toBe(true);
+    expect(workspaceMiddleHasEditorTab(["working_diff"])).toBe(true);
+  });
+});
+
+describe("workspaceSidebarIsEmpty", () => {
+  it("is empty without a conversation, including a bare new-tab launcher", () => {
+    expect(workspaceSidebarIsEmpty([])).toBe(true);
+    expect(workspaceSidebarIsEmpty(["new_tab"])).toBe(true);
+  });
+
+  it("is not empty once a chat is open", () => {
+    expect(workspaceSidebarIsEmpty(["agent"])).toBe(false);
+    expect(workspaceSidebarIsEmpty(["draft", "new_tab"])).toBe(false);
+    expect(workspaceSidebarIsEmpty(["provider_subagent"])).toBe(false);
+  });
+});
+
+describe("resolveActivityRailPresentation", () => {
+  const available = {
+    enabled: true,
+    entryCount: 4,
+    middleHasEditorTab: false,
+    sidebarOpen: true,
+    sidebarEmpty: true,
+  };
+
+  it("uses the side column only while the left sidebar is closed and no view is open", () => {
+    expect(resolveActivityRailPresentation({ ...available, sidebarOpen: false })).toBe("rail");
+  });
+
+  it("uses the large grid only when the open sidebar is empty", () => {
+    expect(resolveActivityRailPresentation(available)).toBe("canvas");
+  });
+
+  it("hides the column when the sidebar is open on a chat", () => {
+    expect(resolveActivityRailPresentation({ ...available, sidebarEmpty: false })).toBe("hidden");
+  });
+
+  it("hides both when an editor tab is open, or when the chrome itself is off", () => {
+    expect(resolveActivityRailPresentation({ ...available, middleHasEditorTab: true })).toBe(
+      "hidden",
+    );
+    expect(
+      resolveActivityRailPresentation({
+        ...available,
+        sidebarOpen: false,
+        middleHasEditorTab: true,
+      }),
+    ).toBe("hidden");
+    expect(
+      resolveActivityRailPresentation({
+        ...available,
+        sidebarEmpty: false,
+        middleHasEditorTab: true,
+      }),
+    ).toBe("hidden");
+    expect(resolveActivityRailPresentation({ ...available, enabled: false })).toBe("hidden");
+    expect(resolveActivityRailPresentation({ ...available, entryCount: 0 })).toBe("hidden");
   });
 });
 
