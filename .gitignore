@@ -67,7 +67,12 @@ CLAUDE.local.md
 .debug.conversations/
 .debug/
 .dev/
-.paseo/
+.paseo/*
+!.paseo/triggers/
+!.paseo/triggers/**
+!.paseo/automations/
+!.paseo/automations/**
+.paseo/automations/logs/
 .wrangler/
 **/.wrangler/
 **/.tanstack/

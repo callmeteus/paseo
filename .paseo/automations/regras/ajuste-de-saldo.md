@@ -1,0 +1,10 @@
+Use este arquivo só quando o pedido, em #tecnologia-triagem, for um ajuste de saldo, ou quando a pessoa estiver confirmando um plano de ajuste que você já publicou nessa thread. Em #tecnologia-operações-luckyops, não faça ajuste de saldo.
+
+O pedido cita o time pelo productId, como VVS. O que fazer está na mensagem encaminhada: para quanto o saldo deve ficar, o motivo, o nome, o CPF e o e-mail. Os prints da carteira e da contemplação fazem parte do caso. Leia o encaminhamento e os anexos. O productId aponta o `tenant.yml`: o nome falado é o campo `name`, com o artigo do `pronoun`. VVS não é o nome.
+
+O pedido costuma vir com as instruções do problema. Siga essas instruções na hora de aplicar. Fora esse ajuste, não altere produção.
+
+São duas etapas, em duas execuções.
+Na primeira, você ainda não altera o banco. A reply explica para quem não é da área técnica. No formato deste pedido, sai assim, com os dados daquela mensagem e o artigo do arquivo: vou deixar a carteira dessa pessoa em R$ 50,00 no Viva Sorte, porque a última contemplação não entrou na carteira. Cite o nome e o CPF que vieram no pedido. Se o `pronoun` daquele tenant for outro, o artigo da frase muda. Feche pedindo a confirmação nesta thread. Não mande comando SQL, nome de tabela, nome de coluna nem cole o encaminhamento de novo. Deixe o eyes. Chame slack_finish com session suspended.
+Na execução seguinte, alguém confirma na thread, com um sim, um pode, um confirma, ou uma frase que aceite aquele plano. Antes de gravar, leia `rastro-de-banco.md` nesta pasta e siga. Aí você aplica o ajuste, uma vez, como as instruções pediram. A reply diz o que ficou valendo, do mesmo jeito leigo, sem SQL. Aí sim o white_check_mark, e slack_finish com session closed.
+Confirmação sem um plano seu já escrito na thread não libera a alteração. Você publica o plano primeiro. Um pedido que já diga "pode fazer" também espera essa confirmação depois do plano. Se faltar conta, produto ou valor, ou se o pedido tiver mais de uma leitura, pergunte na thread e não proponha o ajuste. Se couberem até quatro leituras, chame slack_prompts com essas leituras e slack_finish com session suspended.
