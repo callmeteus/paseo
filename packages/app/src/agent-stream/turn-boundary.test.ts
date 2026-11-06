@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StreamItem } from "@/types/stream";
-import { resolveAssistantTurnForkBoundary } from "./turn-boundary";
+import { resolveAssistantTurnForkBoundary, resolveUserMessageForkBoundary } from "./turn-boundary";
 
 function timestamp(seed: number): Date {
   return new Date(`2026-01-01T00:00:${seed.toString().padStart(2, "0")}.000Z`);
@@ -108,6 +108,47 @@ describe("resolveAssistantTurnForkBoundary", () => {
       resolveAssistantTurnForkBoundary({
         items: [assistantMessage("assistant-1", 2)],
         startIndex: 0,
+        supportsTimelineCursor: false,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("resolveUserMessageForkBoundary", () => {
+  it("uses the user message id when timeline cursors are unsupported", () => {
+    const user = { ...userMessage("user-1", 1), messageId: "msg-user-1" };
+    expect(
+      resolveUserMessageForkBoundary({
+        items: [user, assistantMessage("assistant-1", 2, "msg-a1")],
+        userIndex: 0,
+        supportsTimelineCursor: false,
+      }),
+    ).toEqual({ boundaryMessageId: "msg-user-1" });
+  });
+
+  it("prefers the timeline cursor when supported", () => {
+    const user = {
+      ...userMessage("user-1", 1),
+      messageId: "msg-user-1",
+      timelineCursor: { epoch: "timeline-1", seq: 5 },
+    };
+    expect(
+      resolveUserMessageForkBoundary({
+        items: [user],
+        userIndex: 0,
+        supportsTimelineCursor: true,
+      }),
+    ).toEqual({
+      boundaryCursor: { epoch: "timeline-1", seq: 5 },
+      boundaryMessageId: "msg-user-1",
+    });
+  });
+
+  it("returns undefined without a message id when cursors are unsupported", () => {
+    expect(
+      resolveUserMessageForkBoundary({
+        items: [userMessage("user-1", 1)],
+        userIndex: 0,
         supportsTimelineCursor: false,
       }),
     ).toBeUndefined();

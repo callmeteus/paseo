@@ -69,6 +69,7 @@ interface UserMessageProps {
   isLastInGroup?: boolean;
   isPending?: boolean;
   disableOuterSpacing?: boolean;
+  onFork?: (target: AssistantForkTarget) => Promise<void> | void;
 }
 
 const userMessageStylesheet = StyleSheet.create((theme) => ({
@@ -169,6 +170,59 @@ function UserMessageImagePill({ image, onOpen, accessibilityLabel }: UserMessage
 
 const MESSAGE_TEXT_DATASET = { messageText: "true" };
 
+interface UserMessageTrailingRowProps {
+  formattedTimestamp: string;
+  capabilities?: AgentCapabilityFlags;
+  messageId?: string;
+  message: string;
+  rewindPending: boolean;
+  onRewind: (input: { mode: RewindMode; rewoundText: string }) => void | Promise<void>;
+  canForkUserMessage: boolean;
+  onFork?: (target: AssistantForkTarget) => void;
+  getMessageContent: () => string;
+}
+
+const UserMessageTrailingRow = memo(function UserMessageTrailingRow({
+  formattedTimestamp,
+  capabilities,
+  messageId,
+  message,
+  rewindPending,
+  onRewind,
+  canForkUserMessage,
+  onFork,
+  getMessageContent,
+}: UserMessageTrailingRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={userMessageStylesheet.trailingRow} testID="user-message-trailing-row">
+      <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
+        {formattedTimestamp}
+      </Text>
+      {capabilities && messageId ? (
+        <RewindMenu
+          capabilities={capabilities}
+          isPending={rewindPending}
+          rewoundText={message}
+          onRewind={onRewind}
+        />
+      ) : null}
+      {canForkUserMessage && onFork ? (
+        <AssistantForkMenu
+          onFork={onFork}
+          testID="user-message-fork-menu"
+          accessibilityLabel={t("message.actions.forkUserMessageMenu")}
+        />
+      ) : null}
+      <TurnCopyButton
+        getContent={getMessageContent}
+        containerStyle={userMessageStylesheet.copyButton}
+        accessibilityLabel={t("message.actions.copyMessage")}
+      />
+    </View>
+  );
+});
+
 export const UserMessage = memo(function UserMessage({
   serverId,
   agentId,
@@ -183,6 +237,7 @@ export const UserMessage = memo(function UserMessage({
   isLastInGroup = true,
   isPending = false,
   disableOuterSpacing,
+  onFork,
 }: UserMessageProps) {
   const isCompact = useIsCompactFormFactor();
   const { t } = useTranslation();
@@ -206,7 +261,9 @@ export const UserMessage = memo(function UserMessage({
   );
   const hasAttachments = visibleAttachments.length > 0;
   const messageHasChip = hasInlineChip(message);
-  const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
+  const canForkUserMessage = Boolean(onFork);
+  const showTrailingRow =
+    !isPending && hasText && (isCompact || isNative || isHovered || canForkUserMessage);
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
     [timestamp],
@@ -316,26 +373,17 @@ export const UserMessage = memo(function UserMessage({
           {messageText}
         </View>
         {hasText ? (
-          <View
-            style={trailingRowStyle}
-            pointerEvents={showTrailingRow ? "auto" : "none"}
-            testID="user-message-trailing-row"
-          >
-            <Text style={userMessageStylesheet.timestampText} testID="user-message-timestamp">
-              {formattedTimestamp}
-            </Text>
-            {capabilities && messageId ? (
-              <RewindMenu
-                capabilities={capabilities}
-                isPending={rewindMutation.isPending}
-                rewoundText={message}
-                onRewind={handleRewind}
-              />
-            ) : null}
-            <TurnCopyButton
-              getContent={getMessageContent}
-              containerStyle={userMessageStylesheet.copyButton}
-              accessibilityLabel={t("message.actions.copyMessage")}
+          <View style={trailingRowStyle} pointerEvents={showTrailingRow ? "auto" : "none"}>
+            <UserMessageTrailingRow
+              formattedTimestamp={formattedTimestamp}
+              capabilities={capabilities}
+              messageId={messageId}
+              message={message}
+              rewindPending={rewindMutation.isPending}
+              onRewind={handleRewind}
+              canForkUserMessage={canForkUserMessage}
+              onFork={onFork}
+              getMessageContent={getMessageContent}
             />
           </View>
         ) : null}

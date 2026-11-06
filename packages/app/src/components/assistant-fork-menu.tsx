@@ -17,6 +17,8 @@ export type AssistantForkTarget = "tab" | "workspace";
 interface AssistantForkMenuProps {
   onFork: (target: AssistantForkTarget) => Promise<void> | void;
   testID?: string;
+  /** Overrides the trigger and tooltip copy (defaults to forkMenu). */
+  accessibilityLabel?: string;
 }
 
 const ThemedSplit = withUnistyles(Split);
@@ -27,8 +29,10 @@ const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.for
 export const AssistantForkMenu = memo(function AssistantForkMenu({
   onFork,
   testID = "assistant-fork-menu",
+  accessibilityLabel,
 }: AssistantForkMenuProps) {
   const { t } = useTranslation();
+  const forkTriggerLabel = accessibilityLabel ?? t("message.actions.forkMenu");
   const [isOpen, setIsOpen] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<AssistantForkTarget | null>(null);
   const isLocked = pendingTarget !== null;
@@ -63,10 +67,10 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
   const tooltipContent = useMemo(
     () => (
       <TooltipContent side="top" align="center" offset={8}>
-        <Text style={styles.tooltipText}>{t("message.actions.forkMenu")}</Text>
+        <Text style={styles.tooltipText}>{forkTriggerLabel}</Text>
       </TooltipContent>
     ),
-    [t],
+    [forkTriggerLabel],
   );
 
   const forkIcon = useMemo(
@@ -80,7 +84,7 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
         <TooltipTrigger asChild>
           <View style={styles.triggerSlot} collapsable={false}>
             <DropdownMenuTrigger
-              accessibilityLabel={t("message.actions.forkMenu")}
+              accessibilityLabel={forkTriggerLabel}
               accessibilityRole="button"
               disabled={isLocked}
               style={triggerStyle}

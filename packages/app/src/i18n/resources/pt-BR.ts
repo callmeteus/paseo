@@ -472,6 +472,7 @@ export const ptBR: TranslationResources = {
       copyTurn: "Copiar turno",
       copyMessage: "Copiar mensagem",
       forkMenu: "Bifurcar mensagem",
+      forkUserMessageMenu: "Bifurcar o chat antes desta mensagem",
       forkInNewTab: "Bifurcar em uma nova aba",
       forkInNewWorkspace: "Bifurcar em um novo workspace",
       forkUnavailable: "Atualize o host para usar isto.",

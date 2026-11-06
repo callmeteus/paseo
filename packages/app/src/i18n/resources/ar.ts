@@ -462,6 +462,7 @@ export const ar: TranslationResources = {
       copyTurn: "نسخ بدوره",
       copyMessage: "انسخ الرسالة",
       forkMenu: "تفريع الرسالة",
+      forkUserMessageMenu: "تفريع الدردشة قبل هذه الرسالة",
       forkInNewTab: "تفريع في تبويب جديد",
       forkInNewWorkspace: "تفريع في مساحة عمل جديدة",
       forkUnavailable: "حدّث المضيف لاستخدام هذا.",

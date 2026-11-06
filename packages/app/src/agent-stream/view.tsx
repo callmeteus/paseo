@@ -47,7 +47,12 @@ import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
 import { readSessionLimitNotice } from "@/agent-stream/session-limit";
 import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
-import { getStreamItemMessageId, type StreamItem } from "@/types/stream";
+import {
+  getStreamItemMessageId,
+  type StreamItem,
+  type UserMessageItem,
+  type UserMessageImageAttachment,
+} from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import type { PendingPermission } from "@/types/shared";
@@ -56,6 +61,7 @@ import type {
   AgentPermissionAction,
   AgentPermissionResponse,
 } from "@getpaseo/protocol/agent-types";
+import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useSessionStore } from "@/stores/session-store";
 import { useRevealedText } from "@/hooks/use-revealed-text";
@@ -90,6 +96,9 @@ import { type StreamSegmentRenderers, type StreamViewportHandle } from "./strate
 import { ChatOutlineRail } from "@/agent-stream/chat-outline/rail";
 import { useChatOutline } from "@/agent-stream/chat-outline/use-chat-outline";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
+import { resolveUserMessageForkBoundary } from "./turn-boundary";
+import type { AssistantForkTarget } from "@/components/assistant-fork-menu";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import {
   CompletedTurnFooterRow,
@@ -151,6 +160,51 @@ function BottomOverlayInset({ height }: { height: number }) {
   const style = useMemo(() => ({ height }), [height]);
   return <View style={style} />;
 }
+
+type UserMessageForkBridgeFork = (
+  item: UserMessageItem,
+  target: AssistantForkTarget,
+) => Promise<void> | void;
+
+interface UserMessageForkBridgeProps extends Omit<
+  ComponentProps<typeof UserMessage>,
+  "onFork" | "message" | "messageId" | "images" | "attachments"
+> {
+  item: UserMessageItem;
+  canFork: boolean;
+  forkUserMessage: UserMessageForkBridgeFork;
+  messageText: string;
+  messageId?: string;
+  images?: UserMessageImageAttachment[];
+  attachments?: AgentAttachment[];
+}
+
+const UserMessageForkBridge = memo(function UserMessageForkBridge({
+  item,
+  canFork,
+  forkUserMessage,
+  messageText,
+  messageId,
+  images,
+  attachments,
+  ...rest
+}: UserMessageForkBridgeProps) {
+  const handleFork = useCallback(
+    (target: AssistantForkTarget) => forkUserMessage(item, target),
+    [forkUserMessage, item],
+  );
+
+  return (
+    <UserMessage
+      {...rest}
+      message={messageText}
+      messageId={messageId}
+      images={images}
+      attachments={attachments}
+      onFork={canFork ? handleFork : undefined}
+    />
+  );
+});
 
 function renderPendingPermissionsNode(input: {
   pendingPermissions: PendingPermission[];
@@ -405,6 +459,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     const streamHead = providedStreamHead ?? sessionStreamHead;
     const forkAgent = useForkAgent({ serverId: resolvedServerId, toast, readOnly });
+    const supportsAgentForkContext = useHostFeature(resolvedServerId, "agentForkContext");
     const supportsAgentForkContextCursor = useSessionStore(
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentForkContextCursor === true,
@@ -541,6 +596,46 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     // the component reads the current (fresh) streamItems/streamHead from props.
     const effectiveStreamItems = useRetainedValue(streamItems, isActive);
     const effectiveStreamHead = useRetainedValue(streamHead, isActive);
+
+    const mergedStreamForFork = useMemo(
+      () => [...effectiveStreamItems, ...(effectiveStreamHead ?? [])],
+      [effectiveStreamItems, effectiveStreamHead],
+    );
+    const userMessageIndexById = useMemo(() => {
+      const map = new Map<string, number>();
+      mergedStreamForFork.forEach((streamItem, index) => {
+        if (streamItem.kind === "user_message") {
+          map.set(streamItem.id, index);
+        }
+      });
+      return map;
+    }, [mergedStreamForFork]);
+
+    const handleForkUserMessage = useStableEvent(
+      async (item: UserMessageItem, target: AssistantForkTarget) => {
+        const userIndex = userMessageIndexById.get(item.id);
+        if (userIndex === undefined) {
+          return;
+        }
+        const boundary = resolveUserMessageForkBoundary({
+          items: mergedStreamForFork,
+          userIndex,
+          supportsTimelineCursor: supportsAgentForkContextCursor,
+        });
+        if (!boundary) {
+          toast?.error(t("message.actions.forkFailed"));
+          return;
+        }
+        await forkAgent({
+          agentId,
+          agent: context,
+          workspaceId: context.workspaceId,
+          target,
+          boundary,
+        });
+      },
+    );
+
     const limitResumeItemId = useMemo(
       () =>
         latestLimitResumeItemId(
@@ -765,12 +860,21 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const renderUserMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "user_message" }>) => {
         const collapsedTurn = getCollapsedTurn(item.id);
+        const canForkThisUserMessage =
+          !readOnly &&
+          supportsAgentForkContext &&
+          !(
+            item.clientMessageId !== undefined && pendingClientMessageIds.has(item.clientMessageId)
+          );
         const message = (
-          <UserMessage
+          <UserMessageForkBridge
+            item={item}
+            canFork={canForkThisUserMessage}
+            forkUserMessage={handleForkUserMessage}
             serverId={resolvedServerId}
             agentId={agentId}
             messageId={item.messageId}
-            message={item.text}
+            messageText={item.text}
             images={item.images}
             attachments={item.attachments}
             timestamp={item.timestamp.getTime()}
@@ -799,9 +903,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agentId,
         client,
         getCollapsedTurn,
+        handleForkUserMessage,
         pendingClientMessageIds,
+        readOnly,
         resolvedServerId,
         setTurnExpanded,
+        supportsAgentForkContext,
       ],
     );
 

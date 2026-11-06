@@ -460,6 +460,7 @@ export const en = {
       copyTurn: "Copy turn",
       copyMessage: "Copy message",
       forkMenu: "Fork chat from here",
+      forkUserMessageMenu: "Fork chat before this message",
       forkInNewTab: "Fork in a new tab",
       forkInNewWorkspace: "Fork in a new workspace",
       forkUnavailable: "Update the host to use this.",

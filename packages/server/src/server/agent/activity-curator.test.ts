@@ -390,6 +390,26 @@ second line'`,
     expect(result.attachment.text).not.toContain("Later answer.");
   });
 
+  it("builds fork context bounded at a user message id", () => {
+    const result = buildAgentForkContextAttachment({
+      boundaryMessageId: "user-2",
+      rows: [
+        row(1, { type: "user_message", text: "First", messageId: "user-1" }),
+        row(2, { type: "user_message", text: "Second", messageId: "user-2" }),
+        row(3, {
+          type: "assistant_message",
+          text: "After second.",
+          messageId: "assistant-after-user-2",
+        }),
+      ],
+    });
+
+    expect(result.boundaryMessageId).toBe("user-2");
+    expect(result.attachment.text).toContain("[User] First");
+    expect(result.attachment.text).toContain("[User] Second");
+    expect(result.attachment.text).not.toContain("After second.");
+  });
+
   it("does not cap fork context to the generic recent activity limit", () => {
     const messageRows = Array.from({ length: 25 }, (_, index) =>
       row(index + 1, {
@@ -497,7 +517,7 @@ second line'`,
         boundaryMessageId: "missing",
         rows: [row(1, { type: "assistant_message", text: "Done.", messageId: "assistant-1" })],
       }),
-    ).toThrow("Selected assistant message is no longer available.");
+    ).toThrow("Selected message is no longer available.");
   });
 });
 

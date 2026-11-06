@@ -261,14 +261,21 @@ function selectForkContextRows(input: {
   }
   const boundaryIndex = boundaryCursor
     ? projectedRows.findIndex((row) => row.seqEnd === boundaryCursor.seq)
-    : projectedRows.findLastIndex(
-        (row) => row.item.type === "assistant_message" && row.item.messageId === boundaryMessageId,
-      );
+    : projectedRows.findLastIndex((row) => {
+        const item = row.item;
+        if (item.type === "assistant_message" && item.messageId === boundaryMessageId) {
+          return true;
+        }
+        if (item.type === "user_message" && item.messageId === boundaryMessageId) {
+          return true;
+        }
+        return false;
+      });
   if (boundaryIndex < 0) {
     throw new Error(
       boundaryCursor
         ? "Selected timeline position is no longer available."
-        : "Selected assistant message is no longer available.",
+        : "Selected message is no longer available.",
     );
   }
   const boundarySeq = projectedRows[boundaryIndex].seqEnd;
