@@ -97,6 +97,8 @@ import {
   useHorizontalScrollBoundary,
 } from "@/components/ui/horizontal-scroll-boundary";
 import { useSessionStore } from "@/stores/session-store";
+import { tabLineHostsWorkspaceChrome } from "@/screens/workspace/workspace-chrome-model";
+import { useWorkspaceTabLineChrome } from "@/screens/workspace/workspace-tab-line-chrome";
 
 const DROPDOWN_WIDTH = 220;
 const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
@@ -1087,6 +1089,15 @@ function ResolvedWorkspaceDesktopTabsRow({
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
   const tabsScrollRef = useRef<ScrollView>(null);
   const [exitFocusModeWidth, setExitFocusModeWidth] = useState<number>(0);
+  const [tabLineChromeWidth, setTabLineChromeWidth] = useState(0);
+  const tabLineChrome = useWorkspaceTabLineChrome();
+  const showTabLineChrome =
+    tabLineHostsWorkspaceChrome({
+      host,
+      paneId,
+      chromePaneId: tabLineChrome.chromePaneId,
+      soleMainRow: tabLineChrome.soleMainRow,
+    }) && tabLineChrome.trailing != null;
   const tabScrollBoundary = useHorizontalScrollBoundary();
   const [labelMeasurements, setLabelMeasurements] = useState(
     () => new Map<string, WorkspaceTabLabelMeasurement>(),
@@ -1100,6 +1111,9 @@ function ResolvedWorkspaceDesktopTabsRow({
   const handleExitFocusModeLayout = useCallback((event: LayoutChangeEvent) => {
     updateMeasuredWidth(setExitFocusModeWidth, event);
   }, []);
+  const handleTabLineChromeLayout = useCallback((event: LayoutChangeEvent) => {
+    updateMeasuredWidth(setTabLineChromeWidth, event);
+  }, []);
 
   const layoutMetrics = useMemo(
     () => ({
@@ -1109,7 +1123,8 @@ function ResolvedWorkspaceDesktopTabsRow({
         DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH +
           (focusModeEnabled ? exitFocusModeWidth : 0) +
           (showPaneSplitActions ? PANE_SPLIT_ACTIONS_RESERVED_WIDTH : 0) +
-          (showPaneMaximizeAction ? PANE_MAXIMIZE_ACTION_RESERVED_WIDTH : 0),
+          (showPaneMaximizeAction ? PANE_MAXIMIZE_ACTION_RESERVED_WIDTH : 0) +
+          (showTabLineChrome ? tabLineChromeWidth : 0),
       ),
       rowPaddingHorizontal: TAB_ROW_PADDING_HORIZONTAL,
       tabGap: TAB_CHIP_GAP,
@@ -1120,7 +1135,14 @@ function ResolvedWorkspaceDesktopTabsRow({
       tabHorizontalPadding: TAB_CHIP_HORIZONTAL_PADDING,
       closeButtonWidth: TAB_CLOSE_BUTTON_RESERVED_WIDTH,
     }),
-    [exitFocusModeWidth, focusModeEnabled, showPaneMaximizeAction, showPaneSplitActions],
+    [
+      exitFocusModeWidth,
+      focusModeEnabled,
+      showPaneMaximizeAction,
+      showPaneSplitActions,
+      showTabLineChrome,
+      tabLineChromeWidth,
+    ],
   );
 
   const panePanelKinds = useMemo(() => tabs.map(({ tab }) => tab.kind), [tabs]);
@@ -1482,6 +1504,15 @@ function ResolvedWorkspaceDesktopTabsRow({
         onSplitDown={onSplitDown}
         onTogglePaneMaximized={onTogglePaneMaximized}
       />
+      {showTabLineChrome ? (
+        <View
+          style={styles.tabLineChrome}
+          testID="workspace-tab-line-chrome"
+          onLayout={handleTabLineChromeLayout}
+        >
+          {tabLineChrome.trailing}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -1644,6 +1675,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabsContainerSidebar: {
     backgroundColor: theme.colors.surfaceSidebar,
+  },
+  tabLineChrome: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: theme.spacing[2],
+    paddingLeft: theme.spacing[1],
+    paddingRight: theme.spacing[2],
   },
   tabsScroll: {
     minWidth: 0,

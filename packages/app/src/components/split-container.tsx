@@ -56,6 +56,11 @@ import {
 import type { WorkspaceTab } from "@/workspace-tabs/model";
 import { recordRenderProfileReasons, RenderProfile } from "@/utils/render-profiler";
 import { isNative } from "@/constants/platform";
+import {
+  resolveWorkspaceChromePaneId,
+  type WorkspaceChromePaneNode,
+} from "@/screens/workspace/workspace-chrome-model";
+import { WorkspaceTabLineChromeProvider } from "@/screens/workspace/workspace-tab-line-chrome";
 
 interface SplitContainerProps {
   layout: WorkspaceLayout;
@@ -101,6 +106,8 @@ interface SplitContainerProps {
   onReorderTabsInPane: (paneId: string, tabIds: string[]) => void;
   focusModeEnabled?: boolean;
   onExitFocusMode: () => void;
+  /** Commit and the explorer toggle, rendered on the tab line that owns the chrome. */
+  tabLineTrailing?: ReactNode;
 }
 
 interface SplitNodeViewProps extends Omit<
@@ -175,6 +182,7 @@ export function SplitContainer({
   onReorderTabsInPane,
   focusModeEnabled,
   onExitFocusMode,
+  tabLineTrailing = null,
 }: SplitContainerProps) {
   const inheritedWindowChromeCorners = useWindowChromeCorners();
   const windowChromeCorners = focusModeEnabled ? inheritedWindowChromeCorners : "none";
@@ -233,61 +241,86 @@ export function SplitContainer({
       : inheritedWindowChromeCorners;
   const mainColumnStyle = styles.mainColumn;
   const renderRoot = useMemo(() => wrapRootPaneForStableMount(splitRoot.root), [splitRoot.root]);
+  const chromePaneId = useMemo(
+    () =>
+      resolveWorkspaceChromePaneId({
+        root: toChromePaneNode(splitRoot.root),
+        maximizedPaneId,
+      }),
+    [maximizedPaneId, splitRoot.root],
+  );
   return (
     <RenderProfile id="SplitContainer">
-      <View style={styles.workspaceShell}>
-        <WindowChromeRegion corners={mainColumnWindowChromeCorners}>
-          <View style={mainColumnStyle}>
-            {renderMainHeader?.()}
-            {splitRoot.usesFallbackStrip && <WindowChromeSafeArea placement="below" />}
-            {renderRoot ? (
-              <SplitNodeView
-                node={renderRoot}
-                workspaceKey={workspaceKey}
-                uiTabs={uiTabs}
-                focusedPaneId={layout.focusedPaneId}
-                normalizedServerId={normalizedServerId}
-                normalizedWorkspaceId={normalizedWorkspaceId}
-                isWorkspaceFocused={isWorkspaceFocused}
-                hoveredCloseTabKey={hoveredCloseTabKey}
-                setHoveredCloseTabKey={setHoveredCloseTabKey}
-                closingTabIds={closingTabIds}
-                onNavigateTab={onNavigateTab}
-                onCloseTab={onCloseTab}
-                onCopyResumeCommand={onCopyResumeCommand}
-                onCopyAgentId={onCopyAgentId}
-                onCopyTerminalId={onCopyTerminalId}
-                onCopyFilePath={onCopyFilePath}
-                onReloadAgent={onReloadAgent}
-                onDeleteAgent={onDeleteAgent}
-                onRenameTab={onRenameTab}
-                onCloseTabsToLeft={onCloseTabsToLeft}
-                onCloseTabsToRight={onCloseTabsToRight}
-                onCloseOtherTabs={onCloseOtherTabs}
-                onCreateNewTab={onCreateNewTab}
-                buildPaneContentModel={buildPaneContentModel}
-                onFocusPane={onFocusPane}
-                onSplitPane={onSplitPane}
-                onSplitPaneEmpty={onSplitPaneEmpty}
-                onResizeSplit={onResizeSplit}
-                onReorderTabsInPane={onReorderTabsInPane}
-                activeDragTabId={activeDragTabId}
-                showDropZones={activeDragTabId !== null}
-                dropPreview={dropPreview}
-                tabDropPreview={tabDropPreview}
-                windowChromeCorners={splitRoot.usesFallbackStrip ? "none" : windowChromeCorners}
-                maximizedPaneId={maximizedPaneId}
-                workspaceHasMultiplePanes={workspaceHasMultiplePanes}
-                onTogglePaneMaximized={handleTogglePaneMaximized}
-                focusModeEnabled={focusModeEnabled}
-                onExitFocusMode={onExitFocusMode}
-              />
-            ) : null}
-          </View>
-        </WindowChromeRegion>
-      </View>
+      <WorkspaceTabLineChromeProvider
+        soleMainRow={false}
+        chromePaneId={chromePaneId}
+        trailing={tabLineTrailing}
+      >
+        <View style={styles.workspaceShell}>
+          <WindowChromeRegion corners={mainColumnWindowChromeCorners}>
+            <View style={mainColumnStyle}>
+              {renderMainHeader?.()}
+              {splitRoot.usesFallbackStrip && <WindowChromeSafeArea placement="below" />}
+              {renderRoot ? (
+                <SplitNodeView
+                  node={renderRoot}
+                  workspaceKey={workspaceKey}
+                  uiTabs={uiTabs}
+                  focusedPaneId={layout.focusedPaneId}
+                  normalizedServerId={normalizedServerId}
+                  normalizedWorkspaceId={normalizedWorkspaceId}
+                  isWorkspaceFocused={isWorkspaceFocused}
+                  hoveredCloseTabKey={hoveredCloseTabKey}
+                  setHoveredCloseTabKey={setHoveredCloseTabKey}
+                  closingTabIds={closingTabIds}
+                  onNavigateTab={onNavigateTab}
+                  onCloseTab={onCloseTab}
+                  onCopyResumeCommand={onCopyResumeCommand}
+                  onCopyAgentId={onCopyAgentId}
+                  onCopyTerminalId={onCopyTerminalId}
+                  onCopyFilePath={onCopyFilePath}
+                  onReloadAgent={onReloadAgent}
+                  onDeleteAgent={onDeleteAgent}
+                  onRenameTab={onRenameTab}
+                  onCloseTabsToLeft={onCloseTabsToLeft}
+                  onCloseTabsToRight={onCloseTabsToRight}
+                  onCloseOtherTabs={onCloseOtherTabs}
+                  onCreateNewTab={onCreateNewTab}
+                  buildPaneContentModel={buildPaneContentModel}
+                  onFocusPane={onFocusPane}
+                  onSplitPane={onSplitPane}
+                  onSplitPaneEmpty={onSplitPaneEmpty}
+                  onResizeSplit={onResizeSplit}
+                  onReorderTabsInPane={onReorderTabsInPane}
+                  activeDragTabId={activeDragTabId}
+                  showDropZones={activeDragTabId !== null}
+                  dropPreview={dropPreview}
+                  tabDropPreview={tabDropPreview}
+                  windowChromeCorners={splitRoot.usesFallbackStrip ? "none" : windowChromeCorners}
+                  maximizedPaneId={maximizedPaneId}
+                  workspaceHasMultiplePanes={workspaceHasMultiplePanes}
+                  onTogglePaneMaximized={handleTogglePaneMaximized}
+                  focusModeEnabled={focusModeEnabled}
+                  onExitFocusMode={onExitFocusMode}
+                />
+              ) : null}
+            </View>
+          </WindowChromeRegion>
+        </View>
+      </WorkspaceTabLineChromeProvider>
     </RenderProfile>
   );
+}
+
+function toChromePaneNode(node: SplitNode): WorkspaceChromePaneNode {
+  if (node.kind === "pane") {
+    return { kind: "pane", id: node.pane.id, hidden: node.pane.hidden === true };
+  }
+  return {
+    kind: "group",
+    direction: node.group.direction,
+    children: node.group.children.map(toChromePaneNode),
+  };
 }
 
 function SplitGroupChild({
