@@ -28,7 +28,13 @@ import {
   findActiveFileMention,
   type FileMentionRange,
 } from "@/utils/file-mention-autocomplete";
-import { removeMentionToken, type ChatMentionCandidate } from "@/utils/chat-mention-autocomplete";
+import type { ChatMentionCandidate } from "@/utils/chat-mention-autocomplete";
+import {
+  insertInlineChip,
+  maskInlineChips,
+  mentionChipLabel,
+} from "@getpaseo/protocol/inline-chip";
+import { chatMentionAttachmentId } from "@/composer/chat-history-attachment";
 import { useChatMentionSuggestions } from "./use-chat-mention-suggestions";
 import { useHostFeature } from "@/runtime/host-features";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -43,7 +49,7 @@ function resolveMentionWordLimit(isCompactFormFactor: boolean): number | undefin
 interface UseAgentAutocompleteInput {
   userInput: string;
   cursorIndex: number;
-  setUserInput: (nextValue: string) => void;
+  setUserInput: (nextValue: string, selection?: { start: number; end: number }) => void;
   serverId: string;
   agentId: string;
   draft?: DraftCommandTarget;
@@ -51,7 +57,7 @@ interface UseAgentAutocompleteInput {
   onClientSlashCommand?: (command: ClientSlashCommand) => void;
   canExecuteClientSlashCommand?: boolean;
   pluginClientSlashCommands?: readonly PluginClientSlashCommand[];
-  /** Selecting a chat attaches its history instead of inserting text. */
+  /** Selecting a chat replaces the @ token with an inline mention and attaches its history. */
   onChatSelected?: (chat: ChatMentionCandidate) => void | Promise<void>;
 }
 
@@ -116,11 +122,13 @@ function resolveAgentAutocompleteSnapshot(input: {
 
   const text = input.input.text;
   const cursorIndex = input.input.selection.start;
+  // Chip bodies can contain `@` or `/`. Mask them so the caret index still lines up.
+  const masked = maskInlineChips(text);
   return {
     text,
-    slashCommand: findActiveSlashCommand({ text, cursorIndex }),
+    slashCommand: findActiveSlashCommand({ text: masked, cursorIndex }),
     fileMention: findActiveFileMention({
-      text,
+      text: masked,
       cursorIndex,
       maxWords: input.mentionWordLimit,
     }),
@@ -438,13 +446,14 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onChatSelected,
   } = input;
 
+  const maskedUserInput = maskInlineChips(userInput);
   const activeSlashCommand = useMemo(
     () =>
       findActiveSlashCommand({
-        text: userInput,
+        text: maskedUserInput,
         cursorIndex,
       }),
-    [cursorIndex, userInput],
+    [cursorIndex, maskedUserInput],
   );
   const showCommandAutocomplete = activeSlashCommand !== null;
   const commandFilterQuery = activeSlashCommand?.query ?? "";
@@ -453,11 +462,11 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   const activeFileMention = useMemo(
     () =>
       findActiveFileMention({
-        text: userInput,
+        text: maskedUserInput,
         cursorIndex,
         maxWords: mentionWordLimit,
       }),
-    [cursorIndex, mentionWordLimit, userInput],
+    [cursorIndex, maskedUserInput, mentionWordLimit],
   );
   // Escape closes the picker for the token it was pressed on. Tracking the start
   // index keeps it closed while the user keeps typing that same mention, and
@@ -645,7 +654,21 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       if (!current.fileMention) return;
 
       if (selected.type === "chat") {
-        setUserInput(removeMentionToken({ text: current.text, mention: current.fileMention }));
+        const next = insertInlineChip({
+          text: current.text,
+          selection: { start: current.fileMention.start, end: current.fileMention.end },
+          chip: {
+            id: chatMentionAttachmentId(selected.chat.agentId),
+            kind: "mention",
+            label: mentionChipLabel({
+              title: selected.chat.title,
+              workspaceName: selected.chat.workspaceName,
+              agentId: selected.chat.agentId,
+            }),
+            body: "",
+          },
+        });
+        setUserInput(next.text, next.selection);
         void onChatSelected?.(selected.chat);
         onAutocompleteApplied?.();
         return;

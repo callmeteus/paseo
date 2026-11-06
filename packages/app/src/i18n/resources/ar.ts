@@ -3337,6 +3337,7 @@ export const ar: TranslationResources = {
         retrying: "جارٍ إعادة المحاولة...",
         noSearchMatches: "لا توجد نماذج تطابق بحثك",
         noneDetected: "لم يتم اكتشاف أي نماذج",
+        enableModel: "تمكين{{name}}",
         discovered: "اكتشف",
         custom: "نماذج مخصصة",
         updated: "تم تحديث{{time}}",

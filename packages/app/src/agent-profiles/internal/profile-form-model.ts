@@ -8,6 +8,10 @@ import type {
 import type { AgentProfile } from "@getpaseo/protocol/messages";
 import { formatAgentModeLabel, formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { applyFeatureValues, pruneFeatureValues } from "@/hooks/feature-preferences";
+import {
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 
 /**
@@ -116,7 +120,10 @@ export interface AgentProfileFormModel {
   subscribe: (listener: () => void) => () => void;
   close: () => void;
   /** Late input: the host-scoped provider catalog. Never touches selections. */
-  applyProviderCatalog: (entries: readonly ProviderSnapshotEntry[]) => void;
+  applyProviderCatalog: (
+    entries: readonly ProviderSnapshotEntry[],
+    disabledModelIdsByProvider?: DisabledModelIdsByProvider,
+  ) => void;
   /** Late input: the feature list for one request. Stale keys are ignored. */
   applyFeatures: (requestKey: string, features: readonly AgentFeature[]) => void;
   /** Resolve a request that produced no usable features (provider error). */
@@ -143,11 +150,24 @@ function findEntry(
   return entries.find((entry) => entry.provider === provider) ?? null;
 }
 
-function resolveModels(
+function selectableModels(
   entries: readonly ProviderSnapshotEntry[],
   provider: string,
 ): AgentModelDefinition[] {
   return filterSelectableModels(findEntry(entries, provider)?.models ?? null) ?? [];
+}
+
+function resolveModels(
+  entries: readonly ProviderSnapshotEntry[],
+  provider: string,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
+): AgentModelDefinition[] {
+  return (
+    omitDisabledModels(
+      selectableModels(entries, provider),
+      disabledModelIdsByProvider?.[provider],
+    ) ?? []
+  );
 }
 
 function resolveModes(entries: readonly ProviderSnapshotEntry[], provider: string): AgentMode[] {
@@ -175,7 +195,7 @@ function resolveThinkingOptions(
   provider: string,
   modelId: string,
 ): AgentSelectOption[] {
-  return resolveEffectiveModel(resolveModels(entries, provider), modelId)?.thinkingOptions ?? [];
+  return resolveEffectiveModel(selectableModels(entries, provider), modelId)?.thinkingOptions ?? [];
 }
 
 /** Every real option is selected by its own id; only the unset row differs. */
@@ -421,6 +441,7 @@ function buildInitialState(snapshot: AgentProfileFormSnapshot): AgentProfileForm
 
 export function openAgentProfileForm(snapshot: AgentProfileFormSnapshot): AgentProfileFormModel {
   let entries: readonly ProviderSnapshotEntry[] = [];
+  let disabledModelIdsByProvider: DisabledModelIdsByProvider = {};
   let catalogResolution: AgentProfileResolutionStatus = "idle";
   let resolvedFeatureKey: string | null = null;
   let resolvedFeatures: AgentFeature[] = [];
@@ -428,7 +449,7 @@ export function openAgentProfileForm(snapshot: AgentProfileFormSnapshot): AgentP
   let closed = false;
 
   function derive(incoming: AgentProfileFormState): AgentProfileFormState {
-    const models = resolveModels(entries, incoming.provider);
+    const models = resolveModels(entries, incoming.provider, disabledModelIdsByProvider);
     const modes = resolveModes(entries, incoming.provider);
     const next = seedSelections(incoming, {
       entry: findEntry(entries, incoming.provider),
@@ -526,8 +547,9 @@ export function openAgentProfileForm(snapshot: AgentProfileFormSnapshot): AgentP
       closed = true;
       listeners = new Set();
     },
-    applyProviderCatalog: (nextEntries) => {
+    applyProviderCatalog: (nextEntries, nextDisabledModelIds) => {
       entries = [...nextEntries];
+      disabledModelIdsByProvider = nextDisabledModelIds ?? {};
       catalogResolution = "complete";
       publish((current) => current);
     },

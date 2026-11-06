@@ -7,6 +7,7 @@ import {
   PARENT_AGENT_ID_LABEL,
 } from "@getpaseo/protocol/agent-labels";
 
+import { deriveInitialAgentTitle } from "../../agent/create-agent-title.js";
 import type { AgentStorage, StoredAgentRecord } from "../../agent/agent-storage.js";
 import type { AgentTimelineRow } from "../../agent/agent-timeline-store-types.js";
 import type { WorkspaceProvisioningService } from "../../session/workspace-provisioning/workspace-provisioning-service.js";
@@ -20,6 +21,8 @@ import type { CursorChat } from "./types.js";
 
 export const CURSOR_IMPORT_SOURCE = "cursor";
 export const CURSOR_IMPORT_PROVIDER = "cursor";
+/** Cursor composer id of the parent chat, set on an imported subagent. */
+export const CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL = "paseo.import.parent-source-id";
 const MAX_TITLE_CHARS = 80;
 
 export interface ImportCursorChatsInput {
@@ -66,11 +69,12 @@ export function isCursorImportedRecord(record: Pick<StoredAgentRecord, "labels">
 }
 
 /**
- * Import Cursor IDE chats as durable, read-only Paseo agents.
+ * Import Cursor IDE chats as durable Paseo agents.
  *
  * The imported record carries the transcript as `portedTimeline` and has no
  * persistence handle, so the daemon can serve it without spawning a provider.
- * Cursor's database is opened read-only; nothing is written back.
+ * Cursor's database is opened read-only during import. A later finished run of
+ * the imported chat appends to that chat's transcript file.
  */
 export async function importCursorChats(
   input: ImportCursorChatsInput,
@@ -281,6 +285,9 @@ function buildRecord(input: {
     [IMPORT_SOURCE_LABEL]: CURSOR_IMPORT_SOURCE,
     [IMPORT_SOURCE_ID_LABEL]: chat.composerId,
     ...(chat.modelName ? { [IMPORT_MODEL_LABEL]: chat.modelName } : {}),
+    ...(chat.parentComposerId
+      ? { [CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL]: chat.parentComposerId }
+      : {}),
     ...(input.parentAgentId ? { [PARENT_AGENT_ID_LABEL]: input.parentAgentId } : {}),
   };
 
@@ -323,18 +330,28 @@ function buildRecord(input: {
   };
 }
 
+/**
+ * A title Cursor already stored wins, still clamped at 80 characters.
+ * Without one, the first user line uses the same 60-character rule as a new agent.
+ */
 function resolveTitle(chat: CursorChat): string | null {
+  const stored = chat.title?.trim();
+  if (stored) {
+    const clamped = stored.replace(/\s+/g, " ").slice(0, MAX_TITLE_CHARS).trim();
+    return clamped.length > 0 ? clamped : null;
+  }
+
   const firstUserText = chat.messages.find(
     (message) => message.role === "user" && message.text.trim().length > 0,
   )?.text;
-  const raw =
-    chat.title?.trim() ||
-    firstUserText?.trim() ||
-    (chat.subagentTypeName ? `${chat.subagentTypeName} (Cursor)` : null);
-  if (!raw) {
+  if (firstUserText) {
+    return deriveInitialAgentTitle(firstUserText);
+  }
+
+  if (!chat.subagentTypeName) {
     return null;
   }
-  return raw.replace(/\s+/g, " ").slice(0, MAX_TITLE_CHARS).trim();
+  return deriveInitialAgentTitle(`${chat.subagentTypeName} (Cursor)`);
 }
 
 function imported(chat: CursorChat, agentId: string): ImportedCursorChat {

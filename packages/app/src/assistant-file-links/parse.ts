@@ -1,5 +1,5 @@
 import { ASSISTANT_FILE_EXTENSIONS } from "./extensions";
-import { isAbsolutePath } from "@/utils/path";
+import { isAbsolutePath, restoreWindowsFilePath } from "@/utils/path";
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -483,12 +483,45 @@ function parseLocalPathParts(
   };
 }
 
+function sameWindowsLocation(left: string, right: string): boolean {
+  return windowsLocationKey(left) === windowsLocationKey(right);
+}
+
+function windowsLocationKey(value: string): string {
+  const trimmed = /^[A-Za-z]:[\\/]+$/.test(value)
+    ? value.slice(0, 2)
+    : value.replace(/[\\/]+$/, "");
+  return trimmed.toLowerCase();
+}
+
 export function normalizeInlinePathTarget(
   rawPath: string,
   cwd?: string,
 ): NormalizedInlinePathTarget | null {
   if (!rawPath) {
     return null;
+  }
+
+  // The file tab later reads this path against the workspace directory, which is not
+  // the agent cwd. Relativizing a Windows path drops `C:\...` and the daemon then
+  // looks for the leftover suffix in the wrong root.
+  const windowsFile = restoreWindowsFilePath(rawPath);
+  if (windowsFile) {
+    const cwdWindows = cwd ? restoreWindowsFilePath(cwd) : null;
+    if (cwdWindows && sameWindowsLocation(windowsFile, cwdWindows)) {
+      return { directory: "." };
+    }
+
+    const cut = Math.max(windowsFile.lastIndexOf("\\"), windowsFile.lastIndexOf("/"));
+    const parent = cut > 0 ? windowsFile.slice(0, cut) : windowsFile;
+    if (/[\\/]$/.test(windowsFile)) {
+      return { directory: parent.length > 0 ? parent : windowsFile };
+    }
+
+    return {
+      directory: parent.length > 0 ? parent : ".",
+      file: windowsFile,
+    };
   }
 
   const normalizedInput = normalizePathInput(rawPath);

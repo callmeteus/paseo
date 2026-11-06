@@ -481,6 +481,12 @@
                   "required": ["id", "label"]
                 }
               },
+              "disabledModelIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "disallowedTools": {
                 "type": "array",
                 "items": {
@@ -542,6 +548,85 @@
                 "required": ["provider"],
                 "additionalProperties": false
               }
+            }
+          },
+          "additionalProperties": false
+        },
+        "modelRouters": {
+          "type": "object",
+          "properties": {
+            "routers": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["distribution", "fallback"]
+                  },
+                  "targets": {
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "weight": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000
+                        }
+                      },
+                      "required": ["provider"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["id", "name", "mode", "targets"],
+                "additionalProperties": false
+              }
+            },
+            "defaultRouterId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "additionalProperties": false

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isAbsolutePath, resolveWorkspacePath } from "./path";
+import { isAbsolutePath, pathBasename, resolveWorkspacePath, restoreWindowsFilePath } from "./path";
+
+const SPREADSHEET =
+  "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
 
 describe("isAbsolutePath", () => {
   it("returns true for Unix absolute paths", () => {
@@ -52,5 +55,34 @@ describe("resolveWorkspacePath", () => {
 
   it("returns the path unchanged when there is no workspace root", () => {
     expect(resolveWorkspacePath("src/app.ts", "")).toBe("src/app.ts");
+  });
+});
+
+describe("restoreWindowsFilePath", () => {
+  it("puts the spreadsheet path back together with the drive and backslashes", () => {
+    const slashed = SPREADSHEET.replace(/\\/g, "/");
+    expect(restoreWindowsFilePath(slashed)).toBe(SPREADSHEET);
+    expect(restoreWindowsFilePath(SPREADSHEET)).toBe(SPREADSHEET);
+    expect(restoreWindowsFilePath(`  "${slashed}"  `)).toBe(SPREADSHEET);
+  });
+
+  it("does not invent a prefix for the leftover relative suffix", () => {
+    expect(restoreWindowsFilePath("entregas/Servidor-IA-HomeLab-2026-11-05.xlsx")).toBeNull();
+    expect(restoreWindowsFilePath("/tmp/notes.md")).toBeNull();
+    expect(restoreWindowsFilePath("C:")).toBeNull();
+  });
+
+  it("drops a trailing line marker without touching the drive colon", () => {
+    expect(restoreWindowsFilePath("C:\\repo\\src\\app.ts:12-20")).toBe("C:\\repo\\src\\app.ts");
+    expect(restoreWindowsFilePath("C:/repo/src/app.ts:12:4")).toBe("C:\\repo\\src\\app.ts");
+  });
+});
+
+describe("pathBasename", () => {
+  it("reads the filename from either separator", () => {
+    expect(pathBasename(SPREADSHEET)).toBe("Servidor-IA-HomeLab-2026-11-05.xlsx");
+    expect(pathBasename("entregas/Servidor-IA-HomeLab-2026-11-05.xlsx")).toBe(
+      "Servidor-IA-HomeLab-2026-11-05.xlsx",
+    );
   });
 });

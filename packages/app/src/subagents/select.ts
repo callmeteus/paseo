@@ -16,7 +16,8 @@ export interface PaseoSubagentRow {
   title: Agent["title"];
   /** Managed agents have a real title, so the union's task line is always absent for them. */
   description: null;
-  subtitle: null;
+  /** Launch or turn error, when this child failed on its own. */
+  subtitle: string | null;
   status: Agent["status"];
   turn: Agent["turn"];
   requiresAttention: Agent["requiresAttention"];
@@ -63,7 +64,7 @@ function toSubagentRow(agent: Agent): SubagentRow {
     provider: agent.provider,
     title: agent.title,
     description: null,
-    subtitle: null,
+    subtitle: agent.lastError?.trim() ? agent.lastError.trim() : null,
     status: agent.status,
     turn: agent.turn,
     requiresAttention: agent.requiresAttention,

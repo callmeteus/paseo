@@ -948,7 +948,6 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               defaultExpanded={autoExpandReasoning}
               durationMs={resolveThoughtDuration(step)}
               embeddedInToolWork={embeddedInToolWork}
-              maxDetailHeight={GROUPED_TOOL_CALL_DETAIL_MAX_HEIGHT}
             />
           );
         }
@@ -969,8 +968,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       (layoutItem: StreamLayoutItem, group: OverviewToolCallGroup) => {
         const expanded = expandedToolCallGroupIds.has(group.run.id);
         const lastIndex = group.run.steps.length - 1;
-        // The group header is already the activity line. A bare "Pensei" inside it
-        // would be a second summary, so those thoughts render as text.
+        // The group header is already the activity line. The thought under it stays
+        // the sentence beneath "Pensei", not another summary and not a detail card.
         const embeddedInToolWork =
           countSummarizedToolCalls(group.summary) > 0 || thoughtIdsBesideTools.has(group.run.id);
         return (
@@ -1482,14 +1481,9 @@ interface ThoughtSlotProps {
   durationMs?: number;
   /** The same group or turn already has an activity line for a shell, search, or tool. */
   embeddedInToolWork?: boolean;
-  maxDetailHeight?: number;
 }
 
 // Reasoning text is paced the same way assistant text is; see @/hooks/use-revealed-text.
-function thinkingDetail(bodyText: string) {
-  return { type: "unknown" as const, input: bodyText, output: null };
-}
-
 function ThoughtSlot({
   itemId,
   onInlineDetailsExpandedChangeByItemId,
@@ -1499,7 +1493,6 @@ function ThoughtSlot({
   defaultExpanded,
   durationMs,
   embeddedInToolWork = false,
-  maxDetailHeight,
 }: ThoughtSlotProps) {
   const { t } = useTranslation();
   const revealedText = useRevealedText(text, status === "ready" ? "complete" : "streaming");
@@ -1508,22 +1501,12 @@ function ThoughtSlot({
   const header = parseThoughtHeader(revealedText);
   const bodyText = header.title ? stripThoughtHeader(revealedText) : revealedText;
   const row = reasoningRowPresentation({ title: header.title, durationMs, embeddedInToolWork }, t);
-  if (row.kind === "text") {
-    if (!bodyText.trim()) {
-      return null;
-    }
-    // The group or turn line already names the shell, search, or tool. This is the
-    // reasoning itself, not a second summary labeled only "Pensei".
-    return (
-      <View style={isLastInSequence ? stylesheet.thoughtTextLast : stylesheet.thoughtText}>
-        <ToolCallDetailsContent
-          toolName="thinking"
-          detail={thinkingDetail(bodyText)}
-          maxHeight={maxDetailHeight}
-        />
-      </View>
-    );
+  if (row.kind === "text" && !bodyText.trim()) {
+    return null;
   }
+  // Beside a shell or a search the row is still "Pensei" and the sentence under it.
+  // Open that sentence: the previous path painted it as a tool-detail card.
+  const openBody = row.kind === "text" || defaultExpanded;
   return (
     <ToolCallSlot
       itemId={itemId}
@@ -1532,11 +1515,10 @@ function ThoughtSlot({
       args={bodyText}
       status={status === "ready" ? "completed" : "executing"}
       isLastInSequence={isLastInSequence}
-      defaultExpanded={defaultExpanded}
-      forceInline={defaultExpanded}
-      labelOverride={row.label}
-      secondaryLabelOverride={row.secondaryLabel}
-      maxDetailHeight={maxDetailHeight}
+      defaultExpanded={openBody}
+      forceInline={openBody}
+      labelOverride={row.kind === "badge" ? row.label : t("toolCallGroup.thought")}
+      secondaryLabelOverride={row.kind === "badge" ? row.secondaryLabel : undefined}
     />
   );
 }
@@ -1871,12 +1853,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     maxWidth: theme.contentMaxWidth,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[2],
-  },
-  thoughtText: {
-    marginBottom: theme.spacing[1],
-  },
-  thoughtTextLast: {
-    marginBottom: theme.spacing[4],
   },
   emptyState: {
     flex: 1,

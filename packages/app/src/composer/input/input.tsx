@@ -71,6 +71,17 @@ import {
   type EditingTextInputHandle as ComposerTextInputHandle,
   type EditingTextInputProps,
 } from "@/components/ui/text-input";
+import {
+  countPasteLines,
+  formatPasteChipLabel,
+  hasInlineChip,
+  inlineChipDisplayText,
+  insertInlineChip,
+  insertTextAtSelection,
+  shouldChipPaste,
+} from "@getpaseo/protocol/inline-chip";
+import { InlineChipEditor } from "@/composer/inline-chip-editor";
+import { InlineMessageText } from "@/composer/inline-context-chip";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
@@ -453,6 +464,8 @@ interface PasteImagesEffectArgs {
   isDictating: boolean;
   isRealtimeVoiceForCurrentAgent: boolean;
   onAddImages: ((images: ImageAttachment[]) => void) | undefined;
+  /** Long text becomes a chip. A short paste into the chip editor stays text, but the editor inserts it. */
+  onPasteText?: (input: { text: string; chip: boolean }) => void;
 }
 
 function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
@@ -463,10 +476,11 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
     isDictating,
     isRealtimeVoiceForCurrentAgent,
     onAddImages,
+    onPasteText,
   } = args;
 
   useEffect(() => {
-    if (!isWeb || !onAddImages) return;
+    if (!isWeb || (!onAddImages && !onPasteText)) return;
 
     if (!textarea) return;
 
@@ -475,19 +489,31 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
       if (!isConnected || disabled || isDictating || isRealtimeVoiceForCurrentAgent) return;
 
       const imageFiles = collectImageFilesFromClipboardData(event.clipboardData);
-      if (imageFiles.length === 0) return;
+      if (imageFiles.length > 0) {
+        if (!onAddImages) return;
+        event.preventDefault();
+        void filesToImageAttachments(imageFiles)
+          .then((pastedAttachments) => {
+            if (disposed || pastedAttachments.length === 0) return;
+            onAddImages(pastedAttachments);
+            return;
+          })
+          .catch((error) => {
+            console.error("[MessageInput] Failed to process pasted images:", error);
+          });
+        return;
+      }
 
+      const pasted = event.clipboardData?.getData("text/plain") ?? "";
+      if (!onPasteText || pasted.length === 0) return;
+      const rich =
+        event.currentTarget instanceof HTMLElement &&
+        event.currentTarget.dataset.inlineChipEditor === "true";
+      const chip = shouldChipPaste(pasted);
+      // A short paste into the plain textarea is the browser's own insert.
+      if (!rich && !chip) return;
       event.preventDefault();
-
-      void filesToImageAttachments(imageFiles)
-        .then((pastedAttachments) => {
-          if (disposed || pastedAttachments.length === 0) return;
-          onAddImages(pastedAttachments);
-          return;
-        })
-        .catch((error) => {
-          console.error("[MessageInput] Failed to process pasted images:", error);
-        });
+      onPasteText({ text: pasted, chip });
     };
 
     textarea.addEventListener("paste", handlePaste);
@@ -495,7 +521,15 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
       disposed = true;
       textarea.removeEventListener?.("paste", handlePaste);
     };
-  }, [disabled, textarea, isConnected, isDictating, isRealtimeVoiceForCurrentAgent, onAddImages]);
+  }, [
+    disabled,
+    textarea,
+    isConnected,
+    isDictating,
+    isRealtimeVoiceForCurrentAgent,
+    onAddImages,
+    onPasteText,
+  ]);
 }
 
 function useAutoFocusOnWebEffect(
@@ -645,6 +679,7 @@ interface ComposerTextSurfaceProps {
   focusHintVisible: boolean;
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
+  chipEditor: boolean;
 }
 
 /**
@@ -670,12 +705,47 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
       onRenderedLinesChange(event.nativeEvent.lines.length),
     [onRenderedLinesChange],
   );
+  const chipInitialSelection = useMemo(
+    () => ({ start: props.value.length, end: props.value.length }),
+    [props.value],
+  );
+  const onChipSelectionChange = props.onSelectionChange;
+  const onChipKeyPress = props.onKeyPress;
+  const handleChipSelectionChange = useCallback(
+    (selection: { start: number; end: number }) => {
+      onChipSelectionChange({
+        nativeEvent: { selection, target: 0 },
+      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+    },
+    [onChipSelectionChange],
+  );
+  const handleChipKeyPress = useCallback(
+    (event: KeyboardEvent) => {
+      onChipKeyPress?.({
+        nativeEvent: {
+          key: event.key,
+          shiftKey: event.shiftKey,
+          metaKey: event.metaKey,
+          ctrlKey: event.ctrlKey,
+          altKey: event.altKey,
+          isComposing: event.isComposing,
+          keyCode: event.keyCode,
+        },
+        preventDefault: () => event.preventDefault(),
+      } as WebTextInputKeyPressEvent);
+    },
+    [onChipKeyPress],
+  );
   if (props.readOnly) {
     return (
       <View style={styles.textInputScrollWrapper}>
-        <Text style={props.readOnlyTextStyle} testID="composer-readonly-content">
-          {props.value}
-        </Text>
+        {hasInlineChip(props.value) ? (
+          <InlineMessageText text={props.value} style={props.readOnlyTextStyle} />
+        ) : (
+          <Text style={props.readOnlyTextStyle} testID="composer-readonly-content">
+            {props.value}
+          </Text>
+        )}
       </View>
     );
   }
@@ -691,25 +761,41 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           {`${measurementText}\u200b`}
         </Text>
       ) : null}
-      <ComposerTextInput
-        ref={props.textInputRef}
-        dataSet={COMPOSER_INPUT_DATASET}
-        initialValue={props.value}
-        onChangeText={handleTextChange}
-        placeholder={props.placeholder}
-        accessibilityLabel={props.accessibilityLabel}
-        onFocus={props.onFocus}
-        onBlur={props.onBlur}
-        style={props.textInputStyle}
-        multiline
-        scrollEnabled={props.scrollEnabled}
-        editable={props.editable}
-        onKeyPress={props.onKeyPress}
-        onSelectionChange={props.onSelectionChange}
-        onPasteImages={props.onPasteImages}
-        onPasteError={props.onPasteError}
-        autoFocus={props.autoFocus}
-      />
+      {props.chipEditor ? (
+        <InlineChipEditor
+          ref={props.textInputRef}
+          initialText={props.value}
+          initialSelection={chipInitialSelection}
+          style={props.textInputStyle}
+          editable={props.editable}
+          accessibilityLabel={props.accessibilityLabel}
+          onChangeText={handleTextChange}
+          onSelectionChange={handleChipSelectionChange}
+          onKeyPress={props.onKeyPress ? handleChipKeyPress : undefined}
+          onFocus={props.onFocus}
+          onBlur={props.onBlur}
+        />
+      ) : (
+        <ComposerTextInput
+          ref={props.textInputRef}
+          dataSet={COMPOSER_INPUT_DATASET}
+          initialValue={props.value}
+          onChangeText={handleTextChange}
+          placeholder={props.placeholder}
+          accessibilityLabel={props.accessibilityLabel}
+          onFocus={props.onFocus}
+          onBlur={props.onBlur}
+          style={props.textInputStyle}
+          multiline
+          scrollEnabled={props.scrollEnabled}
+          editable={props.editable}
+          onKeyPress={props.onKeyPress}
+          onSelectionChange={props.onSelectionChange}
+          onPasteImages={props.onPasteImages}
+          onPasteError={props.onPasteError}
+          autoFocus={props.autoFocus}
+        />
+      )}
       <FocusHint
         visible={props.focusHintVisible}
         focusInputKeys={props.focusInputKeys}
@@ -1277,6 +1363,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const focusIntentRef = useRef(false);
     const valueRef = useRef(value);
     const selectionRef = useRef({ start: value.length, end: value.length });
+    const [chipEditor, setChipEditor] = useState(() => isWeb && hasInlineChip(value));
+    const syncChipEditor = useCallback((text: string) => {
+      if (!isWeb) return;
+      const next = hasInlineChip(text);
+      setChipEditor((current) => (current === next ? current : next));
+    }, []);
     const paneFocusedRef = useRef(isPaneFocused);
     paneFocusedRef.current = isPaneFocused;
     const [webTextArea, setWebTextArea] = useState<HTMLElement | null>(null);
@@ -1343,7 +1435,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         });
       };
     }, [editingSession]);
-    const getLiveText = useCallback(() => valueRef.current, []);
+    const getLiveText = useCallback(() => inlineChipDisplayText(valueRef.current), []);
     const composerHeight = useComposerHeight({
       getText: getLiveText,
       textareaRef: webTextareaRef,
@@ -1370,7 +1462,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const replaceText = useCallback(
       (nextText: string, selection?: { start: number; end: number }) => {
-        updateComposerHeightForText?.(valueRef.current, nextText);
+        updateComposerHeightForText?.(
+          inlineChipDisplayText(valueRef.current),
+          inlineChipDisplayText(nextText),
+        );
+        syncChipEditor(nextText);
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
         selectionRef.current = selection ?? { start: nextText.length, end: nextText.length };
@@ -1381,7 +1477,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         }
         onChangeText(nextText);
       },
-      [onChangeText, updateComposerHeightForText, updateLiveTextPresence],
+      [onChangeText, syncChipEditor, updateComposerHeightForText, updateLiveTextPresence],
     );
 
     useImperativeHandle(ref, () => ({
@@ -1722,6 +1818,34 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       handleAlternateSendAction();
     }, [alternateSendAction, handleAlternateSendAction]);
 
+    const handlePasteText = useCallback(
+      (input: { text: string; chip: boolean }) => {
+        const current = textInputRef.current?.getText() ?? valueRef.current;
+        const selection = selectionRef.current;
+        const count = countPasteLines(input.text);
+        const next = input.chip
+          ? insertInlineChip({
+              text: current,
+              selection,
+              chip: {
+                id: `paste:${crypto.randomUUID()}`,
+                kind: "paste",
+                label: formatPasteChipLabel({
+                  count,
+                  pastedWord: t("composer.inlineChip.pastedWord"),
+                  lineWord: t(
+                    count === 1 ? "composer.inlineChip.line_one" : "composer.inlineChip.line_other",
+                  ),
+                }),
+                body: input.text,
+              },
+            })
+          : insertTextAtSelection({ text: current, selection, insert: input.text });
+        replaceText(next.text, next.selection);
+      },
+      [replaceText, t],
+    );
+
     usePasteImagesEffect({
       textarea: webTextArea,
       isConnected,
@@ -1729,7 +1853,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isDictating,
       isRealtimeVoiceForCurrentAgent,
       onAddImages,
+      onPasteText: handlePasteText,
     });
+
+    const chipEditorMountedRef = useRef(chipEditor);
+    useLayoutEffect(() => {
+      if (chipEditorMountedRef.current === chipEditor) return;
+      chipEditorMountedRef.current = chipEditor;
+      // Unmounting the textarea blurs it and clears focus intent before this runs.
+      // The pane is still the one the user is typing in, so put the caret back.
+      if (!paneFocusedRef.current) return;
+      textInputRef.current?.focus();
+      textInputRef.current?.setSelection(selectionRef.current);
+    }, [chipEditor]);
 
     const handleSelectionChange = useCallback(
       (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
@@ -1832,12 +1968,16 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const handleInputChange = useCallback(
       (nextValue: string) => {
-        updateComposerHeightForText?.(valueRef.current, nextValue);
+        updateComposerHeightForText?.(
+          inlineChipDisplayText(valueRef.current),
+          inlineChipDisplayText(nextValue),
+        );
+        syncChipEditor(nextValue);
         valueRef.current = nextValue;
         updateLiveTextPresence(nextValue);
         onChangeText(nextValue);
       },
-      [onChangeText, updateComposerHeightForText, updateLiveTextPresence],
+      [onChangeText, syncChipEditor, updateComposerHeightForText, updateLiveTextPresence],
     );
 
     const handleInputFocus = useCallback(() => {
@@ -2042,6 +2182,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             focusHintLabel={t("composer.input.focusHint", {
               shortcut: focusInputKeys ? formatShortcut(focusInputKeys[0], getShortcutOs()) : "",
             })}
+            chipEditor={chipEditor}
           />
         </RenderProfile>
       ),
@@ -2071,6 +2212,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isInputFocused,
         value,
         focusInputKeys,
+        chipEditor,
       ],
     );
     const toolbar = useMemo(

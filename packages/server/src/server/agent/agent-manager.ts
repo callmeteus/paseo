@@ -2,7 +2,14 @@ import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
-import { isCursorImportedRecord } from "../imports/cursor/import.js";
+import {
+  CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL,
+  isCursorImportedRecord,
+} from "../imports/cursor/import.js";
+import {
+  defaultCursorProjectsRoot,
+  writeBackFinishedCursorImport,
+} from "../imports/cursor/transcript-writeback.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/index.js";
@@ -17,10 +24,12 @@ import {
 import {
   getParentAgentIdFromLabels,
   hasOpenAgentTab,
+  IMPORT_SOURCE_ID_LABEL,
   isDelegatedAgent,
   isOpenAgentTabLabel,
   PARENT_AGENT_ID_LABEL,
 } from "@getpaseo/protocol/agent-labels";
+import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
 import type { Logger } from "pino";
 import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
@@ -117,6 +126,7 @@ import {
   type ProviderSubagentDescriptor,
   type ProviderSubagentStoreEvent,
 } from "./provider-subagents/store.js";
+import { syncTaskWorkers } from "./task-worker-sync.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { extractAttention } from "../persistence-hooks.js";
 
@@ -1108,6 +1118,8 @@ export class AgentManager {
   private readonly agents = new Map<string, LiveManagedAgent>();
   private readonly timelineStore: InMemoryAgentTimelineStore;
   private readonly providerSubagents = new ProviderSubagentStore();
+  /** Parents whose task workers are being written, so a list during that write cannot seed twice. */
+  private readonly materializingTaskWorkers = new Set<string>();
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
   private readonly steerEventBarriers = new Map<string, SteerEventBarrier>();
@@ -1153,6 +1165,9 @@ export class AgentManager {
   private readonly resolveProjectInstructions?: (cwd: string) => Promise<string>;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
+  private observedSessionTitleHandler:
+    | ((input: { agentId: string; title: string }) => void)
+    | null = null;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
@@ -1710,8 +1725,45 @@ export class AgentManager {
   }
 
   listProviderSubagents(parentAgentId: string): ProviderSubagentDescriptor[] {
-    this.requirePublicAgent(parentAgentId);
+    const agent = this.requirePublicAgent(parentAgentId);
+    this.materializeTaskWorkers(agent);
     return this.providerSubagents.list(parentAgentId);
+  }
+
+  /**
+   * Puts multitask `task` tool calls on the provider-subagent list this track reads.
+   *
+   * Cursor delivers that tool as kind `other`. The row title is the tool's description,
+   * and the child timeline keeps the prompt and the result. Already-stored timelines
+   * pick the worker up here; a live tool call does the same when it is recorded.
+   *
+   * @param agent - Parent chat whose timeline may contain task tool calls
+   * @param options - `broadcast: false` writes the store without notifying clients
+   */
+  private materializeTaskWorkers(
+    agent: { id: string; provider: string },
+    options?: { broadcast?: boolean },
+  ): void {
+    if (this.materializingTaskWorkers.has(agent.id) || !this.timelineStore.has(agent.id)) {
+      return;
+    }
+    this.materializingTaskWorkers.add(agent.id);
+    try {
+      const events = syncTaskWorkers({
+        parentAgentId: agent.id,
+        provider: agent.provider,
+        items: this.timelineStore.getItems(agent.id),
+        store: this.providerSubagents,
+      });
+      if (options?.broadcast === false) {
+        return;
+      }
+      for (const event of events) {
+        this.dispatch({ type: "provider_subagent", event });
+      }
+    } finally {
+      this.materializingTaskWorkers.delete(agent.id);
+    }
   }
 
   listProviderSubagentActivity(): ProviderSubagentDescriptor[] {
@@ -1740,6 +1792,32 @@ export class AgentManager {
   ): AgentTimelineFetchResult {
     this.requirePublicAgent(parentAgentId);
     return this.providerSubagents.fetchTimeline(parentAgentId, subagentId, options);
+  }
+
+  /**
+   * Records one Multitask task that never started, on that parent only.
+   *
+   * The row is a failed provider subagent, so the track shows the error.
+   * Other tasks and the parent's workflow mode are left as they are.
+   *
+   * @param input - Parent chat, the CLI the task asked for, and the error text
+   */
+  recordMultitaskTaskFailure(input: {
+    parentAgentId: string;
+    provider: string;
+    title: string;
+    message: string;
+  }): void {
+    this.requirePublicAgent(input.parentAgentId);
+    const event = this.providerSubagents.apply(input.parentAgentId, input.provider, {
+      type: "upsert",
+      id: `multitask-task:${randomUUID()}`,
+      title: input.title,
+      description: input.title,
+      subtitle: input.message,
+      status: "failed",
+    });
+    this.dispatch({ type: "provider_subagent", event });
   }
 
   createAgent(
@@ -1772,7 +1850,10 @@ export class AgentManager {
       storedConfig,
       launchConfig: preparedLaunchConfig,
       paseoToolPolicy,
-    } = await this.prepareSessionConfig(config, resolvedAgentId, { env: options?.env });
+    } = await this.prepareSessionConfig(config, resolvedAgentId, {
+      env: options?.env,
+      taskTargetLabel: options.labels?.[MULTITASK_TASK_TARGET_LABEL],
+    });
     const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
     const launchConfig = this.appendSystemPromptText(
       this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
@@ -2662,10 +2743,36 @@ export class AgentManager {
       return;
     }
     const nextConfig = { ...agent.config, workflowModeId: normalized ?? undefined };
+    // Publish before any await. A turn snapshot or the prompt rebuild can emit
+    // while this is in flight, and that payload has to carry the mode the user
+    // just chose. A failed reload or prompt update puts the previous mode back.
+    agent.config.workflowModeId = normalized ?? undefined;
+    const restorePreviousMode = async (): Promise<void> => {
+      const live = this.agents.get(agent.id);
+      if (live) {
+        live.config.workflowModeId = currentWorkflowId ?? undefined;
+        this.touchUpdatedAt(live);
+        this.emitState(live);
+        return;
+      }
+      agent.config.workflowModeId = currentWorkflowId ?? undefined;
+      if (!this.registry) return;
+      const stored = await this.registry.get(agent.id);
+      if (!stored) return;
+      await this.registry.upsert({
+        ...stored,
+        config: { ...stored.config, workflowModeId: currentWorkflowId },
+        updatedAt: new Date().toISOString(),
+      });
+    };
     if (agent.session.setDaemonAppendSystemPrompt) {
-      const prompt = await this.buildLaunchSystemPrompt(nextConfig, agent.id);
-      await agent.session.setDaemonAppendSystemPrompt(prompt ?? null, normalized);
-      agent.config.workflowModeId = normalized ?? undefined;
+      try {
+        const prompt = await this.buildLaunchSystemPrompt(nextConfig, agent.id);
+        await agent.session.setDaemonAppendSystemPrompt(prompt ?? null, normalized);
+      } catch (error) {
+        await restorePreviousMode();
+        throw error;
+      }
       this.refreshSessionPersistence(agent);
       this.touchUpdatedAt(agent);
       this.emitState(agent);
@@ -2674,10 +2781,14 @@ export class AgentManager {
     // Providers that cannot replace the prompt in place need a reload so the
     // next turn does not keep running on the previous workflow instructions.
     if (!this.hasInFlightRun(agent.id)) {
-      await this.reloadAgentSession(agent.id, { workflowModeId: normalized ?? undefined });
+      try {
+        await this.reloadAgentSession(agent.id, { workflowModeId: normalized ?? undefined });
+      } catch (error) {
+        await restorePreviousMode();
+        throw error;
+      }
       return;
     }
-    agent.config.workflowModeId = normalized ?? undefined;
     this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
@@ -2771,6 +2882,17 @@ export class AgentManager {
     this.touchUpdatedAt(agent);
     await this.persistSnapshot(agent, { title: normalizedTitle });
     this.emitState(agent, { persist: false });
+  }
+
+  /**
+   * Receives a provider session title that replaced the prompt the session
+   * started with. The workspace naming flow decides whether it becomes the
+   * visible name.
+   */
+  setObservedSessionTitleHandler(
+    handler: ((input: { agentId: string; title: string }) => void) | null,
+  ): void {
+    this.observedSessionTitleHandler = handler;
   }
 
   async setLabels(agentId: string, labels: Record<string, string>): Promise<void> {
@@ -3130,6 +3252,7 @@ export class AgentManager {
       debugEndpoint: this.debugIngestBaseUrl ? `${this.debugIngestBaseUrl}/${agentId}` : undefined,
       debugLogPath: this.debugLogPathFor(agentId),
       debugSessionId: agentId,
+      taskTargetLabel: agent.labels[MULTITASK_TASK_TARGET_LABEL],
     });
     if (!fragment) return null;
     return prependWorkflowInstruction(prompt, fragment);
@@ -4284,6 +4407,7 @@ export class AgentManager {
       plan.appended,
       options?.broadcast ?? false,
     );
+    this.materializeTaskWorkers(agent, { broadcast: options?.broadcast ?? false });
     this.markReconciledTimeline(agent, appendedRows, options?.markUnread === true);
 
     this.logger.info(
@@ -5038,6 +5162,17 @@ export class AgentManager {
     const unsubscribe = agent.session.subscribe((event: AgentStreamEvent) => {
       this.enqueueSessionEvent(agentId, event);
     });
+    agent.session.observeSessionTitle?.((title) => {
+      const handler = this.observedSessionTitleHandler;
+      if (!handler) {
+        return;
+      }
+      try {
+        handler({ agentId, title });
+      } catch (error) {
+        this.logger.warn({ err: error, agentId }, "Failed to apply the provider session title");
+      }
+    });
     agent.unsubscribeSession = unsubscribe;
   }
 
@@ -5456,6 +5591,7 @@ export class AgentManager {
         });
       }
     }
+    this.materializeTaskWorkers(agent, { broadcast });
     this.touchUpdatedAt(agent);
     this.emitState(agent);
   }
@@ -5528,8 +5664,10 @@ export class AgentManager {
       }
     }
     agent.historyPrimed = true;
+    const broadcastNow = typeof broadcast === "boolean" ? broadcast : broadcast();
+    this.materializeTaskWorkers(agent, { broadcast: broadcastNow });
 
-    if (typeof broadcast !== "function" || !broadcast()) {
+    if (!broadcastNow || typeof broadcast !== "function") {
       return;
     }
     for (const event of providerSubagentEvents) {
@@ -5764,7 +5902,12 @@ export class AgentManager {
           isForegroundEvent,
           terminalDisposition,
         });
-        return undefined;
+        return this.writeBackFinishedCursorImportTurn({
+          agent,
+          options,
+          eventTurnId,
+          terminalDisposition,
+        });
       case "turn_failed":
         return this.onStreamTurnFailed({
           agent,
@@ -5899,6 +6042,93 @@ export class AgentManager {
       this.emitState(agent);
     }
     void this.refreshRuntimeInfo(agent);
+  }
+
+  /**
+   * Appends a finished imported Cursor chat to its transcript.
+   *
+   * History replay and a stale completion are not a run that just finished, so
+   * they leave the file alone. Failure and cancellation never reach this method.
+   */
+  private writeBackFinishedCursorImportTurn(params: {
+    agent: ActiveManagedAgent;
+    options: HandleStreamEventOptions | undefined;
+    eventTurnId: string | undefined;
+    terminalDisposition: ActiveTurnTerminalDisposition;
+  }): Promise<void> | undefined {
+    const { agent, options, eventTurnId, terminalDisposition } = params;
+    if (options?.fromHistory === true || terminalDisposition === "stale" || !eventTurnId) {
+      return undefined;
+    }
+    return this.persistFinishedCursorImport(agent, eventTurnId);
+  }
+
+  /**
+   * After an imported Cursor chat finishes a run, append that run to the
+   * original transcript and keep the stored copy of the chat on the same history.
+   * Failures here are logged. They must not fail the turn or rewrite the file.
+   */
+  private async persistFinishedCursorImport(
+    agent: ActiveManagedAgent,
+    turnId: string,
+  ): Promise<void> {
+    if (!isCursorImportedRecord(agent)) return;
+    const composerId = agent.labels[IMPORT_SOURCE_ID_LABEL]?.trim();
+    if (!composerId || !this.timelineStore.has(agent.id)) return;
+    const parentComposerId = await this.resolveCursorImportParentComposerId(agent);
+    if (parentComposerId === undefined) return;
+
+    try {
+      const result = await writeBackFinishedCursorImport({
+        outcome: "completed",
+        projectsRoot: defaultCursorProjectsRoot(),
+        cwd: agent.cwd,
+        composerId,
+        parentComposerId,
+        turnId,
+        rows: this.timelineStore.getRows(agent.id),
+        existingPortedTimeline: agent.portedTimeline,
+      });
+      if (result.portedTimeline) {
+        agent.portedTimeline = result.portedTimeline;
+        await this.persistSnapshot(agent);
+      }
+      if (result.transcript.status === "failed") {
+        this.logger.warn(
+          { agentId: agent.id, path: result.transcript.path, error: result.transcript.error },
+          "Failed to write the finished run back to the Cursor transcript",
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        { err: error, agentId: agent.id },
+        "Failed to write the finished run back to the Cursor transcript",
+      );
+    }
+  }
+
+  /**
+   * Subagent transcripts live under the parent composer id. Undefined means
+   * the parent id could not be resolved, so the write is skipped instead of
+   * creating a second transcript.
+   */
+  private async resolveCursorImportParentComposerId(
+    agent: ActiveManagedAgent,
+  ): Promise<string | null | undefined> {
+    const labeled = agent.labels[CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL]?.trim();
+    if (labeled) return labeled;
+    const parentAgentId = getParentAgentIdFromLabels(agent.labels);
+    if (!parentAgentId) return null;
+    const parent = this.registry ? await this.registry.get(parentAgentId) : null;
+    const sourceId = parent?.labels?.[IMPORT_SOURCE_ID_LABEL]?.trim();
+    if (!sourceId) {
+      this.logger.warn(
+        { agentId: agent.id, parentAgentId },
+        "Skipped Cursor transcript writeback because the parent chat has no composer id",
+      );
+      return undefined;
+    }
+    return sourceId;
   }
 
   private async onStreamTurnFailed(params: {
@@ -6104,6 +6334,14 @@ export class AgentManager {
       const agent = this.agents.get(agentId);
       if (agent) {
         this.onWorkspaceStateMayHaveChanged?.({ cwd: agent.cwd });
+      }
+    }
+
+    // No-op unless this call is a multitask task. Those register on the subagent track.
+    if (!transient && item.type === "tool_call") {
+      const managed = this.agents.get(agentId);
+      if (managed && !managed.internal) {
+        this.materializeTaskWorkers(managed);
       }
     }
 
@@ -6625,7 +6863,11 @@ export class AgentManager {
   private async prepareSessionConfig(
     config: AgentSessionConfig,
     agentId: string,
-    options: { env?: Record<string, string>; purpose?: AgentResumePurpose } = {},
+    options: {
+      env?: Record<string, string>;
+      purpose?: AgentResumePurpose;
+      taskTargetLabel?: string;
+    } = {},
   ): Promise<PreparedSessionConfig> {
     let storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), {
       env: options.env,
@@ -6652,6 +6894,8 @@ export class AgentManager {
       debugEndpoint: this.debugIngestBaseUrl ? `${this.debugIngestBaseUrl}/${agentId}` : undefined,
       debugLogPath: this.debugLogPathFor(agentId),
       debugSessionId: agentId,
+      taskTargetLabel:
+        options.taskTargetLabel ?? this.agents.get(agentId)?.labels[MULTITASK_TASK_TARGET_LABEL],
     });
     const launchConfig = workflowFragment
       ? this.appendSystemPromptText(baseLaunchConfig, workflowFragment)

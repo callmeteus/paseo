@@ -17,6 +17,7 @@ import type { Logger } from "pino";
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager } from "../agent-manager.js";
 import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
+import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -43,6 +44,12 @@ import {
   type ArchiveDependencies,
 } from "../../workspace-archive-service.js";
 import { createAgentCommand } from "../create-agent/create.js";
+import {
+  multitaskProviderToWarm,
+  resolveCreateAgentTaskLaunch,
+  toMultitaskLaunchProviders,
+  type MultitaskLaunchResult,
+} from "../multitask-task-launch.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
@@ -623,6 +630,51 @@ function ensureMarkdownPath(path: string): string {
   return /\.(md|markdown)$/i.test(path) ? path : `${path}.md`;
 }
 
+function multitaskFailureResult(failure: Extract<MultitaskLaunchResult, { ok: false }>) {
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: failure.message }],
+    structuredContent: ensureValidJson({
+      ok: false,
+      code: failure.code,
+      error: failure.message,
+      closest: failure.closest,
+    }),
+  };
+}
+
+function recordCreateAgentMultitaskFailure(input: {
+  callerAgentId: string | null | undefined;
+  parentProvider: string | undefined;
+  title: string;
+  failure: Extract<MultitaskLaunchResult, { ok: false }>;
+  agentManager: AgentManager;
+  logger: Logger;
+}): void {
+  if (!input.callerAgentId) return;
+  try {
+    input.agentManager.recordMultitaskTaskFailure({
+      parentAgentId: input.callerAgentId,
+      provider: input.failure.providerId ?? input.parentProvider ?? "unknown",
+      title: input.title,
+      message: input.failure.message,
+    });
+  } catch (error) {
+    input.logger.warn({ err: error }, "Could not record the multitask task failure");
+  }
+}
+
+function createAgentToolGuidance(input: {
+  callerAgentId: string | null | undefined;
+  notifyOnFinish: boolean;
+  initialPromptStarted: boolean;
+}): string {
+  if (input.callerAgentId && input.notifyOnFinish && input.initialPromptStarted) {
+    return "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives.";
+  }
+  return "Creation acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
+}
+
 export function createPaseoToolCatalog(options: PaseoToolHostDependencies): PaseoToolCatalog {
   return createToolCatalog(options, options.callerAgentId ? "agent" : "top-level");
 }
@@ -1188,6 +1240,32 @@ function createToolCatalog(
       .strict()
       .describe("Create a new workspace for the agent."),
   ]);
+  const TaskAgentInputSchema = z
+    .discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("paseo"),
+        })
+        .strict()
+        .describe("Run the task as a Paseo agent on this chat's CLI and model."),
+      z
+        .object({
+          kind: z.literal("cli"),
+          provider: z.string().trim().min(1).describe("CLI id from list_providers."),
+          model: z
+            .string()
+            .trim()
+            .min(1)
+            .nullable()
+            .optional()
+            .describe("Model id from list_models. Omit it to use the CLI default."),
+        })
+        .strict()
+        .describe("Run the task on this CLI."),
+    ])
+    .describe(
+      "Where this task runs. Omit it in Multitask to use the target chosen in the Multitask control.",
+    );
   const commonCreateAgentFields = {
     title: z
       .string()
@@ -1195,8 +1273,9 @@ function createToolCatalog(
       .min(1, "Title is required")
       .max(60, "Title must be 60 characters or fewer")
       .describe("Short descriptive title (<= 60 chars) summarizing the agent's focus."),
-    provider: ProviderModelInputSchema.describe(
-      "Required provider/model pair, for example codex/gpt-5.4.",
+    taskAgent: TaskAgentInputSchema.optional(),
+    provider: ProviderModelInputSchema.optional().describe(
+      "Provider/model pair, for example codex/gpt-5.4. In Multitask the control's target is used when taskAgent is omitted, and this value does not override that control.",
     ),
     labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
     settings: CreateAgentSettingsInputSchema.optional().describe(
@@ -1606,36 +1685,95 @@ function createToolCatalog(
     },
   );
 
-  registerTool(
-    "create_agent",
-    {
-      title: "Create agent",
-      description:
-        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt. Do not guess; call list_providers and list_models first if uncertain.",
-      inputSchema: createAgentInputSchema,
-      outputSchema: {
-        agentId: z.string(),
-        type: AgentProviderEnum,
-        status: AgentStatusEnum,
-        cwd: z.string(),
-        workspaceId: z.string().optional(),
-        currentModeId: z.string().nullable(),
-        availableModes: z.array(ProviderModeSchema),
-        guidance: z.string().optional(),
-      },
-    },
-    async (args: unknown) => {
-      const resolvedArgs = await resolveCreateAgentToolArgs(args);
-      const { parsedArgs } = resolvedArgs;
-      let notifyOnFinish: boolean;
-      if (resolvedArgs.kind === "agent-scoped") {
-        notifyOnFinish = parsedArgs.notifyOnFinish;
-      } else {
-        notifyOnFinish = resolvedArgs.parsedArgs.notifyOnFinish ?? false;
+  async function prepareCreateAgentToolLaunch(args: unknown) {
+    const resolvedArgs = await resolveCreateAgentToolArgs(args);
+    const { parsedArgs } = resolvedArgs;
+    let notifyOnFinish: boolean;
+    if (resolvedArgs.kind === "agent-scoped") {
+      notifyOnFinish = parsedArgs.notifyOnFinish;
+    } else {
+      notifyOnFinish = resolvedArgs.parsedArgs.notifyOnFinish ?? false;
+    }
+    const parentAgent = callerAgentId ? agentManager.getAgent(callerAgentId) : null;
+    const multitaskParent = parentAgent?.config.workflowModeId === "multitask";
+    const requestedMode =
+      parsedArgs.settings?.modeId ??
+      ("mode" in parsedArgs && typeof parsedArgs.mode === "string" ? parsedArgs.mode : undefined);
+    const launchInput = {
+      parent: parentAgent
+        ? {
+            workflowModeId: parentAgent.config.workflowModeId,
+            provider: parentAgent.provider,
+            model: parentAgent.config.model,
+            taskTargetLabel: parentAgent.labels[MULTITASK_TASK_TARGET_LABEL],
+          }
+        : null,
+      taskAgent: parsedArgs.taskAgent,
+      provider: parsedArgs.provider,
+      requestedMode,
+    };
+    const catalogCwd = parentAgent?.cwd ?? resolvedArgs.cwd;
+    let entries = await providerSnapshotManager.listProviders({ cwd: catalogCwd });
+    const warmId = multitaskProviderToWarm(launchInput);
+    if (warmId) {
+      const current = entries.find(
+        (entry) => entry.provider.toLowerCase() === warmId.toLowerCase(),
+      );
+      if (current?.status === "loading") {
+        const refreshed = await providerSnapshotManager.listProviders({
+          cwd: catalogCwd,
+          wait: true,
+          providers: [current.provider],
+        });
+        const byId = new Map(entries.map((entry) => [entry.provider, entry]));
+        for (const entry of refreshed) {
+          byId.set(entry.provider, entry);
+        }
+        entries = [...byId.values()];
       }
-      const selectedProvider = resolveRequiredProviderModel(parsedArgs.provider).provider;
-      const inheritedConfig = resolveInheritedProviderConfig(selectedProvider);
-      const { snapshot, initialPromptStarted } = await createAgentCommand(
+    }
+    const launch = resolveCreateAgentTaskLaunch({
+      ...launchInput,
+      providers: toMultitaskLaunchProviders(entries),
+    });
+    const recordMultitaskFailure = (failure: Extract<MultitaskLaunchResult, { ok: false }>) => {
+      recordCreateAgentMultitaskFailure({
+        callerAgentId,
+        parentProvider: parentAgent?.provider,
+        title: parsedArgs.title,
+        failure,
+        agentManager,
+        logger: childLogger,
+      });
+    };
+    if (!launch.ok) {
+      if (!multitaskParent || launch.code === "provider-required") {
+        throw launch.code === "provider-required"
+          ? new PaseoToolInputError(launch.message)
+          : new Error(launch.message);
+      }
+      recordMultitaskFailure(launch);
+      return { kind: "failed" as const, result: multitaskFailureResult(launch) };
+    }
+    return {
+      kind: "ready" as const,
+      resolvedArgs,
+      notifyOnFinish,
+      multitaskParent,
+      requestedMode,
+      launch,
+      recordMultitaskFailure,
+    };
+  }
+
+  async function runPreparedCreateAgent(
+    prepared: Extract<Awaited<ReturnType<typeof prepareCreateAgentToolLaunch>>, { kind: "ready" }>,
+  ) {
+    const { resolvedArgs, notifyOnFinish, multitaskParent, requestedMode, launch } = prepared;
+    const { parsedArgs } = resolvedArgs;
+    const inheritedConfig = resolveInheritedProviderConfig(launch.provider);
+    try {
+      const { snapshot, initialPromptStarted, initialPromptError } = await createAgentCommand(
         {
           agentManager,
           agentStorage,
@@ -1652,7 +1790,7 @@ function createToolCatalog(
         },
         {
           kind: "mcp",
-          provider: parsedArgs.provider,
+          provider: launch.providerArgument,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
           config: inheritedConfig,
@@ -1666,22 +1804,35 @@ function createToolCatalog(
               ? { "paseo.parent-server-id": options.serverId }
               : {}),
           },
-          mode: parsedArgs.settings?.modeId,
-          promptFailure: "throw",
+          mode: launch.modeId ?? requestedMode,
+          promptFailure: multitaskParent ? "return-error" : "throw",
           notifyOnFinish,
           detached: resolvedArgs.detached,
           callerAgentId,
           callerContext,
         },
       );
+      if (multitaskParent && initialPromptError) {
+        const message =
+          initialPromptError instanceof Error
+            ? initialPromptError.message
+            : String(initialPromptError);
+        return multitaskFailureResult({
+          ok: false,
+          code: "unavailable",
+          message,
+          closest: [],
+          providerId: launch.provider,
+        });
+      }
 
-      // Return immediately for async creation.
       const currentSnapshot = agentManager.getAgent(snapshot.id) ?? snapshot;
-      const guidance =
-        callerAgentId && notifyOnFinish && initialPromptStarted
-          ? "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
-          : "Creation acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
-      const response = {
+      const guidance = createAgentToolGuidance({
+        callerAgentId,
+        notifyOnFinish,
+        initialPromptStarted,
+      });
+      return {
         content: [],
         structuredContent: ensureValidJson({
           agentId: currentSnapshot.id,
@@ -1694,7 +1845,45 @@ function createToolCatalog(
           ...(guidance ? { guidance } : {}),
         }),
       };
-      return response;
+    } catch (error) {
+      if (!multitaskParent) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      const failure: Extract<MultitaskLaunchResult, { ok: false }> = {
+        ok: false,
+        code: "unavailable",
+        message,
+        closest: [],
+        providerId: launch.provider,
+      };
+      prepared.recordMultitaskFailure(failure);
+      return multitaskFailureResult(failure);
+    }
+  }
+
+  registerTool(
+    "create_agent",
+    {
+      title: "Create agent",
+      description:
+        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Pass provider/model (for example codex/gpt-5.4) and an initial prompt, or in Multitask omit both provider and taskAgent to use the target chosen in the Multitask control. taskAgent kind paseo uses this chat's CLI. taskAgent kind cli uses that CLI and one of its models from list_providers and list_models. Do not invent a model id. One task's error does not cancel the others.",
+      inputSchema: createAgentInputSchema,
+      outputSchema: {
+        agentId: z.string(),
+        type: AgentProviderEnum,
+        status: AgentStatusEnum,
+        cwd: z.string(),
+        workspaceId: z.string().optional(),
+        currentModeId: z.string().nullable(),
+        availableModes: z.array(ProviderModeSchema),
+        guidance: z.string().optional(),
+      },
+    },
+    async (args: unknown) => {
+      const prepared = await prepareCreateAgentToolLaunch(args);
+      if (prepared.kind === "failed") return prepared.result;
+      return runPreparedCreateAgent(prepared);
     },
   );
 

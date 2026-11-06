@@ -89,7 +89,7 @@ export function filterAndRankChatMentions(
   return ranked.slice(0, limit).map((entry) => entry.chat);
 }
 
-/** Selecting a chat attaches its history, so the typed token disappears entirely. */
+/** Deletes the `@` token the caret is in. The composer replaces that range with a mention chip. */
 export function removeMentionToken(input: RemoveMentionTokenInput): string {
   const before = input.text.slice(0, input.mention.start);
   const after = input.text.slice(input.mention.end);

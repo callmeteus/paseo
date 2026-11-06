@@ -167,6 +167,13 @@ import {
   useWorkspaceAttachmentsStore,
 } from "@/attachments/workspace-attachments-store";
 import { createChatMentionAttachment } from "@/composer/chat-history-attachment";
+import {
+  inlineChipDisplayText,
+  inlineChipIdKey,
+  preserveDisplaySelection,
+  textContainsInlineChipId,
+  updateInlineChipBody,
+} from "@getpaseo/protocol/inline-chip";
 import { droppedItemsToSelectedFiles } from "@/composer/attachments/drop";
 import { getFileTypeLabel } from "@/attachments/file-types";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
@@ -443,6 +450,7 @@ interface PendingFileAttachment {
 
 interface RenderAttachmentTrayArgs {
   serverId: string;
+  composerText: string;
   selectedAttachments: ComposerAttachment[];
   pendingFiles: PendingFileAttachment[];
   isComposerLocked: boolean;
@@ -461,6 +469,7 @@ interface RenderAttachmentTrayArgs {
 function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | null {
   const {
     serverId,
+    composerText,
     selectedAttachments,
     pendingFiles,
     isComposerLocked,
@@ -468,19 +477,25 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
     handleRemoveAttachment,
     labels,
   } = args;
-  if (selectedAttachments.length === 0 && pendingFiles.length === 0) return null;
+  const visibleAttachments = selectedAttachments.filter(
+    (attachment) =>
+      attachment.kind !== "chat_history" || !textContainsInlineChipId(composerText, attachment.id),
+  );
+  if (visibleAttachments.length === 0 && pendingFiles.length === 0) return null;
   return (
     <View style={styles.attachmentTray} testID="composer-attachment-tray">
       {selectedAttachments.map((attachment, index) =>
-        renderComposerAttachmentPill({
-          serverId,
-          attachment,
-          index,
-          disabled: isComposerLocked,
-          onOpen: handleOpenAttachment,
-          onRemove: handleRemoveAttachment,
-          labels,
-        }),
+        attachment.kind === "chat_history" && textContainsInlineChipId(composerText, attachment.id)
+          ? null
+          : renderComposerAttachmentPill({
+              serverId,
+              attachment,
+              index,
+              disabled: isComposerLocked,
+              onOpen: handleOpenAttachment,
+              onRemove: handleRemoveAttachment,
+              labels,
+            }),
       )}
       {pendingFiles.map(({ id, file }) => (
         <AttachmentFrame key={id} testID="composer-pending-file-attachment">
@@ -821,7 +836,7 @@ function QueuedMessageRow({
   return (
     <View style={styles.queueItem}>
       <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-        {item.text}
+        {inlineChipDisplayText(item.text)}
       </Text>
       <View style={styles.queueActions}>
         <Pressable
@@ -1625,6 +1640,11 @@ function ComposerContentImpl({
     textSource.subscribe,
     () => textSource.getSnapshot().trim().length > 0,
     () => textSource.getSnapshot().trim().length > 0,
+  );
+  const inlineChipKey = useSyncExternalStore(
+    textSource.subscribe,
+    () => inlineChipIdKey(textSource.getSnapshot()),
+    () => inlineChipIdKey(textSource.getSnapshot()),
   );
   const setUserInput = onChangeText;
   const workspaceAttachments = useWorkspaceAttachmentsForScopes(attachmentScopeKeys);
@@ -2698,36 +2718,39 @@ function ComposerContentImpl({
     [isFullscreen],
   );
 
-  const attachmentTray = useMemo(
-    () =>
-      renderAttachmentTray({
-        serverId,
-        selectedAttachments,
-        pendingFiles,
-        isComposerLocked,
-        handleOpenAttachment,
-        handleRemoveAttachment,
-        labels: {
-          openImage: t("composer.attachments.openImage"),
-          removeImage: t("composer.attachments.removeImage"),
-          removeFile: t("composer.attachments.removeFile"),
-          removeQuote: t("composer.attachments.removeQuote"),
-          openGithub: (kind: string, numberLabel: string) =>
-            t("composer.attachments.openGithub", { kind, number: numberLabel }),
-          removeGithub: (kind: string, numberLabel: string) =>
-            t("composer.attachments.removeGithub", { kind, number: numberLabel }),
-        },
-      }),
-    [
-      handleOpenAttachment,
-      handleRemoveAttachment,
-      isComposerLocked,
+  const attachmentTray = useMemo(() => {
+    // The chip id key is not an attachment. Reading it refreshes the tray when a paste becomes a chip.
+    void inlineChipKey;
+    return renderAttachmentTray({
       serverId,
+      composerText: textSource.getSnapshot(),
       selectedAttachments,
       pendingFiles,
-      t,
-    ],
-  );
+      isComposerLocked,
+      handleOpenAttachment,
+      handleRemoveAttachment,
+      labels: {
+        openImage: t("composer.attachments.openImage"),
+        removeImage: t("composer.attachments.removeImage"),
+        removeFile: t("composer.attachments.removeFile"),
+        removeQuote: t("composer.attachments.removeQuote"),
+        openGithub: (kind: string, numberLabel: string) =>
+          t("composer.attachments.openGithub", { kind, number: numberLabel }),
+        removeGithub: (kind: string, numberLabel: string) =>
+          t("composer.attachments.removeGithub", { kind, number: numberLabel }),
+      },
+    });
+  }, [
+    handleOpenAttachment,
+    handleRemoveAttachment,
+    inlineChipKey,
+    isComposerLocked,
+    textSource,
+    serverId,
+    selectedAttachments,
+    pendingFiles,
+    t,
+  ]);
 
   const queueList = useMemo(
     () =>
@@ -2792,6 +2815,15 @@ function ComposerContentImpl({
           agentId: chat.agentId,
           missingAttachmentMessage: t("agentAutocomplete.attachChatFailed"),
         });
+        const current = messageInputRef.current?.getText() ?? textSource.getSnapshot();
+        const next = updateInlineChipBody(current, attachment.id, attachment.attachment.text);
+        if (next !== current) {
+          const selection = messageInputRef.current?.getInputSnapshot().selection ?? {
+            start: next.length,
+            end: next.length,
+          };
+          replaceUserInput(next, preserveDisplaySelection(current, next, selection));
+        }
         useWorkspaceAttachmentsStore.getState().addWorkspaceAttachment({ scopeKey, attachment });
         setSendError(null);
       } catch (error) {
@@ -2800,7 +2832,7 @@ function ComposerContentImpl({
         );
       }
     },
-    [attachmentScopeKeys, client, serverId, t],
+    [attachmentScopeKeys, client, replaceUserInput, serverId, t, textSource],
   );
 
   const autocompleteConfiguration = useMemo(

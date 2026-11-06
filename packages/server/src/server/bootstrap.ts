@@ -1,5 +1,9 @@
 import { createIdleRuntimeCleanup } from "./agent/idle-runtime-cleanup/index.js";
 import {
+  createCursorSkillCatalogMonitor,
+  type CursorSkillCatalogMonitor,
+} from "./agent/providers/cursor-skill-catalog-monitor.js";
+import {
   createFinishSubscriptions,
   createFinishObservation,
   createJsonFinishSubscriptionStore,
@@ -12,6 +16,7 @@ import { createServer as createHTTPServer, type IncomingMessage, type ServerResp
 import { appendFileSync, constants, existsSync, mkdirSync, unlinkSync } from "fs";
 import { open, rm, stat } from "fs/promises";
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import { getHostName } from "./host-name.js";
 import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -744,6 +749,7 @@ export async function createPaseoDaemon(
     appBaseUrl = typeof value === "string" ? value : "https://app.paseo.sh";
   });
   let wsServer: VoiceAssistantWebSocketServer | null = null;
+  let cursorSkillCatalog: CursorSkillCatalogMonitor | null = null;
   let serviceProxyListenTarget: ListenTarget | null = null;
   const scriptHealthMonitor = new ScriptHealthMonitor({
     serviceProxy,
@@ -1248,6 +1254,29 @@ export async function createPaseoDaemon(
       await emitWorkspaceUpdatesExternal([workspaceId]);
     },
     logger,
+    readWorkspace: (workspaceId) => workspaceRegistry.get(workspaceId),
+    listWorkspaceAgentTitles: async (workspaceId) => {
+      const records = await agentStorage.listByWorkspace(workspaceId);
+      return records
+        .filter((record) => record.internal !== true && !record.archivedAt)
+        .map((record) => ({ id: record.id, title: record.title ?? null }));
+    },
+  });
+  agentManager.setObservedSessionTitleHandler(({ agentId, title }) => {
+    void (async () => {
+      const record = await agentStorage.get(agentId);
+      if (!record || record.internal === true || record.archivedAt) {
+        return;
+      }
+      await workspaceAutoName.applyObservedSessionTitle({
+        workspaceId: record.workspaceId ?? null,
+        agentId: record.id,
+        agentTitle: record.title ?? null,
+        observedTitle: title,
+      });
+    })().catch((error: unknown) => {
+      logger.warn({ err: error, agentId }, "Failed to apply the provider session title");
+    });
   });
 
   setupAutoArchiveOnMerge({
@@ -1788,6 +1817,14 @@ export async function createPaseoDaemon(
   const start = async () => {
     let mainStarted = false;
     try {
+      if (!cursorSkillCatalog) {
+        cursorSkillCatalog = createCursorSkillCatalogMonitor({
+          homeDirectory: homedir(),
+          agentManager,
+          logger,
+        });
+        await cursorSkillCatalog.start();
+      }
       localCredential = await writeLocalCredential(config.paseoHome);
       if (serviceProxyListenTarget) {
         const boundServiceProxyTarget = await serviceProxy.startStandalone({
@@ -1866,6 +1903,7 @@ export async function createPaseoDaemon(
               logger.info("Daemon password authentication enabled");
             }
 
+            const skillCatalog = cursorSkillCatalog;
             wsServer = new VoiceAssistantWebSocketServer(
               httpServer,
               logger,
@@ -1940,6 +1978,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
             );
+            if (skillCatalog) wsServer.setCursorSkillCatalog(skillCatalog);
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
@@ -2003,6 +2042,8 @@ export async function createPaseoDaemon(
       speechService.start();
       scriptHealthMonitor.start();
     } catch (error) {
+      await cursorSkillCatalog?.stop().catch(() => undefined);
+      cursorSkillCatalog = null;
       providerCatalogRefreshScheduler.stop();
       openWeightRouterSync.stop();
       localCredential = null;
@@ -2020,6 +2061,10 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    await cursorSkillCatalog?.stop().catch((error) => {
+      logger.warn({ err: error }, "Failed to stop Cursor skill catalog watch");
+    });
+    cursorSkillCatalog = null;
     providerCatalogRefreshScheduler.stop();
     openWeightRouterSync.stop();
     localCredential = null;

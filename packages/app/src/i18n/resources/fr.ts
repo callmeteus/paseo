@@ -3381,6 +3381,7 @@ export const fr: TranslationResources = {
         retrying: "Nouvelle tentative…",
         noSearchMatches: "Aucun modèle ne correspond à votre recherche",
         noneDetected: "Aucun modèle détecté",
+        enableModel: "Activer {{name}}",
         discovered: "Détectés",
         custom: "Modèles personnalisés",
         updated: "Mis à jour {{time}}",

@@ -1,4 +1,8 @@
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import {
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import type { ModelRouter, ModelRouterTarget } from "@getpaseo/protocol/model-router";
 import {
   isFreeModel,
@@ -49,12 +53,16 @@ function tierScore(label: string, modelId: string, tiers: RegExp[]): number {
 
 export function collectRouterCandidates(
   entries: readonly ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): RouterModelCandidate[] {
   const candidates: RouterModelCandidate[] = [];
   for (const entry of entries) {
     if (!entry.enabled) continue;
-    for (const model of entry.models ?? []) {
-      if (model.isSelectable === false) continue;
+    const models = omitDisabledModels(
+      (entry.models ?? []).filter((model) => model.isSelectable !== false),
+      disabledModelIdsByProvider?.[entry.provider],
+    );
+    for (const model of models ?? []) {
       const isFree =
         isFreeModel({ id: model.id, label: model.label, metadata: model.metadata }) ||
         isFreeProvider({ id: entry.provider, label: entry.label }) ||
@@ -121,8 +129,9 @@ export function buildRouterSummary(targets: readonly ModelRouterTarget[]): strin
  */
 export function buildPremiumFreePreset(
   entries: readonly ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): RouterPreset | null {
-  const candidates = collectRouterCandidates(entries).filter(
+  const candidates = collectRouterCandidates(entries, disabledModelIdsByProvider).filter(
     (candidate) => candidate.isFree && !candidate.isOpenWeight,
   );
   if (candidates.length === 0) return null;
@@ -138,8 +147,9 @@ export function buildPremiumFreePreset(
  */
 export function buildOpenWeightFreePreset(
   entries: readonly ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): RouterPreset | null {
-  const candidates = collectRouterCandidates(entries).filter(
+  const candidates = collectRouterCandidates(entries, disabledModelIdsByProvider).filter(
     (candidate) => candidate.isFree && candidate.isOpenWeight,
   );
   if (candidates.length === 0) return null;
@@ -150,10 +160,14 @@ export function buildOpenWeightFreePreset(
   };
 }
 
-export function buildRouterPresets(entries: readonly ProviderSnapshotEntry[]): RouterPreset[] {
-  return [buildPremiumFreePreset(entries), buildOpenWeightFreePreset(entries)].filter(
-    (preset): preset is RouterPreset => preset !== null,
-  );
+export function buildRouterPresets(
+  entries: readonly ProviderSnapshotEntry[],
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
+): RouterPreset[] {
+  return [
+    buildPremiumFreePreset(entries, disabledModelIdsByProvider),
+    buildOpenWeightFreePreset(entries, disabledModelIdsByProvider),
+  ].filter((preset): preset is RouterPreset => preset !== null);
 }
 
 /** Human-readable target summary for settings rows. */

@@ -3337,6 +3337,7 @@ export const ptBR: TranslationResources = {
         notInstalled: "Não instalado",
       },
       models: {
+        enableModel: "Ativar {{name}}",
         one: "1 modelo",
         many: "{{count}} modelos",
         addModel: "Adicionar modelo",

@@ -9,16 +9,18 @@
  * Each mode contributes a fragment appended to the provider's system prompt.
  * Debug mode also points the agent at the daemon's local log ingest endpoint.
  *
- * A read-only mode additionally forces the provider's own read-only mode, so
- * enforcement does not depend on the prompt alone. Providers without a known
- * read-only mode fail closed instead of silently becoming writable.
- *
  * The mode id is persisted on `AgentSessionConfig.workflowModeId`. The prompt
  * fragment is never persisted; it is composed for every request at dispatch and
  * again at launch in `AgentManager.prepareSessionConfig`.
  */
 
-export type WorkflowModeId = "agent" | "plan" | "ask" | "debug" | "multitask";
+import { decodeMultitaskTaskTarget } from "@getpaseo/protocol/multitask-task-target";
+import {
+  WORKFLOW_MODES as WORKFLOW_MODE_CATALOG,
+  type WorkflowModeId,
+} from "@getpaseo/protocol/workflow-modes";
+
+export type { WorkflowModeId };
 
 export interface WorkflowModeContext {
   agentId: string;
@@ -26,14 +28,17 @@ export interface WorkflowModeContext {
   debugEndpoint?: string;
   debugLogPath?: string;
   debugSessionId?: string;
+  /**
+   * Raw `paseo.multitask-task-target` label. Only the Multitask prompt reads it.
+   * Absent means each task is a Paseo agent on this chat's CLI.
+   */
+  taskTargetLabel?: string | null;
 }
 
 export interface WorkflowMode {
   id: WorkflowModeId;
-  label: string;
-  description: string;
   icon: string;
-  /** Accent color (hex) used in the UI, matching Cursor's mode palette. */
+  /** Accent color from the shared workflow-mode catalog. */
   color: string;
   /** When true the daemon denies edit/execution permission requests. */
   readOnly: boolean;
@@ -72,6 +77,31 @@ worker a clean, self-contained prompt and a dedicated worktree (isolation:
 integrate the results and report back. Limit nesting: a worker you create must
 not create further workers.`;
 
+/**
+ * Multitask instructions plus the target stored on the chat.
+ *
+ * The text tells the model what the control chose. The daemon still applies
+ * that choice when `create_agent` omits `taskAgent`.
+ *
+ * @param ctx - Workflow context, including the stored task-target label
+ * @returns The prompt fragment for this turn
+ */
+function composeMultitaskPrompt(ctx: WorkflowModeContext): string {
+  const target = decodeMultitaskTaskTarget(ctx.taskTargetLabel);
+  let choice: string;
+  if (target.kind === "paseo") {
+    choice =
+      "The Multitask control is set to a Paseo agent, so each task inherits this chat's CLI and model.";
+  } else if (target.model) {
+    choice = `The Multitask control is set to the ${target.provider} CLI, model ${target.model}.`;
+  } else {
+    choice = `The Multitask control is set to the ${target.provider} CLI and that CLI's default model.`;
+  }
+  return `${MULTITASK_PROMPT}
+
+${choice} The daemon applies that choice when create_agent omits taskAgent. Do not pass provider to override the control. A single task overrides it with taskAgent set to {"kind":"paseo"} or {"kind":"cli","provider":"<id from list_providers>","model":"<id from list_models>"}. Do not invent a model id. If create_agent returns an error for one task, leave the other tasks running and report that error on the failed task.`;
+}
+
 const ASK_PROMPT = `You are in Ask mode.
 
 You are a read-only assistant. You may read files, search, and explain. You must
@@ -103,79 +133,56 @@ The plan must include:
 
 Stop after presenting the plan and ask the user to switch to Agent mode to execute it.`;
 
-export const WORKFLOW_MODES: WorkflowMode[] = [
-  {
-    id: "agent",
-    label: "Agent",
-    description: "Default coding agent with full tool access.",
+const WORKFLOW_MODE_BEHAVIOR: Record<
+  WorkflowModeId,
+  Pick<WorkflowMode, "icon" | "readOnly" | "requiresPaseoTools" | "prompt">
+> = {
+  agent: {
     icon: "sparkles",
-    color: "#3b82f6",
     readOnly: false,
     requiresPaseoTools: false,
     prompt: () => "",
   },
-  {
-    id: "plan",
-    label: "Plan",
-    description: "Investigate and produce an implementation plan without making changes.",
+  plan: {
     icon: "todos",
-    color: "#eab308",
     readOnly: true,
     requiresPaseoTools: false,
     prompt: () => PLAN_PROMPT,
   },
-  {
-    id: "ask",
-    label: "Ask",
-    description: "Read-only: explain and investigate without making changes.",
+  ask: {
     icon: "message_circle",
-    color: "#8b5cf6",
     readOnly: true,
     requiresPaseoTools: false,
     prompt: () => ASK_PROMPT,
   },
-  {
-    id: "debug",
-    label: "Debug",
-    description: "Hypothesis-driven debugging with local log ingestion.",
+  debug: {
     icon: "bug",
-    color: "#f97316",
     readOnly: false,
     requiresPaseoTools: false,
     prompt: DEBUG_PROMPT,
   },
-  {
-    id: "multitask",
-    label: "Multitask",
-    description: "Coordinate multiple parallel sub-agents.",
+  multitask: {
     icon: "layers",
-    color: "#22c55e",
     readOnly: false,
     requiresPaseoTools: true,
-    prompt: () => MULTITASK_PROMPT,
+    prompt: composeMultitaskPrompt,
   },
-];
-
-const BY_ID = new Map(WORKFLOW_MODES.map((m) => [m.id, m]));
-
-/**
- * Provider modes that make writes impossible, keyed by provider id. A read-only
- * workflow mode forces this mode; providers without an entry cannot honor a
- * read-only workflow and fail closed at session creation.
- */
-const READ_ONLY_PROVIDER_MODE: Record<string, string> = {
-  opencode: "plan",
-  claude: "plan",
-  codex: "read-only",
-  copilot: "https://agentclientprotocol.com/protocol/session-modes#plan",
-  kilo: "plan",
-  cline: "plan",
-  cursor: "plan",
 };
 
-export function resolveReadOnlyProviderMode(provider: string): string | null {
-  return READ_ONLY_PROVIDER_MODE[provider] ?? null;
-}
+/** Daemon modes: the shared ids and colors, plus the prompt for each id. */
+export const WORKFLOW_MODES: WorkflowMode[] = WORKFLOW_MODE_CATALOG.map((mode) => {
+  const behavior = WORKFLOW_MODE_BEHAVIOR[mode.id];
+  return {
+    id: mode.id,
+    color: mode.color,
+    icon: behavior.icon,
+    readOnly: behavior.readOnly,
+    requiresPaseoTools: behavior.requiresPaseoTools,
+    prompt: behavior.prompt,
+  };
+});
+
+const BY_ID = new Map(WORKFLOW_MODES.map((m) => [m.id, m]));
 
 /** The provider's normal writable mode, restored when a read-only workflow ends. */
 const DEFAULT_WRITABLE_PROVIDER_MODE: Record<string, string> = {

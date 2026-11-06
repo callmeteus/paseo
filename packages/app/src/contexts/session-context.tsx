@@ -49,6 +49,7 @@ import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
+import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import { resyncProviderSubagents, useProviderSubagentStore } from "@/subagents/provider-store";
 import {
   getLastWorkspaceSelection,
@@ -502,6 +503,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         "agent.provider_subagents.update",
         "checkout_status_update",
         "status.server_info",
+        "status.agent_commands_changed",
       ],
       { notifications: true },
     );
@@ -545,6 +547,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (serverInfo) {
         updateSessionServerInfo(serverId, toDaemonServerInfo(serverInfo));
         return;
+      }
+      if (message.payload.status === "agent_commands_changed") {
+        void queryClient.invalidateQueries({ queryKey: agentCommandsQueryRoot(serverId) });
       }
     });
 

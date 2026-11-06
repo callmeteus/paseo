@@ -38,6 +38,26 @@ describe("tool-call-display", () => {
     });
   });
 
+  it("titles a Cursor task by its description instead of Other", () => {
+    const display = buildToolCallDisplayModel({
+      name: "other",
+      status: "running",
+      error: null,
+      detail: {
+        type: "unknown",
+        input: {
+          _toolName: "task",
+          prompt: "Answer why OpenCode did not compact the context",
+          description: "Por que não compactou o contexto",
+        },
+        output: null,
+      },
+    });
+
+    expect(display).toEqual({ displayName: "Por que não compactou o contexto" });
+    expect(display.displayName).not.toBe("Other");
+  });
+
   it("uses sub-agent detail for task label and description", () => {
     const display = buildToolCallDisplayModel({
       name: "task",

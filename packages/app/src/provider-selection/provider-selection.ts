@@ -8,6 +8,10 @@ import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manife
 import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { i18n } from "@/i18n/i18next";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
+import {
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import { filterSelectableModels } from "./model-catalog";
 
 export interface ProviderSelectionModelRow {
@@ -99,11 +103,12 @@ function buildModelSelection(
   providerLabel: string,
   models: AgentModelDefinition[] | null,
   serverId?: string | null,
+  disabledIds?: readonly string[],
 ): ProviderModelSelection {
   if (models === null) {
     return { kind: "loading" };
   }
-  const selectableModels = filterSelectableModels(models) ?? [];
+  const selectableModels = omitDisabledModels(filterSelectableModels(models), disabledIds) ?? [];
   if (selectableModels.length === 0) {
     return { kind: "models", rows: [buildSyntheticDefaultRow(provider, providerLabel, serverId)] };
   }
@@ -118,12 +123,13 @@ function buildEntryModelSelection(
   label: string,
   isConnected: boolean,
   serverId?: string | null,
+  disabledIds?: readonly string[],
 ): ProviderModelSelection {
   if ((entry.models?.length ?? 0) > 0) {
-    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId);
+    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId, disabledIds);
   }
   if (entry.status === "ready") {
-    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId);
+    return buildModelSelection(entry.provider, label, entry.models ?? null, serverId, disabledIds);
   }
   if (entry.status === "loading") {
     return isConnected
@@ -144,6 +150,7 @@ export function buildProviderSelectorProviders(input: {
   providerDefinitions: AgentProviderDefinition[];
   modelsByProvider: Map<string, AgentModelDefinition[]>;
   serverId?: string | null;
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider;
 }): ProviderSelectorProvider[] {
   return input.providerDefinitions.map((definition) => ({
     id: definition.id,
@@ -156,6 +163,7 @@ export function buildProviderSelectorProviders(input: {
         ? (input.modelsByProvider.get(definition.id) ?? [])
         : null,
       input.serverId,
+      input.disabledModelIdsByProvider?.[definition.id],
     ),
   }));
 }
@@ -164,6 +172,7 @@ export function buildSelectableProviderSelectorProviders(
   entries: ProviderSnapshotEntry[] | undefined,
   isConnected = true,
   serverId?: string | null,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): ProviderSelectorProvider[] {
   return (
     (entries ?? [])
@@ -179,7 +188,13 @@ export function buildSelectableProviderSelectorProviders(
           id: entry.provider,
           label,
           serverId,
-          modelSelection: buildEntryModelSelection(entry, label, isConnected, serverId),
+          modelSelection: buildEntryModelSelection(
+            entry,
+            label,
+            isConnected,
+            serverId,
+            disabledModelIdsByProvider?.[entry.provider],
+          ),
         };
       })
   );

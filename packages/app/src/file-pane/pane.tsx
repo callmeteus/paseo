@@ -14,6 +14,7 @@ import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { usePublishPanelInstanceAttributes } from "@/panels/panel-instance-attributes";
 import { useSessionStore } from "@/stores/session-store";
 import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
+import { restoreWindowsFilePath } from "@/utils/path";
 import { formatFileSize } from "@/utils/format-file-size";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 
@@ -36,7 +37,7 @@ export function FilePane({
   const { t } = useTranslation();
   const connected = useSessionStore((state) => Boolean(state.sessions[serverId]?.client));
   const root = workspaceRoot.trim();
-  const path = location.path.trim();
+  const path = restoreWindowsFilePath(location.path) ?? location.path.trim();
   const target = useMemo(
     () => (path ? resolveFilePreviewReadTarget({ path, workspaceRoot: root }) : null),
     [path, root],

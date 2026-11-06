@@ -11,6 +11,11 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
+import {
+  disabledModelIdsByProviderFromConfig,
+  omitDisabledModels,
+  type DisabledModelIdsByProvider,
+} from "@getpaseo/protocol/disabled-models";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { OptimisticFormPreferences } from "@/create-agent-preferences/optimistic-preferences";
 import { applyAgentProfilePreferences } from "@/create-agent-preferences/preferences";
@@ -101,22 +106,35 @@ function resolveSelectedProviderModes(input: {
 
 function buildAllProviderModels(
   snapshotEntries: ProviderSnapshotEntry[] | undefined,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): Map<string, AgentModelDefinition[]> {
   const map = new Map<string, AgentModelDefinition[]>();
   for (const entry of snapshotEntries ?? []) {
-    map.set(entry.provider, filterSelectableModels(entry.models ?? []) ?? []);
+    map.set(
+      entry.provider,
+      omitDisabledModels(
+        filterSelectableModels(entry.models ?? []),
+        disabledModelIdsByProvider?.[entry.provider],
+      ) ?? [],
+    );
   }
   return map;
 }
 
 function buildProviderModelsByProvider(
   snapshotEntries: ProviderSnapshotEntry[] | undefined,
+  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): ProviderModelsByProvider {
   const map: ProviderModelsByProvider = new Map();
   for (const entry of snapshotEntries ?? []) {
     map.set(
       entry.provider,
-      entry.status === "ready" ? filterSelectableModels(entry.models ?? null) : null,
+      entry.status === "ready"
+        ? omitDisabledModels(
+            filterSelectableModels(entry.models ?? null),
+            disabledModelIdsByProvider?.[entry.provider],
+          )
+        : null,
     );
   }
   return map;
@@ -227,17 +245,27 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       ),
     [snapshotEntries],
   );
+  const disabledModelIdsByProvider = useMemo(
+    () => disabledModelIdsByProviderFromConfig(config?.providers),
+    [config?.providers],
+  );
   const snapshotAllProviderModels = useMemo(
-    () => buildAllProviderModels(snapshotEntries),
-    [snapshotEntries],
+    () => buildAllProviderModels(snapshotEntries, disabledModelIdsByProvider),
+    [disabledModelIdsByProvider, snapshotEntries],
   );
   const snapshotProviderModelsByProvider = useMemo(
-    () => buildProviderModelsByProvider(snapshotEntries),
-    [snapshotEntries],
+    () => buildProviderModelsByProvider(snapshotEntries, disabledModelIdsByProvider),
+    [disabledModelIdsByProvider, snapshotEntries],
   );
   const snapshotModelSelectorProviders = useMemo(
-    () => buildSelectableProviderSelectorProviders(snapshotEntries, isConnected),
-    [snapshotEntries, isConnected],
+    () =>
+      buildSelectableProviderSelectorProviders(
+        snapshotEntries,
+        isConnected,
+        undefined,
+        disabledModelIdsByProvider,
+      ),
+    [disabledModelIdsByProvider, isConnected, snapshotEntries],
   );
   const snapshotSelectedEntry = useMemo(
     () =>
@@ -246,8 +274,9 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         : null,
     [formState.provider, snapshotEntries],
   );
-  const snapshotSelectedProviderModels = filterSelectableModels(
-    snapshotSelectedEntry?.models ?? null,
+  const snapshotSelectedProviderModels = omitDisabledModels(
+    filterSelectableModels(snapshotSelectedEntry?.models ?? null),
+    formState.provider ? disabledModelIdsByProvider[formState.provider] : undefined,
   );
   const selectedProviderIsLoading = snapshotSelectedEntry?.status === "loading";
   const snapshotSelectedProviderModes = resolveSelectedProviderModes({

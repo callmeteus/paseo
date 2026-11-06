@@ -19,7 +19,7 @@ import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { resolvePreferredEditorId, usePreferredEditor } from "@/hooks/use-preferred-editor";
 import { openExternalUrl } from "@/utils/open-external-url";
-import { isAbsolutePath } from "@/utils/path";
+import { isAbsolutePath, pathBasename } from "@/utils/path";
 import { isWeb } from "@/constants/platform";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { resolveWorkspaceFilePaths, type WorkspaceFileLocation } from "@/workspace/file-open";
@@ -105,7 +105,7 @@ export function WorkspaceOpenInEditorButton({
     [activeFile, cwd],
   );
   const activeFileName = useMemo(
-    () => resolvedFile?.absolutePath.split("/").findLast(Boolean) ?? null,
+    () => (resolvedFile ? pathBasename(resolvedFile.absolutePath) : null),
     [resolvedFile],
   );
 

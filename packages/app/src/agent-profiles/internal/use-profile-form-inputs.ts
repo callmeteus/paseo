@@ -1,6 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { disabledModelIdsByProviderFromConfig } from "@getpaseo/protocol/disabled-models";
 import { useFetchQuery } from "@/data/query";
+import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { AgentProfileFormModel, AgentProfileFormState } from "./profile-form-model";
@@ -18,13 +20,18 @@ export function useAgentProfileFormCatalog(input: {
   model: AgentProfileFormModel;
 }): void {
   const { entries } = useProvidersSnapshot(input.serverId, { cwd: null });
+  const { config } = useDaemonConfig(input.serverId);
+  const disabledModelIdsByProvider = useMemo(
+    () => disabledModelIdsByProviderFromConfig(config?.providers),
+    [config?.providers],
+  );
 
   useEffect(() => {
     if (!entries) {
       return;
     }
-    input.model.applyProviderCatalog(entries);
-  }, [entries, input.model]);
+    input.model.applyProviderCatalog(entries, disabledModelIdsByProvider);
+  }, [disabledModelIdsByProvider, entries, input.model]);
 }
 
 export function useAgentProfileFormFeatures(input: {

@@ -64,3 +64,70 @@ test("auto-name preserves workspace archival that lands during its metadata writ
     archivedAt,
   });
 });
+
+test("auto-name gives the workspace and the OpenCode agent the same title", async () => {
+  const prompt = "Fix the login bug before the release";
+  let workspace = createPersistedWorkspaceRecord({
+    workspaceId: "workspace-shared-title",
+    projectId: "project-shared-title",
+    cwd: "/workspace",
+    kind: "directory",
+    displayName: "workspace",
+    title: prompt,
+    createdAt: "2026-08-08T00:00:00.000Z",
+    updatedAt: "2026-08-08T00:00:00.000Z",
+  });
+  const agentTitles: string[] = [];
+  const updateEmitted = deferred();
+  const autoName = new WorkspaceAutoName({
+    agentManager: {
+      setTitle: async (_agentId: string, title: string) => {
+        agentTitles.push(title);
+      },
+    } as AgentManager,
+    workspaceRegistry: {
+      update: async (_workspaceId, updater) => {
+        workspace = updater(workspace);
+        return workspace;
+      },
+    },
+    workspaceGitService: {} as WorkspaceGitService,
+    providerSnapshotManager: {} as ProviderSnapshotManager,
+    readDaemonConfig: () => ({}),
+    gitMutation: { notifyGitMutation: async () => {} },
+    emitWorkspaceUpdateForCwd: async () => {},
+    emitWorkspaceUpdateForWorkspaceId: async () => updateEmitted.resolve(),
+    logger: pino({ level: "silent" }),
+    generateWorkspaceName: async () => ({ title: "Repair the login", branch: null }),
+    listWorkspaceAgentTitles: async () => [
+      { id: "opencode", title: prompt },
+      { id: "cloud", title: prompt },
+    ],
+    readWorkspace: async () => workspace,
+  });
+
+  autoName.scheduleForDirectory({
+    workspaceId: workspace.workspaceId,
+    cwd: workspace.cwd,
+    firstAgentContext: { prompt },
+  });
+  await updateEmitted.promise;
+
+  expect(workspace.title).toBe("Repair the login");
+  expect(agentTitles).toEqual(["Repair the login", "Repair the login"]);
+
+  await autoName.applyObservedSessionTitle({
+    workspaceId: workspace.workspaceId,
+    agentId: "opencode",
+    agentTitle: "Repair the login",
+    observedTitle: "Shorter login fix",
+  });
+
+  expect(workspace.title).toBe("Shorter login fix");
+  expect(agentTitles).toEqual([
+    "Repair the login",
+    "Repair the login",
+    "Shorter login fix",
+    "Shorter login fix",
+  ]);
+});
