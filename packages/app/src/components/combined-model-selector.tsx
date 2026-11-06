@@ -21,7 +21,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { ModelIconGlyph } from "@/model-icons/glyph";
 import type { ModelIconId } from "@/model-icons/icons";
-import { resolveChoiceIconId } from "@/model-icons/resolve";
+import { resolveChoiceIconId, shouldHideRedundantModelGlyph } from "@/model-icons/resolve";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useActiveRouter } from "@/model-routers/use-router-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
@@ -133,7 +133,11 @@ function DefaultModelSelectorTrigger({
   iconId: ModelIconId | null;
 }): ReactElement {
   const glyphSize = toolbar?.glyphSize ?? ICON_SIZE.md;
-  const showGlyph = iconId !== null || selectedProvider.trim().length > 0;
+  const hasProvider = selectedProvider.trim().length > 0;
+  const showModelGlyph =
+    iconId !== null && !shouldHideRedundantModelGlyph(selectedProvider, iconId);
+  const showGlyph = showModelGlyph || hasProvider;
+  const glyphBoxStyle = toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16;
   return (
     <ComboboxTrigger
       ref={anchorRef}
@@ -147,12 +151,21 @@ function DefaultModelSelectorTrigger({
       chevron={toolbar?.showCaret === false ? null : undefined}
     >
       {showGlyph ? (
-        <View style={toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16}>
-          {iconId ? (
-            <ModelIconGlyph id={iconId} size={glyphSize} color={styles.mark.color} />
-          ) : (
-            <ModelProviderGlyph provider={selectedProvider} serverId={serverId} size={glyphSize} />
-          )}
+        <View style={styles.toolbarGlyphRow}>
+          {hasProvider ? (
+            <View style={glyphBoxStyle}>
+              <ModelProviderGlyph
+                provider={selectedProvider}
+                serverId={serverId}
+                size={glyphSize}
+              />
+            </View>
+          ) : null}
+          {showModelGlyph && iconId ? (
+            <View style={glyphBoxStyle}>
+              <ModelIconGlyph id={iconId} size={glyphSize} color={styles.mark.color} />
+            </View>
+          ) : null}
         </View>
       ) : null}
       <View style={styles.triggerTextColumn}>
@@ -417,6 +430,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   mark: {
     color: theme.colors.foregroundMuted,
+  },
+  toolbarGlyphRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    flexShrink: 0,
   },
   toolbarGlyph16: {
     width: 16,

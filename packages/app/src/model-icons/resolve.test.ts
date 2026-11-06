@@ -4,6 +4,7 @@ import {
   resolveChoiceIconId,
   resolveModelIconId,
   resolveRouterIconId,
+  shouldHideRedundantModelGlyph,
 } from "@/model-icons/resolve";
 
 describe("resolveModelIconId", () => {
@@ -109,6 +110,20 @@ describe("resolveChoiceIconId", () => {
 
   it("uses the selected model when no router is selected", () => {
     expect(resolveChoiceIconId({ modelId: "gemini-2.5-pro", router: null })).toBe("gemini");
+  });
+});
+
+describe("shouldHideRedundantModelGlyph", () => {
+  it.each([
+    ["anthropic", "claude", true],
+    ["claude", "claude", true],
+    ["openai", "openai", true],
+    ["codex", "openai", true],
+    ["opencode", "claude", false],
+    ["openai", "claude", false],
+    ["anthropic", "gemini", false],
+  ] as const)("provider %s + model mark %s -> hide=%s", (provider, modelIcon, expected) => {
+    expect(shouldHideRedundantModelGlyph(provider, modelIcon)).toBe(expected);
   });
 });
 

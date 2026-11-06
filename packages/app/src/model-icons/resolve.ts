@@ -320,3 +320,38 @@ export function resolveChoiceIconId(input: {
   }
   return resolveModelIconId({ id: input.modelId, label: input.modelLabel });
 }
+
+/**
+ * When the provider chip and the model mark resolve to the same visual family
+ * (Anthropic vs Claude marks, OpenAI vs GPT), showing both is redundant.
+ * Routers are handled upstream: `resolveChoiceIconId` already returns the
+ * router mark, which should stay visible next to the provider.
+ */
+const PROVIDER_VISUAL_MODEL_FAMILY: Readonly<Record<string, string>> = {
+  claude: "anthropic",
+  anthropic: "anthropic",
+  openai: "openai",
+  /** OpenAI Codex uses the same GPT mark as the model row */
+  codex: "openai",
+};
+
+const MODEL_ICON_VISUAL_FAMILY: Readonly<Partial<Record<ModelIconId, string>>> = {
+  claude: "anthropic",
+  anthropic: "anthropic",
+  openai: "openai",
+};
+
+export function shouldHideRedundantModelGlyph(
+  providerId: string,
+  modelIconId: ModelIconId | null,
+): boolean {
+  if (!modelIconId) {
+    return false;
+  }
+  const family = PROVIDER_VISUAL_MODEL_FAMILY[providerId.trim().toLowerCase()];
+  if (!family) {
+    return false;
+  }
+  const modelFamily = MODEL_ICON_VISUAL_FAMILY[modelIconId];
+  return modelFamily !== undefined && modelFamily === family;
+}
