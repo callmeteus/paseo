@@ -749,9 +749,22 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
     [props.textInputRef],
   );
   const syncSkillHighlightScroll = useCallback((offsetY: number) => {
-    highlightShiftRef.current?.setNativeProps({
-      style: { transform: [{ translateY: -offsetY }] },
-    });
+    // `setNativeProps` only exists on native (React Native) views; on web the
+    // ref points at a DOM node, so apply the transform through its style instead.
+    // Calling `setNativeProps` unconditionally crashes on web ("... is not a
+    // function").
+    const node = highlightShiftRef.current as unknown as {
+      setNativeProps?: (props: { style?: { transform?: { translateY: number }[] } }) => void;
+      style?: { transform?: string };
+    } | null;
+    if (!node) return;
+    if (typeof node.setNativeProps === "function") {
+      node.setNativeProps({ style: { transform: [{ translateY: -offsetY }] } });
+      return;
+    }
+    if (node.style) {
+      node.style.transform = `translateY(-${offsetY}px)`;
+    }
   }, []);
   const handleSkillHighlightScroll = useCallback<NonNullable<EditingTextInputProps["onScroll"]>>(
     (event) => {
