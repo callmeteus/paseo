@@ -3655,6 +3655,79 @@ class OpenCodeAgentSession implements AgentSession {
     }
   }
 
+  private async retryOpenCodePromptWithoutImages(
+    errorMsg: string,
+    parts: Array<{ type: string; mime?: string }>,
+    dispatchMessageId: string,
+    model: { providerID: string; modelID: string } | undefined,
+    effectiveMode: string | undefined,
+    effectiveVariant: string | undefined,
+    systemPrompt: string | undefined,
+    options: AgentRunOptions | undefined,
+    turnId: string,
+  ): Promise<boolean> {
+    if (!/does not support image input|cannot read image/i.test(errorMsg)) return false;
+    if (!parts.some((p) => p.type === "file" && (p.mime ?? "").startsWith("image/"))) return false;
+    const strippedParts = parts.filter(
+      (p) => !(p.type === "file" && (p.mime ?? "").startsWith("image/")),
+    ) as typeof parts;
+    if (strippedParts.length === 0) {
+      strippedParts.push({
+        type: "text",
+        text: "(attached image removed: model does not support image input)",
+      } as never);
+    }
+    this.notifySubscribers(
+      {
+        type: "timeline",
+        provider: "opencode",
+        transient: true,
+        item: {
+          type: "error",
+          message: "OpenCode does not support image input; retrying without the attached image(s).",
+        },
+      },
+      turnId,
+    );
+    try {
+      const retryResponse = await this.client.session.promptAsync({
+        sessionID: this.sessionId,
+        directory: this.config.cwd,
+        messageID: dispatchMessageId,
+        parts: strippedParts as never,
+        ...(options?.outputSchema
+          ? {
+              format: {
+                type: "json_schema" as const,
+                schema: options.outputSchema as Record<string, unknown>,
+              },
+            }
+          : {}),
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        ...(model ? { model } : {}),
+        ...(effectiveMode ? { agent: effectiveMode } : {}),
+        ...(effectiveVariant ? { variant: effectiveVariant } : {}),
+      });
+      if (retryResponse.error) {
+        this.finishForegroundTurn(
+          {
+            type: "turn_failed",
+            provider: "opencode",
+            error: toDiagnosticErrorMessage(retryResponse.error),
+          },
+          turnId,
+        );
+      }
+      return true;
+    } catch (retryError) {
+      this.finishForegroundTurn(
+        { type: "turn_failed", provider: "opencode", error: toDiagnosticErrorMessage(retryError) },
+        turnId,
+      );
+      return true;
+    }
+  }
+
   async steerActiveTurn(
     prompt: AgentPromptInput,
     options: SteerActiveTurnOptions,
@@ -4044,11 +4117,24 @@ class OpenCodeAgentSession implements AgentSession {
             data: promptResponse.data,
           });
           if (promptResponse.error) {
+            const errorMsg = toDiagnosticErrorMessage(promptResponse.error);
+            const retried = await this.retryOpenCodePromptWithoutImages(
+              errorMsg,
+              parts,
+              dispatchMessageId,
+              model,
+              effectiveMode,
+              effectiveVariant,
+              systemPrompt,
+              options,
+              turnId,
+            );
+            if (retried) return;
             this.finishForegroundTurn(
               {
                 type: "turn_failed",
                 provider: "opencode",
-                error: toDiagnosticErrorMessage(promptResponse.error),
+                error: errorMsg,
               },
               turnId,
             );

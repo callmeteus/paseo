@@ -2214,13 +2214,25 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");
     }
+    // Some models advertise image support but reject images at runtime with
+    // "Cannot read image (this model does not support image input)". When the
+    // provider explicitly says it has no image capability, drop the images and
+    // keep going with the text instead of failing the whole turn.
+    let effectivePrompt = prompt;
     if (
       promptIncludesImage(prompt) &&
       this.agentCapabilities?.promptCapabilities?.image === false
     ) {
-      throw new Error(
-        `${this.config.provider} does not support image input. Remove the image or switch models.`,
-      );
+      effectivePrompt = stripImagesFromPrompt(prompt);
+      this.pushEvent({
+        type: "timeline",
+        provider: this.provider,
+        transient: true,
+        item: {
+          type: "error",
+          message: `${this.config.provider} does not support image input; continuing without the attached image(s).`,
+        },
+      });
     }
 
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
@@ -2233,7 +2245,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
     this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
-    this.emitSubmittedUserMessage(prompt, messageId, turnId, options?.clientMessageId);
+    this.emitSubmittedUserMessage(effectivePrompt, messageId, turnId, options?.clientMessageId);
     this.armTurnIdleTimeout(turnId);
     this.armTurnFirstActivityTimeout(turnId);
 
@@ -2243,7 +2255,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       // Cursor stores session/prompt as the user message and resends that
       // transcript on later turns. ACP has no system-prompt field, so the
       // Hub note stays on the MCP server instructions instead of this text.
-      prompt: toACPContentBlocks(prompt),
+      prompt: toACPContentBlocks(effectivePrompt),
     });
 
     return { turnId };
@@ -2256,6 +2268,86 @@ export class ACPAgentSession implements AgentSession, ACPClient {
    * as assistant text and then resolves the prompt. Keep the turn open through
    * a short backoff instead of failing work the user already watched run.
    */
+  private async runPromptRetryBackoff(
+    input: { turnId: string; prompt: ContentBlock[] },
+    summary: { message: string; code?: string; diagnostic?: string },
+    attempt: number,
+  ): Promise<boolean> {
+    const retryDelayMs = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[attempt];
+    // An aborted upstream read is how Cursor reports ECONNRESET. Another
+    // provider that rejects with the same text is a real failure.
+    const abortedRead = isRetriableAbortedReadError(summary.message);
+    const shouldRetry =
+      retryDelayMs !== undefined &&
+      !this.closed &&
+      !this.turnCancelRequested &&
+      isRetriableProviderError(summary.message) &&
+      (this.providerId === "cursor" || !abortedRead);
+    if (!shouldRetry) {
+      this.finishTurn({
+        type: "turn_failed",
+        provider: this.provider,
+        error: summary.message,
+        code: summary.code,
+        diagnostic: this.collectDiagnostic(summary.diagnostic ?? summary.message),
+        turnId: input.turnId,
+      });
+      return false;
+    }
+
+    const retryNumber = attempt + 1;
+    const totalAttempts = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1;
+    this.pushEvent({
+      type: "timeline",
+      provider: this.provider,
+      transient: true,
+      turnId: input.turnId,
+      item: {
+        type: "error",
+        message: `${this.providerId} is temporarily unavailable; retrying in ${Math.round(
+          retryDelayMs / 1000,
+        )}s (attempt ${retryNumber + 1}/${totalAttempts})`,
+      },
+    });
+    // The backoff is intended waiting, not a silent provider.
+    this.clearTurnIdleTimeout();
+    this.clearTurnFirstActivityTimeout();
+    await this.waitForPromptRetry(retryDelayMs);
+    if (this.activeForegroundTurnId !== input.turnId) return false;
+    if (this.closed) return false;
+    if (this.turnCancelRequested) {
+      this.finishTurn({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason: "Interrupted",
+        turnId: input.turnId,
+      });
+      return false;
+    }
+    this.armTurnIdleTimeout(input.turnId);
+    return true;
+  }
+
+  private tryStripImagesForUnsupportedError(
+    message: string,
+    input: { turnId: string; prompt: ContentBlock[] },
+  ): boolean {
+    if (!isImageUnsupportedError(message)) return false;
+    if (!input.prompt.some((block) => block.type === "image")) return false;
+    input.prompt = stripImagesFromContentBlocks(input.prompt);
+    this.pushEvent({
+      type: "timeline",
+      provider: this.provider,
+      transient: true,
+      turnId: input.turnId,
+      item: {
+        type: "error",
+        message: `${this.providerId} does not support image input; retrying without the attached image(s).`,
+      },
+    });
+    return true;
+  }
+
   private async runPromptWithRetries(input: {
     turnId: string;
     messageId: string;
@@ -2283,58 +2375,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       } catch (error) {
         if (this.activeForegroundTurnId !== input.turnId) return;
         const summary = summarizeACPRequestError(error);
-        const retryDelayMs = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[attempt];
-        // An aborted upstream read is how Cursor reports ECONNRESET. Another
-        // provider that rejects with the same text is a real failure.
-        const abortedRead = isRetriableAbortedReadError(summary.message);
-        const shouldRetry =
-          retryDelayMs !== undefined &&
-          !this.closed &&
-          !this.turnCancelRequested &&
-          isRetriableProviderError(summary.message) &&
-          (this.providerId === "cursor" || !abortedRead);
-        if (!shouldRetry) {
-          this.finishTurn({
-            type: "turn_failed",
-            provider: this.provider,
-            error: summary.message,
-            code: summary.code,
-            diagnostic: this.collectDiagnostic(summary.diagnostic ?? summary.message),
-            turnId: input.turnId,
-          });
-          return;
+        if (this.tryStripImagesForUnsupportedError(summary.message, input)) {
+          continue;
         }
-
-        const retryNumber = attempt + 1;
-        const totalAttempts = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS.length + 1;
-        this.pushEvent({
-          type: "timeline",
-          provider: this.provider,
-          transient: true,
-          turnId: input.turnId,
-          item: {
-            type: "error",
-            message: `${this.providerId} is temporarily unavailable; retrying in ${Math.round(
-              retryDelayMs / 1000,
-            )}s (attempt ${retryNumber + 1}/${totalAttempts})`,
-          },
-        });
-        // The backoff is intended waiting, not a silent provider.
-        this.clearTurnIdleTimeout();
-        this.clearTurnFirstActivityTimeout();
-        await this.waitForPromptRetry(retryDelayMs);
-        if (this.activeForegroundTurnId !== input.turnId) return;
-        if (this.closed) return;
-        if (this.turnCancelRequested) {
-          this.finishTurn({
-            type: "turn_canceled",
-            provider: this.provider,
-            reason: "Interrupted",
-            turnId: input.turnId,
-          });
-          return;
-        }
-        this.armTurnIdleTimeout(input.turnId);
+        const shouldContinue = await this.runPromptRetryBackoff(input, summary, attempt);
+        if (shouldContinue) continue;
+        return;
       }
     }
   }
@@ -3669,6 +3715,15 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return true;
   }
 
+  private holdImageUnsupportedError(text: string): boolean {
+    if (this.replayingHistory || this.activeForegroundTurnId === null) return false;
+    if (!isImageUnsupportedError(text)) return false;
+    const trimmed = text.trim();
+    if (trimmed.length === 0 || trimmed.length > 400) return false;
+    this.retriableAssistantFailure = trimmed;
+    return true;
+  }
+
   private createMessageTimelineItem(
     type: "assistant_message" | "reasoning",
     update: Extract<
@@ -3688,7 +3743,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       if (text === null || text.length === 0) {
         return null;
       }
-      if (this.holdRetriableAbortedRead(text)) {
+      if (this.holdRetriableAbortedRead(text) || this.holdImageUnsupportedError(text)) {
         return null;
       }
       return {
@@ -4236,6 +4291,32 @@ function normalizeMcpServers(servers?: Record<string, McpServerConfig>): McpServ
 
 function promptIncludesImage(prompt: AgentPromptInput): boolean {
   return typeof prompt !== "string" && prompt.some((block) => block.type === "image");
+}
+
+function stripImagesFromPrompt(prompt: AgentPromptInput): AgentPromptInput {
+  if (typeof prompt === "string") return prompt;
+  const stripped = prompt.filter((block) => block.type !== "image");
+  if (stripped.length === 0) {
+    return [{ type: "text", text: "(attached image removed: model does not support image input)" }];
+  }
+  return stripped;
+}
+
+export function isImageUnsupportedError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("does not support image input") ||
+    normalized.includes("cannot read image") ||
+    (normalized.includes("image input") && normalized.includes("not support"))
+  );
+}
+
+function stripImagesFromContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  const stripped = blocks.filter((block) => block.type !== "image");
+  if (stripped.length === 0) {
+    return [{ type: "text", text: "(attached image removed: model does not support image input)" }];
+  }
+  return stripped;
 }
 
 function toACPContentBlocks(prompt: AgentPromptInput): ContentBlock[] {

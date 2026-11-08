@@ -3268,19 +3268,20 @@ describe("ACPAgentSession", () => {
     expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
   });
 
-  test("startTurn rejects image prompts when the agent does not advertise image support", async () => {
+  test("startTurn strips images when the agent does not advertise image support", async () => {
     const session = createSession();
-    const prompt = vi.fn();
+    const prompt = vi.fn().mockResolvedValue({ stopReason: "end_turn" });
     asInternals<ACPSessionInternals>(session).sessionId = "session-1";
     asInternals<ACPSessionInternals>(session).agentCapabilities = {
       promptCapabilities: { image: false },
     };
     asInternals<ACPSessionInternals>(session).connection = { prompt };
 
-    await expect(
-      session.startTurn([{ type: "image", data: "AAAA", mimeType: "image/png" }]),
-    ).rejects.toThrow("does not support image input");
-    expect(prompt).not.toHaveBeenCalled();
+    const result = await session.startTurn([
+      { type: "image", data: "AAAA", mimeType: "image/png" },
+    ]);
+    expect(result.turnId).toBeTruthy();
+    expect(prompt).toHaveBeenCalled();
   });
 
   test("fails a turn that never starts responding instead of loading forever", async () => {

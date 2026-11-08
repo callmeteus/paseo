@@ -1829,6 +1829,7 @@ describe("OpenCode adapter startTurn error handling", () => {
       expect(events).toContainEqual({
         type: "timeline",
         provider: "opencode",
+        transient: true,
         item: {
           type: "error",
           message: "Provider retry (attempt 1): model does not exist",
