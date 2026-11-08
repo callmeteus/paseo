@@ -14,6 +14,9 @@ export const HUB_GITHUB_CLONE_URL = "https://github.com/callmeteus/paseo-hub.git
  */
 export const LOCAL_HUB_PORT = "25000";
 export const LOCAL_HUB_ORIGIN = `http://127.0.0.1:${LOCAL_HUB_PORT}`;
+/** How long a start may sit on /health before the installer gives up. */
+export const LOCAL_HUB_READY_TIMEOUT_MS = 90_000;
+const HEALTH_POLL_INTERVAL_MS = 1_000;
 
 export interface HubLocalInstallState {
   installed: boolean;
@@ -74,6 +77,19 @@ export function hubInstallPercent(phase: HubLocalInstallPhase, lines: number): n
   const ceiling = PHASE_CEILING[phase];
   const extra = Math.min(ceiling - floor, Math.floor(Math.max(0, lines) / 4));
   return floor + extra;
+}
+
+/**
+ * Bar position while /health is still failing.
+ *
+ * @param waitedMs - Time since the process was spawned
+ * @returns Integer from the starting floor through the starting ceiling
+ */
+export function hubStartupWaitPercent(waitedMs: number): number {
+  const floor = PHASE_FLOOR.starting;
+  const ceiling = PHASE_CEILING.starting;
+  const ratio = Math.min(1, Math.max(0, waitedMs) / LOCAL_HUB_READY_TIMEOUT_MS);
+  return floor + Math.floor(ratio * (ceiling - floor));
 }
 
 /**
@@ -166,7 +182,7 @@ async function runInstall(
     return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
   }
   if (built) {
-    return startBuiltHub(dependencies, checkout, dataDirectory, report);
+    return startBuiltHub(dependencies, checkout, dataDirectory, onProgress);
   }
 
   await mkdir(checkout, { recursive: true });
@@ -205,7 +221,9 @@ async function runInstall(
   if (!alreadyRunning) {
     report("starting");
     await dependencies.start(checkout, dataDirectory, tools.node);
-    const healthy = await waitForHealth(dependencies.probeHealth);
+    const healthy = await waitForHealth(dependencies.probeHealth, (waitedMs) => {
+      onProgress({ phase: "starting", percent: hubStartupWaitPercent(waitedMs) });
+    });
     if (!healthy) {
       throw new Error("Hub did not become ready.");
     }
@@ -223,25 +241,27 @@ async function runInstall(
  * @param dependencies - Process hooks
  * @param checkout - Existing Hub checkout
  * @param dataDirectory - Hub data directory
- * @param report - Progress callback
+ * @param onProgress - Progress callback
  * @returns Running install state
  */
 async function startBuiltHub(
   dependencies: HubLocalInstallerDependencies,
   checkout: string,
   dataDirectory: string,
-  report: (phase: HubLocalInstallPhase, lines?: number) => void,
+  onProgress: (progress: HubLocalInstallProgress) => void,
 ): Promise<HubLocalInstallState> {
   const tools = dependencies.resolveTools
     ? await dependencies.resolveTools()
     : await resolveInstallTools();
-  report("starting");
+  onProgress({ phase: "starting", percent: hubInstallPercent("starting", 0) });
   await dependencies.start(checkout, dataDirectory, tools.node);
-  const healthy = await waitForHealth(dependencies.probeHealth);
+  const healthy = await waitForHealth(dependencies.probeHealth, (waitedMs) => {
+    onProgress({ phase: "starting", percent: hubStartupWaitPercent(waitedMs) });
+  });
   if (!healthy) {
     throw new Error("Hub did not become ready.");
   }
-  report("ready");
+  onProgress({ phase: "ready", percent: hubInstallPercent("ready", 0) });
   return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
 }
 
@@ -328,10 +348,18 @@ function isHealthOk(body: unknown): boolean {
   return typeof body === "object" && body !== null && "ok" in body && body.ok === true;
 }
 
-async function waitForHealth(probe: (origin: string) => Promise<boolean>): Promise<boolean> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+async function waitForHealth(
+  probe: (origin: string) => Promise<boolean>,
+  onWait: (waitedMs: number) => void,
+): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < LOCAL_HUB_READY_TIMEOUT_MS) {
     if (await probe(LOCAL_HUB_ORIGIN)) return true;
-    await delay(1_000);
+    const waitedMs = Date.now() - startedAt;
+    if (waitedMs >= LOCAL_HUB_READY_TIMEOUT_MS) return false;
+    onWait(waitedMs);
+    const remainingMs = LOCAL_HUB_READY_TIMEOUT_MS - waitedMs;
+    await delay(Math.min(HEALTH_POLL_INTERVAL_MS, remainingMs));
   }
   return false;
 }

@@ -2,8 +2,10 @@ import { expect, test } from "vitest";
 import {
   HUB_GITHUB_CLONE_URL,
   LOCAL_HUB_ORIGIN,
+  LOCAL_HUB_READY_TIMEOUT_MS,
   createHubLocalInstaller,
   hubInstallPercent,
+  hubStartupWaitPercent,
   installToolPaths,
   type HubInstallCommand,
   type HubLocalInstallerDependencies,
@@ -15,6 +17,13 @@ test("install percent stays inside the phase range", () => {
   expect(hubInstallPercent("downloading", 100)).toBe(39);
   expect(hubInstallPercent("installing", 8)).toBe(42);
   expect(hubInstallPercent("ready", 0)).toBe(100);
+});
+
+test("startup wait percent climbs across the 90 second health window", () => {
+  expect(LOCAL_HUB_READY_TIMEOUT_MS).toBe(90_000);
+  expect(hubStartupWaitPercent(0)).toBe(88);
+  expect(hubStartupWaitPercent(45_000)).toBe(93);
+  expect(hubStartupWaitPercent(LOCAL_HUB_READY_TIMEOUT_MS)).toBe(99);
 });
 
 test("install clones callmeteus/paseo-hub, builds it, and starts it", async () => {

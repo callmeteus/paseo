@@ -8,6 +8,7 @@ import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AutomationsHubFrame } from "@/automations/automations-hub-frame";
+import { hubStartStatusId } from "@/automations/hub-start-status";
 import { HubDaemonLink } from "@/automations/hub-daemon-link";
 import {
   resolveAutomationsView,
@@ -494,12 +495,46 @@ function AutomationsBody({
   );
 }
 
+function useStartingElapsed(phase: HubLocalInstallPhase): number {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (phase !== "starting") return;
+    const startedAt = Date.now();
+    setElapsedMs(0);
+    const timer = setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 1_000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [phase]);
+  if (phase !== "starting") return 0;
+  return elapsedMs;
+}
+
+function installProgressLabel(input: {
+  progress: InstallProgress;
+  elapsedMs: number;
+  translate: (key: string) => string;
+}): string {
+  if (input.progress.phase !== "starting") {
+    const phaseLabel = input.translate(`sidebar.automationsPage.progress.${input.progress.phase}`);
+    return `${phaseLabel} ${String(input.progress.percent)}%`;
+  }
+  const statusId = hubStartStatusId(input.elapsedMs);
+  const statusLabel = input.translate(`sidebar.automationsPage.progress.${statusId}`);
+  if (statusId === "starting") return `${statusLabel} ${String(input.progress.percent)}%`;
+  return statusLabel;
+}
+
 function InstallProgressBar({ progress }: { progress: InstallProgress }): ReactElement {
   const { t } = useTranslation();
-  const phaseLabel = t(`sidebar.automationsPage.progress.${progress.phase}`);
+  const elapsedMs = useStartingElapsed(progress.phase);
   return (
     <View style={styles.progressBlock} testID="automations-progress">
-      <Text style={styles.emptyDescription}>{`${phaseLabel} ${String(progress.percent)}%`}</Text>
+      <Text style={styles.emptyDescription}>
+        {installProgressLabel({ progress, elapsedMs, translate: t })}
+      </Text>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progress.percent}%` }]} />
       </View>
