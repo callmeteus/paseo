@@ -391,8 +391,20 @@ export function isRetriableProviderError(message: string): boolean {
     normalized.includes("deadline_exceeded") ||
     normalized.includes("[unavailable]") ||
     normalized.includes("high load") ||
-    isRetriableAbortedReadError(message)
+    isRetriableAbortedReadError(message) ||
+    isRetriableHttp2CancelError(message)
   );
+}
+
+// The failure is one short line. A transcript that quotes it is not a retry.
+const RETRIABLE_TRANSPORT_FAILURE_MAX_LENGTH = 400;
+
+function normalizeShortTransportFailure(message: string): string | null {
+  const normalized = message.trim().toLowerCase();
+  if (normalized.length === 0 || normalized.length > RETRIABLE_TRANSPORT_FAILURE_MAX_LENGTH) {
+    return null;
+  }
+  return normalized;
 }
 
 /**
@@ -408,9 +420,8 @@ export function isRetriableProviderError(message: string): boolean {
  * @returns Whether the text is that retriable aborted read
  */
 export function isRetriableAbortedReadError(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-  // The failure is one short line. A transcript that quotes it is not a retry.
-  if (normalized.length === 0 || normalized.length > 400) return false;
+  const normalized = normalizeShortTransportFailure(message);
+  if (normalized === null) return false;
   const mentionsReset = normalized.includes("econnreset") || normalized.includes("[aborted] read");
   if (!mentionsReset) return false;
   if (hasRetriableErrorClass(normalized)) return true;
@@ -419,6 +430,31 @@ export function isRetriableAbortedReadError(message: string): boolean {
     normalized.includes("[aborted] read") &&
     normalized.includes("econnreset")
   );
+}
+
+/**
+ * Cursor reports an upstream HTTP/2 RST_STREAM CANCEL the same way: one
+ * assistant chunk,
+ * `Error: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)`,
+ * then the prompt resolves. Code 0x8 is the peer cancelling the stream, not
+ * the user stopping the turn.
+ *
+ * @param message - Assistant chunk or prompt error text
+ * @returns Whether the text is that retriable HTTP/2 cancel
+ */
+export function isRetriableHttp2CancelError(message: string): boolean {
+  const normalized = normalizeShortTransportFailure(message);
+  if (normalized === null) return false;
+  const mentionsCancel =
+    normalized.includes("http/2 stream closed") &&
+    (normalized.includes("[canceled]") || normalized.includes("error code cancel"));
+  if (!mentionsCancel) return false;
+  if (hasRetriableErrorClass(normalized)) return true;
+  return normalized.startsWith("internal error") && normalized.includes("[canceled]");
+}
+
+function isRetriableCursorTransportFailure(message: string): boolean {
+  return isRetriableAbortedReadError(message) || isRetriableHttp2CancelError(message);
 }
 
 function resolveTurnIdleLimitMs(provider: string, options: AgentRunOptions | undefined): number {
@@ -2264,9 +2300,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   /**
    * Cursor rejects a long turn with `RetriableError: [resource_exhausted]` when
    * its provider is briefly out of capacity, after its own retries are spent.
-   * An aborted upstream read is the same kind of failure, but Cursor writes it
-   * as assistant text and then resolves the prompt. Keep the turn open through
-   * a short backoff instead of failing work the user already watched run.
+   * An aborted upstream read and an HTTP/2 stream CANCEL are the same kind of
+   * failure, but Cursor writes them as assistant text and then resolves the
+   * prompt. Keep the turn open through a short backoff instead of failing work
+   * the user already watched run.
    */
   private async runPromptRetryBackoff(
     input: { turnId: string; prompt: ContentBlock[] },
@@ -2274,15 +2311,16 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     attempt: number,
   ): Promise<boolean> {
     const retryDelayMs = ACP_RETRIABLE_PROMPT_RETRY_DELAYS_MS[attempt];
-    // An aborted upstream read is how Cursor reports ECONNRESET. Another
-    // provider that rejects with the same text is a real failure.
-    const abortedRead = isRetriableAbortedReadError(summary.message);
+    // An aborted read and an HTTP/2 CANCEL are how Cursor reports a dropped
+    // upstream stream. Another provider that rejects with the same text is
+    // a real failure.
+    const cursorTransportFailure = isRetriableCursorTransportFailure(summary.message);
     const shouldRetry =
       retryDelayMs !== undefined &&
       !this.closed &&
       !this.turnCancelRequested &&
       isRetriableProviderError(summary.message) &&
-      (this.providerId === "cursor" || !abortedRead);
+      (this.providerId === "cursor" || !cursorTransportFailure);
     if (!shouldRetry) {
       this.finishTurn({
         type: "turn_failed",
@@ -2365,10 +2403,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
           prompt: input.prompt,
         });
         if (this.activeForegroundTurnId !== input.turnId) return;
-        const abortedRead = this.retriableAssistantFailure;
+        const transportFailure = this.retriableAssistantFailure;
         this.retriableAssistantFailure = null;
-        if (abortedRead && !this.closed && !this.turnCancelRequested) {
-          throw new Error(abortedRead);
+        if (transportFailure && !this.closed && !this.turnCancelRequested) {
+          throw new Error(transportFailure);
         }
         this.handlePromptResponse(response, input.turnId);
         return;
@@ -3700,17 +3738,17 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   /**
-   * Cursor reports an aborted upstream read as assistant text, then resolves
+   * Cursor reports a dropped upstream stream as assistant text, then resolves
    * the prompt. Hold that line off the timeline so the prompt retry can run
    * before the turn is shown as a dead provider.
    *
    * @param text - Assistant chunk that would otherwise be shown
    * @returns Whether the chunk was held for retry
    */
-  private holdRetriableAbortedRead(text: string): boolean {
+  private holdRetriableTransportFailure(text: string): boolean {
     if (this.replayingHistory || this.activeForegroundTurnId === null) return false;
     if (this.providerId !== "cursor") return false;
-    if (!isRetriableAbortedReadError(text)) return false;
+    if (!isRetriableCursorTransportFailure(text)) return false;
     this.retriableAssistantFailure = text.trim();
     return true;
   }
@@ -3743,7 +3781,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       if (text === null || text.length === 0) {
         return null;
       }
-      if (this.holdRetriableAbortedRead(text) || this.holdImageUnsupportedError(text)) {
+      if (this.holdRetriableTransportFailure(text) || this.holdImageUnsupportedError(text)) {
         return null;
       }
       return {
