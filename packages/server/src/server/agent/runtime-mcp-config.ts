@@ -36,10 +36,13 @@ export function withRuntimePaseoMcpServer(params: {
    * this header the agent's MCP requests are rejected when a password is set.
    */
   mcpAuthToken: string | null;
+  sharedMcpServers?: Record<string, McpServerConfig> | null;
 }): AgentSessionConfig {
   const storedConfig = stripInternalPaseoMcpServer(params.config);
-  if (!params.mcpBaseUrl || storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
-    return storedConfig;
+  const shared = params.sharedMcpServers ?? {};
+  const mergedServers = { ...shared, ...storedConfig.mcpServers };
+  if (!params.mcpBaseUrl || mergedServers[PASEO_MCP_SERVER_NAME]) {
+    return { ...storedConfig, ...(Object.keys(mergedServers).length ? { mcpServers: mergedServers } : {}) };
   }
 
   return {
@@ -52,7 +55,7 @@ export function withRuntimePaseoMcpServer(params: {
           ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } }
           : {}),
       },
-      ...storedConfig.mcpServers,
+      ...mergedServers,
     },
   };
 }

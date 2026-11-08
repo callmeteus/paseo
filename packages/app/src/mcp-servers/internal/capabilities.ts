@@ -1,4 +1,4 @@
-interface McpServersCapabilities {
+export interface McpServersCapabilities {
   mcpServers?: boolean;
 }
 
