@@ -12,11 +12,14 @@ import { MAX_PORTED_TRANSCRIPT_CHARS } from "./agent-provider-swap.js";
 import { PORTED_CONTEXT_MARKER, preserveSuffixSystemPrompt } from "./system-prompt.js";
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
 
-type SnapshotAgentManager = Pick<AgentManager, "createAgent" | "getTimeline">;
+type SnapshotAgentManager = Pick<
+  AgentManager,
+  "createAgent" | "getTimeline" | "getSearchableTimelineRows"
+>;
 
 export interface ExportAgentSnapshotInput {
   storage: Pick<AgentStorage, "get">;
-  agentManager: Pick<AgentManager, "getAgent" | "getTimeline">;
+  agentManager: Pick<AgentManager, "getAgent" | "getTimeline" | "getSearchableTimelineRows">;
   agentId: string;
 }
 
@@ -111,9 +114,21 @@ export async function exportAgentSnapshot(input: ExportAgentSnapshotInput): Prom
   if (!record) {
     throw new AgentSnapshotTransferError("agent.notFound", `Agent ${input.agentId} not found`);
   }
-  const items = input.agentManager.getAgent(input.agentId)
-    ? input.agentManager.getTimeline(input.agentId)
-    : [];
+  let items: AgentTimelineItem[] = [];
+  if (input.agentManager.getAgent(input.agentId)) {
+    items = input.agentManager.getTimeline(input.agentId);
+  }
+  if (items.length === 0) {
+    // Fall back to the durable store when the in-memory timeline is empty (a
+    // chat that was never opened in this daemon, or one whose provider history
+    // has not been hydrated yet).
+    try {
+      const rows = await input.agentManager.getSearchableTimelineRows(input.agentId);
+      if (rows.length > 0) items = rows.map((row) => row.item);
+    } catch {
+      // keep empty
+    }
+  }
   return {
     version: "paseo.agent-snapshot/v1",
     agentId: record.id,

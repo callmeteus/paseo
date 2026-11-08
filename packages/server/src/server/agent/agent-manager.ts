@@ -59,6 +59,7 @@ import {
   type AgentRunResult,
   type AgentSession,
   type AgentSessionConfig,
+  type McpServerConfig,
   type SteerResult,
   type AgentStreamEvent,
   type AgentTimelineItem,
@@ -1153,6 +1154,7 @@ export class AgentManager {
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
+  private sharedMcpServers: Record<string, McpServerConfig> | null = null;
   private readonly mcpAuthToken: string | null;
   private debugIngestBaseUrl: string | null = null;
   private readonly paseoHome: string | undefined;
@@ -1273,6 +1275,10 @@ export class AgentManager {
 
   setMcpBaseUrl(url: string | null): void {
     this.mcpBaseUrl = url;
+  }
+
+  setSharedMcpServers(servers: Record<string, McpServerConfig> | null): void {
+    this.sharedMcpServers = servers;
   }
 
   setDebugIngestBaseUrl(url: string | null): void {
@@ -5407,6 +5413,56 @@ export class AgentManager {
     this.emitState(agent);
   }
 
+  private async loadPreviousRowsForPort(
+    agentId: string,
+    registry: AgentStorage,
+  ): Promise<AgentTimelineRow[]> {
+    let previousRows: AgentTimelineRow[] = this.timelineStore.has(agentId)
+      ? this.timelineStore.getRows(agentId)
+      : [];
+    if (previousRows.length === 0 && this.durableTimelineStore) {
+      try {
+        const committed = await this.durableTimelineStore.getCommittedRows(agentId);
+        if (committed.length > 0) {
+          previousRows = committed.map((row) => row) as AgentTimelineRow[];
+        }
+      } catch (error) {
+        this.logger.warn({ err: error, agentId }, "Failed to read durable timeline before porting");
+      }
+    }
+    if (previousRows.length === 0) {
+      const imported = await registry.get(agentId);
+      if (imported && isCursorImportedRecord(imported)) {
+        previousRows = this.fetchImportedTimeline(
+          agentId,
+          (imported.portedTimeline ?? []) as AgentTimelineRow[],
+          { limit: 0 },
+        ).rows;
+      }
+    }
+    if (previousRows.length === 0) {
+      try {
+        await this.hydrateTimelineFromProvider(agentId, {
+          force: true,
+          broadcast: false,
+          broadcastTimeline: false,
+        });
+      } catch (error) {
+        this.logger.warn({ err: error, agentId }, "Failed to hydrate timeline before porting");
+      }
+      previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
+      if (previousRows.length === 0 && this.durableTimelineStore) {
+        try {
+          const committed = await this.durableTimelineStore.getCommittedRows(agentId);
+          if (committed.length > 0) previousRows = committed as AgentTimelineRow[];
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return previousRows;
+  }
+
   async swapProvider(
     agentId: string,
     targetProvider: string,
@@ -5419,33 +5475,7 @@ export class AgentManager {
     },
   ): Promise<{ newAgentId: string; previousAgentId: string }> {
     const registry = this.requireRegistry();
-    let previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
-    if (previousRows.length === 0) {
-      const imported = await registry.get(agentId);
-      // An imported transcript has no provider to hydrate from; its durable
-      // rows are the transcript the port must carry.
-      if (imported && isCursorImportedRecord(imported)) {
-        previousRows = this.fetchImportedTimeline(
-          agentId,
-          (imported.portedTimeline ?? []) as AgentTimelineRow[],
-          { limit: 0 },
-        ).rows;
-      }
-    }
-    if (previousRows.length === 0) {
-      // A chat that was never opened in this daemon has no live rows. Without
-      // the provider history the port would silently drop the transcript.
-      try {
-        await this.hydrateTimelineFromProvider(agentId, {
-          force: true,
-          broadcast: false,
-          broadcastTimeline: false,
-        });
-      } catch (error) {
-        this.logger.warn({ err: error, agentId }, "Failed to hydrate timeline before porting");
-      }
-      previousRows = this.timelineStore.has(agentId) ? this.timelineStore.getRows(agentId) : [];
-    }
+    let previousRows: AgentTimelineRow[] = await this.loadPreviousRowsForPort(agentId, registry);
     const previousItems = previousRows.map((row) => row.item);
     const existing = await registry.get(agentId);
     const portedAt = new Date().toISOString();
@@ -6920,6 +6950,7 @@ export class AgentManager {
         agentId,
         mcpBaseUrl: this.mcpBaseUrl,
         mcpAuthToken: this.mcpAuthToken,
+        sharedMcpServers: this.sharedMcpServers,
       }),
     );
     // Daemon-level workflow mode prompt (Ask/Debug/Multitask/Agent). Composed
