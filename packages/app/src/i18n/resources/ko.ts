@@ -823,6 +823,18 @@ export const ko: TranslationResources = {
           moved: "채팅을 {{workspace}}(으)로 이동했습니다",
           failed: "채팅을 이동하지 못했습니다",
         },
+        dropToWorkspace: {
+          title: "Move or copy tab",
+          message: "What should happen with “{{agent}}”?",
+          move: "Move to {{workspace}}",
+          moveHint: "Removes the tab from its current workspace.",
+          copy: "Copy to {{workspace}}",
+          copyHint: "Creates a new tab with the same settings in {{workspace}}.",
+          moved: "Chat moved to {{workspace}}",
+          copied: "Chat copied to {{workspace}}",
+          moveFailed: "Could not move the chat",
+          copyFailed: "Could not copy the chat",
+        },
         promoteChat: {
           title: "워크스페이스로 승격",
           body: "{{cwd}}에 워크스페이스를 만들고 이 채팅을 이동합니다. 하위 에이전트라면 독립 에이전트가 됩니다.",

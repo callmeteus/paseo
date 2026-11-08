@@ -829,6 +829,18 @@ export const ptBR: TranslationResources = {
           moved: "Chat movido para {{workspace}}",
           failed: "Não foi possível mover o chat",
         },
+        dropToWorkspace: {
+          title: "Mover ou copiar aba",
+          message: "O que fazer com “{{agent}}”?",
+          move: "Mover para {{workspace}}",
+          moveHint: "Remove a aba do workspace atual.",
+          copy: "Copiar para {{workspace}}",
+          copyHint: "Cria uma nova aba com as mesmas configurações em {{workspace}}.",
+          moved: "Chat movido para {{workspace}}",
+          copied: "Chat copiado para {{workspace}}",
+          moveFailed: "Não foi possível mover o chat",
+          copyFailed: "Não foi possível copiar o chat",
+        },
         promoteChat: {
           title: "Promover a workspace",
           body: "Cria um workspace em {{cwd}} e move este chat para lá. Se for um subagente, ele deixa de ser filho.",

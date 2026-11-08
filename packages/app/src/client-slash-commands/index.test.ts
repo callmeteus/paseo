@@ -101,7 +101,12 @@ describe("resolveClientSlashCommand", () => {
     expect(
       resolveClientSlashCommand({ text: "/provider-command", hasAttachments: false }),
     ).toBeNull();
-    expect(resolveClientSlashCommand({ text: "hello /quit", hasAttachments: false })).toBeNull();
+    expect(resolveClientSlashCommand({ text: "hello /quit", hasAttachments: false })).toMatchObject(
+      {
+        name: "exit",
+        kind: "archive-agent",
+      },
+    );
     expect(resolveClientSlashCommand({ text: "/quit", hasAttachments: true })).toBeNull();
   });
 });

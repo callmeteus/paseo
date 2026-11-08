@@ -818,6 +818,18 @@ export const ar: TranslationResources = {
           moved: "تم نقل المحادثة إلى {{workspace}}",
           failed: "تعذر نقل المحادثة",
         },
+        dropToWorkspace: {
+          title: "Move or copy tab",
+          message: "What should happen with “{{agent}}”?",
+          move: "Move to {{workspace}}",
+          moveHint: "Removes the tab from its current workspace.",
+          copy: "Copy to {{workspace}}",
+          copyHint: "Creates a new tab with the same settings in {{workspace}}.",
+          moved: "Chat moved to {{workspace}}",
+          copied: "Chat copied to {{workspace}}",
+          moveFailed: "Could not move the chat",
+          copyFailed: "Could not copy the chat",
+        },
         promoteChat: {
           title: "ترقية إلى مساحة عمل",
           body: "ينشئ مساحة عمل في {{cwd}} وينقل هذه المحادثة إليها. إذا كان وكيلًا فرعيًا فسيصبح مستقلًا.",

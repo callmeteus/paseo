@@ -42,6 +42,7 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
+import { GoalCompleteNotice } from "@/components/goal-complete-notice";
 import { ProviderErrorCard } from "@/components/provider-error-card";
 import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
@@ -1168,6 +1169,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 />
               );
             }
+            const goalCompletePrefix = t("goalNotice.complete", { objective: "" });
+            if (item.message.startsWith(goalCompletePrefix)) {
+              return <GoalCompleteNotice message={item.message} />;
+            }
             return <Notification level={item.level} message={item.message} />;
           }
 
@@ -1206,6 +1211,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         resolvedServerId,
         context.provider,
         limitResumeItemId,
+        t,
       ],
     );
 

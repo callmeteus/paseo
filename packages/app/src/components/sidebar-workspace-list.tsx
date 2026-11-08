@@ -181,6 +181,10 @@ import {
   setSidebarScrollOffset,
   useSidebarRevealRequest,
 } from "@/components/sidebar/sidebar-reveal";
+import {
+  registerSidebarWorkspaceDropTarget,
+  useHoveredSidebarWorkspaceDropTarget,
+} from "@/components/sidebar/workspace-drop-targets";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
@@ -489,11 +493,13 @@ function getProjectWorkspaceRowStyle({
   isPressed,
   selected,
   isHovered,
+  isDropTarget = false,
 }: {
   isDragging: boolean;
   isPressed: boolean;
   selected: boolean;
   isHovered: boolean;
+  isDropTarget?: boolean;
 }) {
   return [
     styles.workspaceRow,
@@ -501,6 +507,7 @@ function getProjectWorkspaceRowStyle({
     selected && styles.sidebarRowSelected,
     isDragging && styles.workspaceRowDragging,
     isPressed && styles.workspaceRowPressed,
+    isDropTarget && styles.workspaceRowDropTarget,
   ];
 }
 
@@ -1241,6 +1248,7 @@ function WorkspaceRowInner({
   const isCompact = useIsCompactFormFactor();
   const [isPressed, setIsPressed] = useState(false);
   const isTouchPlatform = platformIsNative || isCompact;
+  const isDropTarget = useHoveredSidebarWorkspaceDropTarget() === workspace.workspaceKey;
   const interaction = useLongPressDragInteraction({
     drag,
     menuController,
@@ -1275,9 +1283,15 @@ function WorkspaceRowInner({
   const setRowNode = useCallback(
     (node: View | null) => {
       registerSidebarRowNode(workspace.workspaceKey, node);
+      registerSidebarWorkspaceDropTarget({
+        workspaceKey: workspace.workspaceKey,
+        serverId: workspace.serverId,
+        workspaceId: workspace.workspaceId,
+        node,
+      });
       dragHandleProps?.setActivatorNodeRef?.(node);
     },
-    [dragHandleProps, workspace.workspaceKey],
+    [dragHandleProps, workspace.serverId, workspace.workspaceId, workspace.workspaceKey],
   );
 
   return (
@@ -1290,6 +1304,7 @@ function WorkspaceRowInner({
           isPressed,
           selected,
           isHovered,
+          isDropTarget,
         });
         const backdrop = getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered });
         return (
@@ -3156,6 +3171,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspaceRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  workspaceRowDropTarget: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+    borderWidth: 1,
+    borderColor: theme.colors.borderAccent,
   },
   workspaceRowPressed: {
     backgroundColor: theme.colors.surface2,

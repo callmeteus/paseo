@@ -830,6 +830,18 @@ export const ja: TranslationResources = {
           moved: "チャットを {{workspace}} へ移動しました",
           failed: "チャットを移動できませんでした",
         },
+        dropToWorkspace: {
+          title: "Move or copy tab",
+          message: "What should happen with “{{agent}}”?",
+          move: "Move to {{workspace}}",
+          moveHint: "Removes the tab from its current workspace.",
+          copy: "Copy to {{workspace}}",
+          copyHint: "Creates a new tab with the same settings in {{workspace}}.",
+          moved: "Chat moved to {{workspace}}",
+          copied: "Chat copied to {{workspace}}",
+          moveFailed: "Could not move the chat",
+          copyFailed: "Could not copy the chat",
+        },
         promoteChat: {
           title: "ワークスペースへ昇格",
           body: "{{cwd}} にワークスペースを作成し、このチャットを移動します。サブエージェントの場合は独立します。",

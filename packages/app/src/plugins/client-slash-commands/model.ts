@@ -51,10 +51,15 @@ export function resolvePluginClientSlashCommand<Command extends SlashCommandDesc
   commands: readonly Command[];
 }): { command: Command; args: string } | null {
   if (input.hasAttachments) return null;
-  const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(input.text.trim());
+  // A plugin slash command can be invoked anywhere in the message, not only at
+  // the very start, so scan for a `/name` token regardless of leading text.
+  const match = /(?:^|\s)\/([^\s]+)/.exec(input.text);
   if (!match) return null;
   const command = input.commands.find((candidate) => candidate.name === match[1]);
-  return command ? { command, args: (match[2] ?? "").trim() } : null;
+  if (!command) return null;
+  const tokenEnd = match.index + match[0].length;
+  const args = input.text.slice(tokenEnd).trim();
+  return { command, args };
 }
 
 export function executePluginClientSlashCommand(input: {

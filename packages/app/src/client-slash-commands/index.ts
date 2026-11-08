@@ -51,17 +51,31 @@ export function resolveClientSlashCommand(input: {
     return null;
   }
 
-  const trimmed = input.text.trim();
-  if (!trimmed.startsWith("/")) {
+  // A client slash command can be invoked anywhere in the message, not only at
+  // the very start, so scan for a `/name` token regardless of leading text.
+  const tokenMatch = /(?:^|\s)\/([^\s]+)/.exec(input.text);
+  if (!tokenMatch) {
     return null;
   }
 
-  const commandName = trimmed.slice(1);
-  if (!commandName || /\s/.test(commandName)) {
+  const commandName = tokenMatch[1];
+  if (!commandName) {
     return null;
   }
 
-  return COMMAND_BY_NAME.get(commandName) ?? null;
+  const command = COMMAND_BY_NAME.get(commandName);
+  if (!command) {
+    return null;
+  }
+
+  // Client commands take no arguments: reject when trailing text follows the
+  // command token.
+  const tokenEnd = tokenMatch.index + tokenMatch[0].length;
+  if (input.text.slice(tokenEnd).trim().length > 0) {
+    return null;
+  }
+
+  return command;
 }
 
 export function buildDraftAgentSetup(agent: Agent): WorkspaceDraftTabSetup {

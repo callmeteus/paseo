@@ -817,6 +817,18 @@ export const zhCN: TranslationResources = {
           moved: "聊天已移动到 {{workspace}}",
           failed: "无法移动聊天",
         },
+        dropToWorkspace: {
+          title: "Move or copy tab",
+          message: "What should happen with “{{agent}}”?",
+          move: "Move to {{workspace}}",
+          moveHint: "Removes the tab from its current workspace.",
+          copy: "Copy to {{workspace}}",
+          copyHint: "Creates a new tab with the same settings in {{workspace}}.",
+          moved: "Chat moved to {{workspace}}",
+          copied: "Chat copied to {{workspace}}",
+          moveFailed: "Could not move the chat",
+          copyFailed: "Could not copy the chat",
+        },
         promoteChat: {
           title: "提升为工作区",
           body: "在 {{cwd}} 创建工作区，并将此聊天移动到那里。如果是子代理，它将变为独立代理。",

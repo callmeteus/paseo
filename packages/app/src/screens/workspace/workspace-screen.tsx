@@ -151,6 +151,7 @@ import {
 import { AgentChatExportHost } from "@/screens/workspace/agent-chat-export-host";
 import { AgentForkRequestHost } from "@/screens/workspace/agent-fork-request-host";
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
+import { TabDropToWorkspaceSheet } from "@/screens/workspace/tab-drop-to-workspace-sheet";
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
 import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
@@ -3996,6 +3997,7 @@ function WorkspaceScreenContent({
         <AgentForkRequestHost serverId={normalizedServerId} workspaceId={normalizedWorkspaceId} />
         <AgentChatExportHost serverId={normalizedServerId} />
         <MoveAgentToWorkspaceSheet />
+        <TabDropToWorkspaceSheet />
         <PromoteAgentToWorkspaceSheet />
         <MoveWorkspaceToFolderSheet />
       </AssistantFileLinkResolverProvider>

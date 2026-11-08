@@ -831,6 +831,18 @@ export const fr: TranslationResources = {
           moved: "Conversation déplacée vers {{workspace}}",
           failed: "Impossible de déplacer la conversation",
         },
+        dropToWorkspace: {
+          title: "Move or copy tab",
+          message: "What should happen with “{{agent}}”?",
+          move: "Move to {{workspace}}",
+          moveHint: "Removes the tab from its current workspace.",
+          copy: "Copy to {{workspace}}",
+          copyHint: "Creates a new tab with the same settings in {{workspace}}.",
+          moved: "Chat moved to {{workspace}}",
+          copied: "Chat copied to {{workspace}}",
+          moveFailed: "Could not move the chat",
+          copyFailed: "Could not copy the chat",
+        },
         promoteChat: {
           title: "Promouvoir en espace de travail",
           body: "Crée un espace de travail dans {{cwd}} et y déplace cette conversation. Si c’est un sous-agent, il devient autonome.",
