@@ -43,18 +43,25 @@ const IS_WEB = isWeb;
 // drag to the preview's nested scroll, so lines past a cap would be unreachable.
 const OPTION_PREVIEW_MAX_HEIGHT = IS_WEB ? 240 : undefined;
 
-// Web clicks that must not answer: a link in the label, anything in the description, and the
-// second click of a double-click, which would otherwise land on the next question's options.
-function isNonAnsweringClick(event: GestureResponderEvent, description: View | null): boolean {
+// Web clicks that must not answer: a link in the label, the second click of a double-click
+// (which would otherwise land on the next question's options), and the release of a drag that
+// selected text inside the row. A plain click anywhere else in the row answers, description
+// included — the whole box is the control, not just the label.
+function isNonAnsweringClick(event: GestureResponderEvent): boolean {
   if (!IS_WEB) return false;
   const click = event.nativeEvent as unknown as MouseEvent;
   if (click.detail > 1) return true;
-  const target = click.target as Element | null;
-  const descriptionElement = description as unknown as Element | null;
-  return Boolean(target?.closest("a") || descriptionElement?.contains(target));
+  if ((click.target as Element | null)?.closest("a")) return true;
+  return hasTextSelection();
+}
+
+function hasTextSelection(): boolean {
+  const selection = window.getSelection();
+  return Boolean(selection && !selection.isCollapsed && selection.toString().trim().length > 0);
 }
 
 // The description is selectable text, so a touch on it belongs to the text, not the option.
+// Web answers through the row's click handler instead (see isNonAnsweringClick).
 const claimResponder = () => true;
 
 function getQuestionInputPlaceholder({
@@ -92,10 +99,9 @@ function QuestionOptionRow({
 }: QuestionOptionRowProps) {
   const { theme } = useUnistyles();
 
-  const descriptionRef = useRef<View>(null);
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
-      if (isNonAnsweringClick(event, descriptionRef.current)) return;
+      if (isNonAnsweringClick(event)) return;
       onToggle(qIndex, optIndex, multiSelect);
     },
     [onToggle, qIndex, optIndex, multiSelect],
@@ -153,7 +159,6 @@ function QuestionOptionRow({
           <MarkdownRenderer text={option.label} compact muted={!isSelected} selectable={false} />
           {option.description ? (
             <View
-              ref={descriptionRef}
               testID="question-form-option-description"
               onStartShouldSetResponder={claimResponder}
             >

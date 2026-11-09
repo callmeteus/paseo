@@ -108,7 +108,7 @@ test.describe("Question option text", () => {
     }
   });
 
-  test("selecting description text never answers, and the label still does", async ({
+  test("clicking description text answers, and selecting it does not", async ({
     page,
     context,
   }) => {
@@ -121,15 +121,14 @@ test.describe("Question option text", () => {
       await dragAcross(page, description);
       await expect.poll(() => selectedText(page)).toBe(DONE_DESCRIPTION);
       await expectChecked(done, false);
+      await expectCurrentQuestion(page, { index: 1, total: 2, question: LINKED_QUESTION });
 
-      await description.getByText("Logs are at", { exact: false }).dblclick({
+      // A click that merely collapses the drag selection is still a selection gesture.
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+      await description.getByText("Logs are at", { exact: false }).click({
         position: { x: 4, y: 4 },
       });
-      await expect.poll(() => selectedText(page)).toBe("Logs");
-      await expectCurrentQuestion(page, { index: 1, total: 2, question: LINKED_QUESTION });
-      await expectChecked(done, false);
-
-      await done.getByText("Done", { exact: true }).click();
       await expectCurrentQuestion(page, { index: 2, total: 2, question: CHECKS_QUESTION });
       await openQuestion(page, { index: 1, total: 2 });
       await expectChecked(done, true);
@@ -154,7 +153,7 @@ test.describe("Question option text", () => {
     }
   });
 
-  test("multi-select description links and selection leave the option unchanged", async ({
+  test("multi-select description clicks toggle, while links and drag-selection do not", async ({
     page,
     context,
   }) => {
@@ -179,16 +178,14 @@ test.describe("Question option text", () => {
       await expect.poll(() => selectedText(page)).toBe(LINT_DESCRIPTION);
       await expectChecked(lint, false);
 
-      await description.getByText("Rules:", { exact: false }).dblclick({
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      await description.getByText("Rules:", { exact: false }).click({
         position: { x: 4, y: 4 },
       });
-      await expect.poll(() => selectedText(page)).toBe("Rules");
-      await expectChecked(lint, false);
+      await expectChecked(lint, true);
 
       await typecheck.getByText("Typecheck", { exact: true }).dblclick();
       await expectChecked(typecheck, true);
-      await lint.getByText("Lint", { exact: true }).click();
-      await expectChecked(lint, true);
     } finally {
       await session.cleanup();
     }
