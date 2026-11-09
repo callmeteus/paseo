@@ -1,8 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { appendFileSync, closeSync, openSync, readFileSync } from "node:fs";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { HubLocalInstallPhase } from "@getpaseo/protocol/messages";
 import { findExecutable } from "../../executable-resolution/executable-resolution.js";
+import { ensurePrivateFile, PRIVATE_FILE_MODE } from "../private-files.js";
 
 /** The automations tab installs Hub from this public fork. */
 export const HUB_GITHUB_REPOSITORY = "callmeteus/paseo-hub";
@@ -110,8 +112,45 @@ export function localHubDataDirectory(paseoHome: string): string {
   return path.join(paseoHome, "hub-data");
 }
 
+const HUB_PROCESS_ENV_KEYS = [
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "PATH",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "TMPDIR",
+  "XDG_RUNTIME_DIR",
+  "XDG_DATA_HOME",
+  "XDG_CONFIG_HOME",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "ALL_PROXY",
+  "all_proxy",
+] as const;
+
+const HUB_LOG_TAIL_LIMIT = 1_500;
+
 let activeInstall: Promise<HubLocalInstallState> | null = null;
 let hubProcess: ChildProcess | null = null;
+let hubGeneration = 0;
+let hubProcessExit: HubProcessExit | null = null;
+let hubLogPath: string | null = null;
+
+interface HubProcessExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
 
 /**
  * Installer bound to the daemon home. Concurrent installs share one in-flight job.
@@ -224,9 +263,7 @@ async function runInstall(
     const healthy = await waitForHealth(dependencies.probeHealth, (waitedMs) => {
       onProgress({ phase: "starting", percent: hubStartupWaitPercent(waitedMs) });
     });
-    if (!healthy) {
-      throw new Error("Hub did not become ready.");
-    }
+    if (!healthy) throw hubNotReadyError();
   }
 
   report("ready");
@@ -258,9 +295,7 @@ async function startBuiltHub(
   const healthy = await waitForHealth(dependencies.probeHealth, (waitedMs) => {
     onProgress({ phase: "starting", percent: hubStartupWaitPercent(waitedMs) });
   });
-  if (!healthy) {
-    throw new Error("Hub did not become ready.");
-  }
+  if (!healthy) throw hubNotReadyError();
   onProgress({ phase: "ready", percent: hubInstallPercent("ready", 0) });
   return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
 }
@@ -354,7 +389,9 @@ async function waitForHealth(
 ): Promise<boolean> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < LOCAL_HUB_READY_TIMEOUT_MS) {
+    if (hubProcessExit !== null) return false;
     if (await probe(LOCAL_HUB_ORIGIN)) return true;
+    if (hubProcessExit !== null) return false;
     const waitedMs = Date.now() - startedAt;
     if (waitedMs >= LOCAL_HUB_READY_TIMEOUT_MS) return false;
     onWait(waitedMs);
@@ -410,26 +447,111 @@ export function runHubInstallCommand(
   });
 }
 
+/**
+ * Environment for the local Hub process.
+ *
+ * The daemon inherits project variables such as DATABASE_URL. Hub treats that
+ * variable as an order to use PostgreSQL, then exits when that server is not
+ * the embedded database in the data directory. Health checks only see a dead
+ * port. The child gets the variables it needs to run and talk to the network,
+ * plus the embedded data directory.
+ *
+ * @param input - Daemon environment and the Hub data directory
+ * @returns Environment for the Hub process
+ */
+export function hubProcessEnvironment(input: {
+  baseEnv: NodeJS.ProcessEnv;
+  dataDirectory: string;
+}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of HUB_PROCESS_ENV_KEYS) {
+    const value = input.baseEnv[key];
+    if (value !== undefined) env[key] = value;
+  }
+  env.PORT = LOCAL_HUB_PORT;
+  env.PASEO_HUB_APP_URL = LOCAL_HUB_ORIGIN;
+  env.PASEO_HUB_DATA_DIR = input.dataDirectory;
+  env.NODE_ENV = "production";
+  return env;
+}
+
+/**
+ * Message shown when startup does not reach /health.
+ *
+ * @param exit - Child exit, when the process ended before the timeout
+ * @param logTail - Trailing Hub log text
+ * @returns Error text for the install response
+ */
+export function hubNotReadyMessage(exit: HubProcessExit | null, logTail: string): string {
+  const reason =
+    exit === null
+      ? "Hub did not become ready."
+      : `Hub exited before it was ready (${exit.signal ?? `code ${String(exit.code)}`}).`;
+  const tail = logTail.trim();
+  if (tail.length === 0) return reason;
+  return `${reason}\n${tail}`;
+}
+
+function hubNotReadyError(): Error {
+  return new Error(hubNotReadyMessage(hubProcessExit, readHubLogTail()));
+}
+
+function localHubLogPath(dataDirectory: string): string {
+  return path.join(path.dirname(dataDirectory), "hub.log");
+}
+
+function readHubLogTail(): string {
+  if (hubLogPath === null) return "";
+  try {
+    const text = readFileSync(hubLogPath, "utf8");
+    return text.length <= HUB_LOG_TAIL_LIMIT ? text.trim() : text.slice(-HUB_LOG_TAIL_LIMIT).trim();
+  } catch {
+    return "";
+  }
+}
+
+function stopTrackedHubProcess(): void {
+  const child = hubProcess;
+  hubProcess = null;
+  if (child === null || child.exitCode !== null || child.killed) return;
+  child.kill("SIGTERM");
+}
+
 async function startLocalHubProcess(
   checkout: string,
   dataDirectory: string,
   nodePath: string,
 ): Promise<void> {
-  if (hubProcess !== null && hubProcess.exitCode === null && !hubProcess.killed) return;
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    PORT: LOCAL_HUB_PORT,
-    PASEO_HUB_APP_URL: LOCAL_HUB_ORIGIN,
-    PASEO_HUB_DATA_DIR: dataDirectory,
-  };
-  // Hub is a Node server. The desktop daemon's executable is Electron.
-  delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(nodePath, [path.join(checkout, "bin", "paseo-hub.js")], {
-    cwd: checkout,
-    env,
-    detached: true,
-    stdio: "ignore",
+  const generation = ++hubGeneration;
+  stopTrackedHubProcess();
+  hubProcessExit = null;
+  const logPath = localHubLogPath(dataDirectory);
+  hubLogPath = logPath;
+  appendFileSync(logPath, `\n--- ${new Date().toISOString()} starting hub ---\n`, {
+    mode: PRIVATE_FILE_MODE,
   });
+  ensurePrivateFile(logPath);
+  const fd = openSync(logPath, "a", PRIVATE_FILE_MODE);
+  let child: ChildProcess;
+  try {
+    child = spawn(nodePath, [path.join(checkout, "bin", "paseo-hub.js")], {
+      cwd: checkout,
+      env: hubProcessEnvironment({ baseEnv: process.env, dataDirectory }),
+      detached: true,
+      stdio: ["ignore", fd, fd],
+    });
+  } finally {
+    closeSync(fd);
+  }
   child.unref();
   hubProcess = child;
+  child.on("exit", (code, signal) => {
+    if (generation !== hubGeneration) return;
+    hubProcessExit = { code, signal };
+    if (hubProcess === child) hubProcess = null;
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("spawn", () => resolve());
+  });
 }

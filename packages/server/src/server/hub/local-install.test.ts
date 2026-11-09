@@ -5,6 +5,8 @@ import {
   LOCAL_HUB_READY_TIMEOUT_MS,
   createHubLocalInstaller,
   hubInstallPercent,
+  hubNotReadyMessage,
+  hubProcessEnvironment,
   hubStartupWaitPercent,
   installToolPaths,
   type HubInstallCommand,
@@ -123,6 +125,45 @@ test("desktop Electron does not look for npm beside its own binary", () => {
     npm: "/home/gio/.nvm/versions/node/v25.2.1/bin/npm",
     node: "/home/gio/.nvm/versions/node/v25.2.1/bin/node",
   });
+});
+
+test("local Hub process drops the daemon's database and node options", () => {
+  const env = hubProcessEnvironment({
+    baseEnv: {
+      HOME: "/home/gio",
+      PATH: "/usr/bin",
+      LANG: "pt_BR.UTF-8",
+      DATABASE_URL: "postgres://paseo:secret@127.0.0.1:5432/other",
+      NODE_OPTIONS: "--require /tmp/preload.js",
+      ELECTRON_RUN_AS_NODE: "1",
+      PASEO_HUB_BIND: "100.66.222.98",
+    },
+    dataDirectory: "/home/gio/.paseo/hub-data",
+  });
+
+  expect(env.DATABASE_URL).toBeUndefined();
+  expect(env.NODE_OPTIONS).toBeUndefined();
+  expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  expect(env.PASEO_HUB_BIND).toBeUndefined();
+  expect(env).toMatchObject({
+    HOME: "/home/gio",
+    PATH: "/usr/bin",
+    LANG: "pt_BR.UTF-8",
+    PORT: "25000",
+    PASEO_HUB_APP_URL: LOCAL_HUB_ORIGIN,
+    PASEO_HUB_DATA_DIR: "/home/gio/.paseo/hub-data",
+    NODE_ENV: "production",
+  });
+});
+
+test("a Hub that exits reports that exit and the log tail", () => {
+  expect(hubNotReadyMessage(null, "")).toBe("Hub did not become ready.");
+  expect(hubNotReadyMessage({ code: 1, signal: null }, "database connection failed")).toBe(
+    "Hub exited before it was ready (code 1).\ndatabase connection failed",
+  );
+  expect(hubNotReadyMessage({ code: null, signal: "SIGTERM" }, "  ")).toBe(
+    "Hub exited before it was ready (SIGTERM).",
+  );
 });
 
 test("a Node daemon keeps the npm beside that runtime", () => {
