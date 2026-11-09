@@ -27,15 +27,19 @@ The web and desktop dev launchers pass the current Git branch to Metro as
 `EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL`. The expanded desktop sidebar shows it in
 the titlebar row. Production builds leave the variable unset and show no label.
 
-`npm run dev` is only a shorthand for `npm run dev:server`. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
+`npm run dev` starts the same daemon as `npm run dev:server`, through the platform
+launcher. Keep `127.0.0.1:17000` for the packaged app and production-style `~/.paseo` state.
 
 **Gotcha — Linux and React Native DevTools.** Metro may start the React Native DevTools Electron helper on first launch. On some Linux machines the helper’s bundled `chrome-sandbox` is not installed with the setuid bit Electron expects, so the process exits with a sandbox fatal while Metro keeps serving. `scripts/dev-app.sh` sets `ELECTRON_DISABLE_SANDBOX=1` on Linux (when unset) so the helper runs without that sandbox. If you start Expo outside that script and see the same error, export `ELECTRON_DISABLE_SANDBOX=1` in the same shell.
 
 ### Reaching the dev stack over Tailscale
 
 The dev launchers bind the daemon to `0.0.0.0`, allow any hostname and CORS origin,
-and bind Metro/Expo to the LAN. When Tailscale is available they detect `tailscale ip
--4`, bake that address into `EXPO_PUBLIC_LOCAL_DAEMON`, and print the tailnet URL:
+and bind Metro/Expo to the LAN. `npm run dev` and `npm run dev:app` pick the
+platform launcher (`.sh` on macOS/Linux, `dev-launcher.ps1` on Windows), so the
+same commands expose the tailnet everywhere. When Tailscale is available they
+detect `tailscale ip -4`, bake that address into `EXPO_PUBLIC_LOCAL_DAEMON`, and
+print the tailnet URL:
 
 ```text
 Tailnet: http://100.101.102.103:8081

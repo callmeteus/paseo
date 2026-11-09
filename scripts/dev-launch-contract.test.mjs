@@ -65,10 +65,32 @@ test("the website dev server binds every interface", async () => {
   assert.match(source, /host: "0\.0\.0\.0"/, "vite must listen on every interface in dev");
 });
 
+test("the cross-platform dev entry points keep the tailnet exposure", async () => {
+  const launcher = await read("scripts/dev-launcher.ps1");
+
+  assert.match(launcher, /tailscale ip -4/, "launcher must detect the tailnet address");
+  assert.match(launcher, /PASEO_LISTEN = "0\.0\.0\.0:/, "daemon must bind 0.0.0.0");
+  assert.match(launcher, /PASEO_CORS_ORIGINS = "\*"/, "dev must allow any CORS origin");
+  assert.match(launcher, /--host lan/, "Metro must bind the LAN");
+  assert.match(launcher, /Tailnet:/, "launcher must print the tailnet URL");
+
+  const dispatcher = await read("scripts/dev-launch.mjs");
+  assert.match(dispatcher, /dev-launcher\.ps1/, "Windows must use the PowerShell launcher");
+  assert.match(dispatcher, /dev-daemon\.sh/, "POSIX must use the daemon shell launcher");
+  assert.match(dispatcher, /dev-app\.sh/, "POSIX must use the app shell launcher");
+});
+
 test("the root dev scripts hand the LAN bind to the daemon", async () => {
   const scripts = (await readRootPackageJson()).scripts;
 
-  for (const name of ["dev:server", "dev:app", "dev:desktop"]) {
+  for (const name of ["dev:server", "dev:desktop"]) {
     assert.match(scripts[name] ?? "", /PASEO_LISTEN=0\.0\.0\.0:/, `${name} must bind the LAN`);
+  }
+  for (const name of ["dev", "dev:app"]) {
+    assert.match(
+      scripts[name] ?? "",
+      /dev-launch\.mjs/,
+      `${name} must pick the platform launcher that binds the LAN`,
+    );
   }
 });
