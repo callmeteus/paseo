@@ -77,7 +77,7 @@ import {
   type MessageInputRef,
 } from "./input/input";
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { ICON_SIZE, FONT_SIZE, type Theme } from "@/styles/theme";
 import type { AgentGoalState } from "@/utils/agent-snapshots";
 import { useAgentCommandsQuery, type DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
@@ -882,6 +882,7 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [objectiveFullHeight, setObjectiveFullHeight] = useState(0);
   const isPaused = goal.status === "paused";
 
   useEffect(() => {
@@ -898,7 +899,22 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
     setIsDetailsExpanded((prev) => !prev);
   }, []);
   const handleCollapse = useCallback(() => setIsCollapsed(true), []);
+  const handleObjectiveMeasureLayout = useCallback(
+    (e: { nativeEvent: { layout: { height: number } } }) =>
+      setObjectiveFullHeight(e.nativeEvent.layout.height),
+    [],
+  );
+
+  useEffect(() => {
+    setIsDetailsExpanded(false);
+    setObjectiveFullHeight(0);
+  }, [goal.objective]);
   const handleEditGoal = useCallback(() => onEdit(goal.objective), [onEdit, goal.objective]);
+
+  const objectiveCollapsedMaxHeight = Math.round(FONT_SIZE.base * 1.4) * 2;
+  const objectiveMeasured = objectiveFullHeight > 0;
+  const objectiveNeedsExpansion =
+    objectiveMeasured && objectiveFullHeight > objectiveCollapsedMaxHeight + 1;
 
   if (isCollapsed) {
     return (
@@ -935,18 +951,20 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
           >
             <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
           </Pressable>
-          <Pressable
-            style={styles.goalActionButton}
-            onPress={handleToggleObjectiveExpanded}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isDetailsExpanded
-                ? t("composer.goal.collapseObjective")
-                : t("composer.goal.expandObjective")
-            }
-          >
-            <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
-          </Pressable>
+          {objectiveNeedsExpansion && (
+            <Pressable
+              style={styles.goalActionButton}
+              onPress={handleToggleObjectiveExpanded}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isDetailsExpanded
+                  ? t("composer.goal.collapseObjective")
+                  : t("composer.goal.expandObjective")
+              }
+            >
+              <ThemedInfo size={ICON_SIZE.sm} uniProps={iconForegroundMutedMapping} />
+            </Pressable>
+          )}
           {goal.status === "paused" ? (
             <Pressable
               style={styles.goalActionButton}
@@ -987,20 +1005,29 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
           </Pressable>
         </View>
       </View>
-      <View
-        style={[
-          styles.goalObjectiveOuter,
-          !isDetailsExpanded ? styles.goalObjectiveCollapsedClip : null,
-        ]}
-      >
-        <Text
-          style={styles.goalText}
-          selectable
-          numberOfLines={isDetailsExpanded ? undefined : 2}
-          ellipsizeMode="tail"
+      <View style={styles.goalObjectiveMeasureWrapper}>
+        <View style={styles.goalObjectiveMeasureHidden} onLayout={handleObjectiveMeasureLayout}>
+          <Text style={styles.goalText} selectable>
+            {goal.objective}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.goalObjectiveOuter,
+            !isDetailsExpanded && (objectiveFullHeight === 0 || objectiveNeedsExpansion)
+              ? styles.goalObjectiveCollapsedClip
+              : null,
+          ]}
         >
-          {goal.objective}
-        </Text>
+          <Text
+            style={styles.goalText}
+            selectable
+            numberOfLines={isDetailsExpanded || !objectiveNeedsExpansion ? undefined : 2}
+            ellipsizeMode="tail"
+          >
+            {goal.objective}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -3228,6 +3255,18 @@ const styles = StyleSheet.create((theme: Theme) => ({
   goalObjectiveOuter: {
     minWidth: 0,
     width: "100%",
+  },
+  goalObjectiveMeasureWrapper: {
+    position: "relative" as const,
+    width: "100%",
+  },
+  goalObjectiveMeasureHidden: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
+    pointerEvents: "none" as const,
   },
   goalObjectiveCollapsedClip: {
     maxHeight: Math.round(theme.fontSize.base * 1.4) * 2,

@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet as UnistylesStyleSheet } from "react-native-unistyles";
+import { FONT_SIZE } from "@/styles/theme";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { ThemedNotificationInfo } from "@/components/message-shared";
@@ -50,6 +51,18 @@ const stylesheet = UnistylesStyleSheet.create((theme) => ({
     minWidth: 0,
     width: "100%",
   },
+  measureWrapper: {
+    position: "relative" as const,
+    width: "100%",
+  },
+  measureHidden: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
+    pointerEvents: "none" as const,
+  },
   objectiveCollapsedClip: {
     maxHeight: Math.round(theme.fontSize.base * 1.4) * 4,
     overflow: "hidden" as const,
@@ -75,12 +88,27 @@ export const GoalCompleteNotice = React.memo(function GoalCompleteNotice({
   const { t } = useTranslation();
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
   const [expanded, setExpanded] = useState(false);
+  const [fullHeight, setFullHeight] = useState(0);
 
   const prefix = t("goalNotice.complete", { objective: "" });
   const objective = message.startsWith(prefix) ? message.slice(prefix.length).trim() : message;
   const header = prefix.trim();
 
+  useEffect(() => {
+    setExpanded(false);
+    setFullHeight(0);
+  }, [objective]);
+
   const handleToggle = useCallback(() => setExpanded((prev) => !prev), []);
+  const handleMeasureLayout = useCallback(
+    (e: { nativeEvent: { layout: { height: number } } }) =>
+      setFullHeight(e.nativeEvent.layout.height),
+    [],
+  );
+
+  const collapsedMaxHeight = useMemo(() => Math.round(FONT_SIZE.base * 1.4) * 4, []);
+  const measured = fullHeight > 0;
+  const needsExpansion = measured && fullHeight > collapsedMaxHeight + 1;
 
   const containerStyle = useMemo(
     () => [
@@ -92,8 +120,11 @@ export const GoalCompleteNotice = React.memo(function GoalCompleteNotice({
   );
 
   const objectiveOuterStyle = useMemo(
-    () => [stylesheet.objectiveOuter, !expanded ? stylesheet.objectiveCollapsedClip : null],
-    [expanded],
+    () => [
+      stylesheet.objectiveOuter,
+      !expanded && (fullHeight === 0 || needsExpansion) ? stylesheet.objectiveCollapsedClip : null,
+    ],
+    [expanded, fullHeight, needsExpansion],
   );
 
   return (
@@ -105,21 +136,28 @@ export const GoalCompleteNotice = React.memo(function GoalCompleteNotice({
           </View>
           <Text style={stylesheet.headerText}>{header}</Text>
         </View>
-        <View style={objectiveOuterStyle}>
-          <MarkdownRenderer text={objective} compact />
+        <View style={stylesheet.measureWrapper}>
+          <View style={stylesheet.measureHidden} onLayout={handleMeasureLayout}>
+            <MarkdownRenderer text={objective} compact />
+          </View>
+          <View style={objectiveOuterStyle}>
+            <MarkdownRenderer text={objective} compact />
+          </View>
         </View>
-        <PressHighlight
-          onPress={handleToggle}
-          style={stylesheet.toggleButton}
-          accessibilityRole="button"
-          accessibilityLabel={
-            expanded ? t("composer.goal.collapseObjective") : t("composer.goal.expandObjective")
-          }
-        >
-          <Text style={stylesheet.toggleText}>
-            {expanded ? t("composer.goal.collapseObjective") : t("composer.goal.expandObjective")}
-          </Text>
-        </PressHighlight>
+        {needsExpansion && (
+          <PressHighlight
+            onPress={handleToggle}
+            style={stylesheet.toggleButton}
+            accessibilityRole="button"
+            accessibilityLabel={
+              expanded ? t("composer.goal.collapseObjective") : t("composer.goal.expandObjective")
+            }
+          >
+            <Text style={stylesheet.toggleText}>
+              {expanded ? t("composer.goal.collapseObjective") : t("composer.goal.expandObjective")}
+            </Text>
+          </PressHighlight>
+        )}
       </View>
     </View>
   );
