@@ -13,13 +13,24 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type RewindMode, useRewindCapabilities } from "./use-rewind-capabilities";
 import type { AgentCapabilityFlags } from "@getpaseo/protocol/agent-types";
+import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { UserMessageImageAttachment } from "@/types/stream";
 
 export type { RewindMode };
+
+export interface RewindMenuInput {
+  mode: RewindMode;
+  rewoundText: string;
+  rewoundImages?: readonly UserMessageImageAttachment[];
+  rewoundAttachments?: readonly AgentAttachment[];
+}
 
 interface RewindMenuProps {
   capabilities: AgentCapabilityFlags;
   rewoundText: string;
-  onRewind: (input: { mode: RewindMode; rewoundText: string }) => Promise<void> | void;
+  rewoundImages?: readonly UserMessageImageAttachment[];
+  rewoundAttachments?: readonly AgentAttachment[];
+  onRewind: (input: RewindMenuInput) => Promise<void> | void;
   isPending?: boolean;
   testID?: string;
 }
@@ -38,6 +49,8 @@ function getIcon(mode: RewindMode, color: string): ReactElement {
 export const RewindMenu = memo(function RewindMenu({
   capabilities,
   rewoundText,
+  rewoundImages,
+  rewoundAttachments,
   onRewind,
   isPending: isPendingProp = false,
   testID = "rewind-menu",
@@ -70,7 +83,7 @@ export const RewindMenu = memo(function RewindMenu({
       if (isLocked) return;
       setPendingMode(mode);
       try {
-        await onRewind({ mode, rewoundText });
+        await onRewind({ mode, rewoundText, rewoundImages, rewoundAttachments });
       } catch {
         // useRewindAgentMutation owns the toast; the menu only owns flow state.
       } finally {
@@ -78,7 +91,7 @@ export const RewindMenu = memo(function RewindMenu({
         setIsOpen(false);
       }
     },
-    [isLocked, onRewind, rewoundText],
+    [isLocked, onRewind, rewoundAttachments, rewoundImages, rewoundText],
   );
 
   const triggerStyle = useCallback(

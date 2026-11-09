@@ -15,6 +15,7 @@ export type AgentRunController = Pick<
   AgentManager,
   | "getAgent"
   | "planGoalTurn"
+  | "planSkillTurn"
   | "planWorkflowTurn"
   | "tryRunOutOfBand"
   | "hasInFlightRun"
@@ -126,6 +127,41 @@ async function planGoalDispatch(
   };
 }
 
+/**
+ * Hoist a mid-sentence `/skill` to the first token, the only position providers
+ * parse as a slash command. The timeline keeps the original text through
+ * `submittedPromptText`.
+ */
+async function planSkillDispatch(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+  logger: Logger,
+): Promise<{ prompt: AgentPromptInput; options: StartAgentRunOptions | undefined } | null> {
+  const plan = await agentManager.planSkillTurn(agentId, prompt);
+  if (!plan) return null;
+  logger.debug(
+    {
+      agentId,
+      skill: plan.prompt.split(/\s+/, 1)[0],
+      originalLength: plan.submittedPromptText.length,
+    },
+    "agent.skill.hoisted",
+  );
+  return {
+    prompt: plan.prompt,
+    options: {
+      ...options,
+      runOptions: {
+        ...options?.runOptions,
+        clientMessageId: options?.runOptions?.clientMessageId ?? randomUUID(),
+        submittedPromptText: plan.submittedPromptText,
+      },
+    },
+  };
+}
+
 function applyWorkflowDispatch(
   agentManager: AgentRunController,
   agentId: string,
@@ -172,13 +208,20 @@ export async function startAgentRun(
   // rewrites the prompt into a real turn, while pause/resume/clear stay
   // out-of-band. Both paths work for every provider.
   const originalSubmittedText = promptText(prompt);
-  ({ prompt, options } = await planGoalDispatch(agentManager, agentId, prompt, options));
-  // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
-  // in-flight turn — replaceAgentRun would interrupt the running turn. The
-  // intercept lives at this layer so it covers every prompt entrypoint.
-  if (await agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
-    options?.onDispatch?.("out_of_band");
-    return { disposition: "out_of_band" };
+  const skillDispatch = await planSkillDispatch(agentManager, agentId, prompt, options, logger);
+  if (skillDispatch) {
+    // A hoisted skill is a slash command: it must not run `/goal` control
+    // subcommands or the out-of-band intercept on the rewritten prompt.
+    ({ prompt, options } = skillDispatch);
+  } else {
+    ({ prompt, options } = await planGoalDispatch(agentManager, agentId, prompt, options));
+    // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
+    // in-flight turn — replaceAgentRun would interrupt the running turn. The
+    // intercept lives at this layer so it covers every prompt entrypoint.
+    if (await agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
+      options?.onDispatch?.("out_of_band");
+      return { disposition: "out_of_band" };
+    }
   }
   // Re-assert the active workflow on every dispatch. The provider mode switch
   // is the enforcement; this instruction keeps the role explicit mid-session

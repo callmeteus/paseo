@@ -8,7 +8,7 @@ import {
   AttachmentThumbnail,
 } from "@/components/attachment-pill";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
-import { RewindMenu, type RewindMode } from "@/components/rewind/rewind-menu";
+import { RewindMenu, type RewindMenuInput } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { TaskListRow } from "@/components/task-list-row";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -175,8 +175,10 @@ interface UserMessageTrailingRowProps {
   capabilities?: AgentCapabilityFlags;
   messageId?: string;
   message: string;
+  rewoundImages: readonly UserMessageImageAttachment[];
+  rewoundAttachments: readonly AgentAttachment[];
   rewindPending: boolean;
-  onRewind: (input: { mode: RewindMode; rewoundText: string }) => void | Promise<void>;
+  onRewind: (input: RewindMenuInput) => void | Promise<void>;
   canForkUserMessage: boolean;
   onFork?: (target: AssistantForkTarget) => void;
   getMessageContent: () => string;
@@ -187,6 +189,8 @@ const UserMessageTrailingRow = memo(function UserMessageTrailingRow({
   capabilities,
   messageId,
   message,
+  rewoundImages,
+  rewoundAttachments,
   rewindPending,
   onRewind,
   canForkUserMessage,
@@ -204,6 +208,8 @@ const UserMessageTrailingRow = memo(function UserMessageTrailingRow({
           capabilities={capabilities}
           isPending={rewindPending}
           rewoundText={message}
+          rewoundImages={rewoundImages}
+          rewoundAttachments={rewoundAttachments}
           onRewind={onRewind}
         />
       ) : null}
@@ -274,7 +280,7 @@ export const UserMessage = memo(function UserMessage({
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
   const getMessageContent = useCallback(() => expandInlineChips(message, "copy"), [message]);
   const handleRewind = useCallback(
-    (input: { mode: RewindMode; rewoundText: string }) => {
+    (input: RewindMenuInput) => {
       return rewindMutation.rewindAgent(input);
     },
     [rewindMutation],
@@ -379,6 +385,8 @@ export const UserMessage = memo(function UserMessage({
               capabilities={capabilities}
               messageId={messageId}
               message={message}
+              rewoundImages={images}
+              rewoundAttachments={attachments}
               rewindPending={rewindMutation.isPending}
               onRewind={handleRewind}
               canForkUserMessage={canForkUserMessage}

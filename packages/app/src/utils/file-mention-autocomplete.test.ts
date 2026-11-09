@@ -172,7 +172,11 @@ describe("applyFileMentionReplacement", () => {
       mention: { start: 5, end: 13, query: "src/com" },
       relativePath: "src/components/chat.tsx",
     });
-    expect(next).toBe('open "src/components/chat.tsx" next');
+    expect(next.text).toBe('open "src/components/chat.tsx" next');
+    expect(next.selection).toEqual({
+      start: 'open "src/components/chat.tsx"'.length,
+      end: 'open "src/components/chat.tsx"'.length,
+    });
   });
 
   it("escapes double quotes in replacement path", () => {
@@ -182,6 +186,10 @@ describe("applyFileMentionReplacement", () => {
       mention: { start: 0, end: 4, query: "foo" },
       relativePath: 'src/"quoted".ts',
     });
-    expect(next).toBe('"src/\\"quoted\\".ts"');
+    expect(next.text).toBe('"src/\\"quoted\\".ts"');
+    expect(next.selection).toEqual({
+      start: next.text.length,
+      end: next.text.length,
+    });
   });
 });

@@ -226,6 +226,7 @@ type ScheduleAgentManager = Pick<
   AgentRunController,
   | "getAgent"
   | "planGoalTurn"
+  | "planSkillTurn"
   | "planWorkflowTurn"
   | "reloadAgentSession"
   | "tryRunOutOfBand"

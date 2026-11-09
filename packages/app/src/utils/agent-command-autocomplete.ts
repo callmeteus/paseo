@@ -1,8 +1,10 @@
+import { findSkillCommandTokens, isSlashCommandBoundary } from "@getpaseo/protocol/skill-command";
 import {
   compareMatchScores,
   type MatchScore,
   scoreTextFields,
 } from "@getpaseo/protocol/search/text-match";
+import { collapsedSelection, type TextReplacement } from "./text-replacement";
 
 interface CommandAutocompleteEntry {
   command: {
@@ -76,10 +78,23 @@ export function filterAndRankCommandAutocompleteEntries<TEntry extends CommandAu
   return scoredEntries.map((scored) => scored.entry);
 }
 
+/**
+ * Daemon-level commands that also work mid-sentence, so the inline picker offers
+ * them next to skills. `/goal` already accepts any position; everything else is
+ * a provider command that must stay at the start of the prompt.
+ */
+const INLINE_DAEMON_COMMAND_NAMES = new Set(["goal"]);
+
 export function filterInlineSkillCommandEntries<TEntry extends InlineSkillCommandEntry>(
   entries: readonly TEntry[],
 ): TEntry[] {
-  return entries.filter((entry) => entry.source === "provider" && entry.command.kind === "skill");
+  return entries.filter((entry) => {
+    if (entry.source !== "provider") return false;
+    if (entry.command.kind === "skill") return true;
+    return INLINE_DAEMON_COMMAND_NAMES.has(
+      entry.command.name.trim().replace(/^\//, "").toLowerCase(),
+    );
+  });
 }
 
 export function skillCommandNames(commands: readonly { name: string; kind?: string }[]): string[] {
@@ -103,24 +118,10 @@ export function findSkillHighlightRanges(
   text: string,
   skillNames: readonly string[],
 ): SkillHighlightRange[] {
-  if (skillNames.length === 0 || !text.includes("/")) return [];
-  const names = new Set<string>();
-  for (const skillName of skillNames) {
-    const normalized = skillName.trim().replace(/^\//, "").toLowerCase();
-    if (normalized.length > 0) names.add(normalized);
-  }
-  if (names.size === 0) return [];
-
-  const ranges: SkillHighlightRange[] = [];
-  const token = /(?:^|\s)\/([^\s/]+)/g;
-  for (const match of text.matchAll(token)) {
-    const name = match[1];
-    const matchIndex = match.index;
-    if (!name || matchIndex === undefined || !names.has(name.toLowerCase())) continue;
-    const start = matchIndex + match[0].length - name.length - 1;
-    ranges.push({ start, end: start + name.length + 1 });
-  }
-  return ranges;
+  return findSkillCommandTokens(text, skillNames).map((token) => ({
+    start: token.start,
+    end: token.end,
+  }));
 }
 
 const INVALID_SLASH_COMMAND_QUERY_CHARS = /[/\s\n\r\t"']/;
@@ -137,7 +138,7 @@ export function findActiveSlashCommand(
     slashIndex = slashIndex === 0 ? -1 : beforeCursor.lastIndexOf("/", slashIndex - 1)
   ) {
     const previousCharacter = slashIndex > 0 ? input.text[slashIndex - 1] : "";
-    if (previousCharacter && !/\s/.test(previousCharacter)) {
+    if (!isSlashCommandBoundary(previousCharacter)) {
       continue;
     }
 
@@ -157,9 +158,18 @@ export function findActiveSlashCommand(
   return null;
 }
 
-export function applySlashCommandReplacement(input: ApplySlashCommandReplacementInput): string {
+export function applySlashCommandReplacement(
+  input: ApplySlashCommandReplacementInput,
+): TextReplacement {
   const before = input.text.slice(0, input.command.start);
   const after = input.text.slice(input.command.end);
-  const replacement = `${before}/${input.commandName}${after}`;
-  return input.command.end === input.text.length ? `${replacement} ` : replacement;
+  const inserted = `/${input.commandName}`;
+  const appendSpace = input.command.end === input.text.length;
+  const text = `${before}${inserted}${after}${appendSpace ? " " : ""}`;
+  // The caret lands right after the name the user picked, not at the end of the
+  // sentence, so a mid-sentence insertion keeps the rest of the draft editable.
+  return {
+    text,
+    selection: collapsedSelection(input.command.start + inserted.length + (appendSpace ? 1 : 0)),
+  };
 }

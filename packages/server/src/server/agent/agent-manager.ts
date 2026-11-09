@@ -112,6 +112,7 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { parseAgentMessage, projectAgentMessages } from "./agent-messages/index.js";
+import { planSkillPrompt, type SkillTurnPlan } from "./agent-skill.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
@@ -1106,6 +1107,8 @@ function detachedAgentLabelPatch(labels: Record<string, string>): AgentLabelPatc
  */
 const RETIRED_INTERNAL_AGENT_TTL_MS = 10 * 60 * 1000;
 const RETIRED_INTERNAL_AGENT_LIMIT = 500;
+/** Skill names change on install, not per turn; a stale list costs at most one turn. */
+const SKILL_NAMES_TTL_MS = 30_000;
 
 export interface RetiredInternalAgent {
   record: ArchivedStoredAgentRecord;
@@ -1183,6 +1186,14 @@ export class AgentManager {
   private acceptingAgentRegistrations = true;
   /** One notice for the next user message after a workflow change. */
   private readonly pendingWorkflowHandoff = new Map<string, string>();
+  /**
+   * Installed skill names per live provider session. Keyed by session object so a
+   * reload naturally misses instead of serving names from a retired runtime.
+   */
+  private readonly skillNamesBySession = new WeakMap<
+    AgentSession,
+    { names: string[]; readAt: number }
+  >();
 
   constructor(options: AgentManagerOptions) {
     this.pluginLifecycle = options.pluginLifecycle;
@@ -3335,6 +3346,47 @@ export class AgentManager {
     // A real user message arrived: the auto-continuation count starts over.
     if (plan) this.goalAutoContinueCounts.delete(agentId);
     return plan;
+  }
+
+  /**
+   * A skill typed mid sentence is hoisted to the front of the prompt because
+   * providers only parse a slash command as the first token. The original text is
+   * kept for the timeline, exactly like `/goal`.
+   */
+  async planSkillTurn(agentId: string, prompt: AgentPromptInput): Promise<SkillTurnPlan | null> {
+    if (typeof prompt !== "string") return null;
+    // Envelopes and prompts that already start with a slash command reach the
+    // provider untouched; reordering either would break their parser.
+    if (parseAgentMessage(prompt)) return null;
+    if (prompt.trimStart().startsWith("/")) return null;
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+    const skillNames = await this.readSkillNames(agent);
+    if (skillNames.length === 0) return null;
+    return planSkillPrompt({ prompt, skillNames });
+  }
+
+  private async readSkillNames(agent: ActiveManagedAgent): Promise<string[]> {
+    const session = agent.session;
+    if (!session.listCommands) return [];
+    const now = Date.now();
+    const cached = this.skillNamesBySession.get(session);
+    if (cached && now - cached.readAt < SKILL_NAMES_TTL_MS) return cached.names;
+    try {
+      const commands = await session.listCommands();
+      const names: string[] = [];
+      for (const command of commands) {
+        if (command.kind !== "skill") continue;
+        const name = command.name.trim().replace(/^\//, "");
+        if (name.length > 0) names.push(name);
+      }
+      this.skillNamesBySession.set(session, { names, readAt: now });
+      return names;
+    } catch (error) {
+      // A provider that cannot list commands must never block the turn.
+      this.logger.debug({ err: error, agentId: agent.id }, "agent.skill.list_commands_failed");
+      return [];
+    }
   }
 
   private async rewriteGoalObjectiveFor(

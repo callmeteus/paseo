@@ -638,17 +638,18 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
       if (selectedIsCommand) {
         if (!current.slashCommand) {
-          setUserInput(`/${selected.id} `);
+          const next = `/${selected.id} `;
+          setUserInput(next, { start: next.length, end: next.length });
           onAutocompleteApplied?.();
           return;
         }
 
-        const nextInput = applySlashCommandReplacement({
+        const next = applySlashCommandReplacement({
           text: current.text,
           command: current.slashCommand,
           commandName: selected.id,
         });
-        setUserInput(nextInput);
+        setUserInput(next.text, next.selection);
         onAutocompleteApplied?.();
         return;
       }
@@ -676,12 +677,12 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         return;
       }
 
-      const nextInput = applyFileMentionReplacement({
+      const next = applyFileMentionReplacement({
         text: current.text,
         mention: current.fileMention,
         relativePath: selected.entryPath,
       });
-      setUserInput(nextInput);
+      setUserInput(next.text, next.selection);
       onAutocompleteApplied?.();
     },
     [

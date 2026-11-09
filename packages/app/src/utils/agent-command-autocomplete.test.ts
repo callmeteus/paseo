@@ -83,10 +83,22 @@ describe("findActiveSlashCommand", () => {
       }),
     ).toBeNull();
   });
+
+  it("opens after opening punctuation and quotes", () => {
+    for (const prefix of ["(", '"', ",", ":"]) {
+      const text = `use ${prefix}/tas`;
+      expect(findActiveSlashCommand({ text, cursorIndex: text.length })).toEqual({
+        start: text.indexOf("/"),
+        end: text.length,
+        query: "tas",
+        position: "inline",
+      });
+    }
+  });
 });
 
 describe("applySlashCommandReplacement", () => {
-  it("replaces only the active slash token", () => {
+  it("replaces only the active slash token and keeps the caret after the name", () => {
     const text = "use /tas before implementation";
 
     expect(
@@ -95,10 +107,13 @@ describe("applySlashCommandReplacement", () => {
         command: { start: 4, end: "use /tas".length, query: "tas", position: "inline" },
         commandName: "taste",
       }),
-    ).toBe("use /taste before implementation");
+    ).toEqual({
+      text: "use /taste before implementation",
+      selection: { start: "use /taste".length, end: "use /taste".length },
+    });
   });
 
-  it("commits an inline slash token at the prompt tail", () => {
+  it("commits an inline slash token at the prompt tail with the caret after the space", () => {
     const text = "use /tas";
 
     expect(
@@ -107,7 +122,10 @@ describe("applySlashCommandReplacement", () => {
         command: { start: 4, end: text.length, query: "tas", position: "inline" },
         commandName: "taste",
       }),
-    ).toBe("use /taste ");
+    ).toEqual({
+      text: "use /taste ",
+      selection: { start: "use /taste ".length, end: "use /taste ".length },
+    });
   });
 
   it("commits a start slash token at the prompt tail", () => {
@@ -119,7 +137,10 @@ describe("applySlashCommandReplacement", () => {
         command: { start: 0, end: text.length, query: "tas", position: "start" },
         commandName: "taste",
       }),
-    ).toBe("/taste ");
+    ).toEqual({
+      text: "/taste ",
+      selection: { start: "/taste ".length, end: "/taste ".length },
+    });
   });
 });
 
@@ -150,6 +171,15 @@ describe("findSkillHighlightRanges", () => {
       { start: text.indexOf("/Deploy"), end: text.length },
     ]);
   });
+
+  it("colors a skill right after opening punctuation or a comma", () => {
+    for (const prefix of ["(", '"', ","]) {
+      const text = `use ${prefix}/deploy now`;
+      expect(findSkillHighlightRanges(text, skills)).toEqual([
+        { start: text.indexOf("/deploy"), end: text.indexOf("/deploy") + "/deploy".length },
+      ]);
+    }
+  });
 });
 
 describe("skillCommandNames", () => {
@@ -166,15 +196,17 @@ describe("skillCommandNames", () => {
 });
 
 describe("filterInlineSkillCommandEntries", () => {
-  it("keeps provider skills and drops executable commands", () => {
+  it("keeps provider skills, the daemon-level /goal, and drops executable commands", () => {
     const entries = [
       { source: "client" as const, command: { name: "clear", kind: "command" } },
       { source: "provider" as const, command: { name: "compact", kind: "command" } },
       { source: "provider" as const, command: { name: "taste", kind: "skill" } },
+      { source: "provider" as const, command: { name: "goal", kind: "command" } },
     ];
 
     expect(filterInlineSkillCommandEntries(entries).map((entry) => entry.command.name)).toEqual([
       "taste",
+      "goal",
     ]);
   });
 });

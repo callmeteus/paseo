@@ -1,3 +1,5 @@
+import { collapsedSelection, type TextReplacement } from "./text-replacement";
+
 export interface FileMentionRange {
   start: number;
   end: number;
@@ -67,8 +69,14 @@ export function formatQuotedFileMentionPath(relativePath: string): string {
   return `"${safePath}"`;
 }
 
-export function applyFileMentionReplacement(input: ApplyFileMentionReplacementInput): string {
+export function applyFileMentionReplacement(
+  input: ApplyFileMentionReplacementInput,
+): TextReplacement {
   const before = input.text.slice(0, input.mention.start);
   const after = input.text.slice(input.mention.end);
-  return `${before}${formatQuotedFileMentionPath(input.relativePath)}${after}`;
+  const inserted = formatQuotedFileMentionPath(input.relativePath);
+  return {
+    text: `${before}${inserted}${after}`,
+    selection: collapsedSelection(input.mention.start + inserted.length),
+  };
 }

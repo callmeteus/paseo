@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { restoreComposerTextIfEmpty } from "./composer-restore";
+import { restoreComposerTextIfEmpty, shouldRestoreRewindAttachments } from "./composer-restore";
 import { shouldRestoreComposerForRewindMode } from "./rewind-mode";
 
 describe("restoreComposerTextIfEmpty", () => {
@@ -19,6 +19,27 @@ describe("restoreComposerTextIfEmpty", () => {
         rewoundText: "message before rewind",
       }),
     ).toBe("keep this draft");
+  });
+});
+
+describe("shouldRestoreRewindAttachments", () => {
+  test("restores when the composer has neither text nor attachments", () => {
+    expect(shouldRestoreRewindAttachments({ currentText: "", currentAttachments: [] })).toBe(true);
+  });
+
+  test("keeps the draft when it already has text", () => {
+    expect(shouldRestoreRewindAttachments({ currentText: "draft", currentAttachments: [] })).toBe(
+      false,
+    );
+  });
+
+  test("keeps the draft when it already has attachments", () => {
+    expect(
+      shouldRestoreRewindAttachments({
+        currentText: "",
+        currentAttachments: [{ kind: "quote", text: "quoted" }],
+      }),
+    ).toBe(false);
   });
 });
 

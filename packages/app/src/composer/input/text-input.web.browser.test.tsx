@@ -236,4 +236,16 @@ describe("ComposerTextInput web IME composition", () => {
 
     expect(mounted.textarea.value).toBe("");
   });
+
+  it("places the caret at the provided selection after replaceText", () => {
+    const mounted = mountInput(ignoreTextChange);
+
+    act(() => {
+      mounted.inputRef.current?.replaceText("use /taste more", { start: 10, end: 10 });
+    });
+
+    expect(mounted.textarea.value).toBe("use /taste more");
+    expect(mounted.textarea.selectionStart).toBe(10);
+    expect(mounted.textarea.selectionEnd).toBe(10);
+  });
 });

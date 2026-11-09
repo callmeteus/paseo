@@ -89,6 +89,10 @@ import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.surface4,
+  // The input's own text is transparent while a skill is highlighted, so the native
+  // selection would paint over invisible glyphs. A translucent surface keeps the
+  // mirrored text readable under the selection.
+  selectionColor: theme.colors.terminal.selectionBackground,
 }));
 import {
   resolveSendTooltipLabel,
@@ -702,13 +706,25 @@ interface ComposerTextSurfaceProps {
  */
 function skillMirrorStyle(style: EditingTextInputProps["style"]): TextStyle {
   const flat = RNStyleSheet.flatten(style);
+  // The mirror sits behind a transparent input, so every box-model and typography
+  // property that affects glyph position has to be copied or the two layers drift.
   return {
     width: "100%",
     fontSize: flat.fontSize,
     fontWeight: flat.fontWeight,
     fontFamily: flat.fontFamily,
     lineHeight: flat.lineHeight,
+    letterSpacing: flat.letterSpacing,
+    textAlign: flat.textAlign,
+    writingDirection: flat.writingDirection,
+    textTransform: flat.textTransform,
+    padding: flat.padding,
+    paddingTop: flat.paddingTop,
     paddingRight: flat.paddingRight,
+    paddingBottom: flat.paddingBottom,
+    paddingLeft: flat.paddingLeft,
+    minHeight: flat.minHeight,
+    height: flat.height,
     textAlignVertical: "top",
     ...(isWeb ? { whiteSpace: "pre-wrap" as const, overflowWrap: "break-word" as const } : {}),
   };
@@ -1584,15 +1600,28 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         syncChipEditor(nextText);
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
-        selectionRef.current = selection ?? { start: nextText.length, end: nextText.length };
+        const resolvedSelection =
+          nextText === ""
+            ? { start: 0, end: 0 }
+            : (selection ?? { start: nextText.length, end: nextText.length });
+        selectionRef.current = resolvedSelection;
         if (nextText === "") {
           textInputRef.current?.reset();
         } else {
-          textInputRef.current?.replaceText(nextText, selection);
+          textInputRef.current?.replaceText(nextText, resolvedSelection);
         }
         onChangeText(nextText);
+        // The programmatic path never emits a selection event, so publish it here or
+        // the composer store keeps the caret index from before the replacement.
+        onSelectionChangeCallback?.(resolvedSelection);
       },
-      [onChangeText, syncChipEditor, updateComposerHeightForText, updateLiveTextPresence],
+      [
+        onChangeText,
+        onSelectionChangeCallback,
+        syncChipEditor,
+        updateComposerHeightForText,
+        updateLiveTextPresence,
+      ],
     );
 
     useImperativeHandle(ref, () => ({
