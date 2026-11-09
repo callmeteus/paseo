@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react-native";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { classifyProviderError, type ProviderErrorKind } from "@/agent-stream/provider-error";
+import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 
 type TranslateKey = Parameters<ReturnType<typeof useTranslation>["t"]>[0];
 interface ProviderErrorCopy {
@@ -61,9 +62,13 @@ const PROVIDER_OVERRIDES: Partial<
   },
 };
 
+const ACP_PROVIDER_TITLES = new Map(ACP_PROVIDER_CATALOG.map((entry) => [entry.id, entry.title]));
+
 function providerLabel(provider: AgentProvider | undefined, fallback: string): string {
   if (!provider) return fallback;
-  return provider.charAt(0).toUpperCase() + provider.slice(1);
+  // Provider ids collapse multi-word names ("commandcode"); use the catalog
+  // title so the card matches the rest of the UI instead of "Commandcode".
+  return ACP_PROVIDER_TITLES.get(provider) ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 export function ProviderErrorCard({

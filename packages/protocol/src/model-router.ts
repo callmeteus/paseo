@@ -205,9 +205,14 @@ export function isProviderCrashFailure(input: {
  * The provider's stored session holds a malformed tool call, so every request
  * from it fails validation upstream. A fresh session (same provider and model)
  * seeded with the transcript is the only way out.
+ *
+ * A reasoning model rejects the same way when the stored transcript has an
+ * assistant turn without `reasoning_content` (for example after switching from
+ * a non-reasoning model mid-session). The history cannot be rewritten in place,
+ * so it needs the same fresh-session repair.
  */
 const SESSION_CORRUPTION_PATTERN =
-  /(tool_calls.*function\.arguments|must be a valid JSON object string|invalid_value)/i;
+  /(tool_calls.*function\.arguments|must be a valid JSON object string|invalid_value|missing required parameter:?\s*'?messages\[\d+\]\.reasoning_content'?|needs the reasoning of every earlier assistant message)/i;
 
 export function isSessionCorruptionFailure(input: {
   error?: string | null;

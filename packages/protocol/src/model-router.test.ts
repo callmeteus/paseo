@@ -240,6 +240,25 @@ describe("isSessionCorruptionFailure", () => {
     ).toBe(true);
   });
 
+  it("detects an assistant turn missing reasoning_content", () => {
+    expect(
+      isSessionCorruptionFailure({
+        error:
+          "Missing required parameter: 'messages[107].reasoning_content'. This model needs the reasoning of every earlier assistant message: send back the 'reasoning_content' returned with that message. If 'reasoning_content' is not available, consider starting a new session or conversation history.",
+      }),
+    ).toBe(true);
+  });
+
+  it("reads the reasoning_content failure from the diagnostic", () => {
+    expect(
+      isSessionCorruptionFailure({
+        error: "Internal error",
+        diagnostic:
+          "Missing required parameter: 'messages[3].reasoning_content' | code=-32603 | data={\"status\":400}",
+      }),
+    ).toBe(true);
+  });
+
   it.each(["Free usage limit reached", "OpenCode helper server exited (4294967295)"])(
     "ignores %s",
     (error) => {
