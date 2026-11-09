@@ -279,11 +279,20 @@ test.describe("New workspace entry points", () => {
       await nonGitOption.click();
       await expectNewWorkspaceProjectSelected(page, nonGitProject.projectDisplayName);
 
-      // No git checkout means no worktree isolation choice: the Isolation row is
-      // absent entirely.
-      await expect(page.getByTestId("workspace-create-isolation-trigger")).toHaveCount(0);
+      // No git checkout means no worktree choice, but the Isolation row stays
+      // because the host supports virtual workspaces.
+      await expect(page.getByTestId("workspace-create-isolation-trigger")).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.getByTestId("workspace-create-isolation-trigger").click();
+      await expect(page.getByTestId("workspace-create-isolation-local")).toBeVisible();
+      await expect(page.getByTestId("workspace-create-isolation-virtual")).toBeVisible();
+      await expect(page.getByTestId("workspace-create-isolation-worktree")).toHaveCount(0);
+      // Selecting virtual hides the project field; go back to Local so the
+      // project picker is available for the next assertion.
+      await page.getByTestId("workspace-create-isolation-local").click();
 
-      // Switching to the git project on the same screen reveals the Isolation row.
+      // Switching to the git project on the same screen reveals the worktree choice.
       await trigger.click();
       const gitOption = page.getByTestId(
         `new-workspace-project-picker-option-${projectEquivalenceViewKey(gitProject.projectKey)}`,

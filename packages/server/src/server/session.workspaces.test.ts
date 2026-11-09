@@ -5994,6 +5994,50 @@ test("workspace.delete.request removes the workspace record permanently", async 
   expect(removedWorkspaceId).toBe("ws-repo-delete");
 });
 
+test("workspace.delete.request removes a virtual workspace folder only when deleteFiles is set", async () => {
+  const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-virtual-delete-"));
+  const workspaceDirectory = path.join(paseoHome, "workspaces", "wks_0000000000000000");
+  mkdirSync(workspaceDirectory, { recursive: true });
+  writeFileSync(path.join(workspaceDirectory, "notes.md"), "# Notes\n");
+
+  const emitted: SessionOutboundMessage[] = [];
+  const session = createSessionForWorkspaceTests({ paseoHome });
+  const workspace = createPersistedWorkspaceRecord({
+    workspaceId: "wks_0000000000000000",
+    projectId: "prj_0000000000000000",
+    cwd: workspaceDirectory,
+    kind: "directory",
+    displayName: "Notes",
+    createdAt: "2026-03-01T12:00:00.000Z",
+    updatedAt: "2026-03-01T12:00:00.000Z",
+  });
+  session.emit = (message) => {
+    if (isSessionOutboundMessage(message)) emitted.push(message);
+  };
+  session.workspaceRegistry.get = async () => workspace;
+  session.workspaceRegistry.remove = async () => {};
+  session.agentStorage.listByWorkspace = async () => [];
+  session.agentManager.flush = async () => {};
+  session.terminalController.killTerminalsForWorkspace = async () => {};
+
+  try {
+    await session.handleMessage({
+      type: "workspace.delete.request",
+      workspaceId: "wks_0000000000000000",
+      requestId: "req-delete-with-files",
+      deleteFiles: true,
+    });
+
+    const response = emitted.find((message) => message.type === "workspace.delete.response") as
+      | { payload: Record<string, unknown> }
+      | undefined;
+    expect(response?.payload.error).toBeNull();
+    expect(existsSync(workspaceDirectory)).toBe(false);
+  } finally {
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
+});
+
 test("archive_workspace_request archives a worktree-kind workspace and removes the directory on last reference", async () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "session-worktree-kind-archive-"));
   const repoDir = path.join(tempDir, "repo");
@@ -9585,6 +9629,69 @@ test("workspace.create.request attaches a directory workspace to its explicit ac
     cwd: REPO_CWD,
     projectId: "prj_explicit",
   });
+});
+
+test("workspace.create.request with virtual source creates a Paseo-managed folder", async () => {
+  const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-virtual-"));
+  const emitted: SessionOutboundMessage[] = [];
+  const workspaces = new Map<string, PersistedWorkspaceRecord>();
+  const projects = new Map<string, PersistedProjectRecord>();
+  const session = createSessionForWorkspaceTests({
+    onMessage: (message) => emitted.push(message),
+    paseoHome,
+  });
+  session.projectRegistry.get = async (projectId: string) => projects.get(projectId) ?? null;
+  session.projectRegistry.getOrCreateActiveByRoot = async (input) => {
+    const existing = Array.from(projects.values()).find(
+      (project) => project.rootPath === input.rootPath && !project.archivedAt,
+    );
+    if (existing) return existing;
+    const project = createPersistedProjectRecord({
+      projectId: "prj_chats",
+      rootPath: input.rootPath,
+      kind: input.kind,
+      displayName: input.displayName,
+      createdAt: input.timestamp,
+      updatedAt: input.timestamp,
+    });
+    projects.set(project.projectId, project);
+    return project;
+  };
+  session.workspaceRegistry.upsert = async (record: unknown) => {
+    const workspace = record as PersistedWorkspaceRecord;
+    workspaces.set(workspace.workspaceId, workspace);
+  };
+  session.workspaceRegistry.get = async (workspaceId: string) =>
+    workspaces.get(workspaceId) ?? null;
+
+  try {
+    await session.handleMessage({
+      type: "workspace.create.request",
+      requestId: "req-virtual-workspace",
+      title: "Notes",
+      source: { kind: "virtual" },
+    });
+
+    const response = findByType(emitted, "workspace.create.response");
+    expect(response?.payload).toMatchObject({
+      requestId: "req-virtual-workspace",
+      error: null,
+      workspace: {
+        workspaceDirectory: expect.stringContaining(path.join(paseoHome, "workspaces")),
+      },
+    });
+    const workspace = response?.payload.workspace!;
+    expect(workspace.workspaceDirectory).toBe(path.join(paseoHome, "workspaces", workspace.id));
+    expect(workspace.projectId).toBe("prj_chats");
+    expect(workspace.projectDisplayName).toBe("Chats");
+    expect(existsSync(workspace.workspaceDirectory)).toBe(true);
+    expect(workspaces.get(workspace.id)).toMatchObject({
+      cwd: workspace.workspaceDirectory,
+      title: "Notes",
+    });
+  } finally {
+    rmSync(paseoHome, { recursive: true, force: true });
+  }
 });
 
 test("workspace.create.request with background persists a hidden workspace that only opted-in listings show", async () => {

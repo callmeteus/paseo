@@ -151,6 +151,16 @@ describe("runRunCommand option validation", () => {
     ).rejects.not.toMatchObject({ code: "INVALID_OPTIONS" });
   });
 
+  it("allows explicit virtual workspace creation through validation", async () => {
+    await expect(
+      runRunCommand(
+        "do something",
+        { newWorkspace: "virtual", provider: undefined, daemonTarget },
+        {} as never,
+      ),
+    ).rejects.not.toMatchObject({ code: "INVALID_OPTIONS" });
+  });
+
   it("rejects unknown new workspace kinds", async () => {
     await expectInvalidOptions({ newWorkspace: "container" }, /Unsupported new workspace kind/);
   });

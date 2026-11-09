@@ -1626,6 +1626,7 @@ export const ja: TranslationResources = {
     isolation: {
       local: "ローカル",
       worktree: "新しいワークツリー",
+      virtual: "仮想",
       label: "分離方法",
     },
     fields: {

@@ -1627,6 +1627,7 @@ export const ru: TranslationResources = {
     isolation: {
       local: "Локально",
       worktree: "Новый worktree",
+      virtual: "Виртуально",
       label: "Изоляция",
     },
     fields: {

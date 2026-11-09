@@ -46,7 +46,10 @@ export function addRunOptions(cmd: Command): Command {
       )
       .option("--thinking <id>", "Thinking option ID to use for this run")
       .option("--mode <mode>", "Provider-specific mode (e.g., plan, default, bypass)")
-      .option("--new-workspace <local|worktree>", "Create a separate local or worktree workspace")
+      .option(
+        "--new-workspace <local|worktree|virtual>",
+        "Create a separate local, worktree, or virtual workspace",
+      )
       .addOption(new Option("--worktree <name>", "Legacy workspace isolation alias").hideHelp())
       .option(
         "--worktree-mode <mode>",
@@ -147,6 +150,12 @@ function resolveNewWorkspaceKind(options: AgentRunOptions): string | undefined {
 
 function buildRunWorkspaceSource(options: AgentRunOptions, cwd: string) {
   const newWorkspace = resolveNewWorkspaceKind(options) ?? "local";
+  if (newWorkspace === "virtual") {
+    return buildWorkspaceSource({
+      daemonTarget: options.daemonTarget,
+      isolation: "virtual",
+    });
+  }
   return buildWorkspaceSource({
     daemonTarget: options.daemonTarget,
     isolation: newWorkspace,
@@ -320,12 +329,13 @@ function validateRunWorkspaceOptions(options: AgentRunOptions): void {
   if (
     options.newWorkspace &&
     options.newWorkspace !== "local" &&
-    options.newWorkspace !== "worktree"
+    options.newWorkspace !== "worktree" &&
+    options.newWorkspace !== "virtual"
   ) {
     throw {
       code: "INVALID_OPTIONS",
       message: `Unsupported new workspace kind: ${options.newWorkspace}`,
-      details: "Use --new-workspace local or --new-workspace worktree",
+      details: "Use --new-workspace local, worktree, or virtual",
     } satisfies CommandError;
   }
 

@@ -14,7 +14,7 @@ import { describeHookWorkspace } from "./plugins/lifecycle/index.js";
 import express from "express";
 import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
 import { appendFileSync, constants, existsSync, mkdirSync, unlinkSync } from "fs";
-import { open, rm, stat } from "fs/promises";
+import { mkdir, open, rm, stat } from "fs/promises";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { getHostName } from "./host-name.js";
@@ -23,6 +23,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Logger } from "pino";
 import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
+import { generateWorkspaceId } from "./workspace-registry-model.js";
 
 export type ListenTarget =
   | { type: "tcp"; host: string; port: number }
@@ -1631,6 +1632,28 @@ export async function createPaseoDaemon(
         title,
         projectId,
         context,
+      );
+      await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
+      return workspace;
+    },
+    createVirtualWorkspace: async (title, context) => {
+      const workspaceId = generateWorkspaceId();
+      const projectsRoot = path.join(config.paseoHome, "workspaces");
+      const cwd = path.join(projectsRoot, workspaceId);
+      await mkdir(cwd, { recursive: true });
+      const project = await workspaceProvisioning.findOrCreateProjectForDirectory(
+        projectsRoot,
+        "Chats",
+      );
+      const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
+        cwd,
+        title,
+        project.projectId,
+        {
+          ...context,
+          workspaceId,
+          workspaceDisplayName: title?.trim() || "Chat",
+        },
       );
       await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
       return workspace;

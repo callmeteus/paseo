@@ -122,4 +122,19 @@ describe("workspace create source", () => {
       "Unsupported workspace isolation",
     );
   });
+
+  it("maps --virtual to a virtual workspace without a path", () => {
+    expect(buildWorkspaceSource({ virtual: true })).toEqual({ kind: "virtual" });
+    expect(buildWorkspaceSource({ isolation: "virtual" })).toEqual({ kind: "virtual" });
+  });
+
+  it("rejects path and worktree options for virtual workspaces", () => {
+    expect(() => buildWorkspaceSource({ virtual: true, path: "/tmp/project" })).toThrow(
+      "Virtual workspaces do not accept",
+    );
+  });
+
+  it("requires an isolation choice when --virtual is omitted", () => {
+    expect(() => buildWorkspaceSource({})).toThrow("Pass --isolation");
+  });
 });

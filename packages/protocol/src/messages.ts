@@ -3082,6 +3082,11 @@ export const WorkspaceCreateRequestSchema = z.object({
       githubPrNumber: z.number().int().positive().optional(),
       worktreeSlug: z.string().optional(),
     }),
+    z.object({
+      // A workspace backed by a folder Paseo creates under $PASEO_HOME/workspaces.
+      // Use it for non-code chats that do not have a dedicated project directory.
+      kind: z.literal("virtual"),
+    }),
   ]),
 });
 
@@ -4047,6 +4052,8 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(internalWorkspaces): added in v0.9.0; remove gate after 2027-03-17.
         internalWorkspaces: z.boolean().optional(),
         backgroundWorkspaces: z.boolean().optional(),
+        // COMPAT(virtualWorkspaces): added in v0.13.1, remove gate after 2027-11-09.
+        virtualWorkspaces: z.boolean().optional(),
         providersSnapshot: z.boolean().optional(),
         connectedHosts: z.boolean().optional(),
         hostMultiplexing: z.boolean().optional(),

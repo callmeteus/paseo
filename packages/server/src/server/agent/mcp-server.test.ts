@@ -2742,6 +2742,58 @@ describe("create_agent MCP tool", () => {
     expect(listed.structuredContent.workspaces).toEqual([]);
   });
 
+  it("creates a virtual workspace without a path", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const virtualWorkspace = createPersistedWorkspaceRecord({
+      workspaceId: "wks_0000000000000000",
+      projectId: "project-1",
+      cwd: join(tmpdir(), "paseo-home", "workspaces", "wks_0000000000000000"),
+      kind: "directory",
+      displayName: "Notes",
+      createdAt: "2026-07-17T00:00:00.000Z",
+      updatedAt: "2026-07-17T00:00:00.000Z",
+    });
+    const createCalls: Array<{ title?: string | null; context: { background?: boolean } }> = [];
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      createVirtualWorkspace: async (title, context) => {
+        createCalls.push({ title, context: context ?? {} });
+        return virtualWorkspace;
+      },
+      logger,
+    });
+
+    const created = await invokeToolWithParsedInput(registeredTool(server, "create_workspace"), {
+      isolation: "virtual",
+      title: "Notes",
+      background: true,
+    });
+    expect(created.structuredContent.workspaceId).toBe("wks_0000000000000000");
+    expect(createCalls).toEqual([{ title: "Notes", context: { background: true } }]);
+  });
+
+  it("rejects path and project options for virtual workspace creation", async () => {
+    const { agentManager, agentStorage } = createTestDeps();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      createVirtualWorkspace: async () => {
+        throw new Error("should not be called");
+      },
+      logger,
+    });
+
+    await expect(
+      invokeToolWithParsedInput(registeredTool(server, "create_workspace"), {
+        isolation: "virtual",
+        path: process.cwd(),
+      }),
+    ).rejects.toThrow("Virtual workspaces do not accept");
+  });
+
   it("accepts custom provider IDs in create_agent input validation", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const server = await createAgentMcpServer({

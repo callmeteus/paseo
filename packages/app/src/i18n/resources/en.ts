@@ -1615,6 +1615,7 @@ export const en = {
     isolation: {
       local: "Local",
       worktree: "New worktree",
+      virtual: "Virtual",
       label: "Isolation",
     },
     fields: {

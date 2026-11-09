@@ -161,6 +161,7 @@ import {
   checkoutLiteFromGitSnapshot,
   checkoutFromPersistedWorkspacePlacement,
   deriveWorkspaceDisplayName,
+  generateWorkspaceId,
 } from "./workspace-registry-model.js";
 import { resolveWorkspaceIdForPath } from "./resolve-workspace-id-for-path.js";
 import {
@@ -4768,17 +4769,23 @@ export class Session {
             ? async (id, workspace, onReady) => {
                 if (!workspace?.workspaceDirectory)
                   throw new Error("Created workspace has no directory");
-                const sourceCwd =
-                  request.source.kind === "directory"
-                    ? request.source.path
-                    : await resolveWorktreeSourceCwd(request.source, this.projectRegistry);
-                const relativeCwd = relative(resolve(sourceCwd), resolve(agentInput.config.cwd));
-                if (
-                  relativeCwd === ".." ||
-                  relativeCwd.startsWith(`..${sep}`) ||
-                  isAbsolute(relativeCwd)
-                )
-                  throw new Error("Agent directory must be inside the workspace source");
+                // A virtual workspace has no caller-visible source directory: the
+                // folder Paseo just created is the only place the agent can start.
+                let cwd = workspace.workspaceDirectory;
+                if (request.source.kind !== "virtual") {
+                  const sourceCwd =
+                    request.source.kind === "directory"
+                      ? request.source.path
+                      : await resolveWorktreeSourceCwd(request.source, this.projectRegistry);
+                  const relativeCwd = relative(resolve(sourceCwd), resolve(agentInput.config.cwd));
+                  if (
+                    relativeCwd === ".." ||
+                    relativeCwd.startsWith(`..${sep}`) ||
+                    isAbsolute(relativeCwd)
+                  )
+                    throw new Error("Agent directory must be inside the workspace source");
+                  cwd = resolve(workspace.workspaceDirectory, relativeCwd);
+                }
                 return this.createSessionAgent(
                   {
                     ...agentInput,
@@ -4786,7 +4793,7 @@ export class Session {
                     requestId,
                     config: {
                       ...agentInput.config,
-                      cwd: resolve(workspace.workspaceDirectory, relativeCwd),
+                      cwd,
                     },
                     workspaceId: workspace.id,
                   },
@@ -7351,14 +7358,51 @@ export class Session {
       const transformed = await this.pluginRuntime.before("workspace.create", input);
       creationRequest = { ...transformed, type, requestId };
     }
+    if (creationRequest.source.kind === "virtual") {
+      return this.handleWorkspaceCreateVirtual(creationRequest, workspaceId);
+    }
     return creationRequest.source.kind === "directory"
       ? this.handleWorkspaceCreateLocal(creationRequest, workspaceId)
       : this.handleWorkspaceCreateWorktree(creationRequest, workspaceId);
   }
 
+  /**
+   * A virtual workspace is a normal directory workspace over a folder Paseo creates
+   * under $PASEO_HOME/workspaces. Nothing exists there beforehand, so creation owns
+   * the directory and delete may remove it.
+   */
+  private async handleWorkspaceCreateVirtual(
+    request: Extract<SessionInboundMessage, { type: "workspace.create.request" }>,
+    workspaceId?: string,
+  ): Promise<WorkspaceDescriptorPayload> {
+    if (request.source.kind !== "virtual") {
+      throw new Error("Unexpected workspace source");
+    }
+
+    const virtualWorkspaceId = workspaceId ?? generateWorkspaceId();
+    // Every virtual workspace lives under one Paseo-owned "Chats" project, so
+    // non-code chats do not each create a dedicated project in the sidebar.
+    const projectsRoot = join(this.paseoHome, "workspaces");
+    const cwd = join(projectsRoot, virtualWorkspaceId);
+    await mkdir(cwd, { recursive: true });
+    const project = await this.workspaceProvisioning.findOrCreateProjectForDirectory(
+      projectsRoot,
+      "Chats",
+    );
+    return this.handleWorkspaceCreateLocal(
+      {
+        ...request,
+        source: { kind: "directory", path: cwd, projectId: project.projectId },
+      },
+      virtualWorkspaceId,
+      request.title?.trim() || "Chat",
+    );
+  }
+
   private async handleWorkspaceCreateLocal(
     request: Extract<SessionInboundMessage, { type: "workspace.create.request" }>,
     workspaceId?: string,
+    virtualDisplayName?: string,
   ): Promise<WorkspaceDescriptorPayload> {
     if (request.source.kind !== "directory") {
       throw new Error("Unexpected workspace source");
@@ -7381,6 +7425,7 @@ export class Session {
         workspaceId,
         background: request.background,
         callerWorkspaceId: this.getCallerWorkspaceId(request.callerAgentId),
+        ...(virtualDisplayName ? { workspaceDisplayName: virtualDisplayName } : {}),
       },
     );
     await this.syncWorkspaceGitObserverForWorkspace(workspace);
@@ -8164,14 +8209,18 @@ export class Session {
       await this.workspaceRegistry.remove(request.workspaceId);
       await this.emitWorkspaceUpdateForWorkspaceId(request.workspaceId);
 
-      // Only a Paseo-owned worktree is ours to remove. A checkout the user opened stays.
-      if (
-        request.deleteFiles === true &&
-        existing.kind === "worktree" &&
-        existing.isPaseoOwnedWorktree &&
-        existing.worktreeRoot
-      ) {
-        await rm(existing.worktreeRoot, { recursive: true, force: true }).catch((error) => {
+      // Only a Paseo-owned directory is ours to remove. Archive keeps it; delete
+      // removes it when deleteFiles is set. A checkout the user opened stays.
+      const virtualWorkspacesRoot = join(this.paseoHome, "workspaces");
+      const isVirtualWorkspace = this.isPathWithinRoot(virtualWorkspacesRoot, existing.cwd);
+      let directoryToRemove: string | null = null;
+      if (existing.kind === "worktree" && existing.isPaseoOwnedWorktree) {
+        directoryToRemove = existing.worktreeRoot;
+      } else if (isVirtualWorkspace) {
+        directoryToRemove = existing.cwd;
+      }
+      if (request.deleteFiles === true && directoryToRemove) {
+        await rm(directoryToRemove, { recursive: true, force: true }).catch((error) => {
           this.sessionLogger.warn(
             { err: error, workspaceId: request.workspaceId },
             "Failed to remove workspace directory during delete",

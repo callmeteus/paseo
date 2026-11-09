@@ -155,6 +155,10 @@ export interface PaseoToolHostDependencies {
     projectId?: string,
     context?: { background?: boolean; callerWorkspaceId?: string },
   ) => Promise<PersistedWorkspaceRecord>;
+  createVirtualWorkspace?: (
+    title?: string | null,
+    context?: { background?: boolean; callerWorkspaceId?: string },
+  ) => Promise<PersistedWorkspaceRecord>;
   workspaceScripts?: Pick<WorkspaceScriptsService, "list" | "launch" | "stop">;
   markWorkspaceArchiving?: ArchiveDependencies["markWorkspaceArchiving"];
   clearWorkspaceArchiving?: ArchiveDependencies["clearWorkspaceArchiving"];
@@ -1482,14 +1486,14 @@ function createToolCatalog(
     {
       title: "Create workspace",
       description:
-        "Create a workspace using an existing local checkout or a new Paseo-managed worktree.",
+        "Create a workspace using an existing local checkout, a new Paseo-managed worktree, or a Paseo-managed virtual folder for non-code chats.",
       inputSchema: {
-        isolation: z.enum(["local", "worktree"]),
+        isolation: z.enum(["local", "worktree", "virtual"]),
         path: z
           .string()
           .optional()
           .describe(
-            "Local directory or source checkout. Defaults to your current workspace. Local isolation adopts an existing directory and never creates one.",
+            "Local directory or source checkout. Defaults to your current workspace. Local isolation adopts an existing directory and never creates one. Virtual isolation takes no path.",
           ),
         projectId: z.string().optional().describe("Existing project id to own the workspace."),
         title: z.string().trim().min(1).optional(),
@@ -1547,7 +1551,29 @@ function createToolCatalog(
       forge,
     }) => {
       let workspace: PersistedWorkspaceRecord;
-      if (isolation === "local") {
+      if (isolation === "virtual") {
+        assertOptionsAbsent(
+          [
+            ["path", path],
+            ["projectId", projectId],
+            ["mode", mode],
+            ["worktreeSlug", worktreeSlug],
+            ["branchName", branchName],
+            ["baseBranch", baseBranch],
+            ["branch", branch],
+            ["prNumber", prNumber],
+            ["forge", forge],
+          ],
+          "Virtual workspaces do not accept a path, project, or worktree options",
+        );
+        if (!options.createVirtualWorkspace) {
+          throw new Error("Workspace provisioning is not configured");
+        }
+        workspace = await options.createVirtualWorkspace(title, {
+          background,
+          callerWorkspaceId: resolveCallerAgent()?.workspaceId,
+        });
+      } else if (isolation === "local") {
         const cwd = resolveScopedCwd(path, { required: true });
         if (!(await isExistingDirectory(cwd))) {
           throw new PaseoToolInputError(`Directory not found: ${cwd}`);

@@ -21,7 +21,8 @@ export function createWorkspaceCommand(): Command {
     workspace
       .command("create")
       .description("Create a workspace")
-      .requiredOption("--isolation <local|worktree>", "Workspace isolation")
+      .option("--isolation <local|worktree|virtual>", "Workspace isolation")
+      .option("--virtual", "Create a Paseo-managed virtual workspace for non-code chats")
       .option("--path <path>", "Local directory or source checkout (default: current)")
       .option("--project <id>", "Existing project id")
       .option("--title <title>", "Workspace title")

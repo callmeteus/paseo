@@ -72,12 +72,16 @@ export interface WorkspaceProvisioningService {
       workspaceId?: string;
       background?: boolean;
       callerWorkspaceId?: string;
+      workspaceDisplayName?: string;
     },
   ): Promise<PersistedWorkspaceRecord>;
   createWorkspaceForWorktree(
     input: CreateWorktreeWorkspaceInput,
   ): Promise<PersistedWorkspaceRecord>;
-  findOrCreateProjectForDirectory(cwd: string): Promise<PersistedProjectRecord>;
+  findOrCreateProjectForDirectory(
+    cwd: string,
+    displayName?: string,
+  ): Promise<PersistedProjectRecord>;
   ensureWorkspaceRecordUnarchived(
     workspace: PersistedWorkspaceRecord,
   ): Promise<PersistedWorkspaceRecord>;
@@ -198,14 +202,17 @@ export function createWorkspaceProvisioningService(deps: {
     }
   }
 
-  async function findOrCreateProjectForDirectory(cwd: string): Promise<PersistedProjectRecord> {
+  async function findOrCreateProjectForDirectory(
+    cwd: string,
+    displayName?: string,
+  ): Promise<PersistedProjectRecord> {
     const rootPath = resolve(cwd);
     const checkout = await workspaceGitService.getCheckout(rootPath);
     const timestamp = new Date().toISOString();
     return projectRegistry.getOrCreateActiveByRoot({
       rootPath,
       kind: checkout.isGit ? "git" : "non_git",
-      displayName: basename(rootPath) || rootPath,
+      displayName: displayName?.trim() || basename(rootPath) || rootPath,
       projectKey: deriveProjectKey({
         rootPath,
         remoteUrl: checkout.remoteUrl,
@@ -244,6 +251,7 @@ export function createWorkspaceProvisioningService(deps: {
       workspaceId?: string;
       background?: boolean;
       callerWorkspaceId?: string;
+      workspaceDisplayName?: string;
     },
   ): Promise<PersistedWorkspaceRecord> {
     const normalizedCwd = resolve(cwd);
@@ -253,10 +261,16 @@ export function createWorkspaceProvisioningService(deps: {
       : // COMPAT(workspaceCreateMissingProjectId): added in v0.1.107, remove after 2027-01-15.
         await findOrCreateProjectForDirectory(normalizedCwd);
     const timestamp = new Date().toISOString();
+    const placement = initialWorkspacePlacement({
+      source: "checkout",
+      cwd: normalizedCwd,
+      checkout,
+    });
     const workspace = createPersistedWorkspaceRecord({
       workspaceId: context?.workspaceId ?? generateWorkspaceId(),
       projectId: project.projectId,
-      ...initialWorkspacePlacement({ source: "checkout", cwd: normalizedCwd, checkout }),
+      ...placement,
+      displayName: context?.workspaceDisplayName?.trim() || placement.displayName,
       title: title?.trim() || null,
       createdAt: timestamp,
       updatedAt: timestamp,

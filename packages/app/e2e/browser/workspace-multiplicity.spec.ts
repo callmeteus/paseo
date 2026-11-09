@@ -2,6 +2,7 @@ import { test, expect, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { gotoWorkspace } from "../support/helpers/launcher";
 import {
+  archiveLocalWorkspaceFromDaemon,
   assertNewWorkspaceSidebarAndHeader,
   connectNewWorkspaceDaemonClient,
   openGlobalNewWorkspaceComposer,
@@ -166,6 +167,47 @@ test.describe("Workspace multiplicity creation flow", () => {
         .archivePaseoWorktree({ worktreePath: worktree.workspaceDirectory })
         .catch(() => undefined);
     } finally {
+      await seeded.cleanup();
+    }
+  });
+
+  test("Virtual isolation creates a Paseo-managed workspace under the Chats project", async ({
+    page,
+  }) => {
+    const seeded: SeededWorkspace = await seedWorkspace({
+      repoPrefix: "multiplicity-virtual-",
+    });
+    let createdWorkspaceId: string | null = null;
+
+    try {
+      await gotoAppShell(page);
+      await waitForSidebarHydration(page);
+      await expect(page.getByTestId(workspaceRowTestId(seeded.workspaceId))).toBeVisible({
+        timeout: 30_000,
+      });
+
+      await openGlobalNewWorkspaceComposer(page);
+      await selectWorkspaceIsolation(page, "virtual");
+      await submitNewWorkspaceEmpty(page);
+
+      const created = await assertNewWorkspaceSidebarAndHeader(page, {
+        serverId: getServerId(),
+        client,
+        previousWorkspaceId: seeded.workspaceId,
+        projectDisplayName: "Chats",
+      });
+      createdWorkspaceId = created.workspaceId;
+
+      expect(created.workspaceDirectory).toContain("workspaces");
+      const descriptor = (await client.fetchWorkspaces()).entries.find(
+        (entry) => entry.id === created.workspaceId,
+      );
+      expect(descriptor?.workspaceKind).toBe("directory");
+      expect(descriptor?.projectDisplayName).toBe("Chats");
+    } finally {
+      if (createdWorkspaceId) {
+        await archiveLocalWorkspaceFromDaemon(client, createdWorkspaceId).catch(() => undefined);
+      }
       await seeded.cleanup();
     }
   });

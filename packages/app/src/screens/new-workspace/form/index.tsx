@@ -20,7 +20,7 @@ import { branchIcon, folderIcon, ProjectIcon, pullRequestIcon } from "./icons";
 import { LaunchControl } from "./launch-control";
 import { AddProjectOption, IsolationOption, ProjectOption, RefOption } from "./options";
 
-type Isolation = "local" | "worktree";
+type Isolation = "local" | "worktree" | "virtual";
 type RenderOption = NonNullable<ComboboxProps["renderOption"]>;
 
 interface PickerControl {
@@ -55,6 +55,7 @@ export interface NewWorkspaceFormProps {
   isolation: PickerControl & {
     effectiveIsolation: Isolation;
     canCreateWorktree: boolean;
+    canCreateVirtual: boolean;
     onSelect: (isolation: Isolation) => void;
   };
   base: PickerControl & {
@@ -128,17 +129,28 @@ function useIsolationPicker(
   isPending: boolean,
 ): { options: ComboboxOption[]; onSelect: (id: string) => void; renderOption: RenderOption } {
   const { t } = useTranslation();
-  const { canCreateWorktree, onSelect, onOpenChange } = isolation;
+  const { canCreateWorktree, canCreateVirtual, onSelect, onOpenChange } = isolation;
   // "New worktree" is omitted entirely (not disabled) when the project isn't a
-  // git checkout, since worktree isolation is impossible there.
+  // git checkout, since worktree isolation is impossible there. Virtual
+  // workspaces do not depend on a project and are offered whenever the host
+  // supports them.
   const options = useMemo<ComboboxOption[]>(() => {
-    const local = { id: "local", label: t("newWorkspace.isolation.local") };
-    if (!canCreateWorktree) return [local];
-    return [local, { id: "worktree", label: t("newWorkspace.isolation.worktree") }];
-  }, [canCreateWorktree, t]);
+    const nextOptions: ComboboxOption[] = [
+      { id: "local", label: t("newWorkspace.isolation.local") },
+    ];
+    if (canCreateWorktree) {
+      nextOptions.push({ id: "worktree", label: t("newWorkspace.isolation.worktree") });
+    }
+    if (canCreateVirtual) {
+      nextOptions.push({ id: "virtual", label: t("newWorkspace.isolation.virtual") });
+    }
+    return nextOptions;
+  }, [canCreateVirtual, canCreateWorktree, t]);
   const handleSelect = useCallback(
     (id: string) => {
-      onSelect(id === "worktree" ? "worktree" : "local");
+      if (id === "worktree") onSelect("worktree");
+      else if (id === "virtual") onSelect("virtual");
+      else onSelect("local");
       onOpenChange(false);
     },
     [onOpenChange, onSelect],
@@ -155,6 +167,33 @@ function useRefRenderOption(itemById: Map<string, PickerItem>, isPending: boolea
     (row) => <RefOption {...row} item={itemById.get(row.option.id)} disabled={isPending} />,
     [isPending, itemById],
   );
+}
+
+function resolveIsolationPresentation(
+  isolation: Isolation,
+  t: (key: string) => string,
+): { isWorktree: boolean; isVirtual: boolean; value: string } {
+  const isWorktree = isolation === "worktree";
+  const isVirtual = isolation === "virtual";
+  let value = t("newWorkspace.isolation.local");
+  if (isVirtual) value = t("newWorkspace.isolation.virtual");
+  else if (isWorktree) value = t("newWorkspace.isolation.worktree");
+  return { isWorktree, isVirtual, value };
+}
+
+function resolveFieldVisibility(input: {
+  canCreateWorktree: boolean;
+  canCreateVirtual: boolean;
+  showRefPicker: boolean;
+  isVirtual: boolean;
+}): { showIsolation: boolean; showBase: boolean; reserveBase: boolean } {
+  const showIsolation = input.canCreateWorktree || input.canCreateVirtual;
+  const showBase = input.showRefPicker && !input.isVirtual;
+  return {
+    showIsolation,
+    showBase,
+    reserveBase: !showBase && !input.isVirtual,
+  };
 }
 
 /**
@@ -194,13 +233,22 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
     () => <HostStatusDot serverId={host.selectedServerId} />,
     [host.selectedServerId],
   );
-  const isWorktree = isolation.effectiveIsolation === "worktree";
-  const isolationValue = isWorktree
-    ? t("newWorkspace.isolation.worktree")
-    : t("newWorkspace.isolation.local");
+  const {
+    isWorktree,
+    isVirtual,
+    value: isolationValue,
+  } = resolveIsolationPresentation(isolation.effectiveIsolation, t);
+  const { showIsolation, showBase, reserveBase } = resolveFieldVisibility({
+    canCreateWorktree: isolation.canCreateWorktree,
+    canCreateVirtual: isolation.canCreateVirtual,
+    showRefPicker: base.showRefPicker,
+    isVirtual,
+  });
   const refIcon = base.selectedItem?.kind === "github-pr" ? pullRequestIcon : branchIcon;
 
-  const projectField = (
+  // A virtual workspace lives in a Paseo-owned folder, so there is no project
+  // or starting ref to choose.
+  const projectField = isVirtual ? null : (
     <FieldTrigger
       ref={project.anchorRef}
       variant={variant}
@@ -244,7 +292,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
       />
     </HostPicker>
   );
-  const isolationField = isolation.canCreateWorktree ? (
+  const isolationField = showIsolation ? (
     <FieldTrigger
       ref={isolation.anchorRef}
       variant={variant}
@@ -258,7 +306,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
       testID="workspace-create-isolation-trigger"
     />
   ) : null;
-  const baseField = base.showRefPicker ? (
+  const baseField = showBase ? (
     <FieldTrigger
       ref={base.anchorRef}
       variant={variant}
@@ -339,9 +387,10 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
         {baseField}
         {launchField}
         {/* Isolation and Base come and go with the project; their rows stay reserved so the
-            stack keeps one height and nothing above the composer jumps. */}
+            stack keeps one height and nothing above the composer jumps. Virtual has no base
+            row at all, so it must not reserve one. */}
         {isolationField ? null : <View style={styles.reservedField} pointerEvents="none" />}
-        {baseField ? null : <View style={styles.reservedField} pointerEvents="none" />}
+        {reserveBase ? <View style={styles.reservedField} pointerEvents="none" /> : null}
         {pickers}
       </View>
     );

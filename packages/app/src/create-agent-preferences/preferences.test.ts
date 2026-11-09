@@ -260,6 +260,10 @@ describe("create agent preferences", () => {
     expect(parseFormPreferences({ provider: "codex" }).isolation).toBeUndefined();
   });
 
+  it("accepts virtual workspace isolation", () => {
+    expect(parseFormPreferences({ isolation: "virtual" }).isolation).toBe("virtual");
+  });
+
   it("rejects an unknown isolation value as invalid stored preferences", () => {
     expect(parseFormPreferences({ provider: "codex", isolation: "sandbox" })).toEqual({});
   });

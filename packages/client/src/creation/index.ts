@@ -63,6 +63,9 @@ export class CreationClient {
       if (request.workspaceId || request.agent?.agentId)
         throw new Error("Update the host to use caller-selected creation IDs.");
       const { agent, ...workspaceInput } = request;
+      if (request.source.kind === "virtual") {
+        throw new Error("Update the host to create virtual workspaces.");
+      }
       const sourceCwd =
         request.source.kind === "directory" ? request.source.path : request.source.cwd;
       const relativeCwd =

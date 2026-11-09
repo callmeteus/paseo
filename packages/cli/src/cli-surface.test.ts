@@ -46,7 +46,7 @@ describe("canonical CLI surface", () => {
   it("names explicit workspace creation without exposing older syntax", () => {
     const run = createCli().commands.find((command) => command.name() === "run");
     const help = run?.helpInformation();
-    expect(help).toContain("--new-workspace <local|worktree>");
+    expect(help).toContain("--new-workspace <local|worktree|virtual>");
     expect(help).not.toContain("--isolation");
     expect(help).not.toContain("--worktree <name>");
   });

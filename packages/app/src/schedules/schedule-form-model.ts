@@ -486,7 +486,9 @@ function resolveInitialIsolation(input: {
   if (input.config) {
     return input.config.isolation ?? "local";
   }
-  return input.preferences?.isolation ?? "local";
+  // Virtual workspaces are not a schedule target; the form only runs in an
+  // existing project directory or a worktree.
+  return input.preferences?.isolation === "worktree" ? "worktree" : "local";
 }
 
 function resolveSelectedProjectOptionId(target: ScheduleProjectTarget | null): string {
@@ -972,7 +974,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
     if (
       snapshot.mode === "create" &&
       !userModified.isolation &&
-      preferences?.isolation !== undefined
+      (preferences?.isolation === "local" || preferences?.isolation === "worktree")
     ) {
       resolved = { ...resolved, isolation: preferences.isolation };
     }

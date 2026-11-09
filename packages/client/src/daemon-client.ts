@@ -3368,6 +3368,10 @@ export class DaemonClient {
     return this.lastServerInfoMessage?.features?.backgroundWorkspaces === true;
   }
 
+  supportsVirtualWorkspaces(): boolean {
+    return this.lastServerInfoMessage?.features?.virtualWorkspaces === true;
+  }
+
   async createAgent(options: CreateAgentRequestOptions): Promise<AgentSnapshotPayload> {
     if (options.git !== undefined || options.worktreeName !== undefined) {
       throw new Error(
@@ -5293,6 +5297,9 @@ export class DaemonClient {
   ): Promise<WorkspaceCreatePayload> {
     const resolvedRequestId = this.createRequestId(requestId ?? input.requestId);
     if (input.background !== undefined || input.callerAgentId) this.requireBackgroundWorkspaces();
+    if (input.source.kind === "virtual" && !this.supportsVirtualWorkspaces()) {
+      throw new Error("Update the host to create virtual workspaces.");
+    }
     if (input.agent?.background !== undefined)
       throw new Error("Configure background on the workspace, not its initial agent.");
     const result = await this.creations.createWorkspace({

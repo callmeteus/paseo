@@ -1644,6 +1644,7 @@ export const fr: TranslationResources = {
     isolation: {
       local: "Local",
       worktree: "Nouveau worktree",
+      virtual: "Virtuel",
       label: "Isolation",
     },
     fields: {

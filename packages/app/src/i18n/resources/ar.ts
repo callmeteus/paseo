@@ -1603,6 +1603,7 @@ export const ar: TranslationResources = {
     isolation: {
       local: "محلي",
       worktree: "شجرة عمل جديدة",
+      virtual: "افتراضي",
       label: "العزل",
     },
     fields: {

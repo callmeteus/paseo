@@ -188,45 +188,68 @@ function noopClearDraft() {}
 // Stable reference so the keyboard-action handler doesn't re-register each render.
 const PROJECT_PICK_ACTIONS: readonly KeyboardActionId[] = ["workspace.project.pick"];
 
+type WorkspaceIsolation = "local" | "worktree" | "virtual";
+
 interface WorkspaceIsolationState {
-  isolation: "local" | "worktree";
-  setIsolation: (value: "local" | "worktree") => void;
-  effectiveIsolation: "local" | "worktree";
+  isolation: WorkspaceIsolation;
+  setIsolation: (value: WorkspaceIsolation) => void;
+  effectiveIsolation: WorkspaceIsolation;
   canCreateWorktree: boolean;
+  canCreateVirtual: boolean;
   showRefPicker: boolean;
 }
 
 // Preserve the user's worktree choice while route metadata is provisional. Once
 // the authoritative placement arrives, unsupported projects fall back to local.
+// Virtual workspaces are Paseo-owned folders and do not depend on a project.
 function useWorkspaceIsolation(input: {
   supportsMultiplicity: boolean;
   worktreeSupport: "supported" | "unsupported" | "unknown";
+  supportsVirtual: boolean;
 }): WorkspaceIsolationState {
-  const { supportsMultiplicity, worktreeSupport } = input;
+  const { supportsMultiplicity, worktreeSupport, supportsVirtual } = input;
   // The last isolation choice is remembered alongside the other New Workspace
   // form preferences (provider, model, mode). A manual in-screen pick overrides
   // the remembered default until the screen remounts.
   const { preferences, updatePreferences } = useFormPreferences();
-  const [manualIsolation, setManualIsolation] = useState<"local" | "worktree" | null>(null);
+  const [manualIsolation, setManualIsolation] = useState<WorkspaceIsolation | null>(null);
   const isolation = manualIsolation ?? preferences.isolation ?? "local";
   const canCreateWorktree = supportsMultiplicity && worktreeSupport !== "unsupported";
+  const canCreateVirtual = supportsVirtual;
   const isWorktree = isolation === "worktree" && canCreateWorktree;
+  const isVirtual = isolation === "virtual" && canCreateVirtual;
 
   const setIsolation = useCallback(
-    (value: "local" | "worktree") => {
+    (value: WorkspaceIsolation) => {
       setManualIsolation(value);
       void updatePreferences({ isolation: value });
     },
     [updatePreferences],
   );
 
+  let effectiveIsolation: WorkspaceIsolation = "local";
+  if (isVirtual) effectiveIsolation = "virtual";
+  else if (isWorktree) effectiveIsolation = "worktree";
+
   return {
     isolation,
     setIsolation,
-    effectiveIsolation: isWorktree ? "worktree" : "local",
+    effectiveIsolation,
     canCreateWorktree,
-    showRefPicker: !supportsMultiplicity || isWorktree,
+    canCreateVirtual,
+    showRefPicker: !isVirtual && (!supportsMultiplicity || isWorktree),
   };
+}
+
+function resolveComposerSourceDirectory(
+  isolation: WorkspaceIsolation,
+  sourceDirectory: string | null,
+): string | null {
+  return isolation === "virtual" ? null : sourceDirectory;
+}
+
+function canOpenProjectPicker(optionCount: number, isolation: WorkspaceIsolation): boolean {
+  return optionCount > 0 && isolation !== "virtual";
 }
 
 function normalizeBranchDetails(
@@ -291,9 +314,9 @@ async function createMultiplicityWorkspace(input: {
   idempotencyKey: string;
   worktreeSlug: string;
   client: NonNullable<ReturnType<typeof useHostRuntimeClient>>;
-  isolation: "local" | "worktree";
-  project: HostProjectListItem;
-  sourceDirectory: string;
+  isolation: WorkspaceIsolation;
+  project: HostProjectListItem | null;
+  sourceDirectory: string | null;
   checkoutRequest: PickerCheckoutRequest | undefined;
   withInitialAgent: boolean;
   agent?: CreateWorkspaceRequestOptions["agent"];
@@ -307,30 +330,38 @@ async function createMultiplicityWorkspace(input: {
   serverId: string;
   createFailedMessage: string;
 }): Promise<WorkspaceCreationResult> {
-  const projectId = getHostProjectId(input.project, input.serverId);
-  if (!projectId) throw new Error("Project is not available on the selected host");
-  const isWorktree = input.isolation === "worktree";
+  const isVirtual = input.isolation === "virtual";
+  if (!isVirtual && !input.project) throw new Error("Choose a project");
+  if (!isVirtual && !input.sourceDirectory) throw new Error("Choose a host for this project");
+  const projectId = isVirtual ? null : getHostProjectId(input.project!, input.serverId);
+  if (!isVirtual && !projectId) throw new Error("Project is not available on the selected host");
   const firstAgentContext = buildFirstAgentContext({
     prompt: input.prompt,
     attachments: input.attachments,
   });
+  let source: CreateWorkspaceRequestOptions["source"];
+  if (isVirtual) {
+    source = { kind: "virtual" };
+  } else if (input.isolation === "worktree") {
+    source = {
+      kind: "worktree",
+      cwd: input.sourceDirectory!,
+      projectId: projectId!,
+      worktreeSlug: input.worktreeSlug,
+      ...input.checkoutRequest,
+    };
+  } else {
+    source = {
+      kind: "directory",
+      path: input.sourceDirectory!,
+      projectId: projectId!,
+    };
+  }
   const payload = await input.client.createWorkspace({
     idempotencyKey: input.idempotencyKey,
     agent: input.agent,
     onEvent: input.onEvent,
-    source: isWorktree
-      ? {
-          kind: "worktree",
-          cwd: input.sourceDirectory,
-          projectId,
-          worktreeSlug: input.worktreeSlug,
-          ...input.checkoutRequest,
-        }
-      : {
-          kind: "directory",
-          path: input.sourceDirectory,
-          projectId,
-        },
+    source,
     ...(firstAgentContext ? { firstAgentContext } : {}),
   });
   if (payload.error || !payload.workspace) {
@@ -934,6 +965,7 @@ export function NewWorkspaceScreen({
   // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
   const supportsWorkspaceMultiplicity = useHostFeature(selectedServerId, "workspaceMultiplicity");
   const supportsForgeSearch = useHostFeature(selectedServerId, "forgeSearch");
+  const supportsVirtualWorkspaces = useHostFeature(selectedServerId, "virtualWorkspaces");
   const [creationIdentity] = useState(() => ({
     draftId: draftId ?? generateDraftId(),
     worktreeSlug: createNameId(),
@@ -1032,6 +1064,22 @@ export function NewWorkspaceScreen({
   const projectIconDataByProjectViewKey = useProjectIcons({
     projects: projectIconTargets,
   });
+  const worktreeSupport = selectedProject
+    ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
+    : "unsupported";
+  const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
+  const { effectiveIsolation, setIsolation, canCreateWorktree, canCreateVirtual, showRefPicker } =
+    useWorkspaceIsolation({
+      supportsMultiplicity: supportsWorkspaceMultiplicity,
+      worktreeSupport,
+      supportsVirtual: supportsVirtualWorkspaces,
+    });
+  // A virtual workspace has no directory until the daemon creates it, so the
+  // composer must not treat the selected project as its working directory.
+  const composerSourceDirectory = resolveComposerSourceDirectory(
+    effectiveIsolation,
+    selectedSourceDirectory,
+  );
   const draftKey = buildNewWorkspaceDraftKey(draftId);
   const forkDraftSetup = usePendingWorkspaceDraftSetup(draftId);
   const draftContextScopeKey = useDraftWorkspaceAttachmentScopeKey(draftId);
@@ -1055,7 +1103,7 @@ export function NewWorkspaceScreen({
     composer: buildComposerConfig({
       serverId: selectedServerId,
       workspaceDirectory: workspace?.workspaceDirectory ?? null,
-      sourceDirectory: selectedSourceDirectory,
+      sourceDirectory: composerSourceDirectory,
       initialSetup: forkDraftSetup?.setup,
     }),
   });
@@ -1087,38 +1135,28 @@ export function NewWorkspaceScreen({
   }, [selectedServerId, t]);
 
   const clientReady = isConnected && Boolean(client);
-  const hasSelectedSourceDirectory = selectedSourceDirectory !== null;
+  const hasSelectedSourceDirectory = composerSourceDirectory !== null;
   const pickerQueryEnabled = pickerOpen && clientReady && hasSelectedSourceDirectory;
 
   const { status: checkoutStatus } = useCheckoutStatusQuery({
     serverId: selectedServerId,
-    cwd: selectedSourceDirectory ?? "",
+    cwd: composerSourceDirectory ?? "",
   });
-
-  const worktreeSupport = selectedProject
-    ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
-    : "unsupported";
-  const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
-  const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker } =
-    useWorkspaceIsolation({
-      supportsMultiplicity: supportsWorkspaceMultiplicity,
-      worktreeSupport,
-    });
 
   const branchSuggestionsQuery = useQuery({
     queryKey: [
       "branch-suggestions",
       selectedServerId,
-      selectedSourceDirectory,
+      composerSourceDirectory,
       debouncedPickerSearchQuery,
     ],
     queryFn: async () => {
-      if (!selectedSourceDirectory) {
+      if (!composerSourceDirectory) {
         throw new Error("Choose a project");
       }
       const connectedClient = withConnectedClient();
       return connectedClient.getBranchSuggestions({
-        cwd: selectedSourceDirectory,
+        cwd: composerSourceDirectory,
         query: debouncedPickerSearchQuery || undefined,
         limit: 20,
       });
@@ -1130,7 +1168,7 @@ export function NewWorkspaceScreen({
   const githubPrSearchQuery = useForgeSearchQuery({
     client,
     serverId: selectedServerId,
-    cwd: selectedSourceDirectory ?? "",
+    cwd: composerSourceDirectory ?? "",
     query: debouncedPickerSearchQuery,
     kinds: ["change_request"],
     supportsForgeSearch,
@@ -1250,7 +1288,7 @@ export function NewWorkspaceScreen({
   useKeyboardActionHandler({
     handlerId: "new-workspace-project-pick",
     actions: PROJECT_PICK_ACTIONS,
-    enabled: projectPickerOptions.length > 0,
+    enabled: canOpenProjectPicker(projectPickerOptions.length, effectiveIsolation),
     priority: 0,
     handle: handleProjectPick,
   });
@@ -1290,32 +1328,38 @@ export function NewWorkspaceScreen({
       if (creationResult.workspace) {
         return creationResult;
       }
-      if (!selectedProject) {
+      const isVirtual = effectiveIsolation === "virtual";
+      if (!isVirtual && !selectedProject) {
         throw new Error("Choose a project");
       }
-      if (!selectedSourceDirectory) {
+      if (!isVirtual && !selectedSourceDirectory) {
         throw new Error("Choose a host for this project");
       }
       const connectedClient = withConnectedClient();
-      const createsWorktree = !supportsWorkspaceMultiplicity || effectiveIsolation === "worktree";
-      const checkoutStatusForCreate = createsWorktree
-        ? await ensureCheckoutStatus({
-            queryClient,
-            client: connectedClient,
-            serverId: selectedServerId,
-            cwd: selectedSourceDirectory,
-          })
-        : null;
+      const createsWorktree =
+        !isVirtual && (!supportsWorkspaceMultiplicity || effectiveIsolation === "worktree");
+      const checkoutStatusForCreate =
+        createsWorktree && selectedSourceDirectory
+          ? await ensureCheckoutStatus({
+              queryClient,
+              client: connectedClient,
+              serverId: selectedServerId,
+              cwd: selectedSourceDirectory,
+            })
+          : null;
       const checkoutRequest = checkoutStatusForCreate
         ? pickerItemToCheckoutRequest(
             selectedItem ?? defaultBasePickerItem(checkoutStatusForCreate),
           )
         : undefined;
+      let isolation: WorkspaceIsolation = "local";
+      if (isVirtual) isolation = "virtual";
+      else if (createsWorktree) isolation = "worktree";
       const normalizedWorkspace = await createMultiplicityWorkspace({
         idempotencyKey: creationIdentity.draftId,
         worktreeSlug: creationIdentity.worktreeSlug,
         client: connectedClient,
-        isolation: createsWorktree ? "worktree" : "local",
+        isolation,
         project: selectedProject,
         sourceDirectory: selectedSourceDirectory,
         checkoutRequest,
@@ -1435,7 +1479,7 @@ export function NewWorkspaceScreen({
       setPendingAction("terminal");
       let outcome: SubmitOutcome = "background";
       await runCreateTerminalWorkspace({
-        cwd: selectedSourceDirectory ?? "",
+        cwd: composerSourceDirectory ?? "",
         prompt: terminalPromptText,
         profile: selectedTerminalProfile,
         profileName: selectedTerminalProfile?.name,
@@ -1494,7 +1538,7 @@ export function NewWorkspaceScreen({
     launchTarget,
     queryClient,
     selectedServerId,
-    selectedSourceDirectory,
+    composerSourceDirectory,
     selectedTerminalProfile,
     t,
     terminalPromptText,
@@ -1557,6 +1601,7 @@ export function NewWorkspaceScreen({
       onOpenChange: handleIsolationPickerOpenChange,
       effectiveIsolation,
       canCreateWorktree,
+      canCreateVirtual,
       onSelect: setIsolation,
     },
     base: {
@@ -1610,7 +1655,7 @@ export function NewWorkspaceScreen({
       textReplacement={terminalTextReplacement}
       attachments={NO_TERMINAL_ATTACHMENTS}
       onChangeAttachments={noopChangeAttachments}
-      cwd={selectedSourceDirectory ?? ""}
+      cwd={composerSourceDirectory ?? ""}
       clearDraft={noopClearDraft}
       autoFocus={terminalTakesPrompt}
       autoFocusKey={launchFocusKey}
@@ -1639,7 +1684,7 @@ export function NewWorkspaceScreen({
       onChangeAttachments={chatDraft.setAttachments}
       onForgeChangeRequestDetected={handleForgeChangeRequestDetected}
       onForgeChangeRequestAutoAttach={handleForgeChangeRequestAutoAttach}
-      cwd={selectedSourceDirectory ?? ""}
+      cwd={composerSourceDirectory ?? ""}
       clearDraft={handleClearDraft}
       autoFocus
       autoFocusKey={launchFocusKey}

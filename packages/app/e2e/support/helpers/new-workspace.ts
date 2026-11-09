@@ -330,14 +330,15 @@ export async function selectNewWorkspaceProject(
 
 // The isolation trigger renders the active isolation's label ("Local" / "New
 // worktree"), so asserting its text proves what the screen currently remembers.
-const ISOLATION_TRIGGER_LABEL: Record<"local" | "worktree", string> = {
+const ISOLATION_TRIGGER_LABEL: Record<"local" | "worktree" | "virtual", string> = {
   local: "Local",
   worktree: "New worktree",
+  virtual: "Virtual",
 };
 
 export async function expectWorkspaceIsolationSelected(
   page: Page,
-  isolation: "local" | "worktree",
+  isolation: "local" | "worktree" | "virtual",
 ): Promise<void> {
   const trigger = page.getByRole("button", { name: "Workspace isolation" });
   await expect(trigger).toBeVisible({ timeout: 30_000 });
@@ -346,7 +347,7 @@ export async function expectWorkspaceIsolationSelected(
 
 export async function selectWorkspaceIsolation(
   page: Page,
-  isolation: "local" | "worktree",
+  isolation: "local" | "worktree" | "virtual",
 ): Promise<void> {
   const trigger = page.getByTestId("workspace-create-isolation-trigger");
   await expect(trigger).toBeVisible({ timeout: 30_000 });

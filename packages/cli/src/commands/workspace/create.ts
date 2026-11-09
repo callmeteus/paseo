@@ -6,6 +6,7 @@ import { toWorkspaceRow, workspaceSchema, type WorkspaceRow } from "./shared.js"
 
 export interface WorkspaceCreateOptions extends CommandOptions {
   isolation?: string;
+  virtual?: boolean;
   path?: string;
   project?: string;
   title?: string;
@@ -122,6 +123,23 @@ function buildWorktreeWorkspaceSource(options: WorkspaceCreateOptions, path: str
 }
 
 export function buildWorkspaceSource(options: WorkspaceCreateOptions) {
+  if (options.virtual === true || options.isolation === "virtual") {
+    assertOptionsAbsent(
+      [
+        options.path,
+        options.project,
+        options.mode,
+        options.worktreeSlug,
+        options.newBranch,
+        options.base,
+        options.branch,
+        options.prNumber,
+        options.forge,
+      ],
+      "Virtual workspaces do not accept a path, project, or worktree options",
+    );
+    return { kind: "virtual" as const };
+  }
   if (options.isolation === "local") {
     return buildLocalWorkspaceSource(options, options.path ?? process.cwd());
   }
@@ -129,7 +147,11 @@ export function buildWorkspaceSource(options: WorkspaceCreateOptions) {
     const sourcePath = options.path ?? (options.project ? undefined : process.cwd());
     return buildWorktreeWorkspaceSource(options, sourcePath);
   }
-  throw new Error(`Unsupported workspace isolation: ${String(options.isolation)}`);
+  throw new Error(
+    options.isolation
+      ? `Unsupported workspace isolation: ${String(options.isolation)}`
+      : "Pass --isolation <local|worktree> or --virtual",
+  );
 }
 
 export async function runCreateCommand(

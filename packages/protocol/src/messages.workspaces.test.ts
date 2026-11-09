@@ -1288,5 +1288,13 @@ describe("workspace message schemas", () => {
     });
     expect(newDirectory.type).toBe("workspace.create.request");
     expect(newDirectory.source.kind).toBe("directory");
+
+    // Virtual source carries no path: Paseo owns the folder.
+    const virtual = WorkspaceCreateRequestSchema.parse({
+      type: "workspace.create.request",
+      requestId: "req-virtual",
+      source: { kind: "virtual" },
+    });
+    expect(virtual.source).toEqual({ kind: "virtual" });
   });
 });
