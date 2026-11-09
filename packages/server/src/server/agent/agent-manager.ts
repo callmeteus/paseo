@@ -149,8 +149,12 @@ const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
 
 type TimeoutResult = "completed" | "timed_out";
 
+function wrapWorkflowInstruction(fragment: string): string {
+  return `<paseo-workflow>\n${fragment}\n</paseo-workflow>`;
+}
+
 function prependWorkflowInstruction(prompt: AgentPromptInput, fragment: string): AgentPromptInput {
-  const block = `<paseo-workflow>\n${fragment}\n</paseo-workflow>`;
+  const block = wrapWorkflowInstruction(fragment);
   if (typeof prompt === "string") {
     return `${block}\n\n${prompt}`;
   }
@@ -2823,7 +2827,7 @@ export class AgentManager {
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
     if (!expectedTurnId) return;
     try {
-      await agent.session.steerActiveTurn(handoff, { expectedTurnId });
+      await agent.session.steerActiveTurn(wrapWorkflowInstruction(handoff), { expectedTurnId });
     } catch (error) {
       this.logger.warn(
         { err: error, agentId: agent.id },
@@ -4467,6 +4471,7 @@ export class AgentManager {
       const event = limitAgentStreamEventContent(rawEvent);
       if (event.type !== "timeline") continue;
       for (const item of projectAgentMessages(event.item)) {
+        if (item.type === "user_message" && item.text.trim().length === 0) continue;
         if (!isReconcilableProviderItem(item)) continue;
         entries.push({
           item,
@@ -5619,6 +5624,7 @@ export class AgentManager {
       const event = limitAgentStreamEventContent(rawEvent);
       if (event.type === "timeline") {
         for (const item of projectAgentMessages(event.item)) {
+          if (item.type === "user_message" && item.text.trim().length === 0) continue;
           historyEvents.push({ ...event, item });
         }
       } else if (event.type === "provider_subagent") {
@@ -6034,6 +6040,10 @@ export class AgentManager {
     flags.shouldDispatchEvent = false;
     flags.shouldNotifyWaiters = false;
     for (const item of projectAgentMessages(event.item)) {
+      // Daemon workflow instructions are tagged <paseo-workflow> and stripped before
+      // display; a user_message that becomes empty after stripping is internal and
+      // must not show up as a chat bubble.
+      if (item.type === "user_message" && item.text.trim().length === 0) continue;
       if (
         item.type === "user_message" &&
         item.clientMessageId &&
