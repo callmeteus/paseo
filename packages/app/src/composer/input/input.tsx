@@ -24,6 +24,7 @@ import {
   useImperativeHandle,
   useMemo,
   forwardRef,
+  type ComponentRef,
 } from "react";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -121,6 +122,34 @@ const SKILL_INPUT_COLOR = {
   color: "transparent",
   backgroundColor: "transparent",
 } as const;
+/**
+ * Styles the web mirror copies from the real textarea before painting. The mirror
+ * is the only visible text while a skill is highlighted, so any drift here shows
+ * up as a caret that does not sit on the character it belongs to.
+ */
+const SKILL_MIRROR_COMPUTED_STYLES = [
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "fontVariant",
+  "lineHeight",
+  "letterSpacing",
+  "wordSpacing",
+  "textTransform",
+  "textIndent",
+  "whiteSpace",
+  "wordWrap",
+  "overflowWrap",
+  "wordBreak",
+  "tabSize",
+  "textAlign",
+  "direction",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+] as const;
 const COMPOSER_INPUT_DATASET = { composerInput: "" } as const;
 
 export interface AttachmentMenuItem {
@@ -790,6 +819,37 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
   );
   const skillRanges = findSkillHighlightRanges(liveText, props.skillNames);
   const highlightSkills = !props.readOnly && !props.chipEditor && skillRanges.length > 0;
+  const skillMirrorTextRef = useRef<ComponentRef<typeof Text> | null>(null);
+  // The mirror is painted from the textarea's own computed styles instead of the
+  // style props: responsive padding, line height and box sizing can differ per
+  // surface, and a mirror that wraps even one character later puts the caret on
+  // the wrong line. Width comes from the live element, so a keyboard resize
+  // re-applies it through the observer.
+  useLayoutEffect(() => {
+    if (!isWeb || !highlightSkills) return;
+    const input = getTextInputNativeElement(inputHandleRef.current) as HTMLElement | null;
+    const mirror = skillMirrorTextRef.current as unknown as HTMLElement | null;
+    if (!input || !mirror) return;
+    const applyMirrorStyles = () => {
+      const computed = window.getComputedStyle(input) as unknown as Record<string, string>;
+      const mirrorStyle = mirror.style as unknown as Record<string, string>;
+      for (const property of SKILL_MIRROR_COMPUTED_STYLES) {
+        mirrorStyle[property] = computed[property] ?? "";
+      }
+      mirrorStyle.width = `${input.clientWidth}px`;
+      mirrorStyle.height = "auto";
+      mirrorStyle.minHeight = "0px";
+      mirrorStyle.maxHeight = "none";
+      mirrorStyle.margin = "0";
+      mirrorStyle.boxSizing = "border-box";
+      mirrorStyle.overflow = "hidden";
+    };
+    applyMirrorStyles();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(applyMirrorStyles);
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, [highlightSkills, liveText, props.textInputStyle]);
   useEffect(() => {
     if (!isWeb || !highlightSkills) return;
     const node = getTextInputNativeElement(inputHandleRef.current);
@@ -879,8 +939,15 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
             <SkillHighlightedText
               text={liveText}
               skillNames={props.skillNames}
-              style={[skillMirrorStyle(props.textInputStyle), skillStyles.text]}
+              // On web the DOM effect above copies the textarea's computed styles, so
+              // only the base color comes from the theme here.
+              style={
+                isWeb
+                  ? skillStyles.text
+                  : [skillMirrorStyle(props.textInputStyle), skillStyles.text]
+              }
               skillStyle={skillStyles.token}
+              textRef={skillMirrorTextRef}
             />
           </View>
         </View>

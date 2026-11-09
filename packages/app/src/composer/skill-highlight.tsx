@@ -1,9 +1,19 @@
-import type { ReactNode } from "react";
+import type { ComponentRef, ReactNode, Ref } from "react";
 import { Text, type StyleProp, type TextStyle } from "react-native";
 import {
   findSkillHighlightRanges,
   type SkillHighlightRange,
 } from "@/utils/agent-command-autocomplete";
+
+interface SkillHighlightedTextProps {
+  text: string;
+  skillNames: readonly string[];
+  style?: StyleProp<TextStyle>;
+  skillStyle?: StyleProp<TextStyle>;
+  testID?: string;
+  /** The rendered text node, so a web mirror can copy the textarea's computed styles. */
+  textRef?: Ref<ComponentRef<typeof Text>>;
+}
 
 export function SkillHighlightedText({
   text,
@@ -11,23 +21,18 @@ export function SkillHighlightedText({
   style,
   skillStyle,
   testID,
-}: {
-  text: string;
-  skillNames: readonly string[];
-  style?: StyleProp<TextStyle>;
-  skillStyle?: StyleProp<TextStyle>;
-  testID?: string;
-}) {
+  textRef,
+}: SkillHighlightedTextProps) {
   const ranges = findSkillHighlightRanges(text, skillNames);
   if (ranges.length === 0) {
     return (
-      <Text style={style} testID={testID}>
+      <Text ref={textRef} style={style} testID={testID}>
         {text}
       </Text>
     );
   }
   return (
-    <Text style={style} testID={testID}>
+    <Text ref={textRef} style={style} testID={testID}>
       <SkillHighlightParts text={text} ranges={ranges} skillStyle={skillStyle} />
     </Text>
   );
