@@ -1902,6 +1902,20 @@ export const CreateAgentRequestMessageSchema = z.object({
     .positive()
     .max(24 * 60 * 60_000)
     .optional(),
+  /**
+   * Prompt files for this run. The daemon writes them under `.paseo/automations/`
+   * in the workspace before the agent starts. Absent when the run has none.
+   */
+  // COMPAT(hubAutomationFiles): added in v0.13.2, remove gate after 2027-11-09.
+  automationFiles: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(512),
+        content: z.string().max(1_000_000),
+      }),
+    )
+    .max(200)
+    .optional(),
   labels: z.record(z.string(), z.string()).default({}),
   requestId: z.string(),
 });
@@ -4047,6 +4061,8 @@ export const ServerInfoStatusPayloadSchema = z
         creationLifecycle: z.boolean().optional(),
         // COMPAT(hubAgentRpc): added in v0.8.0; remove gate after 2027-03-05.
         hubAgentRpc: z.boolean().optional(),
+        // COMPAT(hubAutomationFiles): added in v0.13.2, remove gate after 2027-11-09.
+        hubAutomationFiles: z.boolean().optional(),
         // COMPAT(internalAgents): added in v0.9.0; remove gate after 2027-03-17.
         internalAgents: z.boolean().optional(),
         // COMPAT(internalWorkspaces): added in v0.9.0; remove gate after 2027-03-17.

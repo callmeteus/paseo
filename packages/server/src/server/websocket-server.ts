@@ -1970,6 +1970,8 @@ export class VoiceAssistantWebSocketServer {
         workspaceRequestReceipts: true,
         creationLifecycle: true,
         hubAgentRpc: true,
+        // COMPAT(hubAutomationFiles): added in v0.13.2, remove gate after 2027-11-09.
+        hubAutomationFiles: true,
         backgroundWorkspaces: true,
         // COMPAT(virtualWorkspaces): added in v0.13.1, remove gate after 2027-11-09.
         virtualWorkspaces: true,

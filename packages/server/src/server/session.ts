@@ -79,6 +79,7 @@ import { exportAgentSnapshot, importAgentSnapshot } from "./agent/agent-snapshot
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import type { ScriptHealthState } from "./script-health-monitor.js";
 import { spawnWorkspaceScript } from "./worktree-bootstrap.js";
+import { writeHubAutomationFiles } from "./hub-automation-files.js";
 import type { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import {
   createWorkspaceScriptsService,
@@ -4977,6 +4978,7 @@ export class Session {
       if (!(await this.filesystem.isDirectory(resolvedCwd))) {
         throw new Error(`Working directory does not exist or is not a directory: ${resolvedCwd}`);
       }
+      await writeHubAutomationFiles(resolvedCwd, msg.automationFiles);
 
       const { snapshot, liveSnapshot, initialPromptStarted } = await createAgentCommand(
         {
