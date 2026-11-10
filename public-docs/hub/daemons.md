@@ -18,6 +18,8 @@ Log in from the machine first:
 paseo hub login https://hub.example.com
 ```
 
+The Daemons page's **Add daemon** button lists every address this Hub is reachable on — local, LAN, Tailscale, Netbird, and other overlays — so you copy the command the daemon's machine can actually use.
+
 The CLI prints a URL and a verification code and opens your browser. The approved login is stored under `PASEO_HOME`.
 
 In an interactive terminal, login offers to connect this daemon and separately asks whether to allow Hub automations to run agents. Connection defaults to yes; execution permission defaults to no. It then links to **Triggers** and prints `paseo hub init` for creating a starter trigger as code. `--json` or non-TTY login only logs in. [Quickstart](/docs/hub/quickstart) walks through connection and initialization.

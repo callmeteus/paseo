@@ -16,6 +16,8 @@ daemon 是你的一台运行 Paseo daemon 的机器。把它注册到你的 Hub 
 paseo hub login https://hub.example.com
 ```
 
+Daemons 页面上的 **Add daemon** 按钮会列出这个 Hub 能被访问到的每个地址——本机、局域网、Tailscale、Netbird 以及其他叠加网络——这样你复制的是 daemon 那台机器实际能用的命令。
+
 CLI 会打印一个 URL 和一个验证码，并打开你的浏览器。批准后的登录保存在 `PASEO_HOME` 下。
 
 在交互式终端中，登录流程会询问是否连接这个 daemon，并单独询问是否允许 Hub 自动化在其上运行 Agent。连接默认为是；执行权限默认为否。之后它会给出 **Triggers** 的链接，并打印 `paseo hub init`，用于以代码形式创建起步触发器。`--json` 或非 TTY 的登录只会登录。[快速开始](/docs/hub/quickstart)完整地介绍了连接和初始化。
