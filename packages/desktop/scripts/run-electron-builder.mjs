@@ -4,9 +4,12 @@
  * lack rpmbuild: electron-builder would fail after producing .deb/.AppImage.
  * CI and Fedora-style machines keep rpmbuild and still get .rpm from the base
  * electron-builder.yml targets list.
+ *
+ * A child config that `extends` the base file concatenates `linux.target`, so
+ * the rpm entry survives. Copy the file and drop that line instead.
  */
 import { spawnSync } from "node:child_process";
-import { writeFileSync, mkdtempSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,19 +51,15 @@ function resolveConfigPath() {
   if (!linuxHostLacksRpmbuild()) {
     return defaultConfig;
   }
+  const source = readFileSync(defaultConfig, "utf8");
+  const withoutRpm = source.replace("\n    - rpm\n", "\n");
+  if (withoutRpm === source) {
+    console.error("[desktop] expected a linux rpm target in electron-builder.yml");
+    process.exit(1);
+  }
   const dir = mkdtempSync(join(tmpdir(), "paseo-electron-builder-"));
-  const path = join(dir, "no-rpm.json");
-  writeFileSync(
-    path,
-    `${JSON.stringify(
-      {
-        extends: defaultConfig,
-        linux: { target: ["AppImage", "deb", "tar.gz"] },
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const path = join(dir, "no-rpm.yml");
+  writeFileSync(path, withoutRpm);
   return path;
 }
 
