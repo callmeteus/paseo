@@ -283,6 +283,7 @@ function buildAgentManagerSpies() {
     getPendingPermissions: vi.fn(),
     getRegisteredProviderIds: vi.fn().mockReturnValue(["claude"]),
     listDraftFeatures: vi.fn(),
+    setAgentChatMode: vi.fn().mockResolvedValue({ mode: "chat", applied: "now" }),
   };
 }
 
@@ -1217,6 +1218,23 @@ describe("browser MCP tools", () => {
       await client.close();
       await server.close();
     }
+  });
+
+  it("switches the calling agent between chat and agent mode", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.setAgentChatMode.mockResolvedValue({ mode: "agent", applied: "now" });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "agent-1",
+      logger,
+    });
+
+    const response = await registeredTool(server, "set_chat_mode").handler({ mode: "agent" });
+
+    expect(spies.agentManager.setAgentChatMode).toHaveBeenCalledWith("agent-1", "agent");
+    expect(response.structuredContent).toEqual({ mode: "agent", applied: "now" });
   });
 
   it("wires browser tools through the browser tools broker", async () => {
