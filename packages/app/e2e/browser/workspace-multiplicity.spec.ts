@@ -171,9 +171,8 @@ test.describe("Workspace multiplicity creation flow", () => {
     }
   });
 
-  test("Virtual isolation creates a Paseo-managed workspace under the Chats project", async ({
-    page,
-  }) => {
+  test("Virtual isolation names the workspace and its project from the title", async ({ page }) => {
+    const virtualTitle = "Virtual notes";
     const seeded: SeededWorkspace = await seedWorkspace({
       repoPrefix: "multiplicity-virtual-",
     });
@@ -188,13 +187,14 @@ test.describe("Workspace multiplicity creation flow", () => {
 
       await openGlobalNewWorkspaceComposer(page);
       await selectWorkspaceIsolation(page, "virtual");
+      await page.getByTestId("new-workspace-title-input").fill(virtualTitle);
       await submitNewWorkspaceEmpty(page);
 
       const created = await assertNewWorkspaceSidebarAndHeader(page, {
         serverId: getServerId(),
         client,
         previousWorkspaceId: seeded.workspaceId,
-        projectDisplayName: "Chats",
+        projectDisplayName: virtualTitle,
       });
       createdWorkspaceId = created.workspaceId;
 
@@ -203,7 +203,7 @@ test.describe("Workspace multiplicity creation flow", () => {
         (entry) => entry.id === created.workspaceId,
       );
       expect(descriptor?.workspaceKind).toBe("directory");
-      expect(descriptor?.projectDisplayName).toBe("Chats");
+      expect(descriptor?.projectDisplayName).toBe(virtualTitle);
     } finally {
       if (createdWorkspaceId) {
         await archiveLocalWorkspaceFromDaemon(client, createdWorkspaceId).catch(() => undefined);

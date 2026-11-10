@@ -7380,14 +7380,15 @@ export class Session {
     }
 
     const virtualWorkspaceId = workspaceId ?? generateWorkspaceId();
-    // Every virtual workspace lives under one Paseo-owned "Chats" project, so
-    // non-code chats do not each create a dedicated project in the sidebar.
-    const projectsRoot = join(this.paseoHome, "workspaces");
-    const cwd = join(projectsRoot, virtualWorkspaceId);
+    const cwd = join(this.paseoHome, "workspaces", virtualWorkspaceId);
     await mkdir(cwd, { recursive: true });
+    // Each virtual workspace owns its project, named after the title or first
+    // prompt, so the sidebar opens on the chat name instead of a shared group.
+    const displayName =
+      request.title?.trim() || resolveFirstAgentPromptTitle(request.firstAgentContext) || "Chat";
     const project = await this.workspaceProvisioning.findOrCreateProjectForDirectory(
-      projectsRoot,
-      "Chats",
+      cwd,
+      displayName,
     );
     return this.handleWorkspaceCreateLocal(
       {
@@ -7395,7 +7396,7 @@ export class Session {
         source: { kind: "directory", path: cwd, projectId: project.projectId },
       },
       virtualWorkspaceId,
-      request.title?.trim() || "Chat",
+      displayName,
     );
   }
 

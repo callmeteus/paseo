@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { Combobox, type ComboboxOption, type ComboboxProps } from "@/components/ui/combobox";
-import { Field, FormTextInput } from "@/components/ui/form-field";
+import { FormTextInput } from "@/components/ui/form-field";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { HostPicker } from "@/components/hosts/host-picker";
 import type { LaunchTarget } from "@/new-workspace-launch/target";
@@ -216,21 +216,19 @@ function WorkspaceTitleField({
 }): ReactElement | null {
   const { t } = useTranslation();
   if (!visible) return null;
-  return (
-    <View style={compact ? undefined : styles.desktopTitleField}>
-      <Field label={t("newWorkspace.fields.name")} testID="new-workspace-title">
-        <FormTextInput
-          initialValue={value}
-          onChangeText={onChangeText}
-          placeholder={t("newWorkspace.titlePlaceholder")}
-          testID="new-workspace-title-input"
-          size={compact ? "md" : "sm"}
-          editable={!disabled}
-          accessibilityLabel={t("newWorkspace.fields.name")}
-        />
-      </Field>
-    </View>
+  const input = (
+    <FormTextInput
+      initialValue={value}
+      onChangeText={onChangeText}
+      placeholder={t("newWorkspace.titlePlaceholder")}
+      testID="new-workspace-title-input"
+      size={compact ? "md" : "sm"}
+      editable={!disabled}
+      accessibilityLabel={t("newWorkspace.fields.name")}
+      style={compact ? styles.titleInputField : styles.titleInputBadge}
+    />
   );
+  return compact ? input : <View style={styles.desktopControl}>{input}</View>;
 }
 
 /**
@@ -444,21 +442,15 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
   }
 
   return (
-    <View>
-      <View
-        testID="new-workspace-ref-picker-row"
-        style={styles.desktopRow}
-        pointerEvents="box-none"
-      >
-        <View style={styles.desktopControl}>{projectField}</View>
-        <View style={styles.desktopControl}>{hostField}</View>
-        {isolationField ? <View style={styles.desktopControl}>{isolationField}</View> : null}
-        {baseField ? <View style={styles.desktopControl}>{baseField}</View> : null}
-        <View style={styles.launchSpacer} pointerEvents="none" />
-        {launchField}
-        {pickers}
-      </View>
+    <View testID="new-workspace-ref-picker-row" style={styles.desktopRow} pointerEvents="box-none">
+      <View style={styles.desktopControl}>{projectField}</View>
+      <View style={styles.desktopControl}>{hostField}</View>
+      {isolationField ? <View style={styles.desktopControl}>{isolationField}</View> : null}
       {titleField}
+      {baseField ? <View style={styles.desktopControl}>{baseField}</View> : null}
+      <View style={styles.launchSpacer} pointerEvents="none" />
+      {launchField}
+      {pickers}
     </View>
   );
 }
@@ -485,9 +477,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[4],
     gap: theme.spacing[2],
   },
-  desktopTitleField: {
-    marginBottom: theme.spacing[4],
-    paddingHorizontal: theme.spacing[4],
+  titleInputBadge: {
+    height: FIELD_BADGE_HEIGHT,
+    maxWidth: 240,
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius["2xl"],
+    backgroundColor: "transparent",
+  },
+  titleInputField: {
+    height: FIELD_HEIGHT,
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.xl,
+    backgroundColor: theme.colors.surface1,
   },
   desktopControl: {
     minWidth: 0,

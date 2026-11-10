@@ -9647,7 +9647,7 @@ test("workspace.create.request with virtual source creates a Paseo-managed folde
     );
     if (existing) return existing;
     const project = createPersistedProjectRecord({
-      projectId: "prj_chats",
+      projectId: "prj_virtual",
       rootPath: input.rootPath,
       kind: input.kind,
       displayName: input.displayName,
@@ -9682,8 +9682,9 @@ test("workspace.create.request with virtual source creates a Paseo-managed folde
     });
     const workspace = response?.payload.workspace!;
     expect(workspace.workspaceDirectory).toBe(path.join(paseoHome, "workspaces", workspace.id));
-    expect(workspace.projectId).toBe("prj_chats");
-    expect(workspace.projectDisplayName).toBe("Chats");
+    expect(workspace.projectId).toBe("prj_virtual");
+    expect(workspace.projectDisplayName).toBe("Notes");
+    expect(projects.get("prj_virtual")?.rootPath).toBe(workspace.workspaceDirectory);
     expect(existsSync(workspace.workspaceDirectory)).toBe(true);
     expect(workspaces.get(workspace.id)).toMatchObject({
       cwd: workspace.workspaceDirectory,

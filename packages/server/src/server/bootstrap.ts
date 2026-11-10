@@ -1638,13 +1638,10 @@ export async function createPaseoDaemon(
     },
     createVirtualWorkspace: async (title, context) => {
       const workspaceId = generateWorkspaceId();
-      const projectsRoot = path.join(config.paseoHome, "workspaces");
-      const cwd = path.join(projectsRoot, workspaceId);
+      const cwd = path.join(config.paseoHome, "workspaces", workspaceId);
       await mkdir(cwd, { recursive: true });
-      const project = await workspaceProvisioning.findOrCreateProjectForDirectory(
-        projectsRoot,
-        "Chats",
-      );
+      const displayName = title?.trim() || "Chat";
+      const project = await workspaceProvisioning.findOrCreateProjectForDirectory(cwd, displayName);
       const workspace = await workspaceProvisioning.createWorkspaceForDirectory(
         cwd,
         title,
@@ -1652,7 +1649,7 @@ export async function createPaseoDaemon(
         {
           ...context,
           workspaceId,
-          workspaceDisplayName: title?.trim() || "Chat",
+          workspaceDisplayName: displayName,
         },
       );
       await emitWorkspaceUpdatesExternal([workspace.workspaceId]);
