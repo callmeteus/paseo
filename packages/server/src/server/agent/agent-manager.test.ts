@@ -2095,6 +2095,51 @@ test("listDraftCommands uses explicit model config without default model fetchin
   ]);
 });
 
+test("listDraftCommands coalesces concurrent lookups for the same draft", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-draft-commands-coalesce-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const draftCommand: AgentSlashCommand = {
+    name: "review",
+    description: "Review changes",
+    argumentHint: "",
+    kind: "command",
+  };
+  let listCalls = 0;
+  class CoalescedDraftCommandClient extends TestAgentClient {
+    override async isAvailable(): Promise<boolean> {
+      return true;
+    }
+
+    override async listCommands() {
+      listCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return [draftCommand];
+    }
+  }
+  const manager = new AgentManager({
+    clients: {
+      codex: new CoalescedDraftCommandClient(),
+    },
+    registry: storage,
+    logger,
+  });
+
+  const config = { provider: "codex" as const, cwd: workdir, model: "gpt-5.4" };
+  const [first, second] = await Promise.all([
+    manager.listDraftCommands(config),
+    manager.listDraftCommands(config),
+  ]);
+
+  expect(first).toContainEqual(draftCommand);
+  expect(second).toContainEqual(draftCommand);
+  expect(listCalls).toBe(1);
+
+  await manager.clearDraftCommandsCache();
+  await manager.listDraftCommands(config);
+  expect(listCalls).toBe(2);
+});
+
 test("listDraftFeatures does not start a fallback session without a model", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-draft-features-"));
   const storagePath = join(workdir, "agents");

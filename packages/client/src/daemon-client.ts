@@ -1109,6 +1109,8 @@ function toTimeoutError(error: unknown, label: string, timeoutMs: number): Error
 const DEFAULT_RECONNECT_BASE_DELAY_MS = 1500;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 30000;
 const DEFAULT_SESSION_RPC_TIMEOUT_MS = 60_000;
+// Draft slash-command listing may wait for a Cursor ACP probe to start workspace MCP servers.
+const LIST_COMMANDS_REQUEST_TIMEOUT_MS = 120_000;
 const PUSH_TOKEN_REVOCATION_TIMEOUT_MS = 2_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIVENESS_TIMEOUT_MS = 5000;
@@ -6229,6 +6231,7 @@ export class DaemonClient {
     const options = normalizeListCommandsOptions(input, legacyOptions);
     return this.sendCorrelatedSessionRequest({
       requestId: options.requestId,
+      timeout: LIST_COMMANDS_REQUEST_TIMEOUT_MS,
       message: {
         type: "list_commands_request",
         agentId: options.agentId,

@@ -1,10 +1,14 @@
 import { zSessionConfigOption } from "@agentclientprotocol/sdk/dist/schema/zod.gen.js";
 import type { Logger } from "pino";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { z } from "zod";
 
 import type {
   AgentModelDefinition,
+  AgentSession,
+  AgentSessionConfig,
+  AgentSlashCommand,
   FetchCatalogOptions,
   ProviderMcpLoginResult,
   ProviderMcpServerInfo,
@@ -25,6 +29,7 @@ import {
   loginCursorMcpServer,
   resolveCursorCliCommand,
 } from "./cursor-mcp-auth.js";
+import { cursorProjectRoot } from "./cursor-skill-catalog.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 interface CursorACPAgentClientOptions {
@@ -35,7 +40,9 @@ interface CursorACPAgentClientOptions {
   label?: string;
 }
 
-const CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS = 10_000;
+const COMMAND_LISTING_IDLE_MS = 2 * 60 * 1000;
+// Cursor may start several workspace MCP servers before advertising slash commands.
+const CURSOR_COMMAND_LISTING_WAIT_TIMEOUT_MS = 120_000;
 const CURSOR_CLIENT_CAPABILITY_META = {
   parameterizedModelPicker: true,
 };
@@ -102,11 +109,19 @@ async function fetchCursorModelCatalog(connection: ACPCatalogModelResolverContex
   }
 }
 
+interface CommandListingEntry {
+  session: AgentSession;
+  idleTimer: ReturnType<typeof setTimeout> | null;
+  closing: Promise<void> | null;
+}
+
 export class CursorACPAgentClient extends GenericACPAgentClient {
   private readonly cliCommand: [string, ...string[]];
   private readonly cliEnv?: Record<string, string>;
   private readonly cursorMcpConfigBridge: ReturnType<typeof createCursorMcpConfigBridge>;
   private cursorMcpConfigPrepared = false;
+  private readonly commandListingByRoot = new Map<string, CommandListingEntry>();
+  private readonly commandListingInFlight = new Map<string, Promise<AgentSlashCommand[]>>();
 
   constructor(options: CursorACPAgentClientOptions) {
     const mcpConfigBridge = createCursorMcpConfigBridge({
@@ -121,7 +136,7 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       usageProvider: "cursor",
       // cursor-agent publishes slash commands asynchronously via available_commands_update.
       waitForInitialCommands: true,
-      initialCommandsWaitTimeoutMs: CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS,
+      initialCommandsWaitTimeoutMs: CURSOR_COMMAND_LISTING_WAIT_TIMEOUT_MS,
       clientCapabilityMeta: CURSOR_CLIENT_CAPABILITY_META,
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
       catalogModelResolver: resolveCursorCatalogModels,
@@ -132,6 +147,72 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
     this.cliCommand = resolveCursorCliCommand(options.command);
     this.cliEnv = options.env;
     this.cursorMcpConfigBridge = mcpConfigBridge;
+  }
+
+  clearCommandListingCache(): void {
+    for (const [root, entry] of this.commandListingByRoot) {
+      void this.evictCommandListingRoot(root, entry);
+    }
+    this.commandListingByRoot.clear();
+    this.commandListingInFlight.clear();
+  }
+
+  async listCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
+    const root = cursorProjectRoot(config.cwd, existsSync);
+    const inFlight = this.commandListingInFlight.get(root);
+    if (inFlight) {
+      return inFlight;
+    }
+    const listing = this.listCommandsForProjectRoot(root, config);
+    this.commandListingInFlight.set(root, listing);
+    try {
+      return await listing;
+    } finally {
+      this.commandListingInFlight.delete(root);
+    }
+  }
+
+  private async listCommandsForProjectRoot(
+    root: string,
+    config: AgentSessionConfig,
+  ): Promise<AgentSlashCommand[]> {
+    let entry = this.commandListingByRoot.get(root);
+    if (!entry || entry.closing) {
+      const session = await this.createSession(config);
+      entry = { session, idleTimer: null, closing: null };
+      this.commandListingByRoot.set(root, entry);
+    }
+    this.scheduleCommandListingIdle(root, entry);
+    if (!entry.session.listCommands) {
+      return [];
+    }
+    return await entry.session.listCommands();
+  }
+
+  private scheduleCommandListingIdle(root: string, entry: CommandListingEntry): void {
+    if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+    }
+    entry.idleTimer = setTimeout(() => {
+      void this.evictCommandListingRoot(root, entry);
+    }, COMMAND_LISTING_IDLE_MS);
+  }
+
+  private async evictCommandListingRoot(root: string, entry: CommandListingEntry): Promise<void> {
+    if (this.commandListingByRoot.get(root) !== entry) {
+      return;
+    }
+    this.commandListingByRoot.delete(root);
+    if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+      entry.idleTimer = null;
+    }
+    if (entry.closing) {
+      await entry.closing;
+      return;
+    }
+    entry.closing = entry.session.close().catch(() => undefined);
+    await entry.closing;
   }
 
   async listMcpServers(): Promise<ProviderMcpServerInfo[]> {
@@ -149,6 +230,7 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
   }
 
   async shutdown(): Promise<void> {
+    this.clearCommandListingCache();
     disposeCursorMcpLogins();
   }
 

@@ -86,6 +86,13 @@ import {
   withDaemonSlashCommands,
   type AgentGoal,
 } from "./agent-goal.js";
+import {
+  DRAFT_COMMANDS_CACHE_TTL_MS,
+  DRAFT_COMMANDS_FAILURE_BACKOFF_MS,
+  draftCommandsCacheKey,
+  readDraftCommandsCache,
+  type DraftCommandsCacheEntry,
+} from "./draft-commands-listing.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import { buildPortedTimelineRows, swapAgentProvider } from "./agent-provider-swap.js";
@@ -1190,6 +1197,8 @@ export class AgentManager {
    * Installed skill names per live provider session. Keyed by session object so a
    * reload naturally misses instead of serving names from a retired runtime.
    */
+  private readonly draftCommandsCache = new Map<string, DraftCommandsCacheEntry>();
+  private readonly draftCommandsInFlight = new Map<string, Promise<AgentSlashCommand[]>>();
   private readonly skillNamesBySession = new WeakMap<
     AgentSession,
     { names: string[]; readAt: number }
@@ -1563,14 +1572,56 @@ export class AgentManager {
     }
   }
 
+  clearDraftCommandsCache(): void {
+    this.draftCommandsCache.clear();
+    for (const client of this.clients.values()) {
+      const reset = (client as { clearCommandListingCache?: () => void }).clearCommandListingCache;
+      reset?.call(client);
+    }
+  }
+
   async listDraftCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
-    return withDaemonSlashCommands(await this.listProviderDraftCommands(config));
+    const normalizedConfig = await this.normalizeConfig(config, { resolveDefaultModel: false });
+    const cacheKey = draftCommandsCacheKey(normalizedConfig);
+    const now = Date.now();
+    const cached = readDraftCommandsCache(this.draftCommandsCache, cacheKey, now);
+    if (cached) {
+      if (cached.error !== undefined) {
+        throw cached.error instanceof Error ? cached.error : new Error(String(cached.error));
+      }
+      return withDaemonSlashCommands(cached.commands ?? []);
+    }
+
+    const inFlight = this.draftCommandsInFlight.get(cacheKey);
+    if (inFlight) {
+      return withDaemonSlashCommands(await inFlight);
+    }
+
+    const listing = this.listProviderDraftCommands(normalizedConfig)
+      .then((commands) => {
+        this.draftCommandsCache.set(cacheKey, {
+          commands,
+          expiresAt: Date.now() + DRAFT_COMMANDS_CACHE_TTL_MS,
+        });
+        return commands;
+      })
+      .catch((error) => {
+        this.draftCommandsCache.set(cacheKey, {
+          error,
+          expiresAt: Date.now() + DRAFT_COMMANDS_FAILURE_BACKOFF_MS,
+        });
+        throw error;
+      })
+      .finally(() => {
+        this.draftCommandsInFlight.delete(cacheKey);
+      });
+    this.draftCommandsInFlight.set(cacheKey, listing);
+    return withDaemonSlashCommands(await listing);
   }
 
   private async listProviderDraftCommands(
-    config: AgentSessionConfig,
+    normalizedConfig: AgentSessionConfig,
   ): Promise<AgentSlashCommand[]> {
-    const normalizedConfig = await this.normalizeConfig(config, { resolveDefaultModel: false });
     const client = this.requireClient(normalizedConfig.provider);
     if (!normalizedConfig.model) {
       return [];

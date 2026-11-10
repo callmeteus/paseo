@@ -2894,6 +2894,7 @@ export class Session {
     const catalog = this.cursorSkillCatalog;
     if (!catalog) return null;
     return catalog.subscribe(() => {
+      this.agentManager.clearDraftCommandsCache();
       this.emit({ type: "status", payload: { status: "agent_commands_changed" } });
     });
   }

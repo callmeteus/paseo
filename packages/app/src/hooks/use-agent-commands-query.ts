@@ -73,8 +73,12 @@ export function useAgentCommandsQuery({
     },
     enabled: queryEnabled && !!client && isConnected && (!!agentId || !!draftConfig),
     staleTime: draftConfig ? DRAFT_COMMANDS_STALE_TIME : SESSION_COMMANDS_STALE_TIME,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    retry: draftConfig ? false : 3,
+    retryDelay: draftConfig
+      ? undefined
+      : (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    refetchOnWindowFocus: !draftConfig,
+    refetchOnReconnect: !draftConfig,
   });
 
   // isPending is true when the query has never run yet (no cached data and not fetching)
