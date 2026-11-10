@@ -186,6 +186,12 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       const text = readDocument(root);
       const selection = readSelection(root, selectionRef.current);
       if (text !== textRef.current) publish(text, selection);
+      // A native delete can remove the line break and leave the empty-line
+      // placeholder behind, which would keep a line the text no longer has.
+      if (!text.endsWith("\n") && hasTrailingLinePlaceholder(root)) {
+        paint(text, selection);
+        return;
+      }
       const signature = skillRangeSignature(text, skillNamesRef.current);
       if (signature === rangeSignatureRef.current) return;
       paint(text, selection);
@@ -210,6 +216,26 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
             publish(removed.text, removed.selection);
             return;
           }
+        }
+        if (
+          shouldRemoveTrailingNewline({
+            key: native.key,
+            shiftKey: native.shiftKey,
+            metaKey: native.metaKey,
+            ctrlKey: native.ctrlKey,
+            altKey: native.altKey,
+            selection,
+            text: textRef.current,
+          })
+        ) {
+          // The caret sits after the empty-line placeholder, so the browser would
+          // delete the placeholder first and leave the newline in the model.
+          event.preventDefault();
+          const nextText = textRef.current.slice(0, -1);
+          const nextSelection = { start: nextText.length, end: nextText.length };
+          paint(nextText, nextSelection);
+          publish(nextText, nextSelection);
+          return;
         }
         if (
           native.key === "Enter" &&
@@ -402,6 +428,45 @@ function appendPlainText(root: HTMLElement, text: string): void {
     if (index > 0) root.appendChild(document.createElement("br"));
     if (line.length > 0) root.appendChild(document.createTextNode(line));
   });
+  // A trailing break leaves the caret on a line with no line box, so the editor
+  // looks like it never left the previous line. A zero-width placeholder gives
+  // the empty last line height; reads and offsets treat it as absent.
+  if (text.endsWith("\n")) {
+    const placeholder = document.createElement("span");
+    placeholder.dataset.trailingLine = "true";
+    placeholder.textContent = "\u200B";
+    root.appendChild(placeholder);
+  }
+}
+
+function isTrailingLinePlaceholder(node: Node): boolean {
+  return node instanceof HTMLElement && node.dataset.trailingLine === "true";
+}
+
+function hasTrailingLinePlaceholder(root: HTMLElement): boolean {
+  const last = root.lastChild;
+  return last !== null && isTrailingLinePlaceholder(last);
+}
+
+function shouldRemoveTrailingNewline(input: {
+  key: string;
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  selection: TextSelection;
+  text: string;
+}): boolean {
+  return (
+    input.key === "Backspace" &&
+    !input.shiftKey &&
+    !input.metaKey &&
+    !input.ctrlKey &&
+    !input.altKey &&
+    input.selection.start === input.selection.end &&
+    input.selection.end === input.text.length &&
+    input.text.endsWith("\n")
+  );
 }
 
 function appendSkillText(root: HTMLElement, text: string, color: string): void {
@@ -446,6 +511,7 @@ function readElement(element: HTMLElement): string {
 function readNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
+  if (isTrailingLinePlaceholder(node)) return "";
   const chip = chipStore.get(node);
   if (chip) return serializeInlineChip(chip);
   if (node.tagName === "BR") return "\n";
@@ -489,6 +555,7 @@ function rawOffset(root: HTMLElement, container: Node, offset: number): number {
       total += serializedLength(node);
       return;
     }
+    if (isTrailingLinePlaceholder(node)) return;
     if (node instanceof HTMLElement && node.tagName === "BR") {
       total += 1;
       return;
@@ -502,6 +569,7 @@ function rawOffset(root: HTMLElement, container: Node, offset: number): number {
 function serializedLength(node: Node): number {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
   if (!(node instanceof HTMLElement)) return 0;
+  if (isTrailingLinePlaceholder(node)) return 0;
   const chip = chipStore.get(node);
   if (chip) return serializeInlineChip(chip).length;
   if (node.tagName === "BR") return 1;
@@ -541,6 +609,7 @@ function placeOffset(root: HTMLElement, target: number): { node: Node; offset: n
       remaining -= length;
       return null;
     }
+    if (isTrailingLinePlaceholder(node)) return null;
     if (node instanceof HTMLElement && node.tagName === "BR") {
       const parent = node.parentNode ?? root;
       if (remaining <= 0) return { node: parent, offset: childIndex(node) };

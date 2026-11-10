@@ -8,6 +8,8 @@ import {
 interface AutocompleteKeyPressEvent {
   key: string;
   preventDefault: () => void;
+  /** Shift, Alt, Ctrl, or Meta. Modified keys belong to the editor, not the picker. */
+  hasModifier?: boolean;
 }
 
 interface UseAutocompleteInput<
@@ -67,6 +69,11 @@ export function useAutocomplete<
   const onKeyPress = useCallback(
     (event: TKeyPressEvent) => {
       if (!input.isVisible || input.options.length === 0) {
+        return false;
+      }
+      // Shift+Enter inserts a newline and Shift+Tab moves focus; the picker must
+      // not turn a modified key into a selection.
+      if (event.hasModifier) {
         return false;
       }
 
