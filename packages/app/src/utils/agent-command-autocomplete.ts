@@ -83,7 +83,8 @@ export function filterAndRankCommandAutocompleteEntries<TEntry extends CommandAu
  * them next to skills. `/goal` already accepts any position; everything else is
  * a provider command that must stay at the start of the prompt.
  */
-const INLINE_DAEMON_COMMAND_NAMES = new Set(["goal"]);
+export const INLINE_DAEMON_COMMAND_NAMES = ["goal"] as const;
+const INLINE_DAEMON_COMMAND_NAME_SET = new Set<string>(INLINE_DAEMON_COMMAND_NAMES);
 
 export function filterInlineSkillCommandEntries<TEntry extends InlineSkillCommandEntry>(
   entries: readonly TEntry[],
@@ -91,10 +92,31 @@ export function filterInlineSkillCommandEntries<TEntry extends InlineSkillComman
   return entries.filter((entry) => {
     if (entry.source !== "provider") return false;
     if (entry.command.kind === "skill") return true;
-    return INLINE_DAEMON_COMMAND_NAMES.has(
+    return INLINE_DAEMON_COMMAND_NAME_SET.has(
       entry.command.name.trim().replace(/^\//, "").toLowerCase(),
     );
   });
+}
+
+/**
+ * Names the composer paints like a skill: installed skills plus daemon commands
+ * that are legal mid-sentence (`/goal`). Kept separate from `skillCommandNames`
+ * because the daemon only hoists real skills.
+ */
+export function highlightedCommandNames(
+  commands: readonly { name: string; kind?: string }[],
+): string[] {
+  const names = skillCommandNames(commands);
+  const inlineDaemonNames = new Set<string>(INLINE_DAEMON_COMMAND_NAMES);
+  const seen = new Set(names.map((name) => name.toLowerCase()));
+  for (const command of commands) {
+    const name = command.name.trim().replace(/^\//, "");
+    const normalized = name.toLowerCase();
+    if (!inlineDaemonNames.has(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    names.push(name);
+  }
+  return names;
 }
 
 export function skillCommandNames(commands: readonly { name: string; kind?: string }[]): string[] {

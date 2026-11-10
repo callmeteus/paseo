@@ -107,7 +107,7 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import { resolveDraftQueryConfig, useAgentAutocomplete } from "@/hooks/use-agent-autocomplete";
-import { skillCommandNames } from "@/utils/agent-command-autocomplete";
+import { highlightedCommandNames } from "@/utils/agent-command-autocomplete";
 import { usePluginClientSlashCommands } from "@/plugins/client-slash-commands";
 import {
   executePluginClientSlashCommand,
@@ -1774,7 +1774,7 @@ function ComposerContentImpl({
     draftConfig: skillDraftConfig,
   });
   const skillNames = useMemo(() => {
-    const names = skillCommandNames(skillCommandsQuery.commands);
+    const names = highlightedCommandNames(skillCommandsQuery.commands);
     names.sort();
     return names;
   }, [skillCommandsQuery.commands]);

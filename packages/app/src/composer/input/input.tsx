@@ -726,6 +726,13 @@ interface ComposerTextSurfaceProps {
   focusHintLabel: string;
   chipEditor: boolean;
   skillNames: readonly string[];
+  /**
+   * Registers a setter the parent can call after a programmatic text replacement.
+   * The composer text lives in an external store, so replacing it does not
+   * re-render this surface; without this the mirror keeps the previous text
+   * until the next keystroke.
+   */
+  liveTextSyncRef?: React.MutableRefObject<((text: string) => void) | null>;
 }
 
 /**
@@ -760,9 +767,16 @@ function skillMirrorStyle(style: EditingTextInputProps["style"]): TextStyle {
 }
 
 function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElement {
-  const { onChangeText, onRenderedLinesChange } = props;
+  const { onChangeText, onRenderedLinesChange, liveTextSyncRef } = props;
   const [measurementText, setMeasurementText] = useState(props.value);
   const [liveText, setLiveText] = useState(props.value);
+  useEffect(() => {
+    if (!liveTextSyncRef) return;
+    liveTextSyncRef.current = setLiveText;
+    return () => {
+      liveTextSyncRef.current = null;
+    };
+  }, [liveTextSyncRef]);
   const [syncedValue, setSyncedValue] = useState(props.value);
   if (syncedValue !== props.value) {
     setSyncedValue(props.value);
@@ -1560,6 +1574,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const isInputFocusedRef = useRef(false);
     const focusIntentRef = useRef(false);
     const valueRef = useRef(value);
+    const liveTextSyncRef = useRef<((text: string) => void) | null>(null);
     const selectionRef = useRef({ start: value.length, end: value.length });
     const [chipEditor, setChipEditor] = useState(() => isWeb && hasInlineChip(value));
     const syncChipEditor = useCallback((text: string) => {
@@ -1667,6 +1682,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         syncChipEditor(nextText);
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
+        liveTextSyncRef.current?.(nextText);
         const resolvedSelection =
           nextText === ""
             ? { start: 0, end: 0 }
@@ -2395,6 +2411,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             })}
             chipEditor={chipEditor}
             skillNames={skillNames}
+            liveTextSyncRef={liveTextSyncRef}
           />
         </RenderProfile>
       ),
@@ -2426,6 +2443,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         value,
         focusInputKeys,
         chipEditor,
+        liveTextSyncRef,
       ],
     );
     const toolbar = useMemo(

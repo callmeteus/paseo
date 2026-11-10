@@ -6,6 +6,7 @@ import {
   filterInlineSkillCommandEntries,
   findActiveSlashCommand,
   findSkillHighlightRanges,
+  highlightedCommandNames,
   skillCommandNames,
 } from "./agent-command-autocomplete";
 
@@ -192,6 +193,28 @@ describe("skillCommandNames", () => {
         { name: "create-skill", kind: "skill" },
       ]),
     ).toEqual(["deploy", "create-skill"]);
+  });
+});
+
+describe("highlightedCommandNames", () => {
+  it("includes installed skills and daemon commands that work mid-sentence", () => {
+    expect(
+      highlightedCommandNames([
+        { name: "clear", kind: "command" },
+        { name: "compact", kind: "command" },
+        { name: "goal", kind: "command" },
+        { name: "/deploy", kind: "skill" },
+      ]),
+    ).toEqual(["deploy", "goal"]);
+  });
+
+  it("does not duplicate a skill that shares a daemon command name", () => {
+    expect(
+      highlightedCommandNames([
+        { name: "goal", kind: "skill" },
+        { name: "goal", kind: "command" },
+      ]),
+    ).toEqual(["goal"]);
   });
 });
 
