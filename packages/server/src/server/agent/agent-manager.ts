@@ -7188,13 +7188,20 @@ export class AgentManager {
     }
 
     let unavailableReason: string | null = null;
-    try {
-      const available = await client.isAvailable();
-      if (available) {
-        return client;
+    // A freshly started CLI can fail its first availability probe while it
+    // settles, especially right after a daemon restart. Probe for a short window
+    // before reporting the provider as unavailable.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise<void>((done) => setTimeout(done, 1000));
       }
-    } catch (error) {
-      unavailableReason = error instanceof Error ? error.message : String(error);
+      try {
+        if (await client.isAvailable()) {
+          return client;
+        }
+      } catch (error) {
+        unavailableReason = error instanceof Error ? error.message : String(error);
+      }
     }
 
     const availableProviders = (await this.listProviderAvailability())

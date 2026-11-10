@@ -3820,6 +3820,35 @@ test("createAgent reports available providers when selected provider is unavaila
   );
 });
 
+test("createAgent retries a provider that is briefly unavailable", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+
+  class WarmingCodexClient extends TestAgentClient {
+    availabilityChecks = 0;
+
+    override async isAvailable(): Promise<boolean> {
+      this.availabilityChecks += 1;
+      return this.availabilityChecks >= 2;
+    }
+  }
+
+  const client = new WarmingCodexClient();
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+  });
+
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  expect(agent.provider).toBe("codex");
+  expect(client.availabilityChecks).toBe(2);
+});
+
 test("createAgent rejects a disabled provider without creating a session", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");

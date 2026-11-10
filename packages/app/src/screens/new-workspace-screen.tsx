@@ -980,6 +980,10 @@ export function NewWorkspaceScreen({
     draftId: draftId ?? generateDraftId(),
     worktreeSlug: createNameId(),
   }));
+  // The daemon treats a repeated key with a different request as a conflict.
+  // A user submit is a new intent, so it gets a new key; the creation client
+  // still owns in-flight retries through its own operation identity.
+  const creationKeyRef = useRef(generateDraftId());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [workspaceTitle, setWorkspaceTitle] = useState("");
   const [creationResult, setCreationResult] = useState<
@@ -1367,7 +1371,7 @@ export function NewWorkspaceScreen({
       if (isVirtual) isolation = "virtual";
       else if (createsWorktree) isolation = "worktree";
       const normalizedWorkspace = await createMultiplicityWorkspace({
-        idempotencyKey: creationIdentity.draftId,
+        idempotencyKey: creationKeyRef.current,
         worktreeSlug: creationIdentity.worktreeSlug,
         client: connectedClient,
         isolation,
@@ -1408,6 +1412,7 @@ export function NewWorkspaceScreen({
     async (payload: MessagePayload) => {
       try {
         setErrorMessage(null);
+        creationKeyRef.current = generateDraftId();
         await composerState?.persistFormPreferences();
         await updateFormPreferences({ launchTarget });
         if (isEmptyWorkspaceSubmission(payload)) {
@@ -1488,6 +1493,7 @@ export function NewWorkspaceScreen({
   const handleSubmitTerminalLaunch = useCallback(async () => {
     try {
       setErrorMessage(null);
+      creationKeyRef.current = generateDraftId();
       await updateFormPreferences({ launchTarget });
       setPendingAction("terminal");
       let outcome: SubmitOutcome = "background";
