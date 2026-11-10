@@ -18,13 +18,16 @@ export function isPaseoToolEnabled(
   if (toolName === "speak") {
     return true;
   }
-  // Hub automations and the Slack reads they need stay callable when the
-  // rest of the catalog is off. A provider can still hide one with disabledTools.
+  // Hub automations, the Slack reads they need, and plan_create_update stay
+  // callable when the rest of the catalog is off. Plan mode tells the model to
+  // write the sidebar plan with that tool. A provider can still hide one with
+  // disabledTools.
   if (
     toolName === "list_automations" ||
     toolName === "save_automation" ||
     toolName === "list_slack_channels" ||
-    toolName === "read_slack_messages"
+    toolName === "read_slack_messages" ||
+    toolName === "plan_create_update"
   ) {
     return !policy?.disabledTools?.includes(toolName);
   }

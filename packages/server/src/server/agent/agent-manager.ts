@@ -7056,7 +7056,8 @@ export class AgentManager {
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
     // Cursor only receives tools passed on session/new. The full catalog stays
-    // behind the inject switch; Hub automation tools are registered either way.
+    // behind the inject switch; Hub automation tools and plan_create_update are
+    // registered either way.
     const baseLaunchConfig = this.applyDaemonAppendSystemPrompt(
       withRuntimePaseoMcpServer({
         config: storedConfig,
