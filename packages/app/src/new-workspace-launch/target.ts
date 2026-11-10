@@ -10,6 +10,11 @@ export type { LaunchTarget };
 export const BLANK_TERMINAL_PROFILE_ID = "blank";
 
 export const CHAT_LAUNCH_TARGET: LaunchTarget = { kind: "chat" };
+export const OPENUI_CHAT_LAUNCH_TARGET: LaunchTarget = { kind: "chat", openui: true };
+
+export function isOpenUIChatTarget(target: LaunchTarget): boolean {
+  return target.kind === "chat" && target.openui === true;
+}
 
 export function isBlankTerminalTarget(target: LaunchTarget): boolean {
   return target.kind === "terminal" && target.profileId === BLANK_TERMINAL_PROFILE_ID;
@@ -40,7 +45,7 @@ export function resolveLaunchTarget(
   profiles: readonly TerminalProfile[],
 ): LaunchTarget {
   if (!target || target.kind === "chat") {
-    return CHAT_LAUNCH_TARGET;
+    return target ?? CHAT_LAUNCH_TARGET;
   }
   if (isBlankTerminalTarget(target)) {
     return target;

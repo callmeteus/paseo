@@ -10,7 +10,9 @@ export interface ProviderPreferences {
   featureValues?: Record<string, unknown>;
 }
 
-export type LaunchTarget = { kind: "chat" } | { kind: "terminal"; profileId: string };
+export type LaunchTarget =
+  | { kind: "chat"; openui?: boolean }
+  | { kind: "terminal"; profileId: string };
 
 export interface FormPreferences {
   provider?: string;
@@ -28,7 +30,7 @@ const providerPreferencesSchema: z.ZodType<ProviderPreferences> = z.strictObject
 });
 
 const launchTargetSchema: z.ZodType<LaunchTarget> = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("chat") }),
+  z.strictObject({ kind: z.literal("chat"), openui: z.boolean().optional() }),
   z.strictObject({ kind: z.literal("terminal"), profileId: z.string() }),
 ]);
 

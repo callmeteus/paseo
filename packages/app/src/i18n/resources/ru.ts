@@ -1662,6 +1662,7 @@ export const ru: TranslationResources = {
     launch: {
       title: "Что запустить",
       chat: "Чат",
+      agent: "Агент",
       terminal: "Терминал",
       manageProfiles: "Управление профилями терминала",
       submit: "Запустить",

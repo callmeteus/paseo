@@ -1649,6 +1649,7 @@ export const ko: TranslationResources = {
     launch: {
       title: "What to launch",
       chat: "Chat",
+      agent: "Agent",
       terminal: "Terminal",
       manageProfiles: "Manage profiles",
       submit: "Launch",

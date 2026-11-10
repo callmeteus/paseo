@@ -1679,6 +1679,7 @@ export const fr: TranslationResources = {
     launch: {
       title: "Que lancer ?",
       chat: "Chat",
+      agent: "Agent",
       terminal: "Terminal",
       manageProfiles: "Gérer les profils",
       submit: "Lancer",

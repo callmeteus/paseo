@@ -1673,6 +1673,7 @@ export const ptBR: TranslationResources = {
     launch: {
       title: "What to launch",
       chat: "Chat",
+      agent: "Agente",
       terminal: "Terminal",
       manageProfiles: "Manage profiles",
       submit: "Launch",

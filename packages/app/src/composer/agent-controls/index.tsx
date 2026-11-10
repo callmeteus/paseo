@@ -209,6 +209,8 @@ export interface DraftAgentControlsProps {
   onRouterPicked?: (routerId: string | null) => void;
   /** Draft id used to remember where Multitask tasks run before the chat exists. */
   multitaskTaskTargetKey?: string | null;
+  /** OpenUI Chat hides the workflow-mode picker; code Agents keep it. */
+  hideWorkflowMode?: boolean;
 }
 
 interface AgentControlsProps {
@@ -266,10 +268,15 @@ function useModeControls(serverId: string, agentId: string, supportsWorkflowMode
   const usesPaseoWorkflowModes = workflowModeSource === "paseo" && supportsWorkflowModes;
   const liveModeControl = useLiveAgentModeControl(serverId, agentId);
   const liveWorkflowModeControl = useLiveWorkflowModeControl(serverId, agentId);
+  // Only OpenUI Chats hide the mode picker. Code Agents keep the selector.
+  const isOpenUIChat = useSessionStore(
+    (state) => state.sessions[serverId]?.agents?.get(agentId)?.labels?.["paseo.openui"] === "1",
+  );
   return {
     usesPaseoWorkflowModes,
-    modeControl: usesPaseoWorkflowModes ? null : liveModeControl,
-    workflowModeControl: usesPaseoWorkflowModes ? liveWorkflowModeControl : null,
+    isOpenUIChat,
+    modeControl: !usesPaseoWorkflowModes && !isOpenUIChat ? liveModeControl : null,
+    workflowModeControl: usesPaseoWorkflowModes && !isOpenUIChat ? liveWorkflowModeControl : null,
   };
 }
 
@@ -302,6 +309,26 @@ function useForceAgentMode(serverId: string, agentId: string, enabled: boolean):
       console.warn("[AgentControls] force permission mode failed", error);
     });
   }, [agent, agentId, client, enabled]);
+}
+
+/**
+ * The product runs every chat in the Agent workflow mode and hides the mode
+ * picker, so an agent carried over from Plan/Ask/Debug snaps back to Agent.
+ */
+function useForceWorkflowAgentMode(serverId: string, agentId: string, enabled: boolean): void {
+  const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const workflowModeId = useSessionStore(
+    (state) => state.sessions[serverId]?.agents?.get(agentId)?.workflowModeId ?? null,
+  );
+
+  useEffect(() => {
+    if (!enabled || !client || workflowModeId === "agent") {
+      return;
+    }
+    void client.setAgentWorkflowMode(agentId, "agent").catch((error: unknown) => {
+      console.warn("[AgentControls] force workflow agent mode failed", error);
+    });
+  }, [agentId, client, enabled, workflowModeId]);
 }
 
 function getFeatureIconColor(
@@ -1797,12 +1824,10 @@ export const AgentControls = memo(function AgentControls({
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
   const supportsWorkflowModes = useHostFeature(serverId, "workflowModes");
-  const { usesPaseoWorkflowModes, modeControl, workflowModeControl } = useModeControls(
-    serverId,
-    agentId,
-    supportsWorkflowModes,
-  );
+  const { usesPaseoWorkflowModes, isOpenUIChat, modeControl, workflowModeControl } =
+    useModeControls(serverId, agentId, supportsWorkflowModes);
   useForceAgentMode(serverId, agentId, usesPaseoWorkflowModes);
+  useForceWorkflowAgentMode(serverId, agentId, isOpenUIChat);
   const commandCenterModes = toCommandCenterModes(modeControl);
   const modeProviderDefinitions = getModeProviderDefinitions(modeControl);
 
@@ -2247,6 +2272,7 @@ export function DraftAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
   multitaskTaskTargetKey = null,
+  hideWorkflowMode = false,
 }: DraftAgentControlsProps) {
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
     return toThinkingControlOptions(thinkingOptions);
@@ -2296,7 +2322,7 @@ export function DraftAgentControls({
   const usesPaseoWorkflowModes = workflowModeSource === "paseo" && supportsWorkflowModes;
   const modeControl = useMemo<AgentModeControlValue | null>(
     () =>
-      !usesPaseoWorkflowModes && selectedProvider && modeOptions.length > 0
+      !usesPaseoWorkflowModes && !hideWorkflowMode && selectedProvider && modeOptions.length > 0
         ? {
             provider: selectedProvider,
             providerDefinitions,
@@ -2308,6 +2334,7 @@ export function DraftAgentControls({
         : null,
     [
       usesPaseoWorkflowModes,
+      hideWorkflowMode,
       selectedProvider,
       providerDefinitions,
       modeOptions,
@@ -2318,14 +2345,20 @@ export function DraftAgentControls({
   );
   const workflowModeControl = useMemo<WorkflowModeControlValue | null>(
     () =>
-      usesPaseoWorkflowModes
+      usesPaseoWorkflowModes && !hideWorkflowMode
         ? {
             selectedWorkflowModeId: selectedWorkflowMode,
             onSelectWorkflowMode,
             disabled,
           }
         : null,
-    [selectedWorkflowMode, onSelectWorkflowMode, disabled, usesPaseoWorkflowModes],
+    [
+      selectedWorkflowMode,
+      onSelectWorkflowMode,
+      disabled,
+      usesPaseoWorkflowModes,
+      hideWorkflowMode,
+    ],
   );
   const draftTaskTarget = useDraftMultitaskTaskTarget(multitaskTaskTargetKey);
   const multitaskTaskTarget = useMemo(

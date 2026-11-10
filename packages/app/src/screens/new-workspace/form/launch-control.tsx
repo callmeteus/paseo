@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
-import { MessageCircle, SquareTerminal } from "lucide-react-native";
+import { Bot, MessageCircle, SquareTerminal } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   DropdownMenu,
@@ -27,6 +27,8 @@ import {
   BLANK_TERMINAL_PROFILE_ID,
   CHAT_LAUNCH_TARGET,
   isBlankTerminalTarget,
+  isOpenUIChatTarget,
+  OPENUI_CHAT_LAUNCH_TARGET,
   resolveLaunchProfile,
   terminalLaunchTarget,
   type LaunchTarget,
@@ -38,11 +40,13 @@ import {
 } from "./field-trigger";
 
 const ThemedMessageCircle = withUnistyles(MessageCircle);
+const ThemedBot = withUnistyles(Bot);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 const chatIcon = <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
+const agentIcon = <ThemedBot size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const blankTerminalIcon = <ThemedSquareTerminal size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 
 /** Owns its own leading icon and select callback so neither is rebuilt per render of the menu. */
@@ -97,7 +101,11 @@ function TriggerIcon({
   profile: TerminalProfile | null;
 }): ReactElement {
   if (target.kind === "chat") {
-    return <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
+    return isOpenUIChatTarget(target) ? (
+      <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+    ) : (
+      <ThemedBot size={ICON_SIZE.sm} uniProps={mutedColorMapping} />
+    );
   }
   if (profile) {
     return <TerminalProfileIcon iconKey={getTerminalProfileIcon(profile)} />;
@@ -134,10 +142,15 @@ export function LaunchControl({
   // reading "(openai logo) Codex" is indistinguishable from a chat Codex agent.
   // Leading with the noun fixes that, and de-emphasising the profile name keeps
   // "Terminal" the thing you read first.
-  const triggerLabel =
-    target.kind === "chat" ? t("newWorkspace.launch.chat") : t("newWorkspace.launch.terminal");
+  const triggerLabel = (() => {
+    if (target.kind !== "chat") return t("newWorkspace.launch.terminal");
+    return isOpenUIChatTarget(target)
+      ? t("newWorkspace.launch.chat")
+      : t("newWorkspace.launch.agent");
+  })();
 
-  const selectChat = useCallback(() => onChange(CHAT_LAUNCH_TARGET), [onChange]);
+  const selectChat = useCallback(() => onChange(OPENUI_CHAT_LAUNCH_TARGET), [onChange]);
+  const selectAgent = useCallback(() => onChange(CHAT_LAUNCH_TARGET), [onChange]);
   const selectBlankTerminal = useCallback(
     () => onChange(terminalLaunchTarget(BLANK_TERMINAL_PROFILE_ID)),
     [onChange],
@@ -186,17 +199,24 @@ export function LaunchControl({
         sheetTitle={t("newWorkspace.launch.title")}
         testID="new-workspace-launch-menu"
       >
-        {/* Chat leads with no label of its own: a group label over a single row
-            is noise, and the sheet title already says what the menu is on
-            compact. Terminal keeps its label because that grouping is what
-            stops a profile named Codex reading as a chat Codex agent. */}
+        {/* Chat is the OpenUI conversation; Agent is the original code-focused
+            agent. Terminal keeps its group so a profile named Codex never reads
+            as a chat Codex agent. */}
         <DropdownMenuItem
           testID="new-workspace-launch-option-chat"
           onSelect={selectChat}
-          selected={target.kind === "chat"}
+          selected={isOpenUIChatTarget(target)}
           leading={chatIcon}
         >
           {t("newWorkspace.launch.chat")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          testID="new-workspace-launch-option-agent"
+          onSelect={selectAgent}
+          selected={target.kind === "chat" && !isOpenUIChatTarget(target)}
+          leading={agentIcon}
+        >
+          {t("newWorkspace.launch.agent")}
         </DropdownMenuItem>
         <DropdownMenuLabel>{t("newWorkspace.launch.terminal")}</DropdownMenuLabel>
         <DropdownMenuItem

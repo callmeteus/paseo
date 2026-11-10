@@ -35,7 +35,12 @@ import { ensureCheckoutStatus } from "@/git/checkout-status-cache";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { resolveTerminalProfiles } from "@getpaseo/protocol/terminal-profiles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
-import { resolveLaunchTarget, type LaunchTarget } from "@/new-workspace-launch/target";
+import {
+  isOpenUIChatTarget,
+  resolveLaunchTarget,
+  type LaunchTarget,
+} from "@/new-workspace-launch/target";
+import { OPENUI_SYSTEM_PROMPT } from "@/new-workspace-launch/openui";
 import { useTerminalComposerState } from "@/new-workspace-launch/composer-state";
 import { runCreateTerminalWorkspace } from "./new-workspace-terminal";
 import {
@@ -389,6 +394,7 @@ interface CreateChatAgentInput {
   payload: MessagePayload;
   composerState: ReturnType<typeof useAgentInputDraft>["composerState"];
   workflowModeSource: WorkflowModeSource;
+  launchTarget: LaunchTarget;
   forkDraftSetup?: PendingWorkspaceDraftSetup | null;
   ensureWorkspace: (input: {
     cwd: string;
@@ -488,6 +494,14 @@ function workspaceChatAgentTaskLabels(input: {
   return { labels };
 }
 
+function mergeWorkspaceAgentLabels(
+  taskLabelFields: ReturnType<typeof workspaceChatAgentTaskLabels>,
+  openuiChat: boolean,
+): Record<string, string> {
+  const base = (taskLabelFields as { labels?: Record<string, string> }).labels ?? {};
+  return openuiChat ? { ...base, "paseo.openui": "1" } : base;
+}
+
 async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<SubmitOutcome> {
   const { payload, composerState, workflowModeSource, ensureWorkspace, serverId, clearDraft } =
     input;
@@ -530,6 +544,7 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     usesPaseoWorkflowModes,
     selectedWorkflowMode: composerState.selectedWorkflowMode,
   });
+  const openuiChat = isOpenUIChatTarget(input.launchTarget);
   const initialAgent: NonNullable<CreateWorkspaceRequestOptions["agent"]> = {
     config: {
       provider,
@@ -541,12 +556,15 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       model: composerState.effectiveModelId || undefined,
       thinkingOptionId: composerState.effectiveThinkingOptionId || undefined,
       featureValues: composerState.featureValues,
+      ...(input.launchTarget.kind === "chat" && input.launchTarget.openui
+        ? { systemPrompt: OPENUI_SYSTEM_PROMPT }
+        : {}),
     },
     initialPrompt: text,
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
     attachments: wirePayload.attachments?.length ? wirePayload.attachments : undefined,
-    ...taskLabelFields,
+    labels: mergeWorkspaceAgentLabels(taskLabelFields, openuiChat),
   };
   const execute = async (requestedAgent = initialAgent): Promise<AgentSnapshotPayload> => {
     const { agent } = await ensureWorkspace({
@@ -1444,6 +1462,7 @@ export function NewWorkspaceScreen({
           payload,
           composerState,
           workflowModeSource,
+          launchTarget,
           forkDraftSetup,
           ensureWorkspace,
           serverId: selectedServerId,
@@ -1574,9 +1593,10 @@ export function NewWorkspaceScreen({
             ...composerState.agentControls,
             disabled: isPending,
             multitaskTaskTargetKey: creationIdentity.draftId,
+            hideWorkflowMode: launchTarget.kind === "chat" && launchTarget.openui === true,
           }
         : undefined,
-    [composerState, creationIdentity.draftId, isPending],
+    [composerState, creationIdentity.draftId, isPending, launchTarget],
   );
 
   const pickerEmptyText =
