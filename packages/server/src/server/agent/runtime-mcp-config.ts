@@ -39,10 +39,14 @@ export function withRuntimePaseoMcpServer(params: {
   sharedMcpServers?: Record<string, McpServerConfig> | null;
 }): AgentSessionConfig {
   const storedConfig = stripInternalPaseoMcpServer(params.config);
-  const shared = params.sharedMcpServers ?? {};
+  const shared = { ...params.sharedMcpServers };
+  delete shared[PASEO_MCP_SERVER_NAME];
   const mergedServers = { ...shared, ...storedConfig.mcpServers };
   if (!params.mcpBaseUrl || mergedServers[PASEO_MCP_SERVER_NAME]) {
-    return { ...storedConfig, ...(Object.keys(mergedServers).length ? { mcpServers: mergedServers } : {}) };
+    return {
+      ...storedConfig,
+      ...(Object.keys(mergedServers).length ? { mcpServers: mergedServers } : {}),
+    };
   }
 
   return {

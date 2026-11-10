@@ -193,7 +193,7 @@ import { admitSecuredRelaySocket } from "./websocket/secure-relay-ingress.js";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
-import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
+import type { AgentClient, AgentProvider, McpServerConfig } from "./agent/agent-sdk-types.js";
 import type {
   AgentProfile,
   AgentSkillSelection,
@@ -442,6 +442,7 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
+  mcpServers?: Record<string, McpServerConfig>;
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
@@ -613,6 +614,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
+    mcpServers: config.mcpServers,
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -1877,6 +1879,7 @@ export async function createPaseoDaemon(
             // so Cursor can load the Hub automation tools.
             agentMcpBaseUrl = mcpEnabled ? mcpBaseUrl : null;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
+            agentManager.setSharedMcpServers(config.mcpServers ?? null);
             agentManager.setDebugIngestBaseUrl(createDebugIngestBaseUrl(boundListenTarget));
             agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
@@ -1893,6 +1896,13 @@ export async function createPaseoDaemon(
             });
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {
               agentManager.setAppendSystemPrompt(typeof value === "string" ? value : "");
+            });
+            daemonConfigStore.onFieldChange("mcpServers", (value) => {
+              agentManager.setSharedMcpServers(
+                value && typeof value === "object" && !Array.isArray(value)
+                  ? (value as Record<string, McpServerConfig>)
+                  : null,
+              );
             });
             const relayEnabled = config.relayEnabled ?? true;
             const relayEndpoint = config.relayEndpoint ?? "relay.paseo.sh:443";

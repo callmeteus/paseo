@@ -555,41 +555,46 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       }
     });
 
-    const unsubPlanUpdate = client.on("plan_update", (message) => {
-      if (message.type !== "plan_update") return;
-      console.info("[plan_update] received", message.payload);
-      usePlanStore.getState().setPlan({
-        serverId,
-        workspaceId: message.payload.workspaceId,
-        path: message.payload.path,
-        title: message.payload.title ?? message.payload.path,
-        agentId: message.payload.agentId,
-      });
-      const target = { kind: "file" as const, path: message.payload.path };
-      const active = getLastWorkspaceSelection();
-      if (active?.serverId === serverId && active.workspaceId === message.payload.workspaceId) {
-        const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
-        const resolvedWorkspaceId =
-          resolveWorkspaceMapKeyByIdentity({
-            workspaces,
-            workspaceId: message.payload.workspaceId,
-          }) ?? message.payload.workspaceId;
-        const workspaceKey = buildWorkspaceTabPersistenceKey({
+    // plan_update travels as an owned event stream. Modern clients reject broadcast
+    // messages that no subscription proves ownership of, so it must be observed here.
+    const planUpdates = client.observeEvents(["plan_update"]);
+    planUpdates.subscribe({
+      snapshot: () => {},
+      update: (message) => {
+        if (message.type !== "plan_update") return;
+        usePlanStore.getState().setPlan({
           serverId,
-          workspaceId: resolvedWorkspaceId,
+          workspaceId: message.payload.workspaceId,
+          path: message.payload.path,
+          title: message.payload.title ?? message.payload.path,
+          agentId: message.payload.agentId,
         });
-        if (workspaceKey) {
-          const layout = useWorkspaceLayoutStore.getState();
-          const tabId = layout.openTab({ workspaceKey, target, intent: "reveal" });
-          if (tabId) revealWorkspaceTab(workspaceKey, tabId);
+        const target = { kind: "file" as const, path: message.payload.path };
+        const active = getLastWorkspaceSelection();
+        if (active?.serverId === serverId && active.workspaceId === message.payload.workspaceId) {
+          const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+          const resolvedWorkspaceId =
+            resolveWorkspaceMapKeyByIdentity({
+              workspaces,
+              workspaceId: message.payload.workspaceId,
+            }) ?? message.payload.workspaceId;
+          const workspaceKey = buildWorkspaceTabPersistenceKey({
+            serverId,
+            workspaceId: resolvedWorkspaceId,
+          });
+          if (workspaceKey) {
+            const layout = useWorkspaceLayoutStore.getState();
+            const tabId = layout.openTab({ workspaceKey, target, intent: "reveal" });
+            if (tabId) revealWorkspaceTab(workspaceKey, tabId);
+          }
+          return;
         }
-        return;
-      }
-      navigateToWorkspace({
-        serverId,
-        workspaceId: message.payload.workspaceId,
-        target,
-      });
+        navigateToWorkspace({
+          serverId,
+          workspaceId: message.payload.workspaceId,
+          target,
+        });
+      },
     });
 
     const unsubPermissionRequest = onFeed("agent_permission_request", (message) => {
@@ -742,7 +747,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubAgentAttention();
       unsubCheckoutStatusUpdate();
       unsubStatus();
-      unsubPlanUpdate();
+      void planUpdates
+        .release()
+        .catch((error) => console.warn("[Session] Failed to release plan updates", error));
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAudioOutput();

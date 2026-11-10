@@ -35,12 +35,17 @@ Paseo 默认使用 `~/.paseo` 作为主目录。配置文件是：
   "daemon": {
     "listen": "127.0.0.1:17000",
     "hostnames": ["localhost", ".localhost"],
-    "mcp": { "enabled": true }
+    "mcp": { "enabled": true },
+    "mcpServers": {
+      "docs": { "type": "http", "url": "https://docs.example.com/mcp" }
+    }
   }
 }
 ```
 
 `daemon.hostnames` 是主要字段。旧的 `daemon.allowedHosts` 名称作为已弃用的别名仍然可用，以保持向后兼容。
+
+`daemon.mcpServers` 注册主机级 MCP 服务器，并与该 daemon 启动的每个 agent 共享。agent 可以在自己的 `mcpServers` 中使用相同名称来覆盖共享服务器；保留名称 `paseo` 始终属于 Paseo 的内部 agent 工具。服务器在启动和恢复时注入，因此更改会影响下一个会话，而不是正在运行的会话。
 
 ## 应用更改 {#apply-changes}
 

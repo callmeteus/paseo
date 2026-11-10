@@ -8,12 +8,12 @@ function ownsMessage(sessionID, message) {
 
 function asModelMessage(message) {
   if (message.role && message.content !== undefined) return message;
-  const text =
-    typeof message.text === "string"
-      ? message.text
-      : typeof message.summary === "string"
-        ? message.summary
-        : "";
+  let text = "";
+  if (typeof message.text === "string") {
+    text = message.text;
+  } else if (typeof message.summary === "string") {
+    text = message.summary;
+  }
   if (!text) return null;
   const role = message.type === "assistant" ? "assistant" : "user";
   return { id: message.id, role, content: text };

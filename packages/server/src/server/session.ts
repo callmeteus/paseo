@@ -9717,40 +9717,44 @@ function isValidGitHubRepoSegment(value: string): boolean {
   return /^[A-Za-z0-9._-]+$/u.test(value);
 }
 
+const DIRECT_SESSION_EVENT_MESSAGE_TYPES: ReadonlySet<SessionOutboundMessage["type"]> = new Set([
+  "project.update",
+  "providers_snapshot_update",
+  "agent_attention_required",
+  "agent_permission_request",
+  "agent_permission_resolved",
+  "checkout_status_update",
+  "script_status_update",
+  "workspace_setup_progress",
+  "agent.provider_subagents.update",
+  "terminal_attention_required",
+  "activity_log",
+  "plan_update",
+  "hub.execution.agent.update",
+  "hub.execution.agent.stream",
+]);
+
+const STATUS_SESSION_EVENTS: Partial<
+  Record<
+    Extract<SessionOutboundMessage, { type: "status" }>["payload"]["status"],
+    SessionEventSubscription
+  >
+> = {
+  server_info: "status.server_info",
+  daemon_config_changed: "status.daemon_config_changed",
+  plugin_catalog_changed: "status.plugin_catalog_changed",
+  plugin_settings_changed: "status.plugin_settings_changed",
+  agent_commands_changed: "status.agent_commands_changed",
+};
+
 function sessionEventCategory(message: SessionOutboundMessage): SessionEventSubscription | null {
-  switch (message.type) {
-    case "project.update":
-    case "providers_snapshot_update":
-    case "agent_attention_required":
-    case "agent_permission_request":
-    case "agent_permission_resolved":
-    case "checkout_status_update":
-    case "script_status_update":
-    case "workspace_setup_progress":
-    case "agent.provider_subagents.update":
-    case "terminal_attention_required":
-    case "activity_log":
-    case "hub.execution.agent.update":
-    case "hub.execution.agent.stream":
-      return message.type;
-    case "status":
-      switch (message.payload.status) {
-        case "server_info":
-          return "status.server_info";
-        case "daemon_config_changed":
-          return "status.daemon_config_changed";
-        case "plugin_catalog_changed":
-          return "status.plugin_catalog_changed";
-        case "plugin_settings_changed":
-          return "status.plugin_settings_changed";
-        case "agent_commands_changed":
-          return "status.agent_commands_changed";
-        default:
-          return null;
-      }
-    default:
-      return null;
+  if (DIRECT_SESSION_EVENT_MESSAGE_TYPES.has(message.type)) {
+    return message.type as SessionEventSubscription;
   }
+  if (message.type !== "status") {
+    return null;
+  }
+  return STATUS_SESSION_EVENTS[message.payload.status] ?? null;
 }
 
 // COMPAT(ownedSubscriptions): added in v0.8.0, remove implicit event delivery after 2027-03-09.

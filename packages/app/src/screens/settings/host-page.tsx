@@ -22,6 +22,7 @@ import {
   DEFAULT_TERMINAL_PROFILES,
 } from "@getpaseo/protocol/terminal-profiles";
 import { AgentProfilesSection } from "@/agent-profiles";
+import { McpServersSection } from "@/mcp-servers";
 import { AgentSkillsSection } from "@/agent-skills";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { HostPasswordPrompt } from "@/components/host-password-prompt";
@@ -318,6 +319,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       )}
       <AgentSkillsSection serverId={serverId} />
       <AgentProfilesSection serverId={serverId} />
+      <McpServersSection serverId={serverId} />
     </View>
   );
 }

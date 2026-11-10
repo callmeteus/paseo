@@ -198,6 +198,46 @@ describe("DaemonConfigStore", () => {
     expect(store.get().agentProfiles).toHaveLength(1);
   });
 
+  test("patch persists host-wide MCP servers", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({
+      mcpServers: {
+        docs: { type: "http", url: "https://docs.example.com/mcp" },
+        local: { type: "stdio", command: "npx", args: ["-y", "mcp-server"] },
+      },
+    });
+
+    expect(loadPersistedConfig(paseoHome).daemon?.mcpServers).toEqual({
+      docs: { type: "http", url: "https://docs.example.com/mcp" },
+      local: { type: "stdio", command: "npx", args: ["-y", "mcp-server"] },
+    });
+    expect(store.get().mcpServers).toEqual({
+      docs: { type: "http", url: "https://docs.example.com/mcp" },
+      local: { type: "stdio", command: "npx", args: ["-y", "mcp-server"] },
+    });
+
+    store.patch({ mcpServers: { docs: { type: "http", url: "https://docs.example.com/mcp" } } });
+
+    expect(store.get().mcpServers).toEqual({
+      docs: { type: "http", url: "https://docs.example.com/mcp" },
+    });
+    expect(loadPersistedConfig(paseoHome).daemon?.mcpServers).toEqual({
+      docs: { type: "http", url: "https://docs.example.com/mcp" },
+    });
+  });
+
   test("patch replaces the whole agent profile list rather than merging entries", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

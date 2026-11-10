@@ -227,6 +227,36 @@ const MutableRelayConfigSchema = z
   })
   .passthrough();
 
+const McpStdioServerConfigSchema = z.object({
+  type: z.literal("stdio"),
+  command: z.string(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  alwaysLoad: z.boolean().optional(),
+});
+
+const McpHttpServerConfigSchema = z.object({
+  type: z.literal("http"),
+  url: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+  alwaysLoad: z.boolean().optional(),
+});
+
+const McpSseServerConfigSchema = z.object({
+  type: z.literal("sse"),
+  url: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+  alwaysLoad: z.boolean().optional(),
+});
+
+export const McpServerConfigSchema = z.discriminatedUnion("type", [
+  McpStdioServerConfigSchema,
+  McpHttpServerConfigSchema,
+  McpSseServerConfigSchema,
+]);
+
+export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -265,6 +295,7 @@ export const MutableDaemonConfigSchema = z
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
@@ -291,6 +322,7 @@ export const MutableDaemonConfigPatchSchema = z
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     features: SpeechSettingsPatchSchema.optional(),
@@ -458,36 +490,6 @@ const AgentUsageSchema: z.ZodType<AgentUsage> = z.object({
   contextWindowMaxTokens: z.number().optional(),
   contextWindowUsedTokens: z.number().optional(),
 });
-
-const McpStdioServerConfigSchema = z.object({
-  type: z.literal("stdio"),
-  command: z.string(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-const McpHttpServerConfigSchema = z.object({
-  type: z.literal("http"),
-  url: z.string(),
-  headers: z.record(z.string(), z.string()).optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-const McpSseServerConfigSchema = z.object({
-  type: z.literal("sse"),
-  url: z.string(),
-  headers: z.record(z.string(), z.string()).optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-const McpServerConfigSchema = z.discriminatedUnion("type", [
-  McpStdioServerConfigSchema,
-  McpHttpServerConfigSchema,
-  McpSseServerConfigSchema,
-]);
-
-export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
 const ProviderOptionsSchema = z.record(z.string(), z.unknown());
 
@@ -3611,6 +3613,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   "status.plugin_settings_changed",
   "status.agent_commands_changed",
   "activity_log",
+  "plan_update",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
 ]);
@@ -4262,6 +4265,8 @@ export const ServerInfoStatusPayloadSchema = z
         // agentProfiles to one is silently dropped. The client hides the feature
         // rather than letting a save appear to succeed.
         agentProfiles: z.boolean().optional(),
+        // COMPAT(mcpServers): added in v0.13.1, remove gate after 2027-03-01.
+        mcpServers: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
       })

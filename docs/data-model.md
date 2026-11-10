@@ -202,6 +202,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     hostnames: true | string[],   // legacy alias `allowedHosts` is migrated on load
     trustedProxies: true | string[], // defaults to ["loopback"]; Express proxy names/CIDRs
     mcp: { enabled: boolean, injectIntoAgents: boolean },
+    mcpServers: Record<string, McpServerConfig>, // host-wide servers shared with every agent
     git: { maxProcessesPerSecond: number, maxProcessConcurrency: number },
     appendSystemPrompt: string,    // appended to supported provider system/developer prompts
     terminalProfiles: TerminalProfile[],  // named shell commands; omitted means DEFAULT_TERMINAL_PROFILES
@@ -310,6 +311,11 @@ agents that can access the host through a shell.
 Paseo tools; otherwise the provider policy applies. Provider and global policy are resolved when a
 session is created, resumed, imported, or reloaded, so configuration changes affect the next
 session rather than an already-running one.
+
+`daemon.mcpServers` is the host-wide MCP registry. Entries are injected into every agent launch and
+resume in addition to Paseo's own `paseo` server. An agent that defines a server with the same name
+overrides the shared one; the reserved name `paseo` always stays with Paseo. Shared servers are never
+written into the agent's persisted `config.mcpServers`.
 
 `agents.metadataGeneration.providers` selects the models for daemon-side metadata tasks: commit messages, PR text, branch names, and generated titles. An empty list is Automatic; a non-empty list is Manual and only those models are tried. See [public-docs/metadata-generation.md](../public-docs/metadata-generation.md#how-a-model-is-chosen).
 

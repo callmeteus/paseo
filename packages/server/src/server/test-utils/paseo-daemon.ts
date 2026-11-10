@@ -51,6 +51,7 @@ interface TestPaseoDaemonOptions {
   webUi?: PaseoDaemonConfig["webUi"];
   trustedProxies?: PaseoDaemonConfig["trustedProxies"];
   agentProfiles?: AgentProfile[];
+  mcpServers?: PaseoDaemonConfig["mcpServers"];
   autoArchiveAfterMerge?: boolean;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
   builtinPlugins?: BuiltinPluginLoader;
@@ -225,6 +226,7 @@ async function prepareTestDaemonConfig(
     dictationFinalTimeoutMs: options.dictationFinalTimeoutMs,
     downloadTokenTtlMs: options.downloadTokenTtlMs,
     agentProfiles: options.agentProfiles,
+    mcpServers: options.mcpServers,
     autoArchiveAfterMerge: options.autoArchiveAfterMerge,
     pluginsEnabled: options.pluginsEnabled,
     plugins: options.plugins,

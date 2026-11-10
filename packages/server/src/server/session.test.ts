@@ -5467,6 +5467,49 @@ test("sends project updates only to capable sockets in a retained session", asyn
   ]);
 });
 
+test("delivers plan updates to modern clients through their event subscription", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const targetedMessages: Array<{ source: object; message: SessionOutboundMessage }> = [];
+  const session = createSessionForTest({ messages, targetedMessages });
+  const source = {};
+  session.updateClientCapabilities({ [CLIENT_CAPS.ownedSubscriptions]: true }, source);
+
+  await session.handleMessage(
+    {
+      type: "session.events.set_subscription.request",
+      requestId: "plan-events",
+      events: ["plan_update"],
+    },
+    source,
+  );
+  targetedMessages.length = 0;
+
+  session.publish({
+    type: "plan_update",
+    payload: {
+      workspaceId: "wks_plan",
+      path: "plans/demo.md",
+      title: "Demo plan",
+      agentId: "agent-plan",
+    },
+  });
+
+  expect(messages).toEqual([]);
+  expect(targetedMessages).toEqual([
+    {
+      source,
+      message: expect.objectContaining({
+        type: "plan_update",
+        payload: expect.objectContaining({
+          workspaceId: "wks_plan",
+          path: "plans/demo.md",
+          subscriptionId: expect.any(String),
+        }),
+      }),
+    },
+  ]);
+});
+
 test("project.list returns every active project descriptor", async () => {
   const messages: SessionOutboundMessage[] = [];
   const active = createPersistedProjectRecord({

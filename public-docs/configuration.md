@@ -37,12 +37,17 @@ Minimal example that configures listening address, hostnames, and MCP:
   "daemon": {
     "listen": "127.0.0.1:17000",
     "hostnames": ["localhost", ".localhost"],
-    "mcp": { "enabled": true }
+    "mcp": { "enabled": true },
+    "mcpServers": {
+      "docs": { "type": "http", "url": "https://docs.example.com/mcp" }
+    }
   }
 }
 ```
 
 `daemon.hostnames` is the primary field. The old `daemon.allowedHosts` name still works as a deprecated alias for backward compatibility.
+
+`daemon.mcpServers` registers host-wide MCP servers and shares them with every agent launched by this daemon. An agent can override a shared server by using the same name in its own `mcpServers`; the reserved name `paseo` always belongs to Paseo's internal agent tools. Servers are injected at launch and resume, so changes affect the next session rather than a running one.
 
 ## Apply changes
 
