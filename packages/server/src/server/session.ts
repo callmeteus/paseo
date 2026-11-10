@@ -4942,6 +4942,7 @@ export class Session {
     );
 
     let createdWorktreeForCleanup: CreatePaseoWorktreeWorkflowResult | null = null;
+    let createdDirectoryWorkspaceId: string | null = null;
     let createdAgentId: string | null = null;
     try {
       const requestedCwd = resolve(config.cwd);
@@ -4950,6 +4951,7 @@ export class Session {
         throw new Error(`Working directory does not exist or is not a directory: ${requestedCwd}`);
       }
       this.validatePublicAgentWorkspaceIntent(msg);
+      this.agentManager.assertProviderEnabled(config.provider);
       const trimmedPrompt = initialPrompt?.trim();
       const { provisionalTitle } = resolveCreateAgentTitles({
         configTitle: config.title,
@@ -4973,6 +4975,9 @@ export class Session {
         request: msg,
         createdWorktree,
         workspacePromptTitle,
+        onDirectoryWorkspaceCreated: (workspaceId) => {
+          createdDirectoryWorkspaceId = workspaceId;
+        },
       });
       const resolvedCwd = resolve(resolvedIntent.config.cwd);
       if (!(await this.filesystem.isDirectory(resolvedCwd))) {
@@ -5054,14 +5059,27 @@ export class Session {
         createdWorktree: createdWorktreeForCleanup,
         createdAgentId,
       });
+      if (createdDirectoryWorkspaceId && !createdAgentId) {
+        await this.closeWorkspaceCreatedForFailedAgent(createdDirectoryWorkspaceId);
+      }
       throw error;
     }
+  }
+
+  private async closeWorkspaceCreatedForFailedAgent(workspaceId: string): Promise<void> {
+    await this.archiveWorkspaceRecord(workspaceId).catch((error) => {
+      this.sessionLogger.warn(
+        { err: error, workspaceId },
+        "Failed to close workspace after create_agent_request failed",
+      );
+    });
   }
 
   private async resolveSessionCreateAgentIntent(input: {
     request: CreateAgentRequestMessage;
     createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
     workspacePromptTitle: string | null;
+    onDirectoryWorkspaceCreated?: (workspaceId: string) => void;
   }): Promise<ResolvedSessionCreateAgentIntent> {
     const { request, createdWorktree } = input;
     const callerAgent = request.callerAgentId
@@ -5089,16 +5107,18 @@ export class Session {
         }
         return { workspaceId, cwd: workspace.cwd };
       },
-      createWorkspace: async () => ({
-        workspaceId: await this.workspaceProvisioning.resolveOrCreateWorkspaceIdForCreateAgent({
-          createdWorktree: null,
-          cwd: config.cwd,
-          initialTitle: input.workspacePromptTitle,
-          background: request.background,
-          callerWorkspaceId: callerAgent?.workspaceId,
-        }),
-        cwd: config.cwd,
-      }),
+      createWorkspace: async () => {
+        const workspaceId =
+          await this.workspaceProvisioning.resolveOrCreateWorkspaceIdForCreateAgent({
+            createdWorktree: null,
+            cwd: config.cwd,
+            initialTitle: input.workspacePromptTitle,
+            background: request.background,
+            callerWorkspaceId: callerAgent?.workspaceId,
+          });
+        input.onDirectoryWorkspaceCreated?.(workspaceId);
+        return { workspaceId, cwd: config.cwd };
+      },
     });
     config = { ...config, cwd: intent.cwd };
 

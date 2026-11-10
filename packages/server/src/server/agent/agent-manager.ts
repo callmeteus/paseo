@@ -7214,6 +7214,10 @@ export class AgentManager {
     );
   }
 
+  assertProviderEnabled(provider: AgentProvider): void {
+    this.requireEnabledProvider(provider);
+  }
+
   private requireEnabledProvider(provider: AgentProvider): void {
     if (this.providerEnabled.get(provider) === false) {
       throw new Error(`Provider '${provider}' is disabled`);

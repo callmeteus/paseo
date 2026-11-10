@@ -146,6 +146,11 @@ The key chooses storage, never execution. Availability and catalogue discovery r
 `{ scope: "global", force }` or `{ scope: "workspace", cwd, force }` request, including when another
 target can share its result. Runtime-aware adapters must use that target for both probing and key
 resolution. An explicit home-directory workspace is distinct from a semantic global request.
+When a workspace directory is not on this host and `getCatalogCacheKey` returns the same key for
+that workspace and for the global request, discovery runs as the global request. Spawning in the
+missing directory fails with `spawn <binary> ENOENT`, and that result would be the catalogue for
+every target that shares the key, including Settings.
+
 Plugin callbacks follow the same contract; see [plugin providers](plugins.md#contribute-a-provider).
 
 `ProviderSnapshotManager` owns one refresh deadline per provider. The deadline starts before the
