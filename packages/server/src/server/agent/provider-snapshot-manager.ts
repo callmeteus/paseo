@@ -1,6 +1,7 @@
 import { normalizeAgentModelCatalog } from "@getpaseo/protocol/agent-types";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -1043,14 +1044,15 @@ export class ProviderSnapshotManager {
     const client = this.ensureClient(provider, definition);
     const catalogOptions = createFetchCatalogOptions(options.catalogScope, force);
     let key: string;
+    let sharedKey: string | undefined;
     try {
-      const sharedKey = client.getCatalogCacheKey
+      sharedKey = client.getCatalogCacheKey
         ? await withTimeout(
             client.getCatalogCacheKey(catalogOptions),
             this.refreshTimeoutMs,
             `Timed out resolving ${provider} catalogue key`,
           )
-        : await Promise.resolve(undefined);
+        : undefined;
       key = JSON.stringify(
         sharedKey === undefined ? ["target", snapshotCwd] : ["provider", sharedKey],
       );
@@ -1092,24 +1094,29 @@ export class ProviderSnapshotManager {
       .get(provider)!
       .discoveryLimit(() => {
         if (!isCurrent()) return;
-        return this.refreshProvider({
-          catalogOptions,
-          provider,
-          definition,
-          initial,
-          client,
-          keepLastGoodOnError: options.keepLastGoodOnError,
-          hasLastGoodResult: current.result?.entry.status === "ready",
-          publish: (entry) => {
-            if (!isCurrent()) return false;
-            current.result = identifyEntry(structuredClone(entry));
-            const boundTargets = [...this.targets].flatMap(([cwd, target]) =>
-              target.bindings.get(provider)?.key === key ? [cwd] : [],
-            );
-            this.publishTargets(boundTargets);
-            return true;
+        return catalogOptionsForExistingWorkspace(client, catalogOptions, sharedKey).then(
+          (resolvedOptions) => {
+            if (!isCurrent()) return;
+            return this.refreshProvider({
+              catalogOptions: resolvedOptions,
+              provider,
+              definition,
+              initial,
+              client,
+              keepLastGoodOnError: options.keepLastGoodOnError,
+              hasLastGoodResult: current.result?.entry.status === "ready",
+              publish: (entry) => {
+                if (!isCurrent()) return false;
+                current.result = identifyEntry(structuredClone(entry));
+                const boundTargets = [...this.targets].flatMap(([cwd, target]) =>
+                  target.bindings.get(provider)?.key === key ? [cwd] : [],
+                );
+                this.publishTargets(boundTargets);
+                return true;
+              },
+            });
           },
-        });
+        );
       })
       .finally(() => {
         if (current.load === load) current.load = undefined;
@@ -1325,6 +1332,38 @@ function createWorkspaceSnapshotTarget(cwd: string): ProviderSnapshotTarget {
     snapshotCwd,
     catalogScope: { scope: "workspace", cwd: snapshotCwd },
   };
+}
+
+// Node reports `spawn <command> ENOENT` when cwd is missing. A catalogue key that
+// also matches the global request would publish that as a missing binary for every
+// target, including Settings.
+async function catalogOptionsForExistingWorkspace(
+  client: AgentClient,
+  options: FetchCatalogOptions,
+  sharedKey: string | undefined,
+): Promise<FetchCatalogOptions> {
+  if (sharedKey === undefined || options.scope !== "workspace") return options;
+  if (isExistingDirectory(options.cwd)) return options;
+  const readKey = client.getCatalogCacheKey;
+  if (!readKey) return options;
+  const globalKey = await readKey({ scope: "global", force: options.force });
+  if (globalKey !== sharedKey) return options;
+  return { scope: "global", force: options.force };
+}
+
+function directoryErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  return typeof error.code === "string" ? error.code : undefined;
+}
+
+function isExistingDirectory(cwd: string): boolean {
+  try {
+    return statSync(cwd).isDirectory();
+  } catch (error) {
+    const code = directoryErrorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    return true;
+  }
 }
 
 function createFetchCatalogOptions(

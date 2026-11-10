@@ -1,6 +1,7 @@
 import pino from "pino";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type {
   ProviderEvent,
@@ -2073,9 +2074,7 @@ describe("ProviderSnapshotManager cwd routing", () => {
             wait: true,
           }),
         ]);
-        expect(requests).toEqual([
-          { scope: "workspace", cwd: resolveSnapshotCwd("/tmp/model-memory-a"), force: true },
-        ]);
+        expect(requests).toEqual([{ scope: "global", force: true }]);
       } finally {
         await manager.shutdown();
         manager.destroy();
@@ -2188,7 +2187,7 @@ describe("ProviderSnapshotManager cwd routing", () => {
   });
 
   test.each([
-    { sharing: "shared", expectedCwds: [resolveSnapshotCwd("/tmp/plugin-a")] },
+    { sharing: "shared", expectedCwds: [undefined] },
     {
       sharing: "distinct",
       expectedCwds: [
@@ -2276,7 +2275,7 @@ describe("ProviderSnapshotManager cwd routing", () => {
           const entry = await manager.getProvider({ provider: registration.id, cwd, wait: true });
           expect(entry.status).toBe("ready");
           expect(entry.models?.[0]?.id).toBe(
-            sharing === "shared" ? resolveSnapshotCwd("/tmp/plugin-a") : (cwd ?? "global-model"),
+            sharing === "shared" ? "global-model" : (cwd ?? "global-model"),
           );
         }
         expect(cwds).toEqual(expect.arrayContaining(expectedCwds));
@@ -2391,6 +2390,81 @@ describe("provider-owned catalogue identity", () => {
     opencode: { enabled: false },
     pi: { enabled: false },
   };
+
+  test("a missing workspace does not fail a directory-independent provider catalog", async () => {
+    const missing = resolveSnapshotCwd(
+      join(tmpdir(), "paseo-missing-provider-workspace", "not-created"),
+    );
+    const seen: FetchCatalogOptions[] = [];
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: { ...disabledProviders, codex: { enabled: true } },
+      extraClients: {
+        codex: createExtraClient("codex", {
+          async getCatalogCacheKey() {
+            return "host";
+          },
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog(options) {
+            seen.push(options);
+            if (options.scope === "workspace") {
+              throw new Error("spawn /home/gio/.local/bin/agy ENOENT");
+            }
+            return {
+              models: [{ provider: "codex", id: "installed", label: "Installed" }],
+              modes: [],
+            };
+          },
+        }),
+      },
+    });
+    try {
+      await manager.refreshSnapshotForCwd({ cwd: missing, providers: ["codex"] });
+      expect(seen).toEqual([{ scope: "global", force: true }]);
+      const settings = await manager.getProvider({ provider: "codex", wait: true });
+      const workspace = await manager.getProvider({ provider: "codex", cwd: missing, wait: true });
+      expect(settings).toMatchObject({ status: "ready", models: [{ id: "installed" }] });
+      expect(settings.error).toBeUndefined();
+      expect(workspace.status).toBe("ready");
+      expect(workspace.error).toBeUndefined();
+    } finally {
+      await manager.shutdown();
+      manager.destroy();
+    }
+  });
+
+  test("a shared catalog still probes an existing workspace directory", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "paseo-provider-workspace-"));
+    const seen: FetchCatalogOptions[] = [];
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: { ...disabledProviders, codex: { enabled: true } },
+      extraClients: {
+        codex: createExtraClient("codex", {
+          async getCatalogCacheKey() {
+            return "host";
+          },
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog(options) {
+            seen.push(options);
+            return { models: [], modes: [] };
+          },
+        }),
+      },
+    });
+    try {
+      await manager.refreshSnapshotForCwd({ cwd, providers: ["codex"] });
+      expect(seen).toEqual([{ scope: "workspace", cwd: resolveSnapshotCwd(cwd), force: true }]);
+    } finally {
+      await manager.shutdown();
+      manager.destroy();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 
   test("shares effective runtime/configuration keys, preserves targets, and isolates provider identities", async () => {
     const identities = new Map([
@@ -2650,6 +2724,7 @@ test("late key resolution cannot restore an old identity and concurrent readers 
   let keyCalls = 0;
   let probes = 0;
   const targets: FetchCatalogOptions[] = [];
+  const cwd = await mkdtemp(join(tmpdir(), "paseo-provider-identity-"));
   const manager = new ProviderSnapshotManager({
     logger: createTestLogger(),
     extraClients: {
@@ -2675,22 +2750,10 @@ test("late key resolution cannot restore an old identity and concurrent readers 
     },
   });
   try {
-    const first = manager.getProvider({
-      provider: "codex",
-      cwd: resolveSnapshotCwd("/project"),
-      wait: true,
-    });
-    const second = manager.getProvider({
-      provider: "codex",
-      cwd: resolveSnapshotCwd("/project"),
-      wait: true,
-    });
+    const first = manager.getProvider({ provider: "codex", cwd, wait: true });
+    const second = manager.getProvider({ provider: "codex", cwd, wait: true });
     await began;
-    const third = manager.getProvider({
-      provider: "codex",
-      cwd: resolveSnapshotCwd("/project"),
-      wait: true,
-    });
+    const third = manager.getProvider({ provider: "codex", cwd, wait: true });
     releaseKey();
     releaseCatalog();
     const results = await Promise.all([first, second, third]);
@@ -2699,15 +2762,14 @@ test("late key resolution cannot restore an old identity and concurrent readers 
       "current",
       "current",
     ]);
-    expect(targets).toEqual([
-      { scope: "workspace", cwd: resolveSnapshotCwd("/project"), force: false },
-    ]);
+    expect(targets).toEqual([{ scope: "workspace", cwd: resolveSnapshotCwd(cwd), force: false }]);
     expect(probes).toBe(1);
   } finally {
     releaseKey();
     releaseCatalog();
     await manager.shutdown();
     manager.destroy();
+    await rm(cwd, { recursive: true, force: true });
   }
 });
 
@@ -3040,6 +3102,7 @@ test("a concurrent cached read cannot swallow a force refresh while its key is r
   });
   let keyCalls = 0;
   let calls = 0;
+  const cwd = await mkdtemp(join(tmpdir(), "paseo-provider-key-"));
   const manager = new ProviderSnapshotManager({
     logger: createTestLogger(),
     extraClients: {
@@ -3063,7 +3126,6 @@ test("a concurrent cached read cannot swallow a force refresh while its key is r
       }),
     },
   });
-  const cwd = resolveSnapshotCwd("/project");
   try {
     await manager.getProvider({ provider: "codex", cwd, wait: true });
     const refresh = manager.refreshSnapshotForCwd({ providers: ["codex"], cwd });
@@ -3077,6 +3139,7 @@ test("a concurrent cached read cannot swallow a force refresh while its key is r
     release();
     await manager.shutdown();
     manager.destroy();
+    await rm(cwd, { recursive: true, force: true });
   }
 });
 
