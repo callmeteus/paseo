@@ -1934,6 +1934,14 @@ function WorkspaceScreenContent({
         });
         return;
       }
+      if (selection.kind === "chat") {
+        openTarget({
+          kind: "draft",
+          draftId: generateDraftId(),
+          openui: true,
+        });
+        return;
+      }
       if (selection.kind === "terminal") {
         createTerminal({
           profile: selection.profile,

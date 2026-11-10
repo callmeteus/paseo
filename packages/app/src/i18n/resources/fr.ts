@@ -790,6 +790,7 @@ export const fr: TranslationResources = {
         terminal: "Terminal",
         browser: "Navigateur",
         agent: "Agent",
+        chat: "Chat",
         workspace: "Espace de travail",
       },
       switcher: {

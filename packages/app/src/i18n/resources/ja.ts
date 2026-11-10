@@ -789,6 +789,7 @@ export const ja: TranslationResources = {
         terminal: "ターミナル",
         browser: "ブラウザ",
         agent: "エージェント",
+        chat: "チャット",
         workspace: "ワークスペース",
       },
       switcher: {

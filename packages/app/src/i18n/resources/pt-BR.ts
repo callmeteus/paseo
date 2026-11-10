@@ -788,6 +788,7 @@ export const ptBR: TranslationResources = {
         terminal: "Terminal",
         browser: "Navegador",
         agent: "Agente",
+        chat: "Chat",
         workspace: "Workspace",
       },
       switcher: {

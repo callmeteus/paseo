@@ -777,6 +777,7 @@ export const ar: TranslationResources = {
         terminal: "Terminal",
         browser: "المتصفح",
         agent: "Agent",
+        chat: "دردشة",
         workspace: "Workspace",
       },
       switcher: {

@@ -782,6 +782,7 @@ export const ko: TranslationResources = {
         terminal: "터미널",
         browser: "브라우저",
         agent: "에이전트",
+        chat: "채팅",
         workspace: "워크스페이스",
       },
       switcher: {

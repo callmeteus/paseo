@@ -777,6 +777,7 @@ export const zhCN: TranslationResources = {
         terminal: "Terminal",
         browser: "浏览器",
         agent: "Agent",
+        chat: "聊天",
         workspace: "Workspace",
       },
       switcher: {

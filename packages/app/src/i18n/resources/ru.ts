@@ -788,6 +788,7 @@ export const ru: TranslationResources = {
         terminal: "Терминал",
         browser: "Браузер",
         agent: "Агент",
+        chat: "Чат",
         workspace: "Рабочее пространство",
       },
       switcher: {

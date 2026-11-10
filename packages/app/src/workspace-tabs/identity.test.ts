@@ -17,6 +17,25 @@ describe("New tab identity", () => {
   });
 });
 
+describe("draft tab identity", () => {
+  it("keeps the OpenUI chat flag with the draft target", () => {
+    const target = normalizeWorkspaceTabTarget({
+      kind: "draft",
+      draftId: "draft-1",
+      openui: true,
+    });
+
+    expect(target).toEqual({ kind: "draft", draftId: "draft-1", openui: true });
+    expect(
+      target &&
+        workspaceTabTargetsEqual(target, { kind: "draft", draftId: "draft-1", openui: true }),
+    ).toBe(true);
+    expect(target && workspaceTabTargetsEqual(target, { kind: "draft", draftId: "draft-1" })).toBe(
+      false,
+    );
+  });
+});
+
 describe("provider subagent tab identity", () => {
   test("normalizes and compares the parent and provider child as one tab identity", () => {
     const target = normalizeWorkspaceTabTarget({

@@ -775,6 +775,7 @@ export const en = {
         terminal: "Terminal",
         browser: "Browser",
         agent: "Agent",
+        chat: "Chat",
         workspace: "Workspace",
       },
       switcher: {

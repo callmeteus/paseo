@@ -786,6 +786,7 @@ export const es: TranslationResources = {
         terminal: "Terminal",
         browser: "Navegador",
         agent: "Agent",
+        chat: "Chat",
         workspace: "Workspace",
       },
       switcher: {

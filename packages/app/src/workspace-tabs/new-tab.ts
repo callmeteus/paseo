@@ -5,6 +5,7 @@ import type { TerminalProfile } from "@getpaseo/protocol/messages";
 export type NewTabSelection =
   | { kind: "target"; target: WorkspaceTab["target"] }
   | { kind: "agent" }
+  | { kind: "chat" }
   | { kind: "terminal"; profile?: TerminalProfile }
   | { kind: "browser" };
 

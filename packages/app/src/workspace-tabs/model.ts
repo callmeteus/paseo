@@ -35,7 +35,7 @@ export type PluginWorkspaceTabTarget =
 
 export type WorkspaceTabTarget =
   | { kind: "new_tab" }
-  | { kind: "draft"; draftId: string; setup?: WorkspaceDraftTabSetup }
+  | { kind: "draft"; draftId: string; setup?: WorkspaceDraftTabSetup; openui?: boolean }
   | { kind: "agent"; agentId: string }
   | { kind: "provider_subagent"; parentAgentId: string; subagentId: string }
   | { kind: "terminal"; terminalId: string }
