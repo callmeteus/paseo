@@ -856,6 +856,7 @@ export const es: TranslationResources = {
         copy: "Copy to {{workspace}}",
         copyHint: "Creates a new tab with the same settings in {{workspace}}.",
         moved: "Chat moved to {{workspace}}",
+        movedLeavingEmpty: "Chat moved to {{workspace}}. {{source}} has no chats left.",
         copied: "Chat copied to {{workspace}}",
         moveFailed: "Could not move the chat",
         copyFailed: "Could not copy the chat",

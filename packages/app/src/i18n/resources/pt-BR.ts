@@ -857,6 +857,7 @@ export const ptBR: TranslationResources = {
         copy: "Copiar para {{workspace}}",
         copyHint: "Cria uma nova aba com as mesmas configurações em {{workspace}}.",
         moved: "Chat movido para {{workspace}}",
+        movedLeavingEmpty: "Chat movido para {{workspace}}. {{source}} ficou sem chats.",
         copied: "Chat copiado para {{workspace}}",
         moveFailed: "Não foi possível mover o chat",
         copyFailed: "Não foi possível copiar o chat",
