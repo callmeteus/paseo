@@ -3,6 +3,8 @@ import { useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { ZoomableImage } from "@/components/zoomable-viewport/image";
+import { AssistantSelectionCopySurface } from "@/assistant-selection-copy/surface";
+import { useAddSelectionToChat } from "@/composer/use-add-selection-to-chat";
 import { useSessionStore } from "@/stores/session-store";
 import { FileHtmlPreview } from "./html-preview";
 import { FilePanelLoading } from "./loading";
@@ -43,17 +45,25 @@ function MarkdownPreview({ text, params, workspaceId, host }: TextFilePreviewPro
   const workspaceRoot = useWorkspace(workspaceId, (workspace) => workspace.directory);
   const [rendered, setRendered] = useState(false);
   const handleLayout = useCallback(() => setRendered(true), []);
+  const { addSelection, canAddSelection } = useAddSelectionToChat({
+    serverId: host.id,
+    workspaceId,
+  });
   return (
     <View style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator>
         <View onLayout={handleLayout}>
-          <FileMarkdownPreview
-            source={text}
-            filePath={params.path}
-            workspaceRoot={workspaceRoot ?? ""}
-            client={client}
-            serverId={host.id}
-          />
+          <AssistantSelectionCopySurface
+            onAddSelectionToChat={canAddSelection ? addSelection : undefined}
+          >
+            <FileMarkdownPreview
+              source={text}
+              filePath={params.path}
+              workspaceRoot={workspaceRoot ?? ""}
+              client={client}
+              serverId={host.id}
+            />
+          </AssistantSelectionCopySurface>
         </View>
       </ScrollView>
       {rendered ? null : <FilePanelLoading />}

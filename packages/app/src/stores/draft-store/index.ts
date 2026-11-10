@@ -53,6 +53,7 @@ interface DraftStoreActions {
     draftKey: string;
     attachment: WorkspaceFileComposerAttachment;
   }) => Promise<void>;
+  attachQuote: (input: { draftKey: string; text: string }) => Promise<void>;
   requestAttachmentFocus: (input: { draftKey: string }) => void;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
@@ -408,6 +409,35 @@ export const useDraftStore = create<DraftStore>()(
           };
         });
         scheduleAttachmentGc();
+      },
+
+      attachQuote: async ({ draftKey, text }) => {
+        const quote = text.trim();
+        if (!quote) {
+          return;
+        }
+        await get().hydrateDraftInput({ draftKey });
+        set((state) => {
+          const existing = state.drafts[draftKey];
+          const draft = toDraftInputIfReady(existing) ?? { text: "", attachments: [] };
+          return {
+            drafts: {
+              ...state.drafts,
+              [draftKey]: createDraftRecord({
+                draft: {
+                  ...draft,
+                  attachments: [...draft.attachments, { kind: "quote", text: quote }],
+                },
+                lifecycle: "active",
+                previousVersion: existing?.version,
+              }),
+            },
+            attachmentFocusRequestByDraftKey: {
+              ...state.attachmentFocusRequestByDraftKey,
+              [draftKey]: (state.attachmentFocusRequestByDraftKey[draftKey] ?? 0) + 1,
+            },
+          };
+        });
       },
 
       getCreateModalDraft: () => {

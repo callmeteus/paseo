@@ -57,10 +57,11 @@ import {
   navigateToWorkspace,
 } from "@/stores/navigation-active-workspace-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
-import { revealWorkspaceTab } from "@/workspace-tabs/navigation";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { usePlanStore } from "@/plans/store";
+import { openPlanInExplorerSidebar } from "@/workspace-tabs/open-plan";
+import { useIsCompactFormFactor } from "@/constants/layout";
 
 // Re-export types from session-store and draft-store for backward compatibility
 export type { DraftInput } from "@/stores/draft-store";
@@ -217,6 +218,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const isConnected = useHostRuntimeIsConnected(serverId);
   useLimitResumeRunner(serverId);
   const toast = useToast();
+  const isCompactFormFactor = useIsCompactFormFactor();
 
   // Zustand store actions
   const setIsPlayingAudio = useSessionStore((state) => state.setIsPlayingAudio);
@@ -570,29 +572,38 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           agentId: message.payload.agentId,
         });
         const target = { kind: "file" as const, path: message.payload.path };
-        const active = getLastWorkspaceSelection();
-        if (active?.serverId === serverId && active.workspaceId === message.payload.workspaceId) {
-          const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
-          const resolvedWorkspaceId =
-            resolveWorkspaceMapKeyByIdentity({
-              workspaces,
-              workspaceId: message.payload.workspaceId,
-            }) ?? message.payload.workspaceId;
-          const workspaceKey = buildWorkspaceTabPersistenceKey({
+        const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+        const resolvedWorkspaceId =
+          resolveWorkspaceMapKeyByIdentity({
+            workspaces,
+            workspaceId: message.payload.workspaceId,
+          }) ?? message.payload.workspaceId;
+        const workspaceKey = buildWorkspaceTabPersistenceKey({
+          serverId,
+          workspaceId: resolvedWorkspaceId,
+        });
+        // Open beside the explorer tree, not as a main workspace tab: the plan is a
+        // supporting view, so it belongs in the Explorer sidebar (Ctrl+E).
+        const canOpenInSidebar =
+          workspaceKey !== null && useWorkspaceLayoutStore.persist.hasHydrated();
+        if (canOpenInSidebar) {
+          openPlanInExplorerSidebar({
             serverId,
             workspaceId: resolvedWorkspaceId,
+            path: message.payload.path,
+            isCompact: isCompactFormFactor,
           });
-          if (workspaceKey) {
-            const layout = useWorkspaceLayoutStore.getState();
-            const tabId = layout.openTab({ workspaceKey, target, intent: "reveal" });
-            if (tabId) revealWorkspaceTab(workspaceKey, tabId);
-          }
-          return;
         }
+        const active = getLastWorkspaceSelection();
+        const isActiveWorkspace =
+          active?.serverId === serverId &&
+          (active.workspaceId === message.payload.workspaceId ||
+            active.workspaceId === resolvedWorkspaceId);
+        if (isActiveWorkspace && canOpenInSidebar) return;
         navigateToWorkspace({
           serverId,
           workspaceId: message.payload.workspaceId,
-          target,
+          ...(canOpenInSidebar ? {} : { target }),
         });
       },
     });
@@ -762,6 +773,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     client,
     queryClient,
     serverId,
+    isCompactFormFactor,
     setIsPlayingAudio,
     setAgentStreamTail,
     setAgentStreamHead,

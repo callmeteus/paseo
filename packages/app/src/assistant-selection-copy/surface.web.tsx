@@ -12,6 +12,7 @@ import { View, type StyleProp, type ViewStyle } from "react-native";
 import { createPortal } from "react-dom";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { getOverlayRoot } from "@/lib/overlay-root";
 import { createAssistantSelectionClipboardContent } from "./content.web";
 
@@ -29,6 +30,8 @@ interface SelectionAction {
 }
 
 const DISPLAY_CONTENTS: CSSProperties = { display: "contents" };
+const ACTION_ATTRIBUTE = "data-paseo-selection-chat-action";
+const ACTION_DATASET: Record<string, string> = { paseoSelectionChatAction: "true" };
 const ACTION_WIDTH = 148;
 const ACTION_HEIGHT = 36;
 const ACTION_GAP = 8;
@@ -42,6 +45,15 @@ export function AssistantSelectionCopySurface({
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [action, setAction] = useState<SelectionAction | null>(null);
+  const isPanelActive = useRetainedPanelActive();
+
+  // Switching tabs keeps this panel mounted but hidden while the DOM selection
+  // remains in it. Drop the floating action so it cannot outlive its tab.
+  useEffect(() => {
+    if (!isPanelActive) {
+      setAction(null);
+    }
+  }, [isPanelActive]);
 
   const handleCopy = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     const content = createAssistantSelectionClipboardContent(window.getSelection());
@@ -73,6 +85,11 @@ export function AssistantSelectionCopySurface({
         setAction(null);
         return;
       }
+      // A retained panel that is display:none still owns the selection.
+      if (root.getClientRects().length === 0) {
+        setAction(null);
+        return;
+      }
       const text = selection.toString().trim();
       if (!text) {
         setAction(null);
@@ -97,13 +114,33 @@ export function AssistantSelectionCopySurface({
       window.requestAnimationFrame(update);
     };
 
+    // Any click outside the action and this surface dismisses it. Clicks on the
+    // action itself must survive so its onPress can run.
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(`[${ACTION_ATTRIBUTE}="true"]`)) {
+        return;
+      }
+      setAction(null);
+    };
+    const clear = () => setAction(null);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") clear();
+    };
+
     document.addEventListener("selectionchange", scheduleUpdate);
     window.addEventListener("scroll", scheduleUpdate, true);
     window.addEventListener("resize", scheduleUpdate);
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       document.removeEventListener("selectionchange", scheduleUpdate);
       window.removeEventListener("scroll", scheduleUpdate, true);
       window.removeEventListener("resize", scheduleUpdate);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [onAddSelectionToChat]);
 
@@ -123,6 +160,7 @@ export function AssistantSelectionCopySurface({
         ? createPortal(
             <View
               pointerEvents="box-none"
+              dataSet={ACTION_DATASET}
               style={[styles.actionAnchor, { top: action.top, left: action.left }]}
             >
               <Button
