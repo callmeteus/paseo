@@ -1103,6 +1103,258 @@ test("create_agent_request keeps requested child cwd when grouped under an exist
   }
 });
 
+class CursorCreateClient extends CreateAgentTestClient {
+  override readonly provider = "cursor";
+  createSessionCalls = 0;
+
+  constructor(private readonly failCreate = false) {
+    super();
+  }
+
+  override async createSession(
+    config: AgentSessionConfig,
+    launchContext?: AgentLaunchContext,
+    options?: AgentCreateSessionOptions,
+  ): Promise<AgentSession> {
+    this.createSessionCalls += 1;
+    if (this.failCreate) {
+      throw new Error("cursor session failed");
+    }
+    return super.createSession(config, launchContext, options);
+  }
+}
+
+async function openCursorCreateSession(input: {
+  workdir: string;
+  cwd: string;
+  enabled: boolean;
+  client: CursorCreateClient;
+  emitted: SessionOutboundMessage[];
+}): Promise<{
+  session: TestSession;
+  workspaceRegistry: FileBackedWorkspaceRegistry;
+}> {
+  const logger = {
+    child: () => logger,
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const agentStorage = new AgentStorage(
+    path.join(input.workdir, "agents"),
+    asSessionLogger(logger),
+  );
+  const agentManager = new AgentManager({
+    clients: { cursor: input.client },
+    providerDefinitions: { cursor: { enabled: input.enabled } },
+    registry: agentStorage,
+    logger: asSessionLogger(logger),
+    idFactory: () => "00000000-0000-4000-8000-000000000561",
+  });
+  const projectRegistry = new FileBackedProjectRegistry(
+    path.join(input.workdir, "projects.json"),
+    asSessionLogger(logger),
+  );
+  const workspaceRegistry = new FileBackedWorkspaceRegistry(
+    path.join(input.workdir, "workspaces.json"),
+    asSessionLogger(logger),
+  );
+  const session = asTestSession(
+    new Session({
+      workspaceRuntimeStore: createWorkspaceRuntimeStore(),
+      messageReceipts: createMessageReceiptsStub(),
+      agentMessages: createAgentMessageDeliveryStub(),
+      creationService: createTestCreationService(),
+      clientId: "hub:test",
+      serverId: "test-server",
+      permissions: OWNER_PERMISSIONS,
+      appVersion: null,
+      onMessage: (message) => input.emitted.push(message),
+      logger: asSessionLogger(logger),
+      downloadTokenStore: asDownloadTokenStore(),
+      pushNotifications: asPushNotifications(),
+      paseoHome: path.join(input.workdir, "paseo-home"),
+      agentManager,
+      agentStorage,
+      projectRegistry,
+      workspaceRegistry,
+      scheduleService: asScheduleService(),
+      checkoutDiffManager: asCheckoutDiffManager({
+        subscribe: async () => ({
+          initial: { cwd: input.cwd, files: [], error: null },
+          unsubscribe: () => {},
+        }),
+        scheduleRefreshForCwd: () => {},
+        onWorkspaceStateMayHaveChanged: () => {},
+        invalidateForge: () => {},
+        getMetrics: () => ({
+          checkoutDiffTargetCount: 0,
+          checkoutDiffSubscriptionCount: 0,
+          checkoutDiffWatcherCount: 0,
+          checkoutDiffFallbackRefreshTargetCount: 0,
+        }),
+        dispose: () => {},
+      }),
+      workspaceGitService: createNoopWorkspaceGitService(),
+      daemonConfigStore: asDaemonConfigStore({
+        get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+        onChange: () => () => {},
+      }),
+      mcpBaseUrl: null,
+      stt: null,
+      tts: null,
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      terminalManager: null,
+    }),
+  );
+  await session.handleMessage({
+    type: "fetch_workspaces_request",
+    requestId: "req-subscribe-workspaces",
+    subscribe: {},
+  });
+  return { session, workspaceRegistry };
+}
+
+function runningWorkspaceIds(emitted: SessionOutboundMessage[]): string[] {
+  return filterByType(emitted, "workspace_update").flatMap((message) =>
+    message.payload.kind === "upsert" && message.payload.workspace.status === "running"
+      ? [message.payload.workspace.id]
+      : [],
+  );
+}
+
+function removedWorkspaceIds(emitted: SessionOutboundMessage[]): string[] {
+  return filterByType(emitted, "workspace_update").flatMap((message) =>
+    message.payload.kind === "remove" ? [message.payload.id] : [],
+  );
+}
+
+test("create_agent_request for a disabled provider does not open a running chat", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-disabled-provider-create-"));
+  const cwd = path.join(workdir, "repo");
+  mkdirSync(cwd, { recursive: true });
+  const client = new CursorCreateClient();
+  const emitted: SessionOutboundMessage[] = [];
+  try {
+    const { session, workspaceRegistry } = await openCursorCreateSession({
+      workdir,
+      cwd,
+      enabled: false,
+      client,
+      emitted,
+    });
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-disabled-cursor",
+      idempotencyKey: "hub-cursor-disabled",
+      config: { provider: "cursor", cwd },
+      attachments: [],
+    });
+
+    expect(findByType(emitted, "status")?.payload).toMatchObject({
+      status: "agent_create_failed",
+      requestId: "req-disabled-cursor",
+      error: "Provider 'cursor' is disabled",
+    });
+    expect(client.createSessionCalls).toBe(0);
+    expect(runningWorkspaceIds(emitted)).toEqual([]);
+    expect((await workspaceRegistry.list()).filter((workspace) => !workspace.archivedAt)).toEqual(
+      [],
+    );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request closes a chat opened before the agent fails to start", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-failed-provider-create-"));
+  const cwd = path.join(workdir, "repo");
+  mkdirSync(cwd, { recursive: true });
+  const client = new CursorCreateClient(true);
+  const emitted: SessionOutboundMessage[] = [];
+  try {
+    const { session, workspaceRegistry } = await openCursorCreateSession({
+      workdir,
+      cwd,
+      enabled: true,
+      client,
+      emitted,
+    });
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-cursor-session-failed",
+      idempotencyKey: "hub-cursor-session-failed",
+      config: { provider: "cursor", cwd },
+      attachments: [],
+    });
+
+    expect(findByType(emitted, "status")?.payload).toMatchObject({
+      status: "agent_create_failed",
+      requestId: "req-cursor-session-failed",
+      error: "cursor session failed",
+    });
+    const opened = runningWorkspaceIds(emitted);
+    expect(opened.length).toBeGreaterThan(0);
+    expect(removedWorkspaceIds(emitted)).toEqual(expect.arrayContaining(opened));
+    expect((await workspaceRegistry.list()).filter((workspace) => !workspace.archivedAt)).toEqual(
+      [],
+    );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request leaves an existing workspace open when the agent fails to start", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-existing-workspace-create-"));
+  const cwd = path.join(workdir, "repo");
+  mkdirSync(cwd, { recursive: true });
+  const client = new CursorCreateClient(true);
+  const emitted: SessionOutboundMessage[] = [];
+  try {
+    const { session, workspaceRegistry } = await openCursorCreateSession({
+      workdir,
+      cwd,
+      enabled: true,
+      client,
+      emitted,
+    });
+    const timestamp = "2026-11-10T12:00:00.000Z";
+    await workspaceRegistry.upsert(
+      createPersistedWorkspaceRecord({
+        workspaceId: "ws-existing",
+        projectId: "proj-existing",
+        cwd,
+        kind: "directory",
+        displayName: "repo",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-existing-workspace",
+      idempotencyKey: "hub-existing-workspace",
+      workspaceId: "ws-existing",
+      config: { provider: "cursor", cwd },
+      attachments: [],
+    });
+
+    expect(findByType(emitted, "status")?.payload).toMatchObject({
+      status: "agent_create_failed",
+      requestId: "req-existing-workspace",
+      error: "cursor session failed",
+    });
+    expect(removedWorkspaceIds(emitted)).not.toContain("ws-existing");
+    await expect(workspaceRegistry.get("ws-existing")).resolves.toMatchObject({
+      archivedAt: null,
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("create_agent_request launches from an exact subdirectory in a created worktree", async () => {
   const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-worktree-cwd-"));
   try {

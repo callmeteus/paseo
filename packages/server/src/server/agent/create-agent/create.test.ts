@@ -187,6 +187,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
   const createAgent = vi.fn(async () => snapshot);
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
+      assertProviderEnabled: () => {},
       createAgent,
       getAgent: vi.fn(() => snapshot),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],

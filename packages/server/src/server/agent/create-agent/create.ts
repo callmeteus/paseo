@@ -279,6 +279,7 @@ async function resolveMcpCreateAgent(
 ): Promise<ResolvedCreateAgent> {
   const resolvedProviderModel = resolveProviderModel(input.provider);
   const provider = resolvedProviderModel.provider;
+  dependencies.agentManager.assertProviderEnabled(provider);
   const parentAgent = input.callerAgentId
     ? requireParentAgent(dependencies.agentManager, input.callerAgentId)
     : null;
