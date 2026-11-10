@@ -1596,6 +1596,7 @@ export const zhCN: TranslationResources = {
     },
     fields: {
       project: "项目",
+      name: "名称",
       branch: "分支",
       baseNotApplicable: "不适用",
       host: "主机",

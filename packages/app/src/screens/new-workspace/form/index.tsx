@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import { Combobox, type ComboboxOption, type ComboboxProps } from "@/components/ui/combobox";
+import { Field, FormTextInput } from "@/components/ui/form-field";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { HostPicker } from "@/components/hosts/host-picker";
 import type { LaunchTarget } from "@/new-workspace-launch/target";
@@ -33,6 +34,10 @@ interface PickerControl {
 export interface NewWorkspaceFormProps {
   isCompact: boolean;
   isPending: boolean;
+  title: {
+    value: string;
+    onChangeText: (value: string) => void;
+  };
   project: PickerControl & {
     options: ComboboxOption[];
     projectByOptionId: Map<string, HostProjectListItem>;
@@ -196,6 +201,38 @@ function resolveFieldVisibility(input: {
   };
 }
 
+function WorkspaceTitleField({
+  visible,
+  compact,
+  disabled,
+  value,
+  onChangeText,
+}: {
+  visible: boolean;
+  compact: boolean;
+  disabled: boolean;
+  value: string;
+  onChangeText: (value: string) => void;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <View style={compact ? undefined : styles.desktopTitleField}>
+      <Field label={t("newWorkspace.fields.name")} testID="new-workspace-title">
+        <FormTextInput
+          initialValue={value}
+          onChangeText={onChangeText}
+          placeholder={t("newWorkspace.titlePlaceholder")}
+          testID="new-workspace-title-input"
+          size={compact ? "md" : "sm"}
+          editable={!disabled}
+          accessibilityLabel={t("newWorkspace.fields.name")}
+        />
+      </Field>
+    </View>
+  );
+}
+
 /**
  * The New workspace setup fields, one trigger per field, each opening its picker. Compact: a stack
  * of full-width fields with the label inside. Desktop: one meta row of badges. Either way, a field
@@ -204,7 +241,7 @@ function resolveFieldVisibility(input: {
  */
 export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement {
   const { t } = useTranslation();
-  const { isCompact, isPending, project, host, isolation, base, launch } = props;
+  const { isCompact, isPending, title, project, host, isolation, base, launch } = props;
   const variant: FieldTriggerVariant = isCompact ? "field" : "badge";
   const projectPicker = useProjectPicker(project, isPending);
   const isolationPicker = useIsolationPicker(isolation, isPending);
@@ -244,6 +281,15 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
     showRefPicker: base.showRefPicker,
     isVirtual,
   });
+  const titleField = (
+    <WorkspaceTitleField
+      visible={isVirtual}
+      compact={isCompact}
+      disabled={isPending}
+      value={title.value}
+      onChangeText={title.onChangeText}
+    />
+  );
   const refIcon = base.selectedItem?.kind === "github-pr" ? pullRequestIcon : branchIcon;
 
   // A virtual workspace lives in a Paseo-owned folder, so there is no project
@@ -384,6 +430,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
         {projectField}
         {hostField}
         {isolationField}
+        {titleField}
         {baseField}
         {launchField}
         {/* Isolation and Base come and go with the project; their rows stay reserved so the
@@ -397,14 +444,21 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
   }
 
   return (
-    <View testID="new-workspace-ref-picker-row" style={styles.desktopRow} pointerEvents="box-none">
-      <View style={styles.desktopControl}>{projectField}</View>
-      <View style={styles.desktopControl}>{hostField}</View>
-      {isolationField ? <View style={styles.desktopControl}>{isolationField}</View> : null}
-      {baseField ? <View style={styles.desktopControl}>{baseField}</View> : null}
-      <View style={styles.launchSpacer} pointerEvents="none" />
-      {launchField}
-      {pickers}
+    <View>
+      <View
+        testID="new-workspace-ref-picker-row"
+        style={styles.desktopRow}
+        pointerEvents="box-none"
+      >
+        <View style={styles.desktopControl}>{projectField}</View>
+        <View style={styles.desktopControl}>{hostField}</View>
+        {isolationField ? <View style={styles.desktopControl}>{isolationField}</View> : null}
+        {baseField ? <View style={styles.desktopControl}>{baseField}</View> : null}
+        <View style={styles.launchSpacer} pointerEvents="none" />
+        {launchField}
+        {pickers}
+      </View>
+      {titleField}
     </View>
   );
 }
@@ -430,6 +484,10 @@ const styles = StyleSheet.create((theme) => ({
     // rather than running out to the composer's border.
     paddingHorizontal: theme.spacing[4],
     gap: theme.spacing[2],
+  },
+  desktopTitleField: {
+    marginBottom: theme.spacing[4],
+    paddingHorizontal: theme.spacing[4],
   },
   desktopControl: {
     minWidth: 0,

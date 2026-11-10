@@ -3596,6 +3596,36 @@ test("rejects internal workspace creation and internal listings before sending o
   expect(olderMock.sent).toHaveLength(0);
 });
 
+test("allows a virtual workspace initial agent without a caller-known cwd", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen({ features: { creationLifecycle: true, virtualWorkspaces: true } });
+  await connectPromise;
+
+  const creation = client.createWorkspace({
+    source: { kind: "virtual" },
+    agent: { config: { provider: "claude", cwd: "" } },
+  });
+  void creation.catch(() => undefined);
+
+  await expect.poll(() => mock.sent.length).toBe(1);
+  expect(parseSentFrame(mock.sent[0])).toMatchObject({
+    type: "workspace.create.request",
+    source: { kind: "virtual" },
+    agent: { config: { provider: "claude", cwd: "" } },
+  });
+});
+
 test("sends structured attachments with create_agent_request", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

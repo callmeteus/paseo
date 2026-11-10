@@ -5306,7 +5306,14 @@ export class DaemonClient {
       ...input,
       requestId: resolvedRequestId,
       ...(input.agent
-        ? { agent: { ...input.agent, config: resolveAgentConfig(input.agent) } }
+        ? {
+            agent: {
+              ...input.agent,
+              config: resolveAgentConfig(input.agent, {
+                allowMissingCwd: input.source.kind === "virtual",
+              }),
+            },
+          }
         : {}),
     });
     return {
@@ -7853,7 +7860,10 @@ export class DaemonClient {
   }
 }
 
-function resolveAgentConfig(options: CreateAgentRequestOptions): AgentSessionConfig {
+function resolveAgentConfig(
+  options: CreateAgentRequestOptions,
+  opts?: { allowMissingCwd?: boolean },
+): AgentSessionConfig {
   const {
     config,
     provider,
@@ -7887,13 +7897,15 @@ function resolveAgentConfig(options: CreateAgentRequestOptions): AgentSessionCon
 
   const merged = config ? { ...baseConfig, ...config } : baseConfig;
 
-  if (!merged.provider || !merged.cwd) {
+  if (!merged.provider || (!merged.cwd && !opts?.allowMissingCwd)) {
     throw new Error("createAgent requires provider and cwd");
   }
 
   return {
     ...merged,
     provider: merged.provider,
-    cwd: merged.cwd,
+    // Virtual workspaces have no caller-known directory: the daemon creates one
+    // and overrides this cwd before the provider starts.
+    cwd: merged.cwd ?? "",
   };
 }

@@ -1608,6 +1608,7 @@ export const ar: TranslationResources = {
     },
     fields: {
       project: "المشروع",
+      name: "الاسم",
       branch: "الفرع",
       baseNotApplicable: "غير قابل للتطبيق",
       host: "المضيف",

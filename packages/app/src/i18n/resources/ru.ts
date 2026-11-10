@@ -1632,6 +1632,7 @@ export const ru: TranslationResources = {
     },
     fields: {
       project: "Проект",
+      name: "Название",
       branch: "Ветка",
       baseNotApplicable: "Неприменимо",
       host: "Хост",

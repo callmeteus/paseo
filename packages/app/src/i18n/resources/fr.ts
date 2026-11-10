@@ -1649,6 +1649,7 @@ export const fr: TranslationResources = {
     },
     fields: {
       project: "Projet",
+      name: "Nom",
       branch: "Branche",
       baseNotApplicable: "Non applicable",
       host: "Hôte",

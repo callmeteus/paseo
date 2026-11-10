@@ -1620,6 +1620,7 @@ export const en = {
     },
     fields: {
       project: "Project",
+      name: "Name",
       branch: "Branch",
       baseNotApplicable: "Not applicable",
       host: "Host",

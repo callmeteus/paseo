@@ -1619,6 +1619,7 @@ export const ko: TranslationResources = {
     },
     fields: {
       project: "프로젝트",
+      name: "이름",
       branch: "브랜치",
       baseNotApplicable: "해당 없음",
       host: "호스트",

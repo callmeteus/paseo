@@ -252,6 +252,14 @@ function canOpenProjectPicker(optionCount: number, isolation: WorkspaceIsolation
   return optionCount > 0 && isolation !== "virtual";
 }
 
+function resolveNewWorkspaceTitle(
+  isolation: WorkspaceIsolation,
+  title: string,
+): string | undefined {
+  if (isolation !== "virtual") return undefined;
+  return title.trim() || undefined;
+}
+
 function normalizeBranchDetails(
   data: { branchDetails?: BranchPickerDetail[]; branches?: string[] } | undefined,
 ): BranchPickerDetail[] {
@@ -315,6 +323,7 @@ async function createMultiplicityWorkspace(input: {
   worktreeSlug: string;
   client: NonNullable<ReturnType<typeof useHostRuntimeClient>>;
   isolation: WorkspaceIsolation;
+  title: string | undefined;
   project: HostProjectListItem | null;
   sourceDirectory: string | null;
   checkoutRequest: PickerCheckoutRequest | undefined;
@@ -362,6 +371,7 @@ async function createMultiplicityWorkspace(input: {
     agent: input.agent,
     onEvent: input.onEvent,
     source,
+    ...(input.title ? { title: input.title } : {}),
     ...(firstAgentContext ? { firstAgentContext } : {}),
   });
   if (payload.error || !payload.workspace) {
@@ -971,6 +981,7 @@ export function NewWorkspaceScreen({
     worktreeSlug: createNameId(),
   }));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [workspaceTitle, setWorkspaceTitle] = useState("");
   const [creationResult, setCreationResult] = useState<
     WorkspaceCreationResult | { workspace: null }
   >({ workspace: null });
@@ -1360,6 +1371,7 @@ export function NewWorkspaceScreen({
         worktreeSlug: creationIdentity.worktreeSlug,
         client: connectedClient,
         isolation,
+        title: resolveNewWorkspaceTitle(effectiveIsolation, workspaceTitle),
         project: selectedProject,
         sourceDirectory: selectedSourceDirectory,
         checkoutRequest,
@@ -1388,6 +1400,7 @@ export function NewWorkspaceScreen({
       supportsWorkspaceMultiplicity,
       t,
       withConnectedClient,
+      workspaceTitle,
     ],
   );
 
@@ -1568,6 +1581,10 @@ export function NewWorkspaceScreen({
   const formStack = useNewWorkspaceForm({
     isCompact,
     isPending,
+    title: {
+      value: workspaceTitle,
+      onChangeText: setWorkspaceTitle,
+    },
     project: {
       anchorRef: projectPickerAnchorRef,
       open: openProjectPicker,

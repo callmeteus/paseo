@@ -1631,6 +1631,7 @@ export const ja: TranslationResources = {
     },
     fields: {
       project: "プロジェクト",
+      name: "名前",
       branch: "ブランチ",
       baseNotApplicable: "該当なし",
       host: "ホスト",

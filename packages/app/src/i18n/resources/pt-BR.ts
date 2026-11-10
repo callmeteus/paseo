@@ -1643,6 +1643,7 @@ export const ptBR: TranslationResources = {
     },
     fields: {
       project: "Projeto",
+      name: "Nome",
       branch: "Branch",
       baseNotApplicable: "Não aplicável",
       host: "Host",
