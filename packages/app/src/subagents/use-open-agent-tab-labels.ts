@@ -1,5 +1,5 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
+import { getOpenAgentTabLabel, OPEN_AGENT_TAB_LABEL } from "@getpaseo/protocol/agent-labels";
 import { useEffect, useRef, useState } from "react";
 import { useSessionStore } from "@/stores/session-store";
 import { getOrCreateClientId } from "@/utils/client-id";
@@ -54,17 +54,19 @@ export function useOpenAgentTabLabels(input: {
     void (async () => {
       try {
         const clientId = await getOrCreateClientId();
-        const label = getOpenAgentTabLabel(clientId);
+        const labels = [OPEN_AGENT_TAB_LABEL, getOpenAgentTabLabel(clientId)];
         const agentIds = getAgentTabsNeedingOpenLabel({
           tabs: input.tabs,
           getAgent: (agentId) => agents?.get(agentId) ?? agentDetails?.get(agentId),
-          label,
+          labels,
           pendingAgentIds: pendingAgentIdsRef.current,
         });
         for (const agentId of agentIds) {
           pendingAgentIdsRef.current.add(agentId);
           try {
-            await client.updateAgent(agentId, { labels: { [label]: "true" } });
+            await client.updateAgent(agentId, {
+              labels: Object.fromEntries(labels.map((label) => [label, "true"])),
+            });
           } catch (error) {
             console.warn("[OpenAgentTabLabels] Failed to mark open subagent tab", {
               error,

@@ -321,6 +321,9 @@ describe("workspace agent visibility", () => {
     const agentVisibility = {
       activeAgentIds: new Set(["active-agent"]),
       autoOpenAgentIds: new Set(["root-agent"]),
+      hiddenAgentIds: new Set(["hidden-agent"]),
+      openedAgentIds: new Set(["open-agent"]),
+      hiddenAgentUpdatedAtById: new Map([["hidden-agent", 1]]),
     };
 
     expect(
@@ -338,6 +341,9 @@ describe("workspace agent visibility", () => {
       terminalsHydrated: true,
       activeAgentIds: agentVisibility.activeAgentIds,
       autoOpenAgentIds: agentVisibility.autoOpenAgentIds,
+      hiddenAgentIds: agentVisibility.hiddenAgentIds,
+      openedAgentIds: agentVisibility.openedAgentIds,
+      hiddenAgentUpdatedAtById: agentVisibility.hiddenAgentUpdatedAtById,
       knownTerminalIds: ["terminal-1", "script-terminal"],
       standaloneTerminalIds: ["terminal-1"],
       hasActivePendingTerminalCreate: false,
@@ -479,52 +485,63 @@ describe("workspace agent visibility", () => {
   });
 
   describe("workspaceAgentVisibilityEqual", () => {
+    const visibility = (input: {
+      active: string[];
+      autoOpen: string[];
+      hidden?: string[];
+      opened?: string[];
+      hiddenAt?: Array<[string, number]>;
+    }) => ({
+      activeAgentIds: new Set(input.active),
+      autoOpenAgentIds: new Set(input.autoOpen),
+      hiddenAgentIds: new Set(input.hidden ?? []),
+      openedAgentIds: new Set(input.opened ?? []),
+      hiddenAgentUpdatedAtById: new Map(input.hiddenAt ?? []),
+    });
+
     it("returns true for identical sets", () => {
-      const a = {
-        activeAgentIds: new Set(["a", "b"]),
-        autoOpenAgentIds: new Set(["a"]),
-      };
-      const b = {
-        activeAgentIds: new Set(["a", "b"]),
-        autoOpenAgentIds: new Set(["a"]),
-      };
-      expect(workspaceAgentVisibilityEqual(a, b)).toBe(true);
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: ["a", "b"], autoOpen: ["a"] }),
+          visibility({ active: ["a", "b"], autoOpen: ["a"] }),
+        ),
+      ).toBe(true);
     });
 
     it("returns false when activeAgentIds differ", () => {
-      const a = {
-        activeAgentIds: new Set(["a"]),
-        autoOpenAgentIds: new Set(["a"]),
-      };
-      const b = {
-        activeAgentIds: new Set(["b"]),
-        autoOpenAgentIds: new Set(["a"]),
-      };
-      expect(workspaceAgentVisibilityEqual(a, b)).toBe(false);
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: ["a"], autoOpen: ["a"] }),
+          visibility({ active: ["b"], autoOpen: ["a"] }),
+        ),
+      ).toBe(false);
     });
 
     it("returns false when autoOpenAgentIds differ", () => {
-      const a = {
-        activeAgentIds: new Set(["a", "b"]),
-        autoOpenAgentIds: new Set(["a"]),
-      };
-      const b = {
-        activeAgentIds: new Set(["a", "b"]),
-        autoOpenAgentIds: new Set(["b"]),
-      };
-      expect(workspaceAgentVisibilityEqual(a, b)).toBe(false);
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: ["a", "b"], autoOpen: ["a"] }),
+          visibility({ active: ["a", "b"], autoOpen: ["b"] }),
+        ),
+      ).toBe(false);
+    });
+
+    it("returns false when hiddenAgentIds differ", () => {
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: ["a"], autoOpen: ["a"], hidden: ["a"] }),
+          visibility({ active: ["a"], autoOpen: ["a"] }),
+        ),
+      ).toBe(false);
     });
 
     it("returns true for empty sets", () => {
-      const a = {
-        activeAgentIds: new Set<string>(),
-        autoOpenAgentIds: new Set<string>(),
-      };
-      const b = {
-        activeAgentIds: new Set<string>(),
-        autoOpenAgentIds: new Set<string>(),
-      };
-      expect(workspaceAgentVisibilityEqual(a, b)).toBe(true);
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: [], autoOpen: [] }),
+          visibility({ active: [], autoOpen: [] }),
+        ),
+      ).toBe(true);
     });
   });
 });

@@ -10,7 +10,13 @@ export const IMPORT_SOURCE_LABEL = "paseo.import.source";
 export const IMPORT_SOURCE_ID_LABEL = "paseo.import.source-id";
 /** Model the chat used in the source product, kept for continuation mapping. */
 export const IMPORT_MODEL_LABEL = "paseo.import.model";
-const OPEN_AGENT_TAB_LABEL_PREFIX = "paseo.open-agent-tab.";
+/**
+ * Global open-tab marker shared by every client connected to the same host.
+ * Per-client labels still exist for older clients; the global label is the
+ * authoritative one for current clients.
+ */
+export const OPEN_AGENT_TAB_LABEL = "paseo.open-agent-tab";
+const OPEN_AGENT_TAB_LABEL_PREFIX = `${OPEN_AGENT_TAB_LABEL}.`;
 
 export function getImportSourceFromLabels(
   labels: Record<string, unknown> | null | undefined,
@@ -24,7 +30,21 @@ export function getOpenAgentTabLabel(clientId: string): string {
 }
 
 export function isOpenAgentTabLabel(label: string): boolean {
-  return label.startsWith(OPEN_AGENT_TAB_LABEL_PREFIX);
+  return label === OPEN_AGENT_TAB_LABEL || label.startsWith(OPEN_AGENT_TAB_LABEL_PREFIX);
+}
+
+/**
+ * A tab is closed when the global label says so and no client-scoped label
+ * still reports it open. Missing labels mean "never explicitly closed", so
+ * agents created before the global marker stay visible.
+ */
+export function isOpenAgentTabClosed(labels: Record<string, unknown> | null | undefined): boolean {
+  if (labels?.[OPEN_AGENT_TAB_LABEL] !== "false") {
+    return false;
+  }
+  return !Object.entries(labels ?? {}).some(
+    ([label, value]) => label.startsWith(OPEN_AGENT_TAB_LABEL_PREFIX) && value === "true",
+  );
 }
 
 export interface AgentLabelSource {

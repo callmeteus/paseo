@@ -3672,6 +3672,81 @@ describe("workspace-layout-store actions", () => {
     expect(contentTabs(workspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey))).toEqual([]);
   });
 
+  it("reconcileTabs prunes an agent tab closed by another client", () => {
+    const workspaceKey = createWorkspaceKey();
+    workspaceLayoutStore.getState().openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1"],
+      autoOpenAgentIds: ["agent-1"],
+      hiddenAgentIds: ["agent-1"],
+      hiddenAgentUpdatedAtById: new Map([["agent-1", Date.now() + 1_000]]),
+      standaloneTerminalIds: [],
+      hasActivePendingDraftCreate: false,
+    });
+
+    expect(contentTabs(workspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey))).toEqual([]);
+  });
+
+  it("reconcileTabs keeps a tab reopened after the shared close marker", () => {
+    const workspaceKey = createWorkspaceKey();
+    workspaceLayoutStore.getState().openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1"],
+      autoOpenAgentIds: ["agent-1"],
+      hiddenAgentIds: ["agent-1"],
+      hiddenAgentUpdatedAtById: new Map([["agent-1", Date.now() - 10_000]]),
+      standaloneTerminalIds: [],
+      hasActivePendingDraftCreate: false,
+    });
+
+    expect(contentTabs(workspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey))).toEqual([
+      expect.objectContaining({ target: { kind: "agent", agentId: "agent-1" } }),
+    ]);
+  });
+
+  it("reconcileTabs clears stale local hidden state when another client reopens the tab", () => {
+    const workspaceKey = createWorkspaceKey();
+    workspaceLayoutStore.getState().openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+    workspaceLayoutStore.setState((state) => ({
+      ...state,
+      hiddenAgentIdsByWorkspace: {
+        [workspaceKey]: new Set<string>(["agent-1"]),
+      },
+    }));
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1"],
+      autoOpenAgentIds: ["agent-1"],
+      openedAgentIds: ["agent-1"],
+      standaloneTerminalIds: [],
+      hasActivePendingDraftCreate: false,
+    });
+
+    expect(contentTabs(workspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey))).toEqual([
+      expect.objectContaining({ target: { kind: "agent", agentId: "agent-1" } }),
+    ]);
+  });
+
   it("reconcileTabs lands on an existing agent instead of the initial New tab", () => {
     const workspaceKey = createWorkspaceKey();
 

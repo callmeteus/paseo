@@ -113,11 +113,11 @@ Parent archive detaches a subagent instead of archiving it when either condition
 - The child is currently open in an agent tab.
 
 All other children archive with the parent. After the workspace layout hydrates, the client marks
-every managed subagent present in its tabs with `paseo.open-agent-tab.<client-id>=true` through the
-generic agent metadata update. This includes background and restored tabs; navigation does not own
-the marker. Closing a tab sets that client's label to `false`. Any `true` client label keeps the child
-open. Detach clears the parent and every open-tab label. The surviving child therefore becomes a
-normal root agent immediately, and closing its still-open tab archives it.
+every managed agent present in its tabs with `paseo.open-agent-tab=true` (plus the legacy
+client-scoped label) through the generic agent metadata update. This includes background and
+restored tabs; navigation does not own the marker. Closing a tab sets the shared label and every
+client-scoped label to `false`. Detach clears the parent and every open-tab label. The surviving
+child therefore becomes a normal root agent immediately.
 
 Runtime ownership is resolved from explicit workspace ID and caller context, never from `cwd`. Workspace creation is a separate operation with `local | worktree` isolation; agent creation reuses that workspace unless a new workspace is explicitly requested.
 
@@ -248,16 +248,29 @@ received.
 
 These are two distinct concepts that used to be conflated:
 
-| Concept                    | Scope      | Triggers                   |
-| -------------------------- | ---------- | -------------------------- |
-| **Tab** (workspace layout) | Per-client | User opens/closes a view   |
-| **Archive** (lifecycle)    | Global     | Explicit lifecycle gesture |
+| Concept                    | Scope                   | Triggers                   |
+| -------------------------- | ----------------------- | -------------------------- |
+| **Tab** (workspace layout) | Per-host for agent tabs | User opens/closes a view   |
+| **Archive** (lifecycle)    | Global                  | Explicit lifecycle gesture |
 
-Closing a tab on a **root agent** still archives — the tab is the agent's home, so closing it means "I'm done with this agent." A confirm dialog protects against archiving a running agent by accident.
+Closing a tab on an **agent** is **layout-only**. The app writes the shared
+`paseo.open-agent-tab` label to `"false"` and clears every client-scoped
+open-tab label, so every client connected to the host prunes the tab. Opening
+the tab again writes `"true"` and reopens it for clients that auto-open agents.
+Single and bulk tab close apply the same policy. The agent stays unarchived and
+stays in its parent's track, so a later parent archive cascades to it when no
+client still has it open. The user can re-open the tab from the track at any
+time.
 
-Closing a tab on a **subagent** (any agent with `parentAgentId`) is **layout-only**. The app clears the current client's open-tab label before removing the tab. Another client's open tab remains protected. The agent stays unarchived and stays in its parent's track, so a later parent archive cascades to it when no client still has it open. The user can re-open the tab from the track at any time. Single and bulk tab close apply the same policy. The hidden intent is persisted with the workspace layout, so a closed layout-only tab stays closed after a restart; opening the agent explicitly clears it.
+File and browser tabs stay local to the client that opened them; they have no
+daemon-side entity to share. Terminal tabs follow the daemon's terminal list, so
+killing a terminal closes its tab on every client.
 
-The asymmetry is intentional: a subagent's persistent relationship lives in the parent's track. Same-workspace subagents are not auto-opened as tabs; the user opens one from that track when needed. A cross-workspace subagent is also auto-opened as a tab in its own workspace so opening that workspace does not appear empty. It remains in the parent's track until it is actually detached.
+The asymmetry is intentional: a subagent's persistent relationship lives in the
+parent's track. Same-workspace subagents are not auto-opened as tabs; the user
+opens one from that track when needed. A cross-workspace subagent is also
+auto-opened as a tab in its own workspace so opening that workspace does not
+appear empty. It remains in the parent's track until it is actually detached.
 
 ## Workspace activity
 
@@ -321,15 +334,13 @@ To keep the agent alive but remove it from the parent's track, use **detach**. T
 
 ## Why this shape
 
-The decision was to **decouple "close tab" from "archive" only for subagents**, rather than universally:
+Closing a tab and archiving an agent are separate gestures:
 
-- **Closing a tab on a root agent still archives** — preserves the existing UX users are trained on
-- **Closing a tab on a subagent is layout-only** — fixes the lossy "click to read, close to dismiss view, lose the row" flow
+- **Closing a tab is layout-only** — fixes the lossy "click to read, close to dismiss view, lose the row" flow and lets the tab close stay shared across clients
+- **Archive stays explicit** — the chat menu and the subagent track own the lifecycle gesture
 - **Archive button on track rows** — gives subagents an explicit lifecycle gesture in their home surface
 - **Detach button on track rows** — lets a subagent continue independently without killing its work
 - **Cascade archive on parent** — keeps subagents from leaking when the parent is archived
-
-We considered universal decoupling (no tab close ever archives, archive is always explicit) but rejected it: it changes a behavior root-agent users rely on.
 
 ## Limitations
 
@@ -339,7 +350,7 @@ A parent that spawns many subagents will see the panel's list grow; the pill onl
 
 ### Cross-client tab dismissal
 
-Closing a subagent's tab on one client doesn't affect other clients' layouts. This is the expected behavior of decoupled tabs and is consistent with how layouts have always worked. Archive remains the global gesture for cross-client cleanup.
+Agent tabs share their open/closed marker through the daemon, so closing a tab on one client closes it on every client connected to the same host. A tab reopened after the close marker survives the next reconciliation and writes the open marker back. File and browser tabs remain local.
 
 ## Storage
 
@@ -351,12 +362,13 @@ $PASEO_HOME/agents/{cwd-with-dashes}/{agent-id}.json
 
 Each agent is a single JSON file. Fields relevant to this doc:
 
-| Field                                        | Type          | Meaning                                                                            |
-| -------------------------------------------- | ------------- | ---------------------------------------------------------------------------------- |
-| `id`                                         | `string`      | Stable identifier                                                                  |
-| `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                   |
-| `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach |
-| `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | `"true"` protects an open tab on that client; detach clears every matching label   |
-| `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                           |
+| Field                                        | Type          | Meaning                                                                             |
+| -------------------------------------------- | ------------- | ----------------------------------------------------------------------------------- |
+| `id`                                         | `string`      | Stable identifier                                                                   |
+| `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                    |
+| `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach  |
+| `labels["paseo.open-agent-tab"]`             | `string?`     | Shared tab marker: `"true"` open, `"false"` closed by any client                    |
+| `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | Legacy per-client marker kept for older clients; detach clears every matching label |
+| `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                            |
 
 See [`docs/data-model.md`](./data-model.md) for the full agent record.

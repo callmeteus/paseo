@@ -271,6 +271,12 @@ export interface WorkspaceTabSnapshot {
   terminalsHydrated: boolean;
   activeAgentIds: Iterable<string>;
   autoOpenAgentIds: Iterable<string>;
+  /** Agents whose tab was closed on any client; the daemon owns this state. */
+  hiddenAgentIds?: Iterable<string>;
+  /** Agents with an open-tab label from any client; clears stale local hidden state. */
+  openedAgentIds?: Iterable<string>;
+  /** When each close marker was written, so a tab reopened afterwards survives. */
+  hiddenAgentUpdatedAtById?: ReadonlyMap<string, number>;
   knownTerminalIds?: Iterable<string>;
   standaloneTerminalIds: Iterable<string>;
   hasActivePendingTerminalCreate?: boolean;
@@ -2488,15 +2494,89 @@ function addMissingEntityTabs(input: {
   return nextLayout;
 }
 
+function resolveHiddenAgentIds(
+  state: WorkspaceTabReconcileState,
+  snapshot: WorkspaceTabSnapshot,
+  tabs: WorkspaceTab[],
+): Set<string> {
+  const tabOpenedAtByAgentId = new Map<string, number>();
+  for (const tab of tabs) {
+    if (!isAgentTab(tab)) {
+      continue;
+    }
+    const current = tabOpenedAtByAgentId.get(tab.target.agentId);
+    if (current === undefined || tab.createdAt > current) {
+      tabOpenedAtByAgentId.set(tab.target.agentId, tab.createdAt);
+    }
+  }
+
+  const hiddenAgentIds = new Set(state.hiddenAgentIds ?? []);
+  // A tab reopened after the daemon wrote the close marker belongs to the user
+  // again; the marker ages out once the open label is written.
+  for (const agentId of snapshot.openedAgentIds ?? []) {
+    hiddenAgentIds.delete(agentId);
+  }
+  for (const agentId of snapshot.hiddenAgentIds ?? []) {
+    const closedAt = snapshot.hiddenAgentUpdatedAtById?.get(agentId);
+    const openedAt = tabOpenedAtByAgentId.get(agentId);
+    if (closedAt !== undefined && openedAt !== undefined && openedAt > closedAt) {
+      continue;
+    }
+    hiddenAgentIds.add(agentId);
+  }
+  return hiddenAgentIds;
+}
+
+function normalizeEntityTabsInLayout(input: {
+  layout: WorkspaceLayout;
+  initialTabs: WorkspaceTab[];
+  originalFocusedTabId: string | null;
+  explorerSidebarPaneId: string | null;
+}): { layout: WorkspaceLayout; focusedTabId: string | null } {
+  let nextLayout = input.layout;
+  let focusedTabId = input.originalFocusedTabId;
+  for (const [canonicalTabId, group] of buildEntityTabGroups(input.initialTabs)) {
+    const keeper = group.tabs.find((tab) => tab.tabId === canonicalTabId) ?? group.tabs[0] ?? null;
+    if (!keeper) {
+      continue;
+    }
+    if (group.tabs.some((tab) => tab.tabId === input.originalFocusedTabId)) {
+      focusedTabId = keeper.tabId;
+    }
+    if (!workspaceTabTargetsEqual(keeper.target, group.target)) {
+      nextLayout = withNormalizedParentTabMap({
+        root: replaceTabInTree(asInternalLayout(nextLayout).root, {
+          tabId: keeper.tabId,
+          nextTabId: keeper.tabId,
+          target: group.target,
+        }),
+        focusedPaneId: nextLayout.focusedPaneId,
+        parentTabIdByTabId: nextLayout.parentTabIdByTabId,
+      });
+    }
+    for (const tab of group.tabs) {
+      if (tab.tabId === keeper.tabId) {
+        continue;
+      }
+      nextLayout =
+        closeTabInLayout({
+          layout: nextLayout,
+          tabId: tab.tabId,
+          explorerSidebarPaneId: input.explorerSidebarPaneId,
+        }) ?? nextLayout;
+    }
+  }
+  return { layout: nextLayout, focusedTabId };
+}
+
 export function reconcileWorkspaceTabs(
   state: WorkspaceTabReconcileState,
   snapshot: WorkspaceTabSnapshot,
 ): WorkspaceTabReconcileState {
-  let nextLayout = state.layout;
+  const initialTabs = collectAllTabs(state.layout.root);
   const originalFocusedTabId =
-    findPaneById(nextLayout.root, nextLayout.focusedPaneId)?.focusedTabId ?? null;
-  let reconciledFocusedTabId = originalFocusedTabId;
-  const hiddenAgentIds = new Set(state.hiddenAgentIds ?? []);
+    findPaneById(state.layout.root, state.layout.focusedPaneId)?.focusedTabId ?? null;
+  const hiddenAgentIds = resolveHiddenAgentIds(state, snapshot, initialTabs);
   const activeAgentIds = normalizeStringSet(snapshot.activeAgentIds);
   const autoOpenAgentIds = normalizeStringSet(snapshot.autoOpenAgentIds);
   // An explicit open owns the tab until the agent joins the active directory.
@@ -2522,44 +2602,18 @@ export function reconcileWorkspaceTabs(
     hiddenAgentIds,
   });
 
-  const initialTabs = collectAllTabs(nextLayout.root);
   const representedAgentIds = new Set(
     initialTabs.filter(isAgentTab).map((tab) => tab.target.agentId),
   );
 
-  const entityGroups = buildEntityTabGroups(initialTabs);
-
-  for (const [canonicalTabId, group] of entityGroups) {
-    const keeper = group.tabs.find((tab) => tab.tabId === canonicalTabId) ?? group.tabs[0] ?? null;
-    if (!keeper) {
-      continue;
-    }
-    if (group.tabs.some((tab) => tab.tabId === originalFocusedTabId)) {
-      reconciledFocusedTabId = keeper.tabId;
-    }
-    if (!workspaceTabTargetsEqual(keeper.target, group.target)) {
-      nextLayout = withNormalizedParentTabMap({
-        root: replaceTabInTree(asInternalLayout(nextLayout).root, {
-          tabId: keeper.tabId,
-          nextTabId: keeper.tabId,
-          target: group.target,
-        }),
-        focusedPaneId: nextLayout.focusedPaneId,
-        parentTabIdByTabId: nextLayout.parentTabIdByTabId,
-      });
-    }
-    for (const tab of group.tabs) {
-      if (tab.tabId === keeper.tabId) {
-        continue;
-      }
-      nextLayout =
-        closeTabInLayout({
-          layout: nextLayout,
-          tabId: tab.tabId,
-          explorerSidebarPaneId: state.explorerSidebarPaneId,
-        }) ?? nextLayout;
-    }
-  }
+  const normalizedEntities = normalizeEntityTabsInLayout({
+    layout: state.layout,
+    initialTabs,
+    originalFocusedTabId,
+    explorerSidebarPaneId: state.explorerSidebarPaneId,
+  });
+  let nextLayout = normalizedEntities.layout;
+  const reconciledFocusedTabId = normalizedEntities.focusedTabId;
 
   nextLayout = collapseStaleEntityTabs({
     layout: nextLayout,

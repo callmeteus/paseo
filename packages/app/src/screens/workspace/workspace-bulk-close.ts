@@ -134,16 +134,17 @@ export async function closeBulkWorkspaceTabs(input: CloseBulkWorkspaceTabsInput)
 
   for (const { tabId, agentId } of groups.layoutOnlyAgentTabs) {
     await closeTab(tabId, async () => {
-      try {
-        await closeLayoutOnlyAgent(agentId);
-      } catch (error) {
-        warn?.(`[WorkspaceScreen] Failed to close subagent tab ${logLabel}`, { error, agentId });
-        return;
-      }
+      // Remove the tab before writing the shared closed marker: the open-tab
+      // marker hook reacts to the tab list and would otherwise race the close.
       closeWorkspaceTabWithCleanup({
         tabId,
         target: { kind: "agent", agentId },
       });
+      try {
+        await closeLayoutOnlyAgent(agentId);
+      } catch (error) {
+        warn?.(`[WorkspaceScreen] Failed to close subagent tab ${logLabel}`, { error, agentId });
+      }
     });
   }
 

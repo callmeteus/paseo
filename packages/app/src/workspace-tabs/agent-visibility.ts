@@ -1,3 +1,4 @@
+import { hasOpenAgentTab, isOpenAgentTabClosed } from "@getpaseo/protocol/agent-labels";
 import { getPortingActivity } from "@/composer/agent-controls/porting-activity";
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceTabSnapshot } from "@/stores/workspace-layout-actions";
@@ -7,10 +8,35 @@ import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
 export interface WorkspaceAgentVisibility {
   activeAgentIds: Set<string>;
   autoOpenAgentIds: Set<string>;
+  /**
+   * Agents whose tab was closed on any client. The daemon keeps the label, so
+   * every client sees the same closed state and prunes the tab.
+   */
+  hiddenAgentIds: Set<string>;
+  /** Agents with an open-tab label from any client; clears stale local hidden state. */
+  openedAgentIds: Set<string>;
+  /** The close marker's `updatedAt`, used to keep a tab reopened after the close. */
+  hiddenAgentUpdatedAtById: Map<string, number>;
 }
 
 function agentBelongsToWorkspace(agent: Agent, workspaceId: string): boolean {
   return normalizeWorkspaceOpaqueId(agent.workspaceId) === workspaceId;
+}
+
+function trackAgentTabLabels(input: {
+  agent: Agent;
+  hiddenAgentIds: Set<string>;
+  openedAgentIds: Set<string>;
+  hiddenAgentUpdatedAtById: Map<string, number>;
+}): void {
+  const { agent, hiddenAgentIds, openedAgentIds, hiddenAgentUpdatedAtById } = input;
+  if (hasOpenAgentTab(agent.labels)) {
+    openedAgentIds.add(agent.id);
+  }
+  if (isOpenAgentTabClosed(agent.labels)) {
+    hiddenAgentIds.add(agent.id);
+    hiddenAgentUpdatedAtById.set(agent.id, agent.updatedAt.getTime());
+  }
 }
 
 export function deriveWorkspaceAgentVisibility(input: {
@@ -25,15 +51,27 @@ export function deriveWorkspaceAgentVisibility(input: {
     return {
       activeAgentIds: new Set<string>(),
       autoOpenAgentIds: new Set<string>(),
+      hiddenAgentIds: new Set<string>(),
+      openedAgentIds: new Set<string>(),
+      hiddenAgentUpdatedAtById: new Map<string, number>(),
     };
   }
 
   const activeAgentIds = new Set<string>();
   const autoOpenAgentIds = new Set<string>();
+  const hiddenAgentIds = new Set<string>();
+  const openedAgentIds = new Set<string>();
+  const hiddenAgentUpdatedAtById = new Map<string, number>();
   for (const agent of sessionAgents?.values() ?? []) {
     if (!agentBelongsToWorkspace(agent, workspaceId)) {
       continue;
     }
+    trackAgentTabLabels({
+      agent,
+      hiddenAgentIds,
+      openedAgentIds,
+      hiddenAgentUpdatedAtById,
+    });
     if (!agent.archivedAt) {
       activeAgentIds.add(agent.id);
       const parentAgent = agent.parentAgentId
@@ -52,7 +90,13 @@ export function deriveWorkspaceAgentVisibility(input: {
       }
     }
   }
-  return { activeAgentIds, autoOpenAgentIds };
+  return {
+    activeAgentIds,
+    autoOpenAgentIds,
+    hiddenAgentIds,
+    openedAgentIds,
+    hiddenAgentUpdatedAtById,
+  };
 }
 
 interface AgentMapsSnapshot {
@@ -110,6 +154,9 @@ export function buildWorkspaceTabSnapshot(input: {
     terminalsHydrated: input.terminalsHydrated,
     activeAgentIds: input.agentVisibility.activeAgentIds,
     autoOpenAgentIds: input.agentVisibility.autoOpenAgentIds,
+    hiddenAgentIds: input.agentVisibility.hiddenAgentIds,
+    openedAgentIds: input.agentVisibility.openedAgentIds,
+    hiddenAgentUpdatedAtById: input.agentVisibility.hiddenAgentUpdatedAtById,
     knownTerminalIds: input.knownTerminalIds,
     standaloneTerminalIds: input.standaloneTerminalIds,
     hasActivePendingTerminalCreate: input.hasActivePendingTerminalCreate,
@@ -124,7 +171,9 @@ export function workspaceAgentVisibilityEqual(
   return (
     a === b ||
     (setsEqual(a.activeAgentIds, b.activeAgentIds) &&
-      setsEqual(a.autoOpenAgentIds, b.autoOpenAgentIds))
+      setsEqual(a.autoOpenAgentIds, b.autoOpenAgentIds) &&
+      setsEqual(a.hiddenAgentIds, b.hiddenAgentIds) &&
+      setsEqual(a.openedAgentIds, b.openedAgentIds))
   );
 }
 

@@ -4,7 +4,9 @@ import {
   getOpenAgentTabLabel,
   hasOpenAgentTab,
   isDelegatedAgent,
+  isOpenAgentTabClosed,
   isOpenAgentTabLabel,
+  OPEN_AGENT_TAB_LABEL,
   PARENT_AGENT_ID_LABEL,
 } from "./agent-labels.js";
 
@@ -31,9 +33,25 @@ describe("agent label policy", () => {
     expect(hasOpenAgentTab({})).toBe(false);
   });
 
-  test("recognizes only client-scoped open-tab labels", () => {
+  test("recognizes the global and client-scoped open-tab labels", () => {
     expect(isOpenAgentTabLabel(getOpenAgentTabLabel("client-a"))).toBe(true);
-    expect(isOpenAgentTabLabel("paseo.open-agent-tab")).toBe(false);
+    expect(isOpenAgentTabLabel(OPEN_AGENT_TAB_LABEL)).toBe(true);
     expect(isOpenAgentTabLabel("custom.open-agent-tab.client-a")).toBe(false);
+  });
+
+  test("treats the global false label as closed unless a client still has it open", () => {
+    const desktopLabel = getOpenAgentTabLabel("desktop-client");
+    const mobileLabel = getOpenAgentTabLabel("mobile-client");
+
+    expect(isOpenAgentTabClosed({ [OPEN_AGENT_TAB_LABEL]: "false" })).toBe(true);
+    expect(isOpenAgentTabClosed({ [OPEN_AGENT_TAB_LABEL]: "false", [desktopLabel]: "false" })).toBe(
+      true,
+    );
+    expect(isOpenAgentTabClosed({ [OPEN_AGENT_TAB_LABEL]: "false", [mobileLabel]: "true" })).toBe(
+      false,
+    );
+    expect(isOpenAgentTabClosed({ [OPEN_AGENT_TAB_LABEL]: "true" })).toBe(false);
+    expect(isOpenAgentTabClosed({ [desktopLabel]: "false" })).toBe(false);
+    expect(isOpenAgentTabClosed({})).toBe(false);
   });
 });

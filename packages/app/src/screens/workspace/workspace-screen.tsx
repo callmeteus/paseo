@@ -17,7 +17,7 @@ import {
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SheetHostScope } from "@/components/ui/isolated-bottom-sheet-modal";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
-import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
+import { buildCloseAgentTabLabels } from "@/subagents/open-tab-labels";
 import {
   memo,
   useCallback,
@@ -63,7 +63,6 @@ import { WorkspaceScriptsButton } from "@/screens/workspace/scripts";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useNavigateToImportedAgent } from "@/hooks/use-import-session";
 import { useToast } from "@/contexts/toast-context";
-import { getOrCreateClientId } from "@/utils/client-id";
 import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
 import { toggleDesktopSidebarsWithCheckoutIntent } from "@/utils/desktop-sidebar-toggle";
 import {
@@ -2045,7 +2044,7 @@ function WorkspaceScreenContent({
 
         const agent =
           useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-        let closePolicy = resolveCloseAgentTabPolicy(agent);
+        const closePolicy = resolveCloseAgentTabPolicy(agent);
         const isRunning = agent?.status === "running";
 
         if (isRunning && closePolicy.kind === "archive-on-close") {
@@ -2061,27 +2060,6 @@ function WorkspaceScreenContent({
           }
         }
 
-        if (closePolicy.kind === "layout-only") {
-          const sessionClient = useSessionStore.getState().sessions[normalizedServerId]?.client;
-          if (!sessionClient) {
-            toast.error(t("common.errors.daemonClientUnavailable"));
-            return;
-          }
-          try {
-            const clientId = await getOrCreateClientId();
-            await sessionClient.updateAgent(agentId, {
-              labels: { [getOpenAgentTabLabel(clientId)]: "false" },
-            });
-            const latestAgent =
-              useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
-            closePolicy = resolveCloseAgentTabPolicy(latestAgent);
-          } catch (error) {
-            console.error("[WorkspaceScreen] Failed to close subagent tab", { error, agentId });
-            toast.error(t("workspace.tabs.toasts.failedToCloseAgent"));
-            return;
-          }
-        }
-
         setHoveredCloseTabKey((current) => (current === tabId ? null : current));
         if (persistenceKey) {
           closeWorkspaceTabWithCleanup({
@@ -2093,6 +2071,22 @@ function WorkspaceScreenContent({
         if (closePolicy.kind === "layout-only") {
           if (persistenceKey) {
             hideWorkspaceAgent(persistenceKey, agentId);
+          }
+          const sessionClient = useSessionStore.getState().sessions[normalizedServerId]?.client;
+          if (!sessionClient) {
+            toast.error(t("common.errors.daemonClientUnavailable"));
+            return;
+          }
+          try {
+            await sessionClient.updateAgent(agentId, {
+              labels: buildCloseAgentTabLabels(
+                useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId)
+                  ?.labels,
+              ),
+            });
+          } catch (error) {
+            console.error("[WorkspaceScreen] Failed to close agent tab", { error, agentId });
+            toast.error(t("workspace.tabs.toasts.failedToCloseAgent"));
           }
           return;
         }
@@ -2427,9 +2421,10 @@ function WorkspaceScreenContent({
           if (!client) {
             throw new Error(t("common.errors.daemonClientUnavailable"));
           }
-          const clientId = await getOrCreateClientId();
           await client.updateAgent(agentId, {
-            labels: { [getOpenAgentTabLabel(clientId)]: "false" },
+            labels: buildCloseAgentTabLabels(
+              useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId)?.labels,
+            ),
           });
           const latestAgent =
             useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
