@@ -55,6 +55,8 @@ Start the installation from Hub. An installation started only from Slack is not 
 
 An app created before interactivity was part of the manifest does not pick the change up. In **Interactivity & Shortcuts**, turn interactivity on. Socket Mode has no request URL. A webhook app uses the Interactivity Request URL above. No new scope is required, so the app does not need to be reinstalled.
 
+Code channels need a reinstall. The manifest turns on `features.code_channels` and adds the bot scope `code_channels:manage`. Until the workspace app is reinstalled, Hub keeps the thread stream and skips the code channel.
+
 ## Configure from environment
 
 Deployments that keep app secrets outside Hub can use one complete transport configuration.

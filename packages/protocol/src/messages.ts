@@ -794,6 +794,12 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     version: z.number(),
     data: JsonWireValueSchema,
   }),
+  z.object({
+    type: z.literal("diff"),
+    patch: z.string(),
+    baseBranch: z.string().optional(),
+    headBranch: z.string().optional(),
+  }),
 ]);
 
 export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [

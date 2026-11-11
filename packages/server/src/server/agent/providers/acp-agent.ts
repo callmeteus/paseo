@@ -4457,9 +4457,11 @@ function mergeToolSnapshot(
 function mapPlanToTimeline(plan: Plan): AgentTimelineItem {
   return {
     type: "todo",
-    items: plan.entries.map((entry) => ({
+    items: plan.entries.map((entry, index) => ({
+      id: String(index),
       text: entry.content,
       completed: entry.status === "completed",
+      status: entry.status === "completed" ? "completed" : "pending",
     })),
   };
 }

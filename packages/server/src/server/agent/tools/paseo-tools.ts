@@ -15,6 +15,7 @@ import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
+import { markdownToTodo } from "../plan-tasks.js";
 import type { AgentManager } from "../agent-manager.js";
 import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
 import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
@@ -2714,6 +2715,9 @@ function createToolCatalog(
         title: planTitle,
         agentId: callerAgentId,
       });
+      if (content !== undefined) {
+        await agentManager.appendTimelineItem(callerAgentId, markdownToTodo(content));
+      }
       return {
         content: [],
         structuredContent: ensureValidJson({ path: planPath, title: planTitle, created }),

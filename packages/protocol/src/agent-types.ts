@@ -374,6 +374,14 @@ export interface PluginTimelineItem {
   data: JsonValue;
 }
 
+/** Unified diff the Hub Slack mirror publishes on a code channel. */
+export interface DiffTimelineItem {
+  type: "diff";
+  patch: string;
+  baseBranch?: string;
+  headBranch?: string;
+}
+
 export interface AgentTaskItem {
   text: string;
   completed: boolean;
@@ -396,7 +404,8 @@ export type AgentTimelineItem =
     }
   | CompactionTimelineItem
   | PortingTimelineItem
-  | PluginTimelineItem;
+  | PluginTimelineItem
+  | DiffTimelineItem;
 
 export type AgentStreamEvent =
   | { type: "thread_started"; sessionId: string; provider: AgentProvider }

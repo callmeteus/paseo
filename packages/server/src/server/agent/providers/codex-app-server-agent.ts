@@ -1,3 +1,4 @@
+import { diffTimelineItem, planMarkdownToTodo } from "../plan-tasks.js";
 import { validateProviderOptions } from "../provider-options.js";
 import {
   getAgentStreamEventTurnId,
@@ -3461,6 +3462,8 @@ export class CodexAppServerAgentSession implements AgentSession {
   private serviceTier: string | null = null;
   private speedModels: CodexModel[] = [];
   private planModeEnabled = false;
+  /** Set when this turn already published a structured plan todo. */
+  private planTodoEmittedForTurn = false;
   private historyPending = false;
   private persistedHistory: PersistedTimelineEntry[] = [];
   private loadingPersistedHistory = false;
@@ -5532,9 +5535,15 @@ export class CodexAppServerAgentSession implements AgentSession {
         this.handlePlanUpdatedNotification(parsed);
         return;
       case "diff_updated":
-        // NOTE: Codex app-server emits frequent `turn/diff/updated` notifications
-        // containing a full accumulated unified diff for the *entire turn*.
-        // This is not a concrete file-change tool call; it is progress telemetry.
+        // Codex sends the full unified diff for the turn. Hub publishes it on the
+        // code channel; the timeline row is not a file-change tool call.
+        if (parsed.diff.trim().length > 0) {
+          this.emitEvent({
+            type: "timeline",
+            provider: CODEX_PROVIDER,
+            item: diffTimelineItem({ patch: parsed.diff }),
+          });
+        }
         return;
       case "token_usage_updated":
         this.handleTokenUsageUpdatedNotification(parsed);
@@ -6154,6 +6163,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       return;
     }
     this.currentTurnId = parsed.turnId;
+    this.planTodoEmittedForTurn = false;
     const pendingIdentification = this.pendingForegroundTurnIdentification;
     if (
       pendingIdentification &&
@@ -6232,6 +6242,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     parsed: Extract<ParsedCodexNotification, { kind: "plan_updated" }>,
   ): void {
     if (!this.planModeEnabled) {
+      this.planTodoEmittedForTurn = true;
       this.emitEvent({
         type: "timeline",
         provider: CODEX_PROVIDER,
@@ -6250,8 +6261,14 @@ export class CodexAppServerAgentSession implements AgentSession {
     });
     if (timelineItem) {
       this.rememberPlanResult(timelineItem);
-      // Older Codex app-server builds reported Plan-mode proposals through
-      // turn/plan/updated. Retain that compatibility path only while Plan mode is active.
+      // The approval card stays. The same steps also go out as a todo so Hub can
+      // draw them on the Slack plan without a separate tool call.
+      this.planTodoEmittedForTurn = true;
+      this.emitEvent({
+        type: "timeline",
+        provider: CODEX_PROVIDER,
+        item: mapCodexPlanUpdateToTodo(parsed.plan),
+      });
       return;
     }
   }
@@ -6647,6 +6664,13 @@ export class CodexAppServerAgentSession implements AgentSession {
         // Codex can surface plans both as turn/plan updates and as completed
         // thread items. In plan mode, approval owns the visible plan card.
         if (this.planModeEnabled) {
+          if (!this.planTodoEmittedForTurn) {
+            this.emitEvent({
+              type: "timeline",
+              provider: CODEX_PROVIDER,
+              item: planMarkdownToTodo(timelineItem.detail.text),
+            });
+          }
           return;
         }
       }

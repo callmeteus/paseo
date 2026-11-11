@@ -1,3 +1,4 @@
+import { markdownToTodo } from "../../plan-tasks.js";
 import { ClaudeRuntimeSafety } from "./runtime-safety.js";
 import { validateProviderOptions } from "../../provider-options.js";
 import type { ChildProcess } from "node:child_process";
@@ -5206,6 +5207,9 @@ class ClaudeAgentSession implements AgentSession {
       return;
     }
     this.enqueueTimeline(item);
+    if (item.detail.type === "plan" && item.detail.text.trim().length > 0) {
+      this.enqueueTimeline(markdownToTodo(item.detail.text));
+    }
   }
 
   private pushEvent(event: AgentStreamEvent) {
