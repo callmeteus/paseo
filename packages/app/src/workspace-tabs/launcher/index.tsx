@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useRouter, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { Globe, SquarePen, SquareTerminal } from "lucide-react-native";
+import { Globe, MessagesSquare, SquarePen, SquareTerminal } from "lucide-react-native";
 import invariant from "tiny-invariant";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -80,6 +80,7 @@ export function NewTabLauncherProvider({
 
 const BUILT_IN_SELECTIONS = {
   agent: { kind: "agent" },
+  chat: { kind: "chat" },
   terminal: { kind: "terminal" },
   changes: { kind: "target", target: { kind: "changes_tree" } },
   diff: { kind: "target", target: { kind: "working_diff" } },
@@ -135,6 +136,14 @@ export function useWorkspaceTabLaunchCatalog(input: {
         disabled: false,
         panelKind: "draft",
         launch: launchSelection(BUILT_IN_SELECTIONS.agent),
+      },
+      chat: {
+        id: "chat",
+        label: t("workspace.tabs.fallback.chat"),
+        Icon: MessagesSquare,
+        disabled: false,
+        panelKind: "draft",
+        launch: launchSelection(BUILT_IN_SELECTIONS.chat),
       },
       terminal: {
         id: "terminal",

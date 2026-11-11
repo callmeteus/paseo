@@ -222,6 +222,11 @@ its completion advances `seqEnd`, followed by a merged assistant message. The ap
 remaining page through the existing stream reducer. It must not append full projected text to a
 live prefix.
 
+Live assistant text never merges across a trailing user row. The projected page splits an assistant
+message at the prompt that interrupted it, so the live reducer starts a new row below that prompt
+instead of extending the row above it; merging put the answer before the question and left the
+user's own message looking like the last row of the chat.
+
 Every path that sends a message to an agent — composer send, dictation accept-and-send, queued
 send-now, and the host runtime's automatic queue drain — goes through
 `dispatchComposerAgentMessage` with a submission writer. There is no second transport for the same

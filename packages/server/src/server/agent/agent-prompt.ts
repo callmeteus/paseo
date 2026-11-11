@@ -474,6 +474,10 @@ export async function sendPreparedPromptToAgent(
     await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
   }
 
+  // A chat/agent switch that arrived mid-turn waits here so this prompt is the first one
+  // answered with the new system prompt.
+  await params.agentManager.applyPendingChatMode(params.agentId);
+
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
     replaceRunning: true,
     onDispatch: params.onDispatch,

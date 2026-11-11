@@ -12,7 +12,7 @@ import {
   requestSidebarReveal,
   workspaceKeyForSidebarRow,
 } from "@/components/sidebar/sidebar-reveal";
-import { useSessionStore } from "@/stores/session-store";
+import { useSessionStore, type SessionState } from "@/stores/session-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
@@ -20,6 +20,7 @@ import {
   closeTabDropToWorkspace,
   useTabDropToWorkspaceRequest,
 } from "@/screens/workspace/tab-drop-to-workspace-store";
+import { workspaceIsEmptyAfterMove } from "@/screens/workspace/workspace-empty-after-move";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const ThemedArrowRight = withUnistyles(ArrowRight);
@@ -80,6 +81,29 @@ function ActionRow({
   );
 }
 
+function resolveEmptySourceWorkspace(input: {
+  session: SessionState | null;
+  sourceWorkspaceId: string | undefined;
+  movedAgentId: string;
+}): { sourceName: string; isEmpty: boolean } {
+  const sourceWorkspace = input.sourceWorkspaceId
+    ? (input.session?.workspaces.get(input.sourceWorkspaceId) ?? null)
+    : null;
+  const sourceName = sourceWorkspace?.title?.trim() || sourceWorkspace?.name || "";
+  if (!sourceName) {
+    return { sourceName: "", isEmpty: false };
+  }
+  return {
+    sourceName,
+    isEmpty: workspaceIsEmptyAfterMove({
+      agents: input.session?.agents ?? new Map(),
+      agentDetails: input.session?.agentDetails,
+      sourceWorkspaceId: input.sourceWorkspaceId,
+      movedAgentId: input.movedAgentId,
+    }),
+  };
+}
+
 export function TabDropToWorkspaceSheet() {
   const { t } = useTranslation();
   const toast = useToast();
@@ -121,6 +145,7 @@ export function TabDropToWorkspaceSheet() {
   const handleMove = useCallback(async () => {
     if (!client || !agent || !request || pendingAction) return;
     setPendingAction("move");
+    const sourceWorkspaceId = agent.workspaceId;
     try {
       await client.setAgentWorkspace(agent.id, request.targetWorkspaceId);
       requestSidebarReveal(
@@ -130,9 +155,20 @@ export function TabDropToWorkspaceSheet() {
         }),
       );
       navigateToAgent({ serverId: request.serverId, agentId: agent.id });
-      toast.show(t("workspace.tabs.dropToWorkspace.moved", { workspace: workspaceName }), {
-        variant: "info",
+      const { sourceName, isEmpty: sourceIsEmpty } = resolveEmptySourceWorkspace({
+        session,
+        sourceWorkspaceId,
+        movedAgentId: agent.id,
       });
+      toast.show(
+        sourceIsEmpty
+          ? t("workspace.tabs.dropToWorkspace.movedLeavingEmpty", {
+              workspace: workspaceName,
+              source: sourceName,
+            })
+          : t("workspace.tabs.dropToWorkspace.moved", { workspace: workspaceName }),
+        { variant: sourceIsEmpty ? "warning" : "info" },
+      );
       closeTabDropToWorkspace();
     } catch (error) {
       toast.error(
@@ -141,7 +177,7 @@ export function TabDropToWorkspaceSheet() {
     } finally {
       setPendingAction(null);
     }
-  }, [agent, client, pendingAction, request, t, toast, workspaceName]);
+  }, [agent, client, pendingAction, request, session, t, toast, workspaceName]);
 
   const handleCopy = useCallback(async () => {
     const config = buildCloneConfig();

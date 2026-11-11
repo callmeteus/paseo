@@ -17,7 +17,9 @@ import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import type { AgentSessionConfig } from "@getpaseo/protocol/agent-types";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
+import { OPENUI_CHAT_LABEL, OPENUI_SYSTEM_PROMPT } from "@/new-workspace-launch/openui";
 import { resolveForcedAgentModeId, resolveKnownAgentModeId } from "@/agent-controls/policy";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -166,6 +168,18 @@ function resolveDraftRoute(input: {
   if (!input.routerTarget) return { provider: input.provider, model: input.model };
   return { provider: input.routerTarget.provider, model: input.routerTarget.model ?? undefined };
 }
+function mergeOpenUIChatLabels(
+  labels: Record<string, string> | undefined,
+  openui: boolean,
+): Record<string, string> {
+  const base = labels ?? {};
+  return openui ? { ...base, [OPENUI_CHAT_LABEL]: "1" } : base;
+}
+
+function openuiChatConfigPatch(openui: boolean): Partial<AgentSessionConfig> {
+  return openui ? { systemPrompt: OPENUI_SYSTEM_PROMPT } : {};
+}
+
 function buildDraftCreateOptions(input: {
   draftId: string;
   config: ReturnType<typeof buildWorkspaceDraftAgentConfig>;
@@ -241,6 +255,7 @@ async function submitDraftCreateRequest(input: {
   workspaceId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
   workflowModeSource: WorkflowModeSource;
+  openui?: boolean;
   composerState: {
     selectedProvider: string | null;
     selectedWorkflowMode: string;
@@ -265,6 +280,7 @@ async function submitDraftCreateRequest(input: {
     workspaceId,
     autoSubmitConfig,
     workflowModeSource,
+    openui = false,
     composerState,
   } = input;
 
@@ -307,6 +323,7 @@ async function submitDraftCreateRequest(input: {
     thinkingOptionId:
       autoSubmitConfig?.thinkingOptionId ?? (composerState.effectiveThinkingOptionId || undefined),
     featureValues: autoSubmitConfig?.featureValues ?? composerState.featureValues,
+    ...openuiChatConfigPatch(openui),
   });
 
   const imagesData = await encodeImages(images);
@@ -319,9 +336,12 @@ async function submitDraftCreateRequest(input: {
     clientMessageId: attempt.clientMessageId,
     images: imagesData,
     attachments,
-    labels: draftMultitaskTaskTargetLabels(
-      input.draftId,
-      workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
+    labels: mergeOpenUIChatLabels(
+      draftMultitaskTaskTargetLabels(
+        input.draftId,
+        workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
+      ),
+      openui,
     ),
   });
   const creation = useWorkspaceDraftSubmissionStore.getState().creationByDraftId[input.draftId];
@@ -344,6 +364,7 @@ function buildDraftAgentSnapshot(input: {
   workspaceDirectory: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
   workflowModeSource: WorkflowModeSource;
+  openui?: boolean;
   composerState: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -407,7 +428,7 @@ function buildDraftAgentSnapshot(input: {
     features: composerState.agentControls.features,
     thinkingOptionId,
     parentAgentId: null,
-    labels: {},
+    labels: mergeOpenUIChatLabels(undefined, input.openui === true),
   };
 }
 
@@ -439,6 +460,7 @@ interface WorkspaceDraftAgentTabProps {
   tabId: string;
   draftId: string;
   initialSetup?: WorkspaceDraftTabSetup;
+  openui?: boolean;
   isPaneFocused: boolean;
   onCreated: (snapshot: AgentSnapshotPayload) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
@@ -461,6 +483,7 @@ export function WorkspaceDraftAgentTab({
   tabId,
   draftId,
   initialSetup = undefined,
+  openui = false,
   isPaneFocused,
   onCreated,
   onOpenWorkspaceFile,
@@ -627,6 +650,7 @@ export function WorkspaceDraftAgentTab({
         workspaceDirectory: draftWorkingDirectory,
         autoSubmitConfig,
         workflowModeSource,
+        openui,
         composerState,
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
@@ -647,6 +671,7 @@ export function WorkspaceDraftAgentTab({
         workspaceId: workspaceFields?.id ?? null,
         autoSubmitConfig,
         workflowModeSource,
+        openui,
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),

@@ -1603,7 +1603,50 @@ describe("stream reducer canonical tool calls", () => {
     );
   });
 
-  it("keeps live submitted assistant merge behavior", () => {
+  it("appends live text after a prompt that was submitted into the streaming head", () => {
+    const state: StreamItem[] = [
+      {
+        kind: "assistant_message",
+        id: "a1",
+        messageId: "msg-1",
+        text: "Saved that preference. ",
+        timestamp: new Date("2025-01-01T11:22:00Z"),
+      },
+      {
+        kind: "user_message",
+        id: "u1",
+        clientMessageId: "client-1",
+        text: "Also check the alternate panel",
+        timestamp: new Date("2025-01-01T11:22:01Z"),
+      },
+    ];
+
+    const next = applyStreamEvent({
+      tail: [],
+      head: state,
+      event: {
+        type: "timeline",
+        provider: "claude",
+        item: {
+          type: "assistant_message",
+          text: "Right. And it probably isn't.",
+          messageId: "msg-1",
+        },
+      },
+      timestamp: new Date("2025-01-01T11:22:02Z"),
+    });
+
+    assert.deepStrictEqual(
+      next.head.map((item) => item.kind),
+      ["assistant_message", "user_message", "assistant_message"],
+    );
+    assert.strictEqual(
+      next.head[2]?.kind === "assistant_message" ? next.head[2].text : null,
+      "Right. And it probably isn't.",
+    );
+  });
+
+  it("starts live assistant text after a submitted prompt instead of above it", () => {
     const state: StreamItem[] = [
       {
         kind: "assistant_message",
@@ -1634,11 +1677,15 @@ describe("stream reducer canonical tool calls", () => {
 
     assert.deepStrictEqual(
       next.map((item) => item.kind),
-      ["assistant_message", "user_message"],
+      ["assistant_message", "user_message", "assistant_message"],
     );
     assert.strictEqual(
       next[0]?.kind === "assistant_message" ? next[0].text : null,
-      "Saved that preference. Right. And it probably isn't.",
+      "Saved that preference. ",
+    );
+    assert.strictEqual(
+      next[2]?.kind === "assistant_message" ? next[2].text : null,
+      "Right. And it probably isn't.",
     );
   });
 });

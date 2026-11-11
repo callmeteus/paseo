@@ -1002,7 +1002,6 @@ function appendAssistantMessage(
   state: StreamItem[],
   text: string,
   timestamp: Date,
-  source: StreamUpdateSource,
   messageId?: string,
   reservedItemIds?: ReadonlySet<string>,
   timelineCursor?: TimelinePosition,
@@ -1027,24 +1026,9 @@ function appendAssistantMessage(
     return [...state.slice(0, -1), updated];
   }
 
-  // A submitted user row can follow the streaming assistant during interrupt.
-  // In that case, look one row further back for the assistant to extend.
-  const secondLast = state[state.length - 2];
-  if (
-    source === "live" &&
-    last?.kind === "user_message" &&
-    secondLast?.kind === "assistant_message" &&
-    (messageId === undefined || secondLast.messageId === messageId)
-  ) {
-    const updated: AssistantMessageItem = {
-      ...secondLast,
-      text: `${secondLast.text}${chunk}`,
-      timestamp,
-      ...(timelineCursor ? { timelineCursor } : {}),
-    };
-    return [...state.slice(0, -2), updated, last];
-  }
-
+  // Live text that arrives after a user row belongs below the prompt, where the canonical
+  // projection also puts it. Merging it into the assistant row above the prompt made the
+  // user's own message read as the last thing in the chat.
   if (!hasContent) {
     return state;
   }
@@ -1662,7 +1646,6 @@ function reduceTimelineEvent(
           state,
           item.text,
           timestamp,
-          source,
           item.messageId,
           reservedItemIds,
           timelineCursor,

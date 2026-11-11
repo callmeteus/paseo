@@ -30,6 +30,7 @@ import {
   PARENT_AGENT_ID_LABEL,
 } from "@getpaseo/protocol/agent-labels";
 import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
+import { OPENUI_CHAT_LABEL, OPENUI_SYSTEM_PROMPT } from "@getpaseo/protocol/openui";
 import type { Logger } from "pino";
 import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
@@ -1193,6 +1194,11 @@ export class AgentManager {
   private acceptingAgentRegistrations = true;
   /** One notice for the next user message after a workflow change. */
   private readonly pendingWorkflowHandoff = new Map<string, string>();
+  /**
+   * Chat/agent mode flipped while a turn was running. The provider session still holds the
+   * previous system prompt, so the reload waits until the next prompt is dispatched.
+   */
+  private readonly pendingChatModeReload = new Map<string, "chat" | "agent">();
   /**
    * Installed skill names per live provider session. Keyed by session object so a
    * reload naturally misses instead of serving names from a retired runtime.
@@ -2807,6 +2813,56 @@ export class AgentManager {
       updatedAt: new Date().toISOString(),
     });
     return normalized;
+  }
+
+  async setAgentChatMode(
+    agentId: string,
+    mode: "chat" | "agent",
+  ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
+    const live = this.agents.get(agentId);
+    if (!live) {
+      throw new Error(`Agent ${agentId} is not loaded`);
+    }
+    const chat = mode === "chat";
+    if ((live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat) {
+      return { mode, applied: "now" };
+    }
+    const labels = { ...live.labels };
+    if (chat) {
+      labels[OPENUI_CHAT_LABEL] = "1";
+    } else {
+      delete labels[OPENUI_CHAT_LABEL];
+    }
+    live.config.systemPrompt = chat ? OPENUI_SYSTEM_PROMPT : undefined;
+    await this.updateAgentMetadata(agentId, { labels });
+    const updated = this.agents.get(agentId);
+    if (updated) {
+      this.refreshSessionPersistence(updated);
+      this.touchUpdatedAt(updated);
+      this.emitState(updated);
+    }
+    if (this.hasInFlightRun(agentId)) {
+      this.pendingChatModeReload.set(agentId, mode);
+      return { mode, applied: "next-message" };
+    }
+    await this.reloadAgentSession(agentId, { systemPrompt: live.config.systemPrompt });
+    return { mode, applied: "now" };
+  }
+
+  /**
+   * Applies a chat/agent switch that ran during a turn. Called before every prompt so the next
+   * message is the first one answered with the new system prompt.
+   */
+  async applyPendingChatMode(agentId: string): Promise<void> {
+    if (!this.pendingChatModeReload.has(agentId)) {
+      return;
+    }
+    const live = this.agents.get(agentId);
+    if (!live || this.hasInFlightRun(agentId)) {
+      return;
+    }
+    this.pendingChatModeReload.delete(agentId);
+    await this.reloadAgentSession(agentId, { systemPrompt: live.config.systemPrompt });
   }
 
   private async applyLiveWorkflowMode(

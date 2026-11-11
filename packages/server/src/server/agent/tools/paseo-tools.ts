@@ -3671,6 +3671,36 @@ function createToolCatalog(
   );
 
   registerTool(
+    "set_chat_mode",
+    {
+      title: "Switch chat mode",
+      description:
+        'Switch this conversation between "chat" (OpenUI: the assistant answers in openui-lang and the UI hides code-agent controls) and "agent" (a code agent). The transcript stays; the new mode applies from the next message.',
+      inputSchema: {
+        mode: z
+          .enum(["chat", "agent"])
+          .describe('"chat" for an OpenUI chat, "agent" for a code agent.'),
+        agentId: z.string().optional().describe("Agent to switch. Defaults to the calling agent."),
+      },
+      outputSchema: {
+        mode: z.string(),
+        applied: z.string(),
+      },
+    },
+    async ({ mode, agentId }) => {
+      const targetAgentId = agentId ?? callerAgentId;
+      if (!targetAgentId) {
+        throw new PaseoToolInputError("agentId is required outside an agent-scoped tool session");
+      }
+      const result = await agentManager.setAgentChatMode(targetAgentId, mode);
+      return {
+        content: [],
+        structuredContent: ensureValidJson(result),
+      };
+    },
+  );
+
+  registerTool(
     "list_pending_permissions",
     {
       title: "List pending permissions",

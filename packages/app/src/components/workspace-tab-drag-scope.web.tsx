@@ -34,7 +34,7 @@ import {
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceTab } from "@/workspace-tabs/model";
 import { panelTargetSupportsHost } from "@/plugins/workspace-panels/locations";
-import { acceptsWorkspaceTabDrop } from "./workspace-tab-drag-policy";
+import { acceptsWorkspaceTabDrop, resolveWorkspaceTabDrop } from "./workspace-tab-drag-policy";
 import { WorkspaceTabDragContext } from "./workspace-tab-drag-context";
 import {
   findSidebarWorkspaceDropTargetAtPoint,
@@ -227,6 +227,31 @@ export function WorkspaceTabDragScope({
     () => new Map(collectAllPanes((layout ?? EMPTY_LAYOUT).root).map((pane) => [pane.id, pane])),
     [layout],
   );
+  const resolveSidebarDropHit = useCallback(
+    (event: Pick<DragMoveEvent, "active" | "activatorEvent" | "delta">) => {
+      const activeData = asWorkspaceTabDragData(event.active.data.current);
+      const tab = activeData ? uiTabs.find((item) => item.tabId === activeData.tabId) : null;
+      if (!activeData || !tab || tab.target.kind !== "agent") {
+        return null;
+      }
+      const point = resolveDragPointerPosition(event);
+      const hit = point ? findSidebarWorkspaceDropTargetAtPoint(point.x, point.y) : null;
+      if (
+        !hit ||
+        hit.serverId !== normalizedServerId ||
+        hit.workspaceId === normalizedWorkspaceId
+      ) {
+        return null;
+      }
+      return {
+        workspaceId: hit.workspaceId,
+        workspaceKey: hit.workspaceKey,
+        agentId: tab.target.agentId,
+      };
+    },
+    [normalizedServerId, normalizedWorkspaceId, uiTabs],
+  );
+
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const data = asWorkspaceTabDragData(event.active.data.current);
     if (!data) {
@@ -347,43 +372,36 @@ export function WorkspaceTabDragScope({
     [onMoveTabToPane, onReorderTabsInPane, panesById, tabDropPreview, uiTabs],
   );
 
-  const updateSidebarDropHighlight = useCallback(
-    (event: Pick<DragMoveEvent, "active" | "activatorEvent" | "delta">) => {
-      const activeData = asWorkspaceTabDragData(event.active.data.current);
-      const tab = activeData ? uiTabs.find((item) => item.tabId === activeData.tabId) : null;
-      if (!activeData || !tab || tab.target.kind !== "agent") {
-        setHoveredSidebarWorkspaceDropTarget(null);
-        return;
-      }
-      const point = resolveDragPointerPosition(event);
-      const hit = point ? findSidebarWorkspaceDropTargetAtPoint(point.x, point.y) : null;
-      if (
-        !hit ||
-        hit.serverId !== normalizedServerId ||
-        hit.workspaceId === normalizedWorkspaceId
-      ) {
-        setHoveredSidebarWorkspaceDropTarget(null);
-        return;
-      }
-      setHoveredSidebarWorkspaceDropTarget(hit.workspaceKey);
-    },
-    [normalizedServerId, normalizedWorkspaceId, uiTabs],
-  );
+  const updateSidebarDropHighlight = useCallback((hit: { workspaceKey: string } | null) => {
+    setHoveredSidebarWorkspaceDropTarget(hit ? hit.workspaceKey : null);
+  }, []);
 
   const handleDragMove = useCallback(
     (event: DragMoveEvent) => {
+      const sidebarDrop = resolveSidebarDropHit(event);
+      updateSidebarDropHighlight(sidebarDrop);
+      if (sidebarDrop) {
+        setDropPreview(null);
+        setTabDropPreview(null);
+        return;
+      }
       updateDropPreview(event);
-      updateSidebarDropHighlight(event);
     },
-    [updateDropPreview, updateSidebarDropHighlight],
+    [resolveSidebarDropHit, updateDropPreview, updateSidebarDropHighlight],
   );
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
+      const sidebarDrop = resolveSidebarDropHit(event);
+      updateSidebarDropHighlight(sidebarDrop);
+      if (sidebarDrop) {
+        setDropPreview(null);
+        setTabDropPreview(null);
+        return;
+      }
       updateDropPreview(event);
-      updateSidebarDropHighlight(event);
     },
-    [updateDropPreview, updateSidebarDropHighlight],
+    [resolveSidebarDropHit, updateDropPreview, updateSidebarDropHighlight],
   );
 
   const applyPaneDropEnd = useCallback(
@@ -411,53 +429,37 @@ export function WorkspaceTabDragScope({
     (event: DragEndEvent) => {
       const activeData = asWorkspaceTabDragData(event.active.data.current);
       const overData = asDragOverData(event.over?.data.current);
-      const tab = activeData
-        ? (uiTabs.find((item) => item.tabId === activeData.tabId) ?? null)
-        : null;
+      const sidebarDrop = resolveSidebarDropHit(event);
+      const resolution = resolveWorkspaceTabDrop({
+        sidebarTarget: sidebarDrop,
+        sourcePaneId: activeData?.paneId ?? null,
+        over: overData ?? null,
+        allowCrossPane,
+      });
 
       setActiveDragTabId(null);
 
-      if (activeData && tab && tab.target.kind === "agent" && !overData) {
-        const point = resolveDragPointerPosition(event);
-        const hit = point ? findSidebarWorkspaceDropTargetAtPoint(point.x, point.y) : null;
-        if (
-          hit &&
-          hit.serverId === normalizedServerId &&
-          hit.workspaceId !== normalizedWorkspaceId
-        ) {
-          openTabDropToWorkspace({
-            agentId: tab.target.agentId,
-            serverId: normalizedServerId,
-            targetWorkspaceId: hit.workspaceId,
-          });
-        }
-      }
-
-      if (
+      if (resolution?.kind === "workspace") {
+        openTabDropToWorkspace({
+          agentId: resolution.agentId,
+          serverId: normalizedServerId,
+          targetWorkspaceId: resolution.workspaceId,
+        });
+      } else if (resolution?.kind === "tab" && activeData && overData?.kind === "workspace-tab") {
+        applyTabDropEnd({ activeData, overData });
+      } else if (
+        resolution?.kind === "pane" &&
         activeData &&
-        overData &&
-        event.over &&
-        acceptsWorkspaceTabDrop(allowCrossPane, activeData.paneId, overData)
+        overData?.kind === "split-pane-drop"
       ) {
-        if (overData?.kind === "workspace-tab") {
-          applyTabDropEnd({ activeData, overData });
-        } else if (overData?.kind === "split-pane-drop") {
-          applyPaneDropEnd({ activeData, overData });
-        }
+        applyPaneDropEnd({ activeData, overData });
       }
 
       setHoveredSidebarWorkspaceDropTarget(null);
       setDropPreview(null);
       setTabDropPreview(null);
     },
-    [
-      allowCrossPane,
-      applyTabDropEnd,
-      applyPaneDropEnd,
-      normalizedServerId,
-      normalizedWorkspaceId,
-      uiTabs,
-    ],
+    [allowCrossPane, applyTabDropEnd, applyPaneDropEnd, normalizedServerId, resolveSidebarDropHit],
   );
 
   const context = useMemo(

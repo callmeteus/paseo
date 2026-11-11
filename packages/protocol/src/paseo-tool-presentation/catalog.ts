@@ -179,6 +179,11 @@ export const PASEO_TOOL_CATALOG = {
     context: field("modeId"),
     detail: { inputOrder: ["agentId", "modeId"] },
   },
+  set_chat_mode: {
+    label: "Switch chat mode",
+    context: field("mode"),
+    detail: { inputOrder: ["mode", "agentId"] },
+  },
   cancel_agent: {
     label: "Cancel agent",
     context: targetAgent(),
