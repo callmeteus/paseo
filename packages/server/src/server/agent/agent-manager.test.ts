@@ -659,6 +659,39 @@ class UnsupportedSteeringSession extends TestAgentSession {
   }
 }
 
+test("a prompt reopens a provider session that already closed", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-reopen-closed-"));
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new (class extends TestAgentSession {
+        override async startTurn(): Promise<{ turnId: string }> {
+          throw new Error(`${this.provider} session is closed`);
+        }
+      })(config);
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  let agentId: string | null = null;
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    const events: AgentStreamEvent[] = [];
+    for await (const event of manager.streamAgent(agent.id, "continue the work")) {
+      events.push(event);
+    }
+
+    expect(client.resumeOverrides).toHaveLength(1);
+    expect(events.some((event) => event.type === "turn_failed")).toBe(false);
+    expect(events.some((event) => event.type === "turn_completed")).toBe(true);
+    expect(manager.getTimeline(agent.id).some((item) => item.type === "error")).toBe(false);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 async function startAndSteerThroughManager(
   session: AgentSession,
   behavior: "steer" | "interrupt" = "steer",
