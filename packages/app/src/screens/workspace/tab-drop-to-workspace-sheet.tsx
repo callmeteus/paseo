@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ArrowRight, Copy, FolderInput } from "lucide-react-native";
+import { Archive, ArrowRight, Copy, FolderInput, Trash2, X } from "lucide-react-native";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { ScrollView } from "@/components/ui/scroll-view";
@@ -21,15 +22,19 @@ import {
   useTabDropToWorkspaceRequest,
 } from "@/screens/workspace/tab-drop-to-workspace-store";
 import { workspaceIsEmptyAfterMove } from "@/screens/workspace/workspace-empty-after-move";
+import { archiveWorkspaceOptimistically } from "@/workspace/workspace-archive";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const ThemedArrowRight = withUnistyles(ArrowRight);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedFolderInput = withUnistyles(FolderInput);
+const ThemedArchive = withUnistyles(Archive);
+const ThemedTrash = withUnistyles(Trash2);
+const ThemedX = withUnistyles(X);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-type DropAction = "move" | "copy";
+type DropAction = "move" | "copy" | "archive" | "delete";
 
 function ActionRow({
   variant,
@@ -40,7 +45,7 @@ function ActionRow({
   testID,
   onPress,
 }: {
-  variant: "move" | "copy";
+  variant: "move" | "copy" | "archive" | "delete" | "keep";
   title: string;
   description: string;
   pending: boolean;
@@ -49,12 +54,18 @@ function ActionRow({
   onPress: () => void;
 }) {
   const rowStyle = useMemo(() => [styles.row, disabled && styles.rowDisabled], [disabled]);
-  const icon =
-    variant === "move" ? (
-      <ThemedFolderInput size={ICON_SIZE.sm} uniProps={mutedMapping} />
-    ) : (
-      <ThemedCopy size={ICON_SIZE.sm} uniProps={mutedMapping} />
-    );
+  let icon;
+  if (variant === "move") {
+    icon = <ThemedFolderInput size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+  } else if (variant === "copy") {
+    icon = <ThemedCopy size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+  } else if (variant === "archive") {
+    icon = <ThemedArchive size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+  } else if (variant === "delete") {
+    icon = <ThemedTrash size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+  } else {
+    icon = <ThemedX size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+  }
   return (
     <PressHighlight
       disabled={disabled}
@@ -104,11 +115,179 @@ function resolveEmptySourceWorkspace(input: {
   };
 }
 
+async function deleteEmptyWorkspace(input: {
+  client: {
+    deleteWorkspace: (workspaceId: string, options?: { deleteFiles?: boolean }) => Promise<unknown>;
+  };
+  workspaceId: string;
+  workspaceKind: string | undefined;
+}): Promise<void> {
+  await input.client.deleteWorkspace(input.workspaceId, {
+    deleteFiles: input.workspaceKind === "worktree",
+  });
+}
+
+function applyMovedSource(input: {
+  sourceIsEmpty: boolean;
+  sourceWorkspaceId: string | undefined;
+  sourceName: string;
+  onEmpty: (source: { workspaceId: string; name: string }) => void;
+  onClose: () => void;
+}): void {
+  if (input.sourceIsEmpty && input.sourceWorkspaceId) {
+    input.onEmpty({ workspaceId: input.sourceWorkspaceId, name: input.sourceName });
+    return;
+  }
+  input.onClose();
+}
+
+interface EmptySourceClient {
+  archiveWorkspace: (workspaceId: string) => Promise<{ error: string | null }>;
+  deleteWorkspace: (workspaceId: string, options?: { deleteFiles?: boolean }) => Promise<unknown>;
+}
+
+async function runEmptySourceAction(input: {
+  action: "archive" | "delete";
+  client: EmptySourceClient;
+  serverId: string;
+  workspaceId: string;
+  workspaceKind: string | undefined;
+}): Promise<void> {
+  if (input.action === "archive") {
+    await archiveWorkspaceOptimistically({
+      client: input.client,
+      workspace: { serverId: input.serverId, workspaceId: input.workspaceId },
+    });
+    return;
+  }
+  await deleteEmptyWorkspace({
+    client: input.client,
+    workspaceId: input.workspaceId,
+    workspaceKind: input.workspaceKind,
+  });
+}
+
+function EmptySourcePrompt({
+  sourceName,
+  pendingAction,
+  onArchive,
+  onDelete,
+  onKeep,
+  t,
+}: {
+  sourceName: string;
+  pendingAction: DropAction | null;
+  onArchive: () => void;
+  onDelete: () => void;
+  onKeep: () => void;
+  t: TFunction;
+}) {
+  return (
+    <>
+      <Text style={styles.message}>
+        {t("workspace.tabs.dropToWorkspace.emptySourceMessage", { source: sourceName })}
+      </Text>
+      <ActionRow
+        variant="archive"
+        title={t("workspace.tabs.dropToWorkspace.archiveSource")}
+        description={t("workspace.tabs.dropToWorkspace.archiveSourceHint")}
+        pending={pendingAction === "archive"}
+        disabled={pendingAction !== null}
+        testID="tab-drop-to-workspace-archive-source"
+        onPress={onArchive}
+      />
+      <ActionRow
+        variant="delete"
+        title={t("workspace.tabs.dropToWorkspace.deleteSource")}
+        description={t("workspace.tabs.dropToWorkspace.deleteSourceHint")}
+        pending={pendingAction === "delete"}
+        disabled={pendingAction !== null}
+        testID="tab-drop-to-workspace-delete-source"
+        onPress={onDelete}
+      />
+      <ActionRow
+        variant="keep"
+        title={t("workspace.tabs.dropToWorkspace.keepSource")}
+        description={t("workspace.tabs.dropToWorkspace.keepSourceHint")}
+        pending={false}
+        disabled={pendingAction !== null}
+        testID="tab-drop-to-workspace-keep-source"
+        onPress={onKeep}
+      />
+    </>
+  );
+}
+
+function SheetContent({
+  emptySource,
+  agentName,
+  workspaceName,
+  pendingAction,
+  onArchive,
+  onDelete,
+  onKeep,
+  onMove,
+  onCopy,
+  t,
+}: {
+  emptySource: { workspaceId: string; name: string } | null;
+  agentName: string;
+  workspaceName: string;
+  pendingAction: DropAction | null;
+  onArchive: () => void;
+  onDelete: () => void;
+  onKeep: () => void;
+  onMove: () => void;
+  onCopy: () => void;
+  t: TFunction;
+}) {
+  if (emptySource) {
+    return (
+      <EmptySourcePrompt
+        sourceName={emptySource.name}
+        pendingAction={pendingAction}
+        onArchive={onArchive}
+        onDelete={onDelete}
+        onKeep={onKeep}
+        t={t}
+      />
+    );
+  }
+  return (
+    <>
+      <Text style={styles.message}>
+        {t("workspace.tabs.dropToWorkspace.message", { agent: agentName })}
+      </Text>
+      <ActionRow
+        variant="move"
+        title={t("workspace.tabs.dropToWorkspace.move", { workspace: workspaceName })}
+        description={t("workspace.tabs.dropToWorkspace.moveHint")}
+        pending={pendingAction === "move"}
+        disabled={pendingAction !== null}
+        testID="tab-drop-to-workspace-move"
+        onPress={onMove}
+      />
+      <ActionRow
+        variant="copy"
+        title={t("workspace.tabs.dropToWorkspace.copy", { workspace: workspaceName })}
+        description={t("workspace.tabs.dropToWorkspace.copyHint")}
+        pending={pendingAction === "copy"}
+        disabled={pendingAction !== null}
+        testID="tab-drop-to-workspace-copy"
+        onPress={onCopy}
+      />
+    </>
+  );
+}
+
 export function TabDropToWorkspaceSheet() {
   const { t } = useTranslation();
   const toast = useToast();
   const request = useTabDropToWorkspaceRequest();
   const [pendingAction, setPendingAction] = useState<DropAction | null>(null);
+  const [emptySource, setEmptySource] = useState<{ workspaceId: string; name: string } | null>(
+    null,
+  );
 
   const session = useSessionStore((state) => (request ? state.sessions[request.serverId] : null));
   const agent = request ? (session?.agents.get(request.agentId) ?? null) : null;
@@ -119,7 +298,14 @@ export function TabDropToWorkspaceSheet() {
   const visible = Boolean(request && agent && targetWorkspace && client);
   const workspaceName = targetWorkspace?.title?.trim() || targetWorkspace?.name || "";
   const agentName = agent?.title?.trim() || t("workspace.tabs.fallback.agent");
-  const header = useMemo(() => ({ title: t("workspace.tabs.dropToWorkspace.title") }), [t]);
+  const header = useMemo(
+    () => ({
+      title: emptySource
+        ? t("workspace.tabs.dropToWorkspace.emptySourceTitle")
+        : t("workspace.tabs.dropToWorkspace.title"),
+    }),
+    [emptySource, t],
+  );
 
   const buildCloneConfig = useCallback(() => {
     if (!agent) return null;
@@ -160,16 +346,16 @@ export function TabDropToWorkspaceSheet() {
         sourceWorkspaceId,
         movedAgentId: agent.id,
       });
-      toast.show(
-        sourceIsEmpty
-          ? t("workspace.tabs.dropToWorkspace.movedLeavingEmpty", {
-              workspace: workspaceName,
-              source: sourceName,
-            })
-          : t("workspace.tabs.dropToWorkspace.moved", { workspace: workspaceName }),
-        { variant: sourceIsEmpty ? "warning" : "info" },
-      );
-      closeTabDropToWorkspace();
+      toast.show(t("workspace.tabs.dropToWorkspace.moved", { workspace: workspaceName }), {
+        variant: "info",
+      });
+      applyMovedSource({
+        sourceIsEmpty,
+        sourceWorkspaceId,
+        sourceName,
+        onEmpty: setEmptySource,
+        onClose: closeTabDropToWorkspace,
+      });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("workspace.tabs.dropToWorkspace.moveFailed"),
@@ -178,6 +364,49 @@ export function TabDropToWorkspaceSheet() {
       setPendingAction(null);
     }
   }, [agent, client, pendingAction, request, session, t, toast, workspaceName]);
+
+  const handleEmptySourceAction = useCallback(
+    async (action: "archive" | "delete") => {
+      if (!client || !request || !emptySource || pendingAction) return;
+      setPendingAction(action);
+      try {
+        const workspaceKind = session?.workspaces.get(emptySource.workspaceId)?.workspaceKind;
+        await runEmptySourceAction({
+          action,
+          client,
+          serverId: request.serverId,
+          workspaceId: emptySource.workspaceId,
+          workspaceKind,
+        });
+        closeTabDropToWorkspace();
+      } catch (error) {
+        let message: string;
+        if (error instanceof Error) {
+          message = error.message;
+        } else if (action === "archive") {
+          message = t("workspace.tabs.dropToWorkspace.archiveSourceFailed");
+        } else {
+          message = t("workspace.tabs.dropToWorkspace.deleteSourceFailed");
+        }
+        toast.error(message);
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [client, emptySource, pendingAction, request, session, t, toast],
+  );
+
+  const handleKeepSource = useCallback(() => {
+    closeTabDropToWorkspace();
+  }, []);
+
+  const handleArchiveSource = useCallback(() => {
+    void handleEmptySourceAction("archive");
+  }, [handleEmptySourceAction]);
+
+  const handleDeleteSource = useCallback(() => {
+    void handleEmptySourceAction("delete");
+  }, [handleEmptySourceAction]);
 
   const handleCopy = useCallback(async () => {
     const config = buildCloneConfig();
@@ -225,26 +454,17 @@ export function TabDropToWorkspaceSheet() {
       testID="tab-drop-to-workspace-sheet"
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text style={styles.message}>
-          {t("workspace.tabs.dropToWorkspace.message", { agent: agentName })}
-        </Text>
-        <ActionRow
-          variant="move"
-          title={t("workspace.tabs.dropToWorkspace.move", { workspace: workspaceName })}
-          description={t("workspace.tabs.dropToWorkspace.moveHint")}
-          pending={pendingAction === "move"}
-          disabled={pendingAction !== null}
-          testID="tab-drop-to-workspace-move"
-          onPress={handleMove}
-        />
-        <ActionRow
-          variant="copy"
-          title={t("workspace.tabs.dropToWorkspace.copy", { workspace: workspaceName })}
-          description={t("workspace.tabs.dropToWorkspace.copyHint")}
-          pending={pendingAction === "copy"}
-          disabled={pendingAction !== null}
-          testID="tab-drop-to-workspace-copy"
-          onPress={handleCopy}
+        <SheetContent
+          emptySource={emptySource}
+          agentName={agentName}
+          workspaceName={workspaceName}
+          pendingAction={pendingAction}
+          onArchive={handleArchiveSource}
+          onDelete={handleDeleteSource}
+          onKeep={handleKeepSource}
+          onMove={handleMove}
+          onCopy={handleCopy}
+          t={t}
         />
       </ScrollView>
     </AdaptiveModalSheet>
