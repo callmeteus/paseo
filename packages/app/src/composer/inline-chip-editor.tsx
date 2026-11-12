@@ -26,6 +26,7 @@ import {
   type InlineChip,
   type TextSelection,
 } from "@getpaseo/protocol/inline-chip";
+import { continueComposerList } from "@/composer/list-format";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 import { applyInlineChipDomStyle, getUnistylesAppTheme } from "./inline-chip-chrome";
 import { InlineChipDisclosure } from "./inline-context-chip";
@@ -245,11 +246,13 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           !native.altKey
         ) {
           event.preventDefault();
-          const next = insertTextAtSelection({
-            text: textRef.current,
-            selection,
-            insert: "\n",
-          });
+          const next =
+            continueComposerList(textRef.current, selection) ??
+            insertTextAtSelection({
+              text: textRef.current,
+              selection,
+              insert: "\n",
+            });
           paint(next.text, next.selection);
           publish(next.text, next.selection);
           return;

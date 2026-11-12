@@ -86,7 +86,7 @@ import {
 import { InlineChipEditor } from "@/composer/inline-chip-editor";
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
-import { hasComposerListMarker } from "@/composer/list-format";
+import { continueComposerList, hasComposerListMarker } from "@/composer/list-format";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
@@ -464,6 +464,7 @@ interface DesktopKeyPressContext {
   disabled: boolean;
   handleAlternateSendAction: () => void;
   handleDefaultSendAction: () => void;
+  replaceText: (text: string, selection: { start: number; end: number }) => void;
 }
 
 function handleDesktopKeyPressImpl(
@@ -485,8 +486,11 @@ function handleDesktopKeyPressImpl(
   }
 
   if (event.nativeEvent.key !== "Enter") return;
+  if (shiftKey) {
+    continueListOnShiftEnter(event, ctx, { metaKey, ctrlKey, altKey });
+    return;
+  }
   if (!ctx.submitOnEnter) return;
-  if (shiftKey) return;
 
   if (ctx.isSubmitDisabled || ctx.isSubmitLoading || ctx.disabled) return;
   event.preventDefault();
@@ -495,6 +499,19 @@ function handleDesktopKeyPressImpl(
     return;
   }
   ctx.handleDefaultSendAction();
+}
+
+function continueListOnShiftEnter(
+  event: WebTextInputKeyPressEvent,
+  ctx: DesktopKeyPressContext,
+  modifiers: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean },
+): void {
+  const extraModifier = Boolean(modifiers.metaKey || modifiers.ctrlKey || modifiers.altKey);
+  if (ctx.disabled || extraModifier) return;
+  const next = continueComposerList(ctx.input.text, ctx.input.selection);
+  if (!next) return;
+  event.preventDefault();
+  ctx.replaceText(next.text, next.selection);
 }
 
 function getTextInputNativeElement(current: ComposerTextInputHandle | null): HTMLElement | null {
@@ -2128,6 +2145,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           disabled,
           handleAlternateSendAction,
           handleDefaultSendAction,
+          replaceText,
         });
       },
       [
@@ -2139,6 +2157,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         disabled,
         handleAlternateSendAction,
         handleDefaultSendAction,
+        replaceText,
       ],
     );
 
