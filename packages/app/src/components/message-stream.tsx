@@ -8,6 +8,7 @@ import {
   AttachmentThumbnail,
 } from "@/components/attachment-pill";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
+import { isOpenUILang } from "@/components/markdown/openui-detect";
 import { RewindMenu, type RewindMenuInput } from "@/components/rewind/rewind-menu";
 import { useRewindAgentMutation } from "@/components/rewind/use-rewind-agent-mutation";
 import { TaskListRow } from "@/components/task-list-row";
@@ -746,6 +747,11 @@ export const AssistantMessage = memo(function AssistantMessage({
   );
   const revealedText = useRevealedText(renderedMessage.text, phase);
   const revealedMessage = renderFullContent ? renderedMessage.text : revealedText;
+  // OpenUI Lang is parsed as a whole program. Revealing it character by character
+  // makes the renderer alternate between invalid and valid parses, which flashes
+  // the card's colors, so OpenUI messages skip the typewriter reveal.
+  const isOpenUIMessage = isWeb && isOpenUILang(renderedMessage.text);
+  const messageText = isOpenUIMessage ? renderedMessage.text : revealedMessage;
   const fullMessageByteLength = useMemo(
     () => (renderedMessage.capped && phase === "complete" ? getUtf8ByteLength(message) : null),
     [message, phase, renderedMessage.capped],
@@ -788,8 +794,8 @@ export const AssistantMessage = memo(function AssistantMessage({
       onLayout={measureMessage}
     >
       <MarkdownRenderer
-        text={revealedMessage}
-        streaming={phase !== "complete" || revealedMessage.length < renderedMessage.text.length}
+        text={messageText}
+        streaming={phase !== "complete" || messageText.length < renderedMessage.text.length}
         client={client}
         workspaceRoot={workspaceRoot}
         serverId={serverId}

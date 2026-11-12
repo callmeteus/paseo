@@ -18,13 +18,11 @@ import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
 
 import { MermaidFence, MermaidStreamingContext, splitMermaidFences } from "./fence/mermaid";
+import { isOpenUILang } from "./openui-detect";
 import { OpenUIRenderer } from "./openui-renderer";
 
 const ThemedMarkdown = withUnistyles(EnrichedMarkdownText);
 const MD4C_FLAGS = { latexMath: false, hardSoftBreaks: true, admonitions: true };
-
-/** An OpenUI Lang program always declares `root = SomeComponent(...)`. */
-const OPENUI_ROOT = /(?:^|\n)\s*root\s*=\s*[A-Za-z_$][\w$]*\s*\(/;
 
 // Reading the breakpoint here makes Unistyles restyle the text when the layout crosses it.
 const markdownStyle =
@@ -65,7 +63,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer(props: MarkdownRe
     () => splitStreamingMarkdown(completeLines, true).head.length,
     [completeLines],
   );
-  if (isWeb && OPENUI_ROOT.test(props.text)) {
+  if (isWeb && isOpenUILang(props.text)) {
     return (
       <OpenUIRenderer
         code={props.text}
