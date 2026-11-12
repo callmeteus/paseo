@@ -2512,8 +2512,14 @@ function resolveHiddenAgentIds(
 
   const hiddenAgentIds = new Set(state.hiddenAgentIds ?? []);
   // A tab reopened after the daemon wrote the close marker belongs to the user
-  // again; the marker ages out once the open label is written.
+  // again; the marker ages out once the open label is written. An open label
+  // with no tab in this layout is stale (the close marker has not reached the
+  // daemon yet), so it must not clear the local hidden state or the reconcile
+  // re-adds the tab the user just closed.
   for (const agentId of snapshot.openedAgentIds ?? []) {
+    if (!tabOpenedAtByAgentId.has(agentId)) {
+      continue;
+    }
     hiddenAgentIds.delete(agentId);
   }
   for (const agentId of snapshot.hiddenAgentIds ?? []) {
