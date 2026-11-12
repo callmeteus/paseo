@@ -82,6 +82,30 @@ import {
   ChatWaitResponseSchema,
 } from "./chat/rpc-schemas.js";
 import {
+  McpBridgeCallToolRequestSchema,
+  McpBridgeCallToolResponseSchema,
+  McpBridgeListServersRequestSchema,
+  McpBridgeListServersResponseSchema,
+  McpBridgeListToolsRequestSchema,
+  McpBridgeListToolsResponseSchema,
+} from "./mcp-bridge/rpc-schemas.js";
+export {
+  McpBridgeCallToolRequestSchema,
+  McpBridgeCallToolResponseSchema,
+  McpBridgeListServersRequestSchema,
+  McpBridgeListServersResponseSchema,
+  McpBridgeListToolsRequestSchema,
+  McpBridgeListToolsResponseSchema,
+  type McpBridgeCallToolRequest,
+  type McpBridgeCallToolResponse,
+  type McpBridgeListServersRequest,
+  type McpBridgeListServersResponse,
+  type McpBridgeListToolsRequest,
+  type McpBridgeListToolsResponse,
+  type McpBridgeServer,
+  type McpBridgeTool,
+} from "./mcp-bridge/rpc-schemas.js";
+import {
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -232,6 +256,8 @@ const McpStdioServerConfigSchema = z.object({
   command: z.string(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
+  // COMPAT(mcpStdioCwd): added in v0.13.2, optional so older daemons ignore it.
+  cwd: z.string().optional(),
   alwaysLoad: z.boolean().optional(),
 });
 
@@ -256,6 +282,24 @@ export const McpServerConfigSchema = z.discriminatedUnion("type", [
 ]);
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
+
+export const McpShareSchema = z
+  .object({
+    hosts: z.array(z.string().min(1)),
+    tools: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+export const McpBridgeSchema = z
+  .object({
+    host: z.string().min(1),
+    via: z.string().min(1).optional(),
+    server: z.string().min(1),
+  })
+  .strict();
+
+export type McpShare = z.infer<typeof McpShareSchema>;
+export type McpBridge = z.infer<typeof McpBridgeSchema>;
 
 export const MutableDaemonConfigSchema = z
   .object({
@@ -296,6 +340,8 @@ export const MutableDaemonConfigSchema = z
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
+    mcpShares: z.record(z.string(), McpShareSchema).optional(),
+    mcpBridges: z.record(z.string(), McpBridgeSchema).optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
@@ -323,6 +369,8 @@ export const MutableDaemonConfigPatchSchema = z
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
     mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
+    mcpShares: z.record(z.string(), McpShareSchema).optional(),
+    mcpBridges: z.record(z.string(), McpBridgeSchema).optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     features: SpeechSettingsPatchSchema.optional(),
@@ -2433,6 +2481,25 @@ export const AgentWorkflowModeSetResponseMessageSchema = z.object({
   }),
 });
 
+export const AgentChatModeSetRequestMessageSchema = z.object({
+  type: z.literal("agent.chat_mode.set.request"),
+  agentId: z.string(),
+  mode: z.enum(["chat", "agent"]),
+  requestId: z.string(),
+});
+
+export const AgentChatModeSetResponseMessageSchema = z.object({
+  type: z.literal("agent.chat_mode.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    mode: z.enum(["chat", "agent"]),
+    applied: z.enum(["now", "next-message"]),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
 
 export const AgentRewindRequestMessageSchema = z.object({
@@ -3666,6 +3733,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HostsRouteFrameRequestSchema,
   HostsRouteCloseRequestSchema,
 
+  McpBridgeListServersRequestSchema,
+  McpBridgeListToolsRequestSchema,
+  McpBridgeCallToolRequestSchema,
+
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
   SessionEventsSetSubscriptionRequestSchema,
@@ -3777,6 +3848,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentDetachRequestMessageSchema,
   AgentModelRouterSetRequestMessageSchema,
   AgentWorkflowModeSetRequestMessageSchema,
+  AgentChatModeSetRequestMessageSchema,
   AgentWorkspaceSetRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
@@ -4273,6 +4345,10 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(mcpServers): added in v0.13.1, remove gate after 2027-03-01.
         mcpServers: z.boolean().optional(),
+        // COMPAT(mcpBridge): added in v0.13.2, remove gate after 2027-03-10.
+        mcpBridge: z.boolean().optional(),
+        // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.
+        mcpBridgeMultiHop: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
       })
@@ -7534,6 +7610,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HostsRouteFrameSchema,
   HostsRouteClosedSchema,
 
+  McpBridgeListServersResponseSchema,
+  McpBridgeListToolsResponseSchema,
+  McpBridgeCallToolResponseSchema,
+
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,
   SessionEventsSetSubscriptionResponseSchema,
@@ -7666,6 +7746,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentDetachResponseMessageSchema,
   AgentModelRouterSetResponseMessageSchema,
   AgentWorkflowModeSetResponseMessageSchema,
+  AgentChatModeSetResponseMessageSchema,
   AgentWorkspaceSetResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
@@ -7880,6 +7961,7 @@ export type AgentModelRouterSetResponseMessage = z.infer<
 export type AgentWorkflowModeSetResponseMessage = z.infer<
   typeof AgentWorkflowModeSetResponseMessageSchema
 >;
+export type AgentChatModeSetResponseMessage = z.infer<typeof AgentChatModeSetResponseMessageSchema>;
 export type AgentWorkspaceSetResponseMessage = z.infer<
   typeof AgentWorkspaceSetResponseMessageSchema
 >;
@@ -8061,6 +8143,7 @@ export type AgentModelRouterSetRequestMessage = z.infer<
 export type AgentWorkflowModeSetRequestMessage = z.infer<
   typeof AgentWorkflowModeSetRequestMessageSchema
 >;
+export type AgentChatModeSetRequestMessage = z.infer<typeof AgentChatModeSetRequestMessageSchema>;
 export type AgentWorkspaceSetRequestMessage = z.infer<typeof AgentWorkspaceSetRequestMessageSchema>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
@@ -8271,6 +8354,12 @@ export const WSHelloMessageSchema = z.object({
   type: z.literal("hello"),
   sessionPermissions: z.array(DaemonPermissionSchema).optional(),
   routed: z.boolean().optional(),
+  // COMPAT(hostHopPath): added in v0.13.2, optional for old daemons.
+  hopPath: z.array(z.string().min(1).max(256)).max(8).optional(),
+  // COMPAT(hostOriginServerId): added in v0.13.2, optional for old daemons.
+  originServerId: z.string().min(1).max(256).optional(),
+  // COMPAT(hostMaxHops): added in v0.13.2, optional for old daemons.
+  maxHops: z.number().int().positive().max(8).optional(),
   producer: z
     .object({ serverId: z.string().min(1).max(256), sourceId: z.string().min(1).max(1024) })
     .optional(),

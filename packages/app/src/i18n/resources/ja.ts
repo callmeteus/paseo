@@ -214,6 +214,7 @@ export const ja: TranslationResources = {
     clientCommands: {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",
+      chatMode: "このチャットをチャット (OpenUI) とエージェントモードで切り替えます",
     },
     goal: {
       active: "目標",
@@ -808,6 +809,8 @@ export const ja: TranslationResources = {
         moveToWorkspace: "ワークスペースへ移動",
         promoteToWorkspace: "ワークスペースへ昇格",
         exportChat: "JSONLとして書き出す",
+        switchToChat: "チャットに切り替え",
+        switchToAgent: "エージェントに切り替え",
         exportChatPending: "チャットを書き出しています…",
         exportChatDone: "{{fileName}}を書き出しました",
         exportChatFailed: "チャットを書き出せませんでした",

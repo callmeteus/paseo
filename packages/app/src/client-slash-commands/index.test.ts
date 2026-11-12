@@ -68,7 +68,21 @@ describe("resolveClientSlashCommand", () => {
     ).toEqual([
       ["exit", ["quit", "q"], "immediate"],
       ["clear", ["new"], "immediate"],
+      ["mode", [], "immediate"],
     ]);
+  });
+
+  it("parses the optional /mode argument", () => {
+    expect(resolveClientSlashCommand({ text: "/mode chat", hasAttachments: false })).toMatchObject({
+      name: "mode",
+      kind: "toggle-chat-mode",
+      argument: "chat",
+    });
+    expect(resolveClientSlashCommand({ text: "/mode", hasAttachments: false })).toMatchObject({
+      name: "mode",
+      kind: "toggle-chat-mode",
+      argument: null,
+    });
   });
 
   it("resolves canonical names and aliases after trimming", () => {

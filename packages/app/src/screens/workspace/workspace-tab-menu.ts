@@ -20,6 +20,8 @@ export interface WorkspaceTabMenuLabels {
   forkInNewTab: string;
   forkInNewWorkspace: string;
   exportChat: string;
+  switchToChat: string;
+  switchToAgent: string;
   closeAbove: string;
   closeBelow: string;
   closeLeft: string;
@@ -43,6 +45,8 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   forkInNewTab: i18n.t("message.actions.forkInNewTab"),
   forkInNewWorkspace: i18n.t("message.actions.forkInNewWorkspace"),
   exportChat: i18n.t("workspace.tabs.menu.exportChat"),
+  switchToChat: i18n.t("workspace.tabs.menu.switchToChat"),
+  switchToAgent: i18n.t("workspace.tabs.menu.switchToAgent"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
   closeLeft: i18n.t("workspace.tabs.menu.closeLeft"),
@@ -115,6 +119,8 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCloseTabsBefore: (tabId: string) => Promise<void> | void;
   onCloseTabsAfter: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  agentChatMode?: "chat" | "agent";
+  onSetAgentChatMode?: (agentId: string, mode: "chat" | "agent") => void;
   labels?: WorkspaceTabMenuLabels;
 }
 
@@ -133,6 +139,8 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
   onCloseTabsToRight: (tabId: string) => Promise<void> | void;
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
+  agentChatMode?: "chat" | "agent";
+  onSetAgentChatMode?: (agentId: string, mode: "chat" | "agent") => void;
   labels?: WorkspaceTabMenuLabels;
 }
 
@@ -221,6 +229,8 @@ export function buildWorkspaceTabMenuEntries(
     onCloseTabsBefore,
     onCloseTabsAfter,
     onCloseOtherTabs,
+    agentChatMode,
+    onSetAgentChatMode,
   } = input;
   const labels = input.labels ?? DEFAULT_WORKSPACE_TAB_MENU_LABELS;
   const isFirstTab = index === 0;
@@ -353,6 +363,19 @@ export function buildWorkspaceTabMenuEntries(
           requestAgentChatExport(agentId);
         },
       });
+      if (onSetAgentChatMode) {
+        const nextMode = agentChatMode === "chat" ? "agent" : "chat";
+        entries.push({
+          kind: "item",
+          key: "switch-chat-mode",
+          label: nextMode === "chat" ? labels.switchToChat : labels.switchToAgent,
+          icon: "split",
+          testID: `${menuTestIDBase}-switch-chat-mode`,
+          onSelect: () => {
+            onSetAgentChatMode(agentId, nextMode);
+          },
+        });
+      }
     }
     entries.push({
       kind: "separator",
@@ -457,6 +480,8 @@ export function buildWorkspaceDesktopTabActions(
       onCloseTabsBefore: input.onCloseTabsToLeft,
       onCloseTabsAfter: input.onCloseTabsToRight,
       onCloseOtherTabs: input.onCloseOtherTabs,
+      agentChatMode: input.agentChatMode,
+      onSetAgentChatMode: input.onSetAgentChatMode,
       labels: input.labels,
     }),
     closeButtonTestId: getCloseButtonTestId(input.tab),

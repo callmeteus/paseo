@@ -211,6 +211,7 @@ export const ar: TranslationResources = {
     clientCommands: {
       archiveAgent: "أرشفة الوكيل الحالي",
       freshDraft: "أرشفة هذا الوكيل وابدأ مسودة جديدة",
+      chatMode: "تبديل هذه الدردشة بين وضع الدردشة (OpenUI) والوكيل",
     },
     goal: {
       active: "الهدف",
@@ -796,6 +797,8 @@ export const ar: TranslationResources = {
         moveToWorkspace: "نقل إلى مساحة العمل",
         promoteToWorkspace: "ترقية إلى مساحة عمل",
         exportChat: "تصدير كـ JSONL",
+        switchToChat: "التبديل إلى الدردشة",
+        switchToAgent: "التبديل إلى الوكيل",
         exportChatPending: "جارٍ تصدير المحادثة…",
         exportChatDone: "تم تصدير {{fileName}}",
         exportChatFailed: "تعذر تصدير المحادثة",

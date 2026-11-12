@@ -1,17 +1,27 @@
 import type { Agent } from "@/stores/session-store";
 import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
 
-export type ClientSlashCommandKind = "archive-agent" | "replace-agent-with-draft";
+export type ClientSlashCommandKind =
+  | "archive-agent"
+  | "replace-agent-with-draft"
+  | "toggle-chat-mode";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
   name: string;
   aliases: readonly string[];
   description: string;
-  descriptionKey: "composer.clientCommands.archiveAgent" | "composer.clientCommands.freshDraft";
+  descriptionKey:
+    | "composer.clientCommands.archiveAgent"
+    | "composer.clientCommands.freshDraft"
+    | "composer.clientCommands.chatMode";
   argumentHint: string;
   kind: ClientSlashCommandKind;
   execution: ClientSlashCommandExecution;
+  /** Commands with an argument accept trailing text, e.g. `/mode chat`. */
+  acceptsArgument?: boolean;
+  /** Parsed trailing argument when `acceptsArgument` is set. */
+  argument?: string | null;
 }
 
 export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
@@ -32,6 +42,16 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     argumentHint: "",
     kind: "replace-agent-with-draft",
     execution: "immediate",
+  },
+  {
+    name: "mode",
+    aliases: [],
+    description: "Switch this chat between Chat (OpenUI) and Agent mode",
+    descriptionKey: "composer.clientCommands.chatMode",
+    argumentHint: "[chat|agent]",
+    kind: "toggle-chat-mode",
+    execution: "immediate",
+    acceptsArgument: true,
   },
 ];
 
@@ -68,10 +88,14 @@ export function resolveClientSlashCommand(input: {
     return null;
   }
 
-  // Client commands take no arguments: reject when trailing text follows the
-  // command token.
+  // Client commands take no arguments unless they opt in: reject when trailing
+  // text follows the command token.
   const tokenEnd = tokenMatch.index + tokenMatch[0].length;
-  if (input.text.slice(tokenEnd).trim().length > 0) {
+  const trailing = input.text.slice(tokenEnd).trim();
+  if (command.acceptsArgument) {
+    return { ...command, argument: trailing.length > 0 ? trailing : null };
+  }
+  if (trailing.length > 0) {
     return null;
   }
 

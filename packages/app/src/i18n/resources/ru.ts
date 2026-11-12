@@ -214,6 +214,7 @@ export const ru: TranslationResources = {
     clientCommands: {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",
+      chatMode: "Переключать этот чат между режимом чата (OpenUI) и агента",
     },
     goal: {
       active: "Цель",
@@ -807,6 +808,8 @@ export const ru: TranslationResources = {
         moveToWorkspace: "Переместить в рабочее пространство",
         promoteToWorkspace: "Повысить до рабочего пространства",
         exportChat: "Экспортировать как JSONL",
+        switchToChat: "Переключить на чат",
+        switchToAgent: "Переключить на агента",
         exportChatPending: "Экспорт чата…",
         exportChatDone: "Экспортирован {{fileName}}",
         exportChatFailed: "Не удалось экспортировать чат",

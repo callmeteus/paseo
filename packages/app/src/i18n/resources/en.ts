@@ -207,6 +207,7 @@ export const en = {
     clientCommands: {
       archiveAgent: "Archive the current agent",
       freshDraft: "Archive this agent and start a fresh draft",
+      chatMode: "Switch this chat between Chat (OpenUI) and Agent mode",
     },
     goal: {
       active: "Goal",
@@ -794,6 +795,8 @@ export const en = {
         moveToWorkspace: "Move to workspace",
         promoteToWorkspace: "Promote to workspace",
         exportChat: "Export as JSONL",
+        switchToChat: "Switch to Chat",
+        switchToAgent: "Switch to Agent",
         exportChatPending: "Exporting chat…",
         exportChatDone: "Exported {{fileName}}",
         exportChatFailed: "Couldn't export the chat",

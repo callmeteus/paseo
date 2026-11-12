@@ -100,6 +100,7 @@ import {
   useHorizontalScrollBoundary,
 } from "@/components/ui/horizontal-scroll-boundary";
 import { useSessionStore } from "@/stores/session-store";
+import { OPENUI_CHAT_LABEL } from "@/new-workspace-launch/openui";
 import { tabLineHostsWorkspaceChrome } from "@/screens/workspace/workspace-chrome-model";
 import { useWorkspaceTabLineChrome } from "@/screens/workspace/workspace-tab-line-chrome";
 
@@ -1181,6 +1182,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       forkInNewTab: t("message.actions.forkInNewTab"),
       forkInNewWorkspace: t("message.actions.forkInNewWorkspace"),
       exportChat: t("workspace.tabs.menu.exportChat"),
+      switchToChat: t("workspace.tabs.menu.switchToChat"),
+      switchToAgent: t("workspace.tabs.menu.switchToAgent"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
       closeLeft: t("workspace.tabs.menu.closeLeft"),
@@ -1591,6 +1594,20 @@ function ResolvedDesktopTabChip({
 }) {
   const { t } = useTranslation();
   const presentation = item.presentation;
+  const agentId = item.tab.target.kind === "agent" ? item.tab.target.agentId : null;
+  const agentChatMode: "chat" | "agent" = useSessionStore((state) => {
+    if (!agentId) return "agent";
+    return state.sessions[serverId]?.agents?.get(agentId)?.labels?.[OPENUI_CHAT_LABEL] === "1"
+      ? "chat"
+      : "agent";
+  });
+  const tabsRowClient = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const handleSetAgentChatMode = useCallback(
+    (targetAgentId: string, mode: "chat" | "agent") => {
+      void tabsRowClient?.setAgentChatMode(targetAgentId, mode).catch(() => undefined);
+    },
+    [tabsRowClient],
+  );
   const resolvedTab = useMemo(
     () =>
       buildWorkspaceDesktopTabActions({
@@ -1608,6 +1625,8 @@ function ResolvedDesktopTabChip({
         onCloseTabsToLeft,
         onCloseTabsToRight,
         onCloseOtherTabs,
+        agentChatMode,
+        onSetAgentChatMode: handleSetAgentChatMode,
         labels,
       }),
     [
@@ -1625,6 +1644,8 @@ function ResolvedDesktopTabChip({
       onReloadAgent,
       onDeleteAgent,
       onRenameTab,
+      agentChatMode,
+      handleSetAgentChatMode,
       tabCount,
     ],
   );

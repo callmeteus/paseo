@@ -37,6 +37,8 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type McpBridgeServer,
+  type McpBridgeTool,
   type ServerInfoStatusPayload,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
@@ -4287,6 +4289,38 @@ export class DaemonClient {
     return payload.workflowModeId;
   }
 
+  /** Switches an agent between OpenUI chat mode and code-agent mode. */
+  async setAgentChatMode(
+    agentId: string,
+    mode: "chat" | "agent",
+  ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.chat_mode.set.request",
+      agentId,
+      mode,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "agent.chat_mode.set.response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    if (!payload.accepted) {
+      throw new Error(payload.error ?? "setAgentChatMode rejected");
+    }
+    return { mode: payload.mode, applied: payload.applied };
+  }
+
   /** Moves a chat's ownership to another workspace, keeping its cwd. */
   async setAgentWorkspace(agentId: string, workspaceId: string): Promise<void> {
     const requestId = this.createRequestId();
@@ -6023,6 +6057,47 @@ export class DaemonClient {
       },
       responseType: "read_project_config_response",
     });
+  }
+
+  async listMcpBridgeServers(requestId?: string): Promise<McpBridgeServer[]> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.bridge.list_servers.response">({
+      requestId,
+      message: { type: "mcp.bridge.list_servers.request", requestId: requestId ?? "" },
+      responseType: "mcp.bridge.list_servers.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.servers;
+  }
+
+  async listMcpBridgeTools(server: string, requestId?: string): Promise<McpBridgeTool[]> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.bridge.list_tools.response">({
+      requestId,
+      message: { type: "mcp.bridge.list_tools.request", requestId: requestId ?? "", server },
+      responseType: "mcp.bridge.list_tools.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.tools;
+  }
+
+  async callMcpBridgeTool(input: {
+    server: string;
+    tool: string;
+    arguments?: Record<string, unknown>;
+    requestId?: string;
+  }): Promise<unknown> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.bridge.call_tool.response">({
+      requestId: input.requestId,
+      message: {
+        type: "mcp.bridge.call_tool.request",
+        requestId: input.requestId ?? "",
+        server: input.server,
+        tool: input.tool,
+        ...(input.arguments ? { arguments: input.arguments } : {}),
+      },
+      responseType: "mcp.bridge.call_tool.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.result;
   }
 
   async writeProjectConfig(input: WriteProjectConfigInput): Promise<WriteProjectConfigPayload> {

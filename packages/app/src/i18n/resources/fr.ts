@@ -215,6 +215,7 @@ export const fr: TranslationResources = {
     clientCommands: {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",
+      chatMode: "Basculer ce chat entre le mode Chat (OpenUI) et Agent",
     },
     goal: {
       active: "Objectif",
@@ -809,6 +810,8 @@ export const fr: TranslationResources = {
         moveToWorkspace: "Déplacer vers un espace de travail",
         promoteToWorkspace: "Promouvoir en espace de travail",
         exportChat: "Exporter en JSONL",
+        switchToChat: "Passer en Chat",
+        switchToAgent: "Passer en Agent",
         exportChatPending: "Exportation du chat…",
         exportChatDone: "{{fileName}} exporté",
         exportChatFailed: "Impossible d’exporter le chat",

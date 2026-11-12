@@ -107,6 +107,7 @@ import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agen
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { buildDraftAgentSetup, type ClientSlashCommand } from "@/client-slash-commands";
+import { OPENUI_CHAT_LABEL } from "@/new-workspace-launch/openui";
 import { useRouterFallback } from "@/model-routers/use-router-fallback";
 
 interface ChatAgentStateShape {
@@ -1633,6 +1634,23 @@ function ActiveAgentComposer({
       const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
       if (!agent) {
         throw new Error("Agent not found");
+      }
+
+      if (command.kind === "toggle-chat-mode") {
+        const client = useSessionStore.getState().sessions[serverId]?.client ?? null;
+        if (!client) {
+          return;
+        }
+        const currentMode = agent.labels?.[OPENUI_CHAT_LABEL] === "1" ? "chat" : "agent";
+        const requested = command.argument?.trim().toLowerCase();
+        let nextMode: "chat" | "agent";
+        if (requested === "chat" || requested === "agent") {
+          nextMode = requested;
+        } else {
+          nextMode = currentMode === "chat" ? "agent" : "chat";
+        }
+        await client.setAgentChatMode(agentId, nextMode);
+        return;
       }
 
       const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });

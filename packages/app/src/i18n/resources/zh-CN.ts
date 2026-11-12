@@ -211,6 +211,7 @@ export const zhCN: TranslationResources = {
     clientCommands: {
       archiveAgent: "归档当前 Agent",
       freshDraft: "归档此 Agent 并开始新的草稿",
+      chatMode: "在此聊天 (OpenUI) 和智能体模式之间切换",
     },
     goal: {
       active: "目标",
@@ -796,6 +797,8 @@ export const zhCN: TranslationResources = {
         moveToWorkspace: "移动到工作区",
         promoteToWorkspace: "提升为工作区",
         exportChat: "导出为 JSONL",
+        switchToChat: "切换到聊天",
+        switchToAgent: "切换到智能体",
         exportChatPending: "正在导出聊天…",
         exportChatDone: "已导出 {{fileName}}",
         exportChatFailed: "无法导出聊天",

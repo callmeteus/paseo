@@ -212,6 +212,7 @@ export const ko: TranslationResources = {
     clientCommands: {
       archiveAgent: "현재 에이전트 보관",
       freshDraft: "이 에이전트를 보관하고 새 초안을 시작합니다",
+      chatMode: "이 채팅을 채팅(OpenUI)과 에이전트 모드 간에 전환합니다",
     },
     goal: {
       active: "목표",
@@ -801,6 +802,8 @@ export const ko: TranslationResources = {
         moveToWorkspace: "워크스페이스로 이동",
         promoteToWorkspace: "워크스페이스로 승격",
         exportChat: "JSONL로 내보내기",
+        switchToChat: "채팅으로 전환",
+        switchToAgent: "에이전트로 전환",
         exportChatPending: "채팅을 내보내는 중…",
         exportChatDone: "{{fileName}}을(를) 내보냈습니다",
         exportChatFailed: "채팅을 내보내지 못했습니다",

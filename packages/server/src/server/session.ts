@@ -4,6 +4,7 @@ import type { CursorSkillCatalog } from "./agent/providers/cursor-skill-catalog.
 import { AgentDirectory } from "./agent/directory.js";
 import { ConnectedHostSession } from "./connected-hosts/index.js";
 import type { ConnectedHosts } from "./connected-hosts/index.js";
+import type { McpBridgeAuthority } from "./mcp/authority.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import { searchChatsAcrossChats } from "./agent/chat-search/cross-chat-search.js";
 import { isSameOrDescendantPath } from "./path-utils.js";
@@ -461,6 +462,7 @@ type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
   connectedHosts?: ConnectedHosts;
+  mcpBridgeAuthority?: McpBridgeAuthority;
   sourceId?: string;
   routed?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
@@ -702,9 +704,34 @@ interface ClientActivity {
 
 export class Session {
   private readonly connectedHostSession: ConnectedHostSession | null;
+  private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
   private routed = false;
+  private hopPath: string[] = [];
+  private originServerId: string | null = null;
+  private maxHops = 3;
   isRouted(): boolean {
     return this.routed;
+  }
+  getHopPath(): readonly string[] {
+    return this.hopPath;
+  }
+  getOriginServerId(): string | null {
+    return this.originServerId;
+  }
+  setOriginServerId(serverId: string | null): void {
+    this.originServerId = serverId;
+  }
+  getMaxHops(): number {
+    return this.maxHops;
+  }
+  setHopContext(input: {
+    hopPath?: readonly string[];
+    originServerId?: string;
+    maxHops?: number;
+  }): void {
+    this.hopPath = [...(input.hopPath ?? [])];
+    this.originServerId = input.originServerId ?? null;
+    this.maxHops = input.maxHops ?? this.maxHops;
   }
   getHostSourceId(): string {
     return this.hostSourceId;
@@ -917,6 +944,7 @@ export class Session {
     this.clientCapabilities = parseClientCapabilities(clientCapabilities);
     this.sessionId = uuidv4();
     this.hostSourceId = hostSource(options);
+    this.mcpBridgeAuthority = options.mcpBridgeAuthority;
     this.connectedHostSession = createHostSession(options, this);
     this.onMessage = onMessage;
     this.onMessageToSource = onMessageToSource
@@ -2422,10 +2450,147 @@ export class Session {
     });
   }
 
+  private dispatchMcpBridgeMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "mcp.bridge.list_servers.request":
+        return this.handleMcpBridgeListServers(msg);
+      case "mcp.bridge.list_tools.request":
+        return this.handleMcpBridgeListTools(msg);
+      case "mcp.bridge.call_tool.request":
+        return this.handleMcpBridgeCallTool(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleMcpBridgeListServers(
+    msg: Extract<SessionInboundMessage, { type: "mcp.bridge.list_servers.request" }>,
+  ): Promise<void> {
+    const authority = this.mcpBridgeAuthority;
+    const originServerId = this.getOriginServerId() ?? this.getHostSourceId();
+    if (!authority) {
+      this.emit({
+        type: "mcp.bridge.list_servers.response",
+        payload: { requestId: msg.requestId, servers: [], error: "MCP bridge is unavailable" },
+      });
+      return;
+    }
+    try {
+      const servers = await authority.listServers({
+        originServerId,
+        includeAll: !this.isRouted(),
+      });
+      this.emit({
+        type: "mcp.bridge.list_servers.response",
+        payload: { requestId: msg.requestId, servers, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.bridge.list_servers.response",
+        payload: {
+          requestId: msg.requestId,
+          servers: [],
+          error: toErrorMessage(error),
+        },
+      });
+    }
+  }
+
+  private async handleMcpBridgeListTools(
+    msg: Extract<SessionInboundMessage, { type: "mcp.bridge.list_tools.request" }>,
+  ): Promise<void> {
+    const authority = this.mcpBridgeAuthority;
+    const originServerId = this.getOriginServerId() ?? this.getHostSourceId();
+    if (!authority) {
+      this.emit({
+        type: "mcp.bridge.list_tools.response",
+        payload: {
+          requestId: msg.requestId,
+          server: msg.server,
+          tools: [],
+          error: "MCP bridge is unavailable",
+        },
+      });
+      return;
+    }
+    try {
+      const tools = await authority.listTools({
+        serverName: msg.server,
+        originServerId,
+        includeAll: !this.isRouted(),
+      });
+      this.emit({
+        type: "mcp.bridge.list_tools.response",
+        payload: { requestId: msg.requestId, server: msg.server, tools, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.bridge.list_tools.response",
+        payload: {
+          requestId: msg.requestId,
+          server: msg.server,
+          tools: [],
+          error: toErrorMessage(error),
+        },
+      });
+    }
+  }
+
+  private async handleMcpBridgeCallTool(
+    msg: Extract<SessionInboundMessage, { type: "mcp.bridge.call_tool.request" }>,
+  ): Promise<void> {
+    const authority = this.mcpBridgeAuthority;
+    const originServerId = this.getOriginServerId() ?? this.getHostSourceId();
+    if (!authority) {
+      this.emit({
+        type: "mcp.bridge.call_tool.response",
+        payload: {
+          requestId: msg.requestId,
+          server: msg.server,
+          tool: msg.tool,
+          result: null,
+          error: "MCP bridge is unavailable",
+        },
+      });
+      return;
+    }
+    try {
+      const result = await authority.callTool({
+        serverName: msg.server,
+        toolName: msg.tool,
+        arguments: msg.arguments,
+        originServerId,
+      });
+      this.emit({
+        type: "mcp.bridge.call_tool.response",
+        payload: {
+          requestId: msg.requestId,
+          server: msg.server,
+          tool: msg.tool,
+          result,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.bridge.call_tool.response",
+        payload: {
+          requestId: msg.requestId,
+          server: msg.server,
+          tool: msg.tool,
+          result: null,
+          error: toErrorMessage(error),
+        },
+      });
+    }
+  }
+
   private dispatchSubscriptionMessage(
     msg: SessionInboundMessage,
     source?: object,
   ): Promise<void> | undefined {
+    const bridge = this.dispatchMcpBridgeMessage(msg);
+    if (bridge) return bridge;
     if (msg.type === "workspace.setup.subscribe.request") return this.subscribeWorkspaceSetup(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
@@ -2960,6 +3125,8 @@ export class Session {
           msg.workflowModeId,
           msg.requestId,
         );
+      case "agent.chat_mode.set.request":
+        return this.handleAgentChatModeSetRequest(msg.agentId, msg.mode, msg.requestId);
       case "agent.workspace.set.request":
         return this.handleAgentWorkspaceSetRequest(msg.agentId, msg.workspaceId, msg.requestId);
       default:
@@ -3854,6 +4021,44 @@ export class Session {
           requestId,
           agentId,
           workflowModeId: workflowModeId ?? null,
+          accepted: false,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleAgentChatModeSetRequest(
+    agentId: string,
+    mode: "chat" | "agent",
+    requestId: string,
+  ): Promise<void> {
+    try {
+      const result = await this.agentManager.setAgentChatMode(agentId, mode);
+      this.emit({
+        type: "agent.chat_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          mode: result.mode,
+          applied: result.applied,
+          accepted: true,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to update the chat mode");
+      this.sessionLogger.error(
+        { err: error, agentId, mode, requestId },
+        "Failed to update the chat mode",
+      );
+      this.emit({
+        type: "agent.chat_mode.set.response",
+        payload: {
+          requestId,
+          agentId,
+          mode,
+          applied: "next-message",
           accepted: false,
           error: message,
         },
@@ -9808,9 +10013,16 @@ function createHostSession(options: SessionOptions, session: Session): Connected
     () => session.isRouted(),
     session.getSessionId(),
     () => options.getConnectedHostBufferedAmount?.() ?? 0,
+    () => session.getHopPath(),
+    () => session.getOriginServerId(),
+    () => session.getMaxHops(),
   );
 }
 
 function hostSource(options: SessionOptions): string {
   return options.sourceId ?? "owner";
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

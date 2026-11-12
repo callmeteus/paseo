@@ -213,6 +213,7 @@ export const ptBR: TranslationResources = {
     clientCommands: {
       archiveAgent: "Arquivar o agente atual",
       freshDraft: "Arquivar este agente e iniciar um novo rascunho",
+      chatMode: "Alternar este chat entre modo Chat (OpenUI) e Agente",
     },
     goal: {
       active: "Meta",
@@ -807,6 +808,8 @@ export const ptBR: TranslationResources = {
         moveToWorkspace: "Mover para workspace",
         promoteToWorkspace: "Promover a workspace",
         exportChat: "Exportar como JSONL",
+        switchToChat: "Mudar para Chat",
+        switchToAgent: "Mudar para Agente",
         exportChatPending: "Exportando o chat…",
         exportChatDone: "{{fileName}} exportado",
         exportChatFailed: "Não foi possível exportar o chat",
