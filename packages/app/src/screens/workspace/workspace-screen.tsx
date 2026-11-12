@@ -73,7 +73,7 @@ import {
 } from "@/workspace-tabs/explorer-sidebar";
 import {
   openPreferredWorkspacePreview,
-  openPreferredWorkspaceTarget,
+  openWorkspaceTargetAtLocation,
   openWorkspaceTargetBeside,
 } from "@/workspace-tabs/open-beside";
 import { openWorkspacePullRequest } from "@/workspace-tabs/open-supporting-view";
@@ -1373,6 +1373,7 @@ function WorkspaceScreenContent({
     [openTab],
   );
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
+  const chatFileOpenLocation = useSettings((settings) => settings.chatFileOpenLocation);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
@@ -1726,15 +1727,14 @@ function WorkspaceScreenContent({
         return;
       }
 
-      openPreferredWorkspaceTarget({
+      openWorkspaceTargetAtLocation({
         workspaceKey: persistenceKey,
         target: createWorkspaceFileTabTarget(location),
-        source: "chatFiles",
-        preferences: openInSidePane,
+        location: chatFileOpenLocation,
         parentTabId: input.parentTabId,
       });
     },
-    [openInSidePane, persistenceKey],
+    [chatFileOpenLocation, persistenceKey],
   );
 
   const handleOpenWorkspaceFileFromPane = useStableEvent(function handleOpenWorkspaceFileFromPane({

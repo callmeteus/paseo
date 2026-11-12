@@ -390,6 +390,29 @@ describe("loadAppSettingsFromStorage", () => {
     expect(legacySide.openInSidePane).not.toHaveProperty("pullRequests");
   });
 
+  it("defaults chat files to Explorer and preserves the legacy side choice", async () => {
+    const defaults = await loadAppSettingsFromStorage(makeDeps());
+    const legacySide = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ openInSidePane: { chatFiles: true } }),
+        }),
+      }),
+    );
+    const explicitMain = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ chatFileOpenLocation: "main" }),
+        }),
+      }),
+    );
+
+    expect(defaults.chatFileOpenLocation).toBe("explorer");
+    expect(legacySide.chatFileOpenLocation).toBe("side");
+    expect(legacySide.openInSidePane).not.toHaveProperty("chatFiles");
+    expect(explicitMain.chatFileOpenLocation).toBe("main");
+  });
+
   it("loads configured terminal scrollback lines from app settings", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
