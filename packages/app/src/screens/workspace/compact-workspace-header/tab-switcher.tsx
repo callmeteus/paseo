@@ -18,6 +18,8 @@ import {
   type WorkspaceTabMenuLabels,
 } from "@/screens/workspace/workspace-tab-menu";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import { OPENUI_CHAT_LABEL } from "@/new-workspace-launch/openui";
+import { useSessionStore } from "@/stores/session-store";
 import { pathBasename } from "@/utils/path";
 
 // The trigger draws at 32pt beside its island neighbours, so only vertical slop is free.
@@ -32,10 +34,12 @@ function getFallbackTabOptionLabel(
     terminal: string;
     browser: string;
     agent: string;
+    chat: string;
     changes: string;
     files: string;
     pullRequest: string;
   },
+  isOpenUIChat = false,
 ): string {
   if (tab.target.kind === "new_tab") {
     return labels.newTab;
@@ -67,6 +71,9 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
+  if (tab.target.kind === "agent" && isOpenUIChat) {
+    return labels.chat;
+  }
   return labels.agent;
 }
 
@@ -77,12 +84,14 @@ function getFallbackTabOptionDescription(
     newAgent: string;
     workspaceSetup: string;
     agent: string;
+    chat: string;
     terminal: string;
     browser: string;
     changes: string;
     files: string;
     pullRequest: string;
   },
+  isOpenUIChat = false,
 ): string {
   if (tab.target.kind === "new_tab") {
     return labels.newTab;
@@ -94,7 +103,7 @@ function getFallbackTabOptionDescription(
     return labels.workspaceSetup;
   }
   if (tab.target.kind === "agent") {
-    return labels.agent;
+    return isOpenUIChat ? labels.chat : labels.agent;
   }
   if (tab.target.kind === "terminal") {
     return labels.terminal;
@@ -187,6 +196,23 @@ function MobileWorkspaceTabOption({
   onCloseOtherTabs: (tabId: string) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
+  const agentId = tab.target.kind === "agent" ? tab.target.agentId : null;
+  const agentChatMode: "chat" | "agent" = useSessionStore((state) => {
+    if (!agentId) return "agent";
+    return state.sessions[normalizedServerId]?.agents?.get(agentId)?.labels?.[OPENUI_CHAT_LABEL] ===
+      "1"
+      ? "chat"
+      : "agent";
+  });
+  const tabSwitcherClient = useSessionStore(
+    (state) => state.sessions[normalizedServerId]?.client ?? null,
+  );
+  const handleSetAgentChatMode = useCallback(
+    (targetAgentId: string, mode: "chat" | "agent") => {
+      void tabSwitcherClient?.setAgentChatMode(targetAgentId, mode).catch(() => undefined);
+    },
+    [tabSwitcherClient],
+  );
   const tabMenuLabels = useMemo<WorkspaceTabMenuLabels>(
     () => ({
       copyResumeCommand: t("workspace.tabs.menu.copyResumeCommand"),
@@ -232,6 +258,8 @@ function MobileWorkspaceTabOption({
     onCloseTabsBefore: onCloseTabsAbove,
     onCloseTabsAfter: onCloseTabsBelow,
     onCloseOtherTabs,
+    agentChatMode,
+    onSetAgentChatMode: agentId ? handleSetAgentChatMode : undefined,
     labels: tabMenuLabels,
   });
 
@@ -243,13 +271,14 @@ function MobileWorkspaceTabOption({
       terminal: t("workspace.tabs.fallback.terminal"),
       browser: t("workspace.tabs.fallback.browser"),
       agent: t("workspace.tabs.fallback.agent"),
+      chat: t("workspace.tabs.fallback.chat"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
   );
-  const fallbackLabel = getFallbackTabOptionLabel(tab, fallbackLabels);
+  const fallbackLabel = getFallbackTabOptionLabel(tab, fallbackLabels, agentChatMode === "chat");
   const openWith = useFilePanelOpenWithMenu(
     { serverId: normalizedServerId, workspaceId: normalizedWorkspaceId, tabId: tab.tabId },
     menuTestIDBase,
@@ -321,6 +350,15 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
   onCloseOtherTabs,
 }: MobileWorkspaceTabSwitcherProps) {
   const { t } = useTranslation();
+  const chatAgentIdsKey = useSessionStore((state) => {
+    const agents = state.sessions[normalizedServerId]?.agents;
+    if (!agents) return "";
+    const ids: string[] = [];
+    for (const agent of agents.values()) {
+      if (agent.labels?.[OPENUI_CHAT_LABEL] === "1") ids.push(agent.id);
+    }
+    return ids.sort().join(",");
+  });
   const tabFallbackLabels = useMemo(
     () => ({
       newTab: t("workspace.tabs.actions.newTab"),
@@ -330,6 +368,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
       terminal: t("workspace.tabs.fallback.terminal"),
       browser: t("workspace.tabs.fallback.browser"),
       agent: t("workspace.tabs.fallback.agent"),
+      chat: t("workspace.tabs.fallback.chat"),
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
@@ -337,14 +376,22 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
     [t],
   );
 
+  const chatAgentIds = useMemo(
+    () => new Set(chatAgentIdsKey.length > 0 ? chatAgentIdsKey.split(",") : []),
+    [chatAgentIdsKey],
+  );
+
   const tabSwitcherOptions = useMemo(
     () =>
-      tabs.map((tab) => ({
-        id: tab.key,
-        label: getFallbackTabOptionLabel(tab, tabFallbackLabels),
-        description: getFallbackTabOptionDescription(tab, tabFallbackLabels),
-      })),
-    [tabFallbackLabels, tabs],
+      tabs.map((tab) => {
+        const isChat = tab.target.kind === "agent" && chatAgentIds.has(tab.target.agentId);
+        return {
+          id: tab.key,
+          label: getFallbackTabOptionLabel(tab, tabFallbackLabels, isChat),
+          description: getFallbackTabOptionDescription(tab, tabFallbackLabels, isChat),
+        };
+      }),
+    [chatAgentIds, tabFallbackLabels, tabs],
   );
 
   const tabByKey = useMemo(() => new Map(tabs.map((tab) => [tab.key, tab])), [tabs]);
