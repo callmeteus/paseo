@@ -178,6 +178,7 @@ The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is
 ### Rules
 
 - **Default is cross-platform.** Don't gate unless you have a specific reason.
+- **Never call a UI change done without considering every platform and surface.** Paseo ships as Electron desktop, browser web, iOS, and Android, and the same capability often has separate implementations per surface (for example `workspace-desktop-tabs-row.tsx` vs `compact-workspace-header/tab-switcher.tsx`). Before finishing, ask what a desktop-only path misses: wire each action, menu item, control, label, and piece of state into every surface that renders that UI, and check the compact layout on mobile/narrow web as well as the desktop one. A feature reachable on one surface only is a bug.
 - **Prefer Metro file extensions over `if` statements.** When a module has fundamentally different implementations per platform, use `.web.ts` / `.native.ts` file extensions instead of runtime `if (isWeb)` branches. Metro resolves the correct file at build time — the unused platform code is never bundled. Reserve `if (isWeb)` for small, inline checks (a single line or a few props). If you find yourself writing a large `if (isWeb) { ... } else { ... }` block, split into separate files instead.
   ```
   hooks/
