@@ -123,6 +123,7 @@ import { parseAgentMessage, projectAgentMessages } from "./agent-messages/index.
 import { planSkillPrompt, type SkillTurnPlan } from "./agent-skill.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import type { McpBridgeManager } from "../mcp/bridge.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
@@ -1171,6 +1172,7 @@ export class AgentManager {
   private mcpBaseUrl: string | null;
   private sharedMcpServers: Record<string, McpServerConfig> | null = null;
   private readonly mcpAuthToken: string | null;
+  private mcpBridgeManager: McpBridgeManager | null = null;
   private debugIngestBaseUrl: string | null = null;
   private readonly paseoHome: string | undefined;
   private paseoToolsEnabled = true;
@@ -1309,6 +1311,10 @@ export class AgentManager {
 
   setSharedMcpServers(servers: Record<string, McpServerConfig> | null): void {
     this.sharedMcpServers = servers;
+  }
+
+  setMcpBridgeManager(manager: McpBridgeManager | null): void {
+    this.mcpBridgeManager = manager;
   }
 
   setDebugIngestBaseUrl(url: string | null): void {
@@ -2827,14 +2833,12 @@ export class AgentManager {
     if ((live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat) {
       return { mode, applied: "now" };
     }
-    const labels = { ...live.labels };
-    if (chat) {
-      labels[OPENUI_CHAT_LABEL] = "1";
-    } else {
-      delete labels[OPENUI_CHAT_LABEL];
-    }
+    // Labels are applied as a patch: `null` deletes the key. Passing the full
+    // label map instead would leave the key behind, so the switch never landed.
     live.config.systemPrompt = chat ? OPENUI_SYSTEM_PROMPT : undefined;
-    await this.updateAgentMetadata(agentId, { labels });
+    await this.updateAgentMetadata(agentId, {
+      labels: { [OPENUI_CHAT_LABEL]: chat ? "1" : null },
+    });
     const updated = this.agents.get(agentId);
     if (updated) {
       this.refreshSessionPersistence(updated);
@@ -3300,7 +3304,7 @@ export class AgentManager {
     agentId: string,
     updates: {
       title?: string;
-      labels?: Record<string, string>;
+      labels?: AgentLabelPatch;
     },
   ): Promise<void> {
     await this.runLifecycleMutation(agentId, () =>
@@ -3312,7 +3316,7 @@ export class AgentManager {
     agentId: string,
     updates: {
       title?: string;
-      labels?: Record<string, string>;
+      labels?: AgentLabelPatch;
     },
   ): Promise<void> {
     const liveAgent = this.getAgent(agentId);
@@ -7111,6 +7115,8 @@ export class AgentManager {
     const paseoToolPolicy = this.paseoToolsEnabled
       ? this.resolvePaseoToolPolicy(storedConfig.provider)
       : { enabled: false };
+    const bridgeServers = this.mcpBridgeManager?.getAgentMcpServers(agentId);
+    const sharedMcpServers = { ...this.sharedMcpServers, ...bridgeServers };
     // Cursor only receives tools passed on session/new. The full catalog stays
     // behind the inject switch; Hub automation tools and plan_create_update are
     // registered either way.
@@ -7120,7 +7126,7 @@ export class AgentManager {
         agentId,
         mcpBaseUrl: this.mcpBaseUrl,
         mcpAuthToken: this.mcpAuthToken,
-        sharedMcpServers: this.sharedMcpServers,
+        sharedMcpServers,
       }),
     );
     // Daemon-level workflow mode prompt (Ask/Debug/Multitask/Agent). Composed

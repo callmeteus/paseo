@@ -25,6 +25,7 @@ import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { OPENUI_CHAT_LABEL } from "@getpaseo/protocol/openui";
 import { startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
 import { GOAL_COMPLETE_MARKER } from "./agent-goal.js";
@@ -4994,6 +4995,45 @@ test("updateAgentMetadata bumps updatedAt for stored agents", async () => {
   expect(after?.title).toBe("Stored title");
   expect(after?.labels).toEqual({ surface: "mobile", role: "worker" });
   expect(Date.parse(after!.updatedAt)).toBeGreaterThan(Date.parse(before!.updatedAt));
+});
+
+test("setAgentChatMode deletes the OpenUI chat label when switching to agent", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-chat-mode-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const manager = new AgentManager({
+    clients: {
+      codex: new TestAgentClient(),
+    },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000129",
+  });
+
+  const snapshot = await manager.createAgent(
+    {
+      provider: "codex",
+      cwd: workdir,
+    },
+    undefined,
+    { workspaceId: undefined },
+  );
+  await manager.updateAgentMetadata(snapshot.id, {
+    labels: { [OPENUI_CHAT_LABEL]: "1" },
+  });
+  expect(manager.getAgent(snapshot.id)?.labels?.[OPENUI_CHAT_LABEL]).toBe("1");
+
+  await manager.setAgentChatMode(snapshot.id, "agent");
+
+  expect(manager.getAgent(snapshot.id)?.labels?.[OPENUI_CHAT_LABEL]).toBeUndefined();
+  const storedAfterAgent = await storage.get(snapshot.id);
+  expect(storedAfterAgent?.labels?.[OPENUI_CHAT_LABEL]).toBeUndefined();
+
+  await manager.setAgentChatMode(snapshot.id, "chat");
+
+  expect(manager.getAgent(snapshot.id)?.labels?.[OPENUI_CHAT_LABEL]).toBe("1");
+  const storedAfterChat = await storage.get(snapshot.id);
+  expect(storedAfterChat?.labels?.[OPENUI_CHAT_LABEL]).toBe("1");
 });
 
 test("persists live mode, model, and thinking changes without an external snapshot subscriber", async () => {
