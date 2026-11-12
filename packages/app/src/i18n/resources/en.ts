@@ -256,6 +256,7 @@ export const en = {
       open: "Open agent features",
       on: "On",
       off: "Off",
+      autoAccept: "Auto-accept",
     },
     mode: {
       title: "Mode",

@@ -263,6 +263,7 @@ export const ja: TranslationResources = {
       open: "エージェント機能を開く",
       on: "オン",
       off: "オフ",
+      autoAccept: "自動承認",
     },
     mode: {
       title: "モード",

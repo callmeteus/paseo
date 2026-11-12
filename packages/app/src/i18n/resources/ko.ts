@@ -261,6 +261,7 @@ export const ko: TranslationResources = {
       open: "에이전트 기능 열기",
       on: "켜짐",
       off: "꺼짐",
+      autoAccept: "자동 수락",
     },
     mode: {
       title: "모드",

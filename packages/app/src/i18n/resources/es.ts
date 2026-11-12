@@ -264,6 +264,7 @@ export const es: TranslationResources = {
       open: "Funciones de agente abierto",
       on: "En",
       off: "Apagado",
+      autoAccept: "Aceptar automáticamente",
     },
     mode: {
       title: "Modo",

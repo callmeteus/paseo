@@ -264,6 +264,7 @@ export const ptBR: TranslationResources = {
       open: "Abrir recursos do agente",
       on: "Ativado",
       off: "Desativado",
+      autoAccept: "Auto-aceitar",
     },
     mode: {
       title: "Modo",

@@ -1606,6 +1606,8 @@ function SheetFeatureItem({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const featureLabel =
+    feature.id === "auto_accept" ? t("agentControls.features.autoAccept") : feature.label;
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
 
@@ -1617,7 +1619,7 @@ function SheetFeatureItem({
     () => handleFeatureOpenChange(openSelector !== featureSelector),
     [featureSelector, handleFeatureOpenChange, openSelector],
   );
-  const sheetHeader = useMemo<SheetHeader>(() => ({ title: feature.label }), [feature.label]);
+  const sheetHeader = useMemo<SheetHeader>(() => ({ title: featureLabel }), [featureLabel]);
 
   const handleTogglePress = useCallback(() => {
     if (feature.type === "toggle") {
@@ -1648,7 +1650,7 @@ function SheetFeatureItem({
         icon={FeatureIcon}
         iconColor={getFeatureIconColor(feature, theme.colors.palette, theme.colors.foregroundMuted)}
         surface="sheet"
-        label={feature.label}
+        label={featureLabel}
         value={feature.value ? t("agentControls.features.on") : t("agentControls.features.off")}
         disabled={disabled}
         onPress={handleTogglePress}
@@ -1672,8 +1674,8 @@ function SheetFeatureItem({
             theme.colors.foregroundMuted,
           )}
           surface="sheet"
-          label={feature.label}
-          value={selectedOption?.label ?? feature.label}
+          label={featureLabel}
+          value={selectedOption?.label ?? featureLabel}
           open={openSelector === featureSelector}
           disabled={disabled}
           onPress={handleSelectPress}

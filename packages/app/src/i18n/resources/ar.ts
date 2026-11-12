@@ -260,6 +260,7 @@ export const ar: TranslationResources = {
       open: "ميزات الوكيل المفتوح",
       on: "على",
       off: "عن",
+      autoAccept: "قبول تلقائي",
     },
     mode: {
       title: "وضع",

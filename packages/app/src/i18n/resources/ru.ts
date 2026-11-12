@@ -263,6 +263,7 @@ export const ru: TranslationResources = {
       open: "Открыть настройки функций агента",
       on: "Включено",
       off: "Выключено",
+      autoAccept: "Автопринятие",
     },
     mode: {
       title: "Режим",

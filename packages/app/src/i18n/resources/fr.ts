@@ -265,6 +265,7 @@ export const fr: TranslationResources = {
       open: "Ouvrir les fonctionnalités de l’agent",
       on: "Activé",
       off: "Désactivé",
+      autoAccept: "Accepter automatiquement",
     },
     mode: {
       title: "Mode",
