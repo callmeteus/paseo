@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
-import { createDaemonCommandHandlers } from "./daemon-manager";
+import { createDaemonCommandHandlers, ensureDesktopDaemonStarted } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
   paseoHome: "",
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   runExternalCliJsonCommand: vi.fn(),
   runExternalCliTextCommand: vi.fn(),
   startDaemonInstance: vi.fn(),
+  startInstalledLocalHub: vi.fn(async () => ({ outcome: "not_installed" as const, origin: null })),
   createNodeEntrypointInvocation: vi.fn(() => ({
     command: "node",
     args: [],
@@ -50,6 +51,10 @@ vi.mock("electron-log/main", () => ({
       },
     },
   },
+}));
+
+vi.mock("@getpaseo/server/hub-local", () => ({
+  startInstalledLocalHub: mocks.startInstalledLocalHub,
 }));
 
 vi.mock("@getpaseo/server/daemon-control", async (importOriginal) => ({
@@ -91,6 +96,8 @@ describe("daemon-manager commands", () => {
     mocks.runExternalCliJsonCommand.mockReset();
     mocks.runExternalCliTextCommand.mockReset();
     mocks.startDaemonInstance.mockReset();
+    mocks.startInstalledLocalHub.mockReset();
+    mocks.startInstalledLocalHub.mockResolvedValue({ outcome: "not_installed", origin: null });
     mocks.createNodeEntrypointInvocation.mockReset();
     mocks.createNodeEntrypointInvocation.mockReturnValue({ command: "node", args: [], env: {} });
     mocks.spawnProcess.mockReset();
@@ -227,6 +234,31 @@ describe("daemon-manager commands", () => {
     await expect(first).resolves.toMatchObject({ serverId: "srv_ready", status: "running" });
     await expect(second).resolves.toMatchObject({ serverId: "srv_ready", status: "running" });
     expect(mocks.startDaemonInstance).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts an installed hub when daemon management is on and the daemon is already running", async () => {
+    mkdirSync(mocks.paseoHome);
+    writeDaemonLock(mocks.paseoHome, { listen: "127.0.0.1:6767", serverId: "srv_ready" });
+    mocks.runExternalCliJsonCommand.mockImplementation(async () =>
+      daemonStatusFromLock(mocks.paseoHome),
+    );
+
+    await ensureDesktopDaemonStarted();
+
+    expect(mocks.startInstalledLocalHub).toHaveBeenCalledWith(mocks.paseoHome);
+    expect(mocks.startDaemonInstance).not.toHaveBeenCalled();
+  });
+
+  it("does not start the hub when daemon management is off", async () => {
+    mocks.settings = {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon, manageBuiltInDaemon: false },
+    };
+
+    await ensureDesktopDaemonStarted();
+
+    expect(mocks.startInstalledLocalHub).not.toHaveBeenCalled();
+    expect(mocks.startDaemonInstance).not.toHaveBeenCalled();
   });
 });
 

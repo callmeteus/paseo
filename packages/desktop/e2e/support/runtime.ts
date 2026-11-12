@@ -397,7 +397,7 @@ export async function expectInstallInProgress(page: Page): Promise<void> {
 export async function interceptDaemonManagementConfirmDialog(
   page: Page,
 ): Promise<ConfirmDialogCall> {
-  await page.getByRole("switch", { name: "Manage built-in daemon" }).click();
+  await page.getByRole("switch", { name: "Daemon and Hub" }).click();
   await page.waitForFunction(() => !!window.__capturedDialogCall, { timeout: 5_000 });
   return page.evaluate(() => window.__capturedDialogCall!);
 }
@@ -412,7 +412,7 @@ export async function toggleDaemonManagement(
   page: Page,
   _action: "enable" | "disable",
 ): Promise<void> {
-  await page.getByRole("switch", { name: "Manage built-in daemon" }).click();
+  await page.getByRole("switch", { name: "Daemon and Hub" }).click();
 }
 
 export function expectDaemonManagementConfirmDialog(args: ConfirmDialogCall): void {
@@ -423,11 +423,11 @@ export function expectDaemonManagementConfirmDialog(args: ConfirmDialogCall): vo
 }
 
 export async function expectDaemonManagementEnabled(page: Page): Promise<void> {
-  await expect(page.getByRole("switch", { name: "Manage built-in daemon" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Daemon and Hub" })).toBeChecked();
 }
 
 export async function expectDaemonManagementDisabled(page: Page): Promise<void> {
-  await expect(page.getByRole("switch", { name: "Manage built-in daemon" })).not.toBeChecked();
+  await expect(page.getByRole("switch", { name: "Daemon and Hub" })).not.toBeChecked();
 }
 
 /**

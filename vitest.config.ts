@@ -41,6 +41,10 @@ export default defineConfig({
         find: /^@getpaseo\/relay$/,
         replacement: path.resolve(__dirname, "packages/relay/src/index.ts"),
       },
+      {
+        find: /^@getpaseo\/server\/hub-local$/,
+        replacement: path.resolve(__dirname, "packages/server/src/server/hub/local-install.ts"),
+      },
       { find: "@", replacement: path.resolve(appDir, "src") },
       // The website's `~/` path alias, as in packages/website/tsconfig.json.
       { find: /^~\/(.*)$/, replacement: path.resolve(__dirname, "packages/website/src/$1") },

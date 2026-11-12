@@ -30,6 +30,8 @@ import {
   webContents,
 } from "electron";
 import { ensureDesktopDaemonStarted, registerDaemonManager } from "./daemon/daemon-manager.js";
+import { syncDaemonHubLogin } from "./daemon/service-login-electron.js";
+import { isDaemonHubServiceLaunch } from "./daemon/service-login.js";
 import { parsePassthroughCliArgsFromArgv, runPassthroughCli } from "./daemon/cli/passthrough.js";
 import { closeAllTransportSessions } from "./daemon/local-transport.js";
 import {
@@ -126,6 +128,10 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   isPackaged: app.isPackaged,
 });
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
+const daemonHubServiceLaunch = isDaemonHubServiceLaunch({
+  argv: process.argv,
+  env: process.env,
+});
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
 const agentNavigationInbox = new AgentNavigationInbox();
 
@@ -980,6 +986,7 @@ async function bootstrap(): Promise<void> {
   });
   ensureNotificationCenterRegistration();
   registerDaemonManager();
+  void syncCurrentDaemonHubLogin();
   void ensureDesktopDaemonStarted();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
@@ -1030,14 +1037,32 @@ async function bootstrap(): Promise<void> {
 
 void runDesktopStartup({
   hasPendingGuiLaunchRequest: Boolean(pendingOpenProjectPath || pendingAgentNavigation),
+  isServiceLaunch: daemonHubServiceLaunch,
   runCliPassthroughIfRequested,
   inheritLoginShellEnv,
+  startServices: startDaemonAndHubForLogin,
   bootstrapGui: bootstrap,
 }).catch((error) => {
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exit(1);
 });
+
+async function syncCurrentDaemonHubLogin(): Promise<void> {
+  const settings = await getDesktopSettingsStore().get();
+  await syncDaemonHubLogin(settings.daemon.manageBuiltInDaemon);
+}
+
+async function startDaemonAndHubForLogin(): Promise<void> {
+  await app.whenReady();
+  try {
+    await syncCurrentDaemonHubLogin();
+    await ensureDesktopDaemonStarted();
+  } catch (error) {
+    log.error("[daemon-hub] login start failed", error);
+  }
+  app.exit(0);
+}
 
 function showDaemonShutdownDialog(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -1048,13 +1073,15 @@ function showDaemonShutdownDialog(): void {
 const quitLifecycle = createQuitLifecycle({
   app,
   closeTransportSessions: closeAllTransportSessions,
-  stopDesktopManagedDaemonIfNeeded: () =>
-    stopDesktopManagedDaemonOnQuitIfNeeded({
+  stopDesktopManagedDaemonIfNeeded: () => {
+    if (daemonHubServiceLaunch) return Promise.resolve(false);
+    return stopDesktopManagedDaemonOnQuitIfNeeded({
       settingsStore: getDesktopSettingsStore(),
       isDesktopManagedDaemonRunning: isDesktopManagedDaemonRunningSync,
       stopDaemon: () => stopDesktopDaemonViaCli("quit"),
       showShutdownFeedback: showDaemonShutdownDialog,
-    }),
+    });
+  },
   installAppUpdateOnQuit: async (signal) => {
     const settings = await getDesktopSettingsStore().get();
     return installAppUpdateOnQuit({
@@ -1081,6 +1108,7 @@ app.on("before-quit", quitLifecycle.handleBeforeQuit);
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
+  if (daemonHubServiceLaunch) return;
   if (process.platform !== "darwin") {
     app.quit();
   }

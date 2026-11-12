@@ -33,6 +33,11 @@
       "source": "./src/server/daemon-instance.ts",
       "default": "./dist/server/server/daemon-instance.js"
     },
+    "./hub-local": {
+      "types": "./dist/server/server/hub/local-install.d.ts",
+      "source": "./src/server/hub/local-install.ts",
+      "default": "./dist/server/server/hub/local-install.js"
+    },
     "./configuration": {
       "types": "./dist/server/server/config.d.ts",
       "source": "./src/server/config.ts",

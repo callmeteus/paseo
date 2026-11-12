@@ -37,9 +37,15 @@ export interface HubInstallCommand {
   cwd?: string;
 }
 
+export interface InstalledHubStartResult {
+  outcome: "not_installed" | "already_running" | "started";
+  origin: string | null;
+}
+
 export interface HubLocalInstaller {
   status(): Promise<HubLocalInstallState>;
   install(onProgress: (progress: HubLocalInstallProgress) => void): Promise<HubLocalInstallState>;
+  startInstalled(): Promise<InstalledHubStartResult>;
 }
 
 export interface HubLocalInstallerDependencies {
@@ -170,7 +176,18 @@ export function createHubLocalInstaller(
       });
       return activeInstall;
     },
+    startInstalled: () => startInstalledHub(dependencies),
   };
+}
+
+/**
+ * Starts a Hub that was already installed. A missing build is left untouched.
+ *
+ * @param paseoHome - Daemon home directory
+ * @returns Whether a build was present, and the origin when it is running
+ */
+export function startInstalledLocalHub(paseoHome: string): Promise<InstalledHubStartResult> {
+  return daemonHubLocalInstaller(paseoHome).startInstalled();
 }
 
 /**
@@ -188,6 +205,31 @@ export function daemonHubLocalInstaller(paseoHome: string): HubLocalInstaller {
       startLocalHubProcess(checkout, dataDirectory, nodePath),
     fileExists,
   });
+}
+
+async function startInstalledHub(
+  dependencies: HubLocalInstallerDependencies,
+): Promise<InstalledHubStartResult> {
+  if (activeInstall !== null) {
+    try {
+      await activeInstall;
+    } catch {
+      // The checkout is whatever that install left on disk.
+    }
+  }
+  const checkout = localHubCheckoutDirectory(dependencies.paseoHome);
+  const built = await dependencies.fileExists(path.join(checkout, "dist", "index.js"));
+  if (!built) return { outcome: "not_installed", origin: null };
+  if (await dependencies.probeHealth(LOCAL_HUB_ORIGIN)) {
+    return { outcome: "already_running", origin: LOCAL_HUB_ORIGIN };
+  }
+  await startBuiltHub(
+    dependencies,
+    checkout,
+    localHubDataDirectory(dependencies.paseoHome),
+    () => undefined,
+  );
+  return { outcome: "started", origin: LOCAL_HUB_ORIGIN };
 }
 
 async function readInstallState(

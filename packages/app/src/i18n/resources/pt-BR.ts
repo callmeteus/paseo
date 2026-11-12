@@ -1720,8 +1720,8 @@ export const ptBR: TranslationResources = {
         pid: "PID {{pid}}",
       },
       management: {
-        title: "Gerenciar daemon integrado",
-        hint: "Permitir que o Paseo inicie e pare o daemon integrado",
+        title: "Daemon e Hub",
+        hint: "Inicia os dois ao abrir o Paseo e ao entrar no sistema. O Hub só inicia se já estiver instalado.",
         pauseTitle: "Pausar daemon integrado",
         pauseMessage:
           "Isso vai parar o daemon integrado imediatamente. Agentes e terminais em execução conectados ao daemon integrado serão interrompidos.",

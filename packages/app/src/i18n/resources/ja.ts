@@ -1708,8 +1708,8 @@ export const ja: TranslationResources = {
         pid: "PID {{pid}}",
       },
       management: {
-        title: "組み込みデーモンを管理",
-        hint: "Paseoが組み込みデーモンを起動・停止できるようにする",
+        title: "デーモンと Hub",
+        hint: "Paseo を開いたときとログイン時に起動します。Hub はインストール済みの場合だけ起動します。",
         pauseTitle: "組み込みデーモンを一時停止",
         pauseMessage:
           "これにより組み込みデーモンが即座に停止します。組み込みデーモンに接続されている実行中のエージェントとターミナルが停止されます。",

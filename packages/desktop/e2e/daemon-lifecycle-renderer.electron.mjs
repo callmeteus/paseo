@@ -118,7 +118,7 @@ export async function verifyAttachedDaemonControls({ repo, root, env, home, port
       execFileSync("xdotool", ["windowfocus", "--sync", windowId, "key", key]);
     }
 
-    const management = page.getByRole("switch", { name: "Manage built-in daemon" });
+    const management = page.getByRole("switch", { name: "Daemon and Hub" });
     await management.click();
     await respondToNativeDialog(
       "Pause built-in daemon",

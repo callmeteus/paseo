@@ -13,6 +13,7 @@ import {
   waitForDaemonReady,
   type DaemonInstance,
 } from "@getpaseo/server/daemon-control";
+import { startInstalledLocalHub } from "@getpaseo/server/hub-local";
 import {
   copyAttachmentFileToManagedStorage,
   deleteManagedAttachmentFile,
@@ -94,6 +95,7 @@ interface DesktopDaemonLogs {
 }
 
 let desktopDaemonStartInFlight: Promise<DesktopDaemonStatus> | null = null;
+let installedHubStart: Promise<void> | null = null;
 
 function parseReleaseChannel(
   args: Record<string, unknown> | undefined,
@@ -284,16 +286,45 @@ export async function ensureDesktopDaemonStarted(): Promise<void> {
   try {
     const settings = await getDesktopSettingsStore().get();
     if (!settings.daemon.manageBuiltInDaemon) return;
-    const current = await resolveDesktopDaemonStatus();
-    if (current.status === "running" || current.status === "starting") return;
-    logDesktopDaemonLifecycle("auto-starting built-in daemon", {
-      status: current.status,
-      home: current.home,
-      pid: current.pid,
-    });
-    await startDaemon();
+    // The daemon can already be running after quit. An installed Hub still
+    // has to come up with the same option, including a login start that exits.
+    const hub = ensureInstalledHubStarted();
+    try {
+      const current = await resolveDesktopDaemonStatus();
+      if (current.status === "running" || current.status === "starting") return;
+      logDesktopDaemonLifecycle("auto-starting built-in daemon", {
+        status: current.status,
+        home: current.home,
+        pid: current.pid,
+      });
+      await startDaemon();
+    } finally {
+      await hub;
+    }
   } catch (error) {
     logDesktopDaemonLifecycle("auto-start failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function ensureInstalledHubStarted(): Promise<void> {
+  if (installedHubStart) return installedHubStart;
+  const pending = runInstalledHubStart().finally(() => {
+    if (installedHubStart === pending) installedHubStart = null;
+  });
+  installedHubStart = pending;
+  return pending;
+}
+
+async function runInstalledHubStart(): Promise<void> {
+  try {
+    const result = await startInstalledLocalHub(getPaseoHome());
+    if (result.outcome === "started") {
+      logDesktopDaemonLifecycle("started installed hub", { origin: result.origin });
+    }
+  } catch (error) {
+    logDesktopDaemonLifecycle("installed hub start failed", {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -335,6 +366,7 @@ async function adoptPublishedServerId(status: DesktopDaemonStatus): Promise<Desk
 
 async function runDesktopDaemonStart(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
+  void ensureInstalledHubStarted();
 
   let current = await resolveDesktopDaemonStatus();
   logDesktopDaemonLifecycle("initial status check before start", {

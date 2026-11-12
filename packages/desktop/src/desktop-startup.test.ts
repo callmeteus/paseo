@@ -6,11 +6,15 @@ describe("desktop startup", () => {
     const calls: string[] = [];
     await runDesktopStartup({
       hasPendingGuiLaunchRequest: false,
+      isServiceLaunch: false,
       runCliPassthroughIfRequested: vi.fn(async () => {
         calls.push("cli");
         return true;
       }),
       inheritLoginShellEnv: vi.fn(() => calls.push("env")),
+      startServices: vi.fn(async () => {
+        calls.push("services");
+      }),
       bootstrapGui: vi.fn(async () => {
         calls.push("gui");
       }),
@@ -23,11 +27,15 @@ describe("desktop startup", () => {
     const calls: string[] = [];
     await runDesktopStartup({
       hasPendingGuiLaunchRequest: false,
+      isServiceLaunch: false,
       runCliPassthroughIfRequested: vi.fn(async () => {
         calls.push("cli");
         return false;
       }),
       inheritLoginShellEnv: vi.fn(() => calls.push("env")),
+      startServices: vi.fn(async () => {
+        calls.push("services");
+      }),
       bootstrapGui: vi.fn(async () => {
         calls.push("gui");
       }),
@@ -42,8 +50,12 @@ describe("desktop startup", () => {
 
     await runDesktopStartup({
       hasPendingGuiLaunchRequest: true,
+      isServiceLaunch: false,
       runCliPassthroughIfRequested,
       inheritLoginShellEnv: vi.fn(() => calls.push("env")),
+      startServices: vi.fn(async () => {
+        calls.push("services");
+      }),
       bootstrapGui: vi.fn(async () => {
         calls.push("gui");
       }),
@@ -51,5 +63,26 @@ describe("desktop startup", () => {
 
     expect(runCliPassthroughIfRequested).not.toHaveBeenCalled();
     expect(calls).toEqual(["env", "gui"]);
+  });
+
+  it("starts daemon and hub services without opening a window", async () => {
+    const calls: string[] = [];
+    const runCliPassthroughIfRequested = vi.fn(async () => true);
+
+    await runDesktopStartup({
+      hasPendingGuiLaunchRequest: false,
+      isServiceLaunch: true,
+      runCliPassthroughIfRequested,
+      inheritLoginShellEnv: vi.fn(() => calls.push("env")),
+      startServices: vi.fn(async () => {
+        calls.push("services");
+      }),
+      bootstrapGui: vi.fn(async () => {
+        calls.push("gui");
+      }),
+    });
+
+    expect(runCliPassthroughIfRequested).not.toHaveBeenCalled();
+    expect(calls).toEqual(["env", "services"]);
   });
 });

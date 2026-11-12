@@ -1696,8 +1696,8 @@ export const ko: TranslationResources = {
         pid: "PID {{pid}}",
       },
       management: {
-        title: "내장 데몬 관리",
-        hint: "Paseo가 내장 데몬을 시작하고 중지하도록 허용합니다",
+        title: "데몬과 Hub",
+        hint: "Paseo를 열 때와 로그인할 때 시작합니다. Hub는 이미 설치되어 있을 때만 시작합니다.",
         pauseTitle: "내장 데몬 일시 중지",
         pauseMessage:
           "내장 데몬이 즉시 중지됩니다. 내장 데몬에 연결된 실행 중인 에이전트와 터미널이 중지됩니다.",

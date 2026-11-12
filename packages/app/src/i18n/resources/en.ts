@@ -1713,8 +1713,8 @@ export const en = {
         pid: "PID {{pid}}",
       },
       management: {
-        title: "Manage built-in daemon",
-        hint: "Let Paseo start and stop the built-in daemon",
+        title: "Daemon and Hub",
+        hint: "Start them when you open Paseo and when you sign in. Hub starts only if it is already installed.",
         pauseTitle: "Pause built-in daemon",
         pauseMessage:
           "This will stop the built-in daemon immediately. Running agents and terminals connected to the built-in daemon will be stopped.",

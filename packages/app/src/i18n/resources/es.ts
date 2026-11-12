@@ -1728,8 +1728,8 @@ export const es: TranslationResources = {
         pid: "PID{{pid}}",
       },
       management: {
-        title: "Administrar demonio incorporado",
-        hint: "Deje quePaseoinicie y detenga el demonio incorporado",
+        title: "Daemon y Hub",
+        hint: "Los inicia al abrir Paseo y al iniciar sesión. Hub solo arranca si ya está instalado.",
         pauseTitle: "Pausar el demonio incorporado",
         pauseMessage:
           "Esto detendrá el demonio incorporado inmediatamente. Se detendrán los agentes en ejecución y los terminales conectados al demonio integrado.",

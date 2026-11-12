@@ -55,6 +55,16 @@ describe("passthrough CLI", () => {
     ).toEqual(["status"]);
   });
 
+  it("ignores the daemon and hub service launch argument", () => {
+    expect(
+      parsePassthroughCliArgs({
+        argv: ["/usr/bin/Paseo", "--start-services"],
+        isDefaultApp: false,
+        forceCli: false,
+      }),
+    ).toBeNull();
+  });
+
   it("returns null when only --no-sandbox is present", () => {
     expect(
       parsePassthroughCliArgs({

@@ -182,6 +182,63 @@ test("a Node daemon keeps the npm beside that runtime", () => {
   });
 });
 
+test("a missing Hub build is not cloned or started", async () => {
+  const commands: HubInstallCommand[] = [];
+  let started = false;
+  const result = await createHubLocalInstaller({
+    paseoHome: "/tmp/paseo-home",
+    fileExists: async () => false,
+    probeHealth: async () => false,
+    run: async (command) => {
+      commands.push(command);
+    },
+    start: async () => {
+      started = true;
+    },
+    resolveTools: async () => ({ npm: "/usr/bin/npm", node: "/usr/bin/node" }),
+  }).startInstalled();
+
+  expect(result).toEqual({ outcome: "not_installed", origin: null });
+  expect(commands).toEqual([]);
+  expect(started).toBe(false);
+});
+
+test("an installed Hub that is already running is left alone", async () => {
+  let started = false;
+  const result = await createHubLocalInstaller({
+    paseoHome: "/tmp/paseo-home",
+    fileExists: async (filePath) => filePath.endsWith("dist/index.js"),
+    probeHealth: async () => true,
+    run: async () => undefined,
+    start: async () => {
+      started = true;
+    },
+  }).startInstalled();
+
+  expect(result).toEqual({ outcome: "already_running", origin: LOCAL_HUB_ORIGIN });
+  expect(started).toBe(false);
+});
+
+test("an installed Hub that is stopped starts without cloning", async () => {
+  const commands: HubInstallCommand[] = [];
+  let healthy = false;
+  const result = await createHubLocalInstaller({
+    paseoHome: "/tmp/paseo-home",
+    fileExists: async (filePath) => filePath.endsWith("dist/index.js"),
+    probeHealth: async () => healthy,
+    run: async (command) => {
+      commands.push(command);
+    },
+    start: async () => {
+      healthy = true;
+    },
+    resolveTools: async () => ({ npm: "/usr/bin/npm", node: "/usr/bin/node" }),
+  }).startInstalled();
+
+  expect(commands).toEqual([]);
+  expect(result).toEqual({ outcome: "started", origin: LOCAL_HUB_ORIGIN });
+});
+
 test("status reports a checkout that has not been built", async () => {
   const status = await createHubLocalInstaller({
     paseoHome: "/tmp/paseo-home",

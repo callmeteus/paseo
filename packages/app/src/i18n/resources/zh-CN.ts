@@ -1673,8 +1673,8 @@ export const zhCN: TranslationResources = {
         pid: "PID {{pid}}",
       },
       management: {
-        title: "管理内置 daemon",
-        hint: "让 Paseo 启动和停止内置 daemon",
+        title: "Daemon 和 Hub",
+        hint: "打开 Paseo 时以及登录系统时启动。Hub 仅在已经安装时启动。",
         pauseTitle: "暂停内置 daemon",
         pauseMessage:
           "这会立即停止内置 daemon。连接到内置 daemon 的运行中 agents 和 terminals 会被停止。",

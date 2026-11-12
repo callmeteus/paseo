@@ -1,8 +1,10 @@
 import { pathToFileURL } from "node:url";
+import { DAEMON_HUB_LAUNCH_ARG } from "../service-login.js";
 import { resolvePassthroughCliEntrypoint } from "./entrypoints.js";
 
 const DESKTOP_CLI_ENV = "PASEO_DESKTOP_CLI";
 const IGNORED_ARG_PREFIXES = ["-psn_", "--class=", "--no-sandbox", "--remote-debugging-port="];
+const IGNORED_EXACT_ARGS = new Set<string>([DAEMON_HUB_LAUNCH_ARG]);
 
 export type PassthroughCliRunner = (argv: string[]) => Promise<number>;
 
@@ -15,7 +17,10 @@ export function parsePassthroughCliArgs(input: {
   const effective: string[] = [];
 
   for (const arg of input.argv.slice(startIndex)) {
-    if (IGNORED_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix))) {
+    if (
+      IGNORED_EXACT_ARGS.has(arg) ||
+      IGNORED_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix))
+    ) {
       continue;
     }
     effective.push(arg);

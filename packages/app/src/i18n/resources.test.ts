@@ -798,6 +798,10 @@ describe("translation resources", () => {
     );
     expect(en.desktop.daemon.status.notRunning).toBe("not running");
     expect(en.desktop.daemon.status.pid).toBe("PID {{pid}}");
+    expect(en.desktop.daemon.management.title).toBe("Daemon and Hub");
+    expect(en.desktop.daemon.management.hint).toBe(
+      "Start them when you open Paseo and when you sign in. Hub starts only if it is already installed.",
+    );
     expect(en.desktop.daemon.management.pauseTitle).toBe("Pause built-in daemon");
     expect(en.desktop.daemon.management.pauseAndStop).toBe("Pause and stop");
     expect(en.desktop.daemon.logs.modalTitle).toBe("Daemon logs");
