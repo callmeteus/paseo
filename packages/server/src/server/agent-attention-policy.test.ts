@@ -34,7 +34,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    ).toEqual({ presentClientIndices: [], shouldPush: true });
   });
 
   it("suppresses notifications when a focused client is present", () => {
@@ -54,10 +54,10 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: false });
+    ).toEqual({ presentClientIndices: [], shouldPush: false });
   });
 
-  it("does not suppress notifications when a focused client is backgrounded", () => {
+  it("notifies a present backgrounded client even when it focuses the target", () => {
     const backgroundFocused = state({
       appVisible: false,
       focusedAgentId: "agent-1",
@@ -71,7 +71,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0], shouldPush: false });
   });
 
   it("treats present clients focused on different agents as eligible", () => {
@@ -87,10 +87,10 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0], shouldPush: false });
   });
 
-  it("chooses the present client with the greatest clamped activity timestamp", () => {
+  it("notifies every present client instead of electing one", () => {
     expect(
       computeNotificationPlan({
         allStates: [
@@ -102,10 +102,10 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 1, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0, 1], shouldPush: false });
   });
 
-  it("uses the lower index when present clients have identical timestamps", () => {
+  it("notifies both present clients with identical timestamps", () => {
     expect(
       computeNotificationPlan({
         allStates: [
@@ -116,7 +116,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0, 1], shouldPush: false });
   });
 
   it("clamps future timestamps to now and treats them as present", () => {
@@ -130,7 +130,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 1, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0, 1], shouldPush: false });
   });
 
   it("never treats no-heartbeat clients as present", () => {
@@ -141,7 +141,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    ).toEqual({ presentClientIndices: [], shouldPush: true });
   });
 
   it("falls back to push for non-error attention when no clients are present", () => {
@@ -152,7 +152,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    ).toEqual({ presentClientIndices: [], shouldPush: true });
   });
 
   it("does not push error attention when no clients are present", () => {
@@ -163,10 +163,10 @@ describe("computeNotificationPlan", () => {
         pushEligible: false,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: false });
+    ).toEqual({ presentClientIndices: [], shouldPush: false });
   });
 
-  it("lets a foreground mobile-style client with recent activity win as most recent", () => {
+  it("notifies both foreground mobile-style clients with recent activity", () => {
     expect(
       computeNotificationPlan({
         allStates: [
@@ -177,10 +177,10 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 1, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0, 1], shouldPush: false });
   });
 
-  it("selects no in-app recipient and pushes when two web-style clients are stale", () => {
+  it("pushes when two web-style clients are stale", () => {
     expect(
       computeNotificationPlan({
         allStates: [state({ lastActivityAtMs: staleAtMs }), state({ lastActivityAtMs: staleAtMs })],
@@ -188,7 +188,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    ).toEqual({ presentClientIndices: [], shouldPush: true });
   });
 
   it("never suppresses when focusTarget is null even if a client focuses a matching id", () => {
@@ -199,7 +199,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+    ).toEqual({ presentClientIndices: [0], shouldPush: false });
   });
 
   it("suppresses terminal notifications when a present visible client focuses the terminal", () => {
@@ -210,7 +210,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: false });
+    ).toEqual({ presentClientIndices: [], shouldPush: false });
   });
 
   it("pushes for a null-focus target when no client is present and push is eligible", () => {
@@ -221,7 +221,7 @@ describe("computeNotificationPlan", () => {
         pushEligible: true,
         nowMs,
       }),
-    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    ).toEqual({ presentClientIndices: [], shouldPush: true });
   });
 });
 

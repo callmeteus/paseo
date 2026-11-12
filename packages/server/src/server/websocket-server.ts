@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { AgentManager, AgentMetricsSnapshot } from "./agent/agent-manager.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
+import type { McpBridgeAuthority } from "./mcp/authority.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import type pino from "pino";
@@ -180,6 +181,7 @@ interface WebSocketServerConfig {
   daemonStatusRpc?: boolean;
   relayConfig?: boolean;
   startPaused?: boolean;
+  mcpBridgeAuthority?: McpBridgeAuthority;
 }
 
 type WebSocketRuntimeMetrics = SessionRuntimeMetrics & CheckoutDiffMetrics;
@@ -511,6 +513,15 @@ const WS_CLOSE_INCOMPATIBLE_PROTOCOL = 4003;
 const WS_CLOSE_SERVER_SHUTDOWN = 1001;
 const WS_PROTOCOL_VERSION = 1;
 const WS_RUNTIME_METRICS_FLUSH_MS = 30_000;
+
+function applyHelloHopContext(session: Session, message: WSHelloMessage): void {
+  session.setHopContext({
+    ...(message.hopPath ? { hopPath: message.hopPath } : {}),
+    ...(message.originServerId ? { originServerId: message.originServerId } : {}),
+    ...(message.maxHops ? { maxHops: message.maxHops } : {}),
+  });
+}
+
 const OWNER_SESSION_ADMISSION: SessionAdmission = {
   principalId: "owner",
   permissions: OWNER_PERMISSIONS,
@@ -574,9 +585,18 @@ export class VoiceAssistantWebSocketServer {
   private readonly downloadTokenStore: DownloadTokenStore;
   private readonly paseoHome: string;
   private readonly connectedHosts: ConnectedHosts;
+  private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
 
   toolHosts() {
     return createToolHosts(this.connectedHosts);
+  }
+
+  getConnectedHosts(): ConnectedHosts {
+    return this.connectedHosts;
+  }
+
+  getServerId(): string {
+    return this.serverId;
   }
   private readonly passwordHash: string | undefined;
   private readonly credentialSource: DaemonAuthConfig | undefined;
@@ -757,6 +777,7 @@ export class VoiceAssistantWebSocketServer {
     this.downloadTokenStore = downloadTokenStore;
     this.paseoHome = paseoHome;
     this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
+    this.mcpBridgeAuthority = wsConfig.mcpBridgeAuthority;
     this.passwordHash = auth?.password;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
@@ -1577,6 +1598,7 @@ export class VoiceAssistantWebSocketServer {
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       connectedHosts: this.connectedHosts,
+      mcpBridgeAuthority: this.mcpBridgeAuthority,
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -1778,6 +1800,7 @@ export class VoiceAssistantWebSocketServer {
     });
     connection.permissionCeiling = message.sessionPermissions;
     connection.session.setRouted(message.routed === true);
+    applyHelloHopContext(connection.session, message);
     this.assignHostSource(connection, message, admitted.principalId, pluginId);
     this.sessions.set(ws, connection);
     if (connection.lifecycle === "reconnectable") {
@@ -1900,6 +1923,7 @@ export class VoiceAssistantWebSocketServer {
     existing.permissionCeiling = message.sessionPermissions;
     existing.session.setPermissions(pending.admission!.permissions);
     existing.session.setRouted(message.routed === true);
+    applyHelloHopContext(existing.session, message);
     this.assignHostSource(existing, message, pending.admission!.principalId);
     const newAppVersion = message.appVersion ?? null;
     if (newAppVersion && newAppVersion !== existing.appVersion) {
@@ -1944,6 +1968,11 @@ export class VoiceAssistantWebSocketServer {
         ? `route:${[principalId, producer.serverId, producer.sourceId].map(encodeURIComponent).join(":")}`
         : principalId;
     connection.session.setHostSource(sourceId);
+    if (hello.originServerId) {
+      connection.session.setOriginServerId(hello.originServerId);
+    } else if (hello.routed && producer) {
+      connection.session.setOriginServerId(producer.serverId);
+    }
   }
 
   private buildServerInfoStatusPayload(session: Session): ServerInfoStatusPayload {
@@ -2145,6 +2174,10 @@ export class VoiceAssistantWebSocketServer {
         agentProfiles: true,
         // COMPAT(mcpServers): added in v0.13.1, remove gate after 2027-03-01.
         mcpServers: true,
+        // COMPAT(mcpBridge): added in v0.13.2, remove gate after 2027-03-10.
+        mcpBridge: true,
+        // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.
+        mcpBridgeMultiHop: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
       },
@@ -2872,10 +2905,14 @@ export class VoiceAssistantWebSocketServer {
       });
     }
 
+    const notifiedSockets = new Set(
+      plan.presentClientIndices
+        .map((index) => notificationEntries[index]?.ws)
+        .filter((ws): ws is WebSocketLike => ws !== undefined),
+    );
+
     for (const { ws } of clientEntries) {
-      const shouldNotify =
-        plan.inAppRecipientIndex !== null &&
-        notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
+      const shouldNotify = notifiedSockets.has(ws);
       const timestamp = new Date().toISOString();
       const connection = this.sessions.get(ws);
       const attentionPayload = {
@@ -2984,10 +3021,14 @@ export class VoiceAssistantWebSocketServer {
         });
     }
 
+    const notifiedSockets = new Set(
+      plan.presentClientIndices
+        .map((index) => notificationEntries[index]?.ws)
+        .filter((ws): ws is WebSocketLike => ws !== undefined),
+    );
+
     for (const { ws } of clientEntries) {
-      const shouldNotify =
-        plan.inAppRecipientIndex !== null &&
-        notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
+      const shouldNotify = notifiedSockets.has(ws);
       const message = wrapSessionMessage({
         type: "terminal_attention_required",
         payload: {

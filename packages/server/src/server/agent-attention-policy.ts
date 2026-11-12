@@ -12,7 +12,13 @@ export interface ClientPresenceState {
 export type AttentionFocusTarget = { kind: "agent"; id: string } | { kind: "terminal"; id: string };
 
 export interface NotificationPlan {
-  inAppRecipientIndex: number | null;
+  /**
+   * Present clients that should raise an in-app/OS notification on their own
+   * device. Every present client is included: a client that is not focused on
+   * the target should notify even when another client was active more recently.
+   * Clients already showing the target suppress themselves in the app.
+   */
+  presentClientIndices: number[];
   shouldPush: boolean;
 }
 
@@ -45,8 +51,7 @@ export function computeNotificationPlan({
   pushEligible,
   nowMs,
 }: ComputeNotificationPlanInput): NotificationPlan {
-  let mostRecentPresentIndex: number | null = null;
-  let mostRecentPresentAtMs = Number.NEGATIVE_INFINITY;
+  const presentClientIndices: number[] = [];
 
   for (const [clientIndex, state] of allStates.entries()) {
     const clampedActivityAtMs =
@@ -59,20 +64,17 @@ export function computeNotificationPlan({
     }
 
     if (state.appVisible && isFocusedOnTarget(state, focusTarget)) {
-      return { inAppRecipientIndex: null, shouldPush: false };
+      return { presentClientIndices: [], shouldPush: false };
     }
 
-    if (clampedActivityAtMs > mostRecentPresentAtMs) {
-      mostRecentPresentIndex = clientIndex;
-      mostRecentPresentAtMs = clampedActivityAtMs;
-    }
+    presentClientIndices.push(clientIndex);
   }
 
-  if (mostRecentPresentIndex !== null) {
-    return { inAppRecipientIndex: mostRecentPresentIndex, shouldPush: false };
+  if (presentClientIndices.length > 0) {
+    return { presentClientIndices, shouldPush: false };
   }
 
-  return { inAppRecipientIndex: null, shouldPush: pushEligible };
+  return { presentClientIndices: [], shouldPush: pushEligible };
 }
 
 export function isPushEligibleAttentionReason(reason: AgentAttentionReason): boolean {
