@@ -786,6 +786,10 @@ function buildShimmerTextStyle(input: {
   });
 }
 
+function shouldShowStopButton(onStop: (() => void) | undefined, isLoading: boolean): boolean {
+  return onStop !== undefined && isLoading;
+}
+
 export const ExpandableBadge = memo(function ExpandableBadge({
   label,
   style,
@@ -1142,7 +1146,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
             onOpenFilePress={handleOpenFilePress}
             onOpenFileHoverIn={handleOpenFileHoverIn}
             onOpenFileHoverOut={handleOpenFileHoverOut}
-            showStopButton={Boolean(onStop)}
+            showStopButton={shouldShowStopButton(onStop, isLoading)}
             onStopPress={handleStopPress}
           />
         </View>
