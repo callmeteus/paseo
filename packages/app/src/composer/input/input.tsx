@@ -85,7 +85,8 @@ import {
 } from "@getpaseo/protocol/inline-chip";
 import { InlineChipEditor } from "@/composer/inline-chip-editor";
 import { InlineMessageText } from "@/composer/inline-context-chip";
-import { SkillHighlightedText } from "@/composer/skill-highlight";
+import { ComposerMirrorText } from "@/composer/composer-mirror-text";
+import { hasComposerListMarker } from "@/composer/list-format";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
@@ -124,8 +125,8 @@ const SKILL_INPUT_COLOR = {
 } as const;
 /**
  * Styles the web mirror copies from the real textarea before painting. The mirror
- * is the only visible text while a skill is highlighted, so any drift here shows
- * up as a caret that does not sit on the character it belongs to.
+ * is the only visible text while a list or skill is showing, so any drift here
+ * puts the caret on the wrong character.
  */
 const SKILL_MIRROR_COMPUTED_STYLES = [
   "fontFamily",
@@ -832,7 +833,10 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
     [syncSkillHighlightScroll],
   );
   const skillRanges = findSkillHighlightRanges(liveText, props.skillNames);
-  const highlightSkills = !props.readOnly && !props.chipEditor && skillRanges.length > 0;
+  const showMirror =
+    !props.readOnly &&
+    !props.chipEditor &&
+    (skillRanges.length > 0 || hasComposerListMarker(liveText));
   const skillMirrorTextRef = useRef<ComponentRef<typeof Text> | null>(null);
   // The mirror is painted from the textarea's own computed styles instead of the
   // style props: responsive padding, line height and box sizing can differ per
@@ -840,7 +844,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
   // the wrong line. Width comes from the live element, so a keyboard resize
   // re-applies it through the observer.
   useLayoutEffect(() => {
-    if (!isWeb || !highlightSkills) return;
+    if (!isWeb || !showMirror) return;
     const input = getTextInputNativeElement(inputHandleRef.current) as HTMLElement | null;
     const mirror = skillMirrorTextRef.current as unknown as HTMLElement | null;
     if (!input || !mirror) return;
@@ -863,9 +867,9 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
     const observer = new ResizeObserver(applyMirrorStyles);
     observer.observe(input);
     return () => observer.disconnect();
-  }, [highlightSkills, liveText, props.textInputStyle]);
+  }, [showMirror, liveText, props.textInputStyle]);
   useEffect(() => {
-    if (!isWeb || !highlightSkills) return;
+    if (!isWeb || !showMirror) return;
     const node = getTextInputNativeElement(inputHandleRef.current);
     if (!node) return;
     node.style.caretColor = skillStyles.text.color;
@@ -876,7 +880,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
       node.style.caretColor = "";
       node.removeEventListener("scroll", sync);
     };
-  }, [highlightSkills, liveText, syncSkillHighlightScroll]);
+  }, [showMirror, liveText, syncSkillHighlightScroll]);
   const measureLines = useCallback(
     (event: import("react-native").TextLayoutEvent) =>
       onRenderedLinesChange(event.nativeEvent.lines.length),
@@ -919,7 +923,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         {hasInlineChip(props.value) ? (
           <InlineMessageText text={props.value} style={props.readOnlyTextStyle} />
         ) : (
-          <SkillHighlightedText
+          <ComposerMirrorText
             text={props.value}
             skillNames={props.skillNames}
             style={props.readOnlyTextStyle}
@@ -942,7 +946,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           {`${measurementText}\u200b`}
         </Text>
       ) : null}
-      {highlightSkills ? (
+      {showMirror ? (
         <View
           pointerEvents="none"
           accessible={false}
@@ -950,7 +954,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           style={skillStyles.highlight}
         >
           <View ref={highlightShiftRef}>
-            <SkillHighlightedText
+            <ComposerMirrorText
               text={liveText}
               skillNames={props.skillNames}
               // On web the DOM effect above copies the textarea's computed styles, so
@@ -962,6 +966,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
               }
               skillStyle={skillStyles.token}
               textRef={skillMirrorTextRef}
+              testID="composer-mirror-text"
             />
           </View>
         </View>
@@ -992,8 +997,8 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           accessibilityLabel={props.accessibilityLabel}
           onFocus={props.onFocus}
           onBlur={props.onBlur}
-          style={[props.textInputStyle, highlightSkills ? SKILL_INPUT_COLOR : null]}
-          cursorColor={highlightSkills ? skillStyles.text.color : undefined}
+          style={[props.textInputStyle, showMirror ? SKILL_INPUT_COLOR : null]}
+          cursorColor={showMirror ? skillStyles.text.color : undefined}
           multiline
           scrollEnabled={props.scrollEnabled}
           editable={props.editable}
