@@ -52,6 +52,8 @@ export interface MarkdownRendererProps extends MarkdownImageContext {
   selectable?: boolean;
   streaming?: boolean;
   onLinkPress?: (url: string) => unknown;
+  /** Send a conversational OpenUI button action back to the agent. */
+  onOpenUIAction?: (message: string) => void;
 }
 
 /** All Markdown surfaces share the same engine and source adaptation. */
@@ -64,7 +66,13 @@ export const MarkdownRenderer = memo(function MarkdownRenderer(props: MarkdownRe
     [completeLines],
   );
   if (isWeb && OPENUI_ROOT.test(props.text)) {
-    return <OpenUIRenderer code={props.text} streaming={props.streaming} />;
+    return (
+      <OpenUIRenderer
+        code={props.text}
+        streaming={props.streaming}
+        onAction={props.onOpenUIAction}
+      />
+    );
   }
   if (!streaming || boundary === 0) return <MarkdownPart {...props} />;
   return (

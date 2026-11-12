@@ -12,6 +12,7 @@ import type { ComponentType, ReactNode } from "react";
 import * as React from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Square } from "lucide-react-native";
 import {
   Pressable,
   StyleProp,
@@ -48,6 +49,7 @@ import {
   destructiveColorMapping,
   shouldStopDetailWheelPropagation,
 } from "@/components/message-shared";
+const ThemedSquareIcon = withUnistyles(Square);
 const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
   container: {
     marginHorizontal: -13,
@@ -374,6 +376,8 @@ interface ExpandableBadgeProps {
   style?: StyleProp<ViewStyle>;
   onToggle?: () => void;
   onOpenFile?: () => void;
+  /** Stops the running agent that owns this tool call (and its process). */
+  onStop?: () => void;
   onDetailHoverChange?: (hovered: boolean) => void;
   renderDetails?: () => ReactNode;
   isLoading?: boolean;
@@ -494,6 +498,8 @@ interface ExpandableBadgeLabelRowProps {
   onOpenFilePress: (event: GestureResponderEvent) => void;
   onOpenFileHoverIn: () => void;
   onOpenFileHoverOut: () => void;
+  showStopButton: boolean;
+  onStopPress: (event: GestureResponderEvent) => void;
 }
 
 function ExpandableBadgeLabelRow({
@@ -523,6 +529,8 @@ function ExpandableBadgeLabelRow({
   onOpenFilePress,
   onOpenFileHoverIn,
   onOpenFileHoverOut,
+  showStopButton,
+  onStopPress,
 }: ExpandableBadgeLabelRowProps) {
   const { t } = useTranslation();
   return (
@@ -566,6 +574,18 @@ function ExpandableBadgeLabelRow({
             size={14}
             uniProps={isOpenFileHovered ? foregroundColorMapping : foregroundMutedColorMapping}
           />
+        </Pressable>
+      ) : null}
+      {showStopButton ? (
+        <Pressable
+          onPress={onStopPress}
+          accessibilityRole="button"
+          accessibilityLabel={t("message.actions.stopTool")}
+          testID="tool-call-stop"
+          style={expandableBadgeStylesheet.openFileButton}
+          hitSlop={6}
+        >
+          <ThemedSquareIcon size={12} uniProps={foregroundColorMapping} />
         </Pressable>
       ) : null}
       {isWebShimmer ? (
@@ -775,6 +795,7 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   isExpanded,
   onToggle,
   onOpenFile,
+  onStop,
   onDetailHoverChange,
   renderDetails,
   isLoading = false,
@@ -816,6 +837,13 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   );
   const handleOpenFileHoverIn = useCallback(() => setIsOpenFileHovered(true), []);
   const handleOpenFileHoverOut = useCallback(() => setIsOpenFileHovered(false), []);
+  const handleStopPress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation?.();
+      onStop?.();
+    },
+    [onStop],
+  );
 
   const nativeGradientIdRef = useRef(
     `shimmer-gradient-${Math.random().toString(36).substring(2, 9)}`,
@@ -1114,6 +1142,8 @@ export const ExpandableBadge = memo(function ExpandableBadge({
             onOpenFilePress={handleOpenFilePress}
             onOpenFileHoverIn={handleOpenFileHoverIn}
             onOpenFileHoverOut={handleOpenFileHoverOut}
+            showStopButton={Boolean(onStop)}
+            onStopPress={handleStopPress}
           />
         </View>
       </Pressable>
@@ -1168,6 +1198,8 @@ interface ToolCallProps {
   onInlineDetailsHoverChange?: (hovered: boolean) => void;
   onInlineDetailsExpandedChange?: (expanded: boolean) => void;
   onOpenFilePath?: (filePath: string) => void;
+  /** Stops the running agent that owns this tool call. */
+  onStop?: () => void;
   defaultExpanded?: boolean;
   forceInline?: boolean;
   maxDetailHeight?: number;
@@ -1193,6 +1225,7 @@ export const ToolCall = memo(function ToolCall({
   onInlineDetailsHoverChange,
   onInlineDetailsExpandedChange,
   onOpenFilePath,
+  onStop,
   defaultExpanded,
   forceInline = false,
   maxDetailHeight = 400,
@@ -1355,6 +1388,7 @@ export const ToolCall = memo(function ToolCall({
       isExpanded={shouldRenderInline && isExpanded}
       onToggle={presentation.canOpenDetails ? handleToggle : undefined}
       onOpenFile={handleOpenFile}
+      onStop={onStop}
       renderDetails={presentation.canOpenDetails && shouldRenderInline ? renderDetails : undefined}
       isLoading={status === "running" || status === "executing"}
       isError={status === "failed"}
@@ -1380,6 +1414,7 @@ function areToolCallPropsEqual(previous: ToolCallProps, next: ToolCallProps) {
   if (previous.isLastInSequence !== next.isLastInSequence) return false;
   if (previous.disableOuterSpacing !== next.disableOuterSpacing) return false;
   if (previous.onOpenFilePath !== next.onOpenFilePath) return false;
+  if (previous.onStop !== next.onStop) return false;
   if (previous.defaultExpanded !== next.defaultExpanded) return false;
   if (previous.forceInline !== next.forceInline) return false;
   if (previous.maxDetailHeight !== next.maxDetailHeight) return false;

@@ -455,6 +455,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const transformTimelineItem = useInstalledTimelineTransform(resolvedServerId);
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
+    const handleStopAgent = useStableEvent(() => {
+      if (!client) return;
+      void client.cancelAgent(agentId).catch(() => undefined);
+    });
     const sessionStreamHead = useSessionStore((state) =>
       state.sessions[resolvedServerId]?.agentStreamHead?.get(agentId),
     );
@@ -959,6 +963,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                   timestamp={item.timestamp.getTime()}
                   workspaceRoot={workspaceRoot}
                   serverId={resolvedServerId}
+                  agentId={agentId}
                   client={client}
                   spacing={layoutItem.assistantSpacing}
                   phase={layoutItem.phase}
@@ -1034,6 +1039,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               agentMessage={data.agentMessage}
               isLastInSequence={isLastInSequence}
               onOpenFilePath={handleToolCallOpenFile}
+              onStop={handleStopAgent}
               maxDetailHeight={maxDetailHeight}
             />
           );
@@ -1050,11 +1056,18 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             status={data.status}
             isLastInSequence={isLastInSequence}
             onOpenFilePath={handleToolCallOpenFile}
+            onStop={handleStopAgent}
             maxDetailHeight={maxDetailHeight}
           />
         );
       },
-      [context.cwd, resolvedServerId, setInlineDetailsExpanded, handleToolCallOpenFile],
+      [
+        context.cwd,
+        resolvedServerId,
+        setInlineDetailsExpanded,
+        handleToolCallOpenFile,
+        handleStopAgent,
+      ],
     );
 
     // Read through a stable event so live group updates do not change the renderer identity

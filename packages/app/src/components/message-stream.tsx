@@ -577,6 +577,7 @@ interface AssistantMessageProps {
   timestamp: number;
   workspaceRoot?: string;
   serverId?: string;
+  agentId?: string;
   client?: DaemonClient | null;
   spacing?: "default" | "compactTop" | "compactBottom" | "compactBoth";
   phase: MarkdownPhase;
@@ -732,6 +733,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   timestamp: _timestamp,
   workspaceRoot,
   serverId,
+  agentId,
   client,
   spacing = "default",
   phase,
@@ -774,6 +776,10 @@ export const AssistantMessage = memo(function AssistantMessage({
   const measureMessage = useStableEvent((event: import("react-native").LayoutChangeEvent) => {
     setAssistantMessageHeight({ markdown: revealedMessage, ...event.nativeEvent.layout });
   });
+  const handleOpenUIAction = useStableEvent((openUIMessage: string) => {
+    if (!client || !agentId) return;
+    void client.sendAgentMessage(agentId, openUIMessage).catch(() => undefined);
+  });
   return (
     <View
       testID="assistant-message"
@@ -787,6 +793,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         client={client}
         workspaceRoot={workspaceRoot}
         serverId={serverId}
+        onOpenUIAction={handleOpenUIAction}
       />
       {fullMessageByteLength !== null ? (
         <Text
