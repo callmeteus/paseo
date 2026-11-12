@@ -81,9 +81,9 @@ import {
   inlineChipDisplayText,
   insertInlineChip,
   insertTextAtSelection,
-  shouldChipPaste,
 } from "@getpaseo/protocol/inline-chip";
-import { InlineChipEditor } from "@/composer/inline-chip-editor";
+import { InlineChipEditor, type InlineChipEditSnapshot } from "@/composer/inline-chip-editor";
+import { composerPasteAction, isPlainTextPasteShortcut } from "@/composer/input/paste";
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
 import { continueComposerList, hasComposerListMarker } from "@/composer/list-format";
@@ -548,7 +548,13 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
     if (!textarea) return;
 
     let disposed = false;
+    let plainPaste = false;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      plainPaste = isPlainTextPasteShortcut(event);
+    };
     const handlePaste = (event: ClipboardEvent) => {
+      const plain = plainPaste;
+      plainPaste = false;
       if (!isConnected || disabled || isDictating || isRealtimeVoiceForCurrentAgent) return;
 
       const imageFiles = collectImageFilesFromClipboardData(event.clipboardData);
@@ -572,16 +578,17 @@ function usePasteImagesEffect(args: PasteImagesEffectArgs): void {
       const rich =
         event.currentTarget instanceof HTMLElement &&
         event.currentTarget.dataset.inlineChipEditor === "true";
-      const chip = shouldChipPaste(pasted);
-      // A short paste into the plain textarea is the browser's own insert.
-      if (!rich && !chip) return;
+      const action = composerPasteAction({ text: pasted, rich, plain });
+      if (!action) return;
       event.preventDefault();
-      onPasteText({ text: pasted, chip });
+      onPasteText({ text: pasted, chip: action.chip });
     };
 
+    textarea.addEventListener("keydown", handleKeyDown);
     textarea.addEventListener("paste", handlePaste);
     return () => {
       disposed = true;
+      textarea.removeEventListener?.("keydown", handleKeyDown);
       textarea.removeEventListener?.("paste", handlePaste);
     };
   }, [
@@ -743,6 +750,7 @@ interface ComposerTextSurfaceProps {
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
   chipEditor: boolean;
+  undoBaseline?: InlineChipEditSnapshot | null;
   skillNames: readonly string[];
   /**
    * Registers a setter the parent can call after a programmatic text replacement.
@@ -993,6 +1001,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
           ref={assignInput}
           initialText={props.value}
           initialSelection={chipInitialSelection}
+          undoBaseline={props.undoBaseline}
           style={props.textInputStyle}
           editable={props.editable}
           accessibilityLabel={props.accessibilityLabel}
@@ -1599,6 +1608,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const liveTextSyncRef = useRef<((text: string) => void) | null>(null);
     const selectionRef = useRef({ start: value.length, end: value.length });
     const [chipEditor, setChipEditor] = useState(() => isWeb && hasInlineChip(value));
+    const chipEditorRef = useRef(chipEditor);
+    chipEditorRef.current = chipEditor;
+    const pasteUndoRef = useRef<InlineChipEditSnapshot | null>(null);
     const syncChipEditor = useCallback((text: string) => {
       if (!isWeb) return;
       const next = hasInlineChip(text);
@@ -2071,6 +2083,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       (input: { text: string; chip: boolean }) => {
         const current = textInputRef.current?.getText() ?? valueRef.current;
         const selection = selectionRef.current;
+        if (input.chip && !chipEditorRef.current) {
+          pasteUndoRef.current = {
+            text: current,
+            selection: { start: selection.start, end: selection.end },
+          };
+        }
         const count = countPasteLines(input.text);
         const next = input.chip
           ? insertInlineChip({
@@ -2111,9 +2129,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       chipEditorMountedRef.current = chipEditor;
       // Unmounting the textarea blurs it and clears focus intent before this runs.
       // The pane is still the one the user is typing in, so put the caret back.
+      pasteUndoRef.current = null;
       if (!paneFocusedRef.current) return;
+      // focus() parks the caret before a chip and reports that selection before
+      // setSelection runs, so keep the caret from the paste.
+      const selection = selectionRef.current;
       textInputRef.current?.focus();
-      textInputRef.current?.setSelection(selectionRef.current);
+      textInputRef.current?.setSelection(selection);
     }, [chipEditor]);
 
     const handleSelectionChange = useCallback(
@@ -2434,6 +2456,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               shortcut: focusInputKeys ? formatShortcut(focusInputKeys[0], getShortcutOs()) : "",
             })}
             chipEditor={chipEditor}
+            undoBaseline={pasteUndoRef.current}
             skillNames={skillNames}
             liveTextSyncRef={liveTextSyncRef}
           />
