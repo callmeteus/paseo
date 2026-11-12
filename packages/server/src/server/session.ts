@@ -10013,9 +10013,6 @@ function createHostSession(options: SessionOptions, session: Session): Connected
     () => session.isRouted(),
     session.getSessionId(),
     () => options.getConnectedHostBufferedAmount?.() ?? 0,
-    () => session.getHopPath(),
-    () => session.getOriginServerId(),
-    () => session.getMaxHops(),
   );
 }
 
