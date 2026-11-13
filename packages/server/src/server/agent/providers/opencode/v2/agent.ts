@@ -167,6 +167,7 @@ export class OpenCodeV2AgentClient implements AgentClient {
       sessionId: info.id,
       env: launch?.env ?? {},
       tools: launch?.paseoTools,
+      maxTools: launch?.maxTools,
     });
     const bound = new Map<string, () => void>();
     const bindChild = (childId: string) => {
@@ -176,6 +177,7 @@ export class OpenCodeV2AgentClient implements AgentClient {
         sessionId: childId,
         env: launch?.env ?? {},
         tools: launch?.paseoTools,
+        maxTools: launch?.maxTools,
       });
       if (childUnbind) bound.set(childId, childUnbind);
     };

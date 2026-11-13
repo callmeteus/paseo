@@ -2711,6 +2711,8 @@ export const fr: TranslationResources = {
       crashPersists: "{{provider}} plante encore. Vérifiez le CLI du fournisseur et réessayez.",
       sessionRepaired:
         "La session était corrompue en amont. Nouvelle session {{provider}} propre avec l'historique.",
+      shrinkingTools:
+        "{{provider}} accepte moins d'outils que ce chat n'en expose. Nouvelle tentative avec moins d'outils.",
       targetCount: "{{count}} cibles",
       usePreset: "Utiliser le preset",
       wizard: {

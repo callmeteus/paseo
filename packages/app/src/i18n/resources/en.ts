@@ -2800,6 +2800,8 @@ export const en = {
       crashPersists: "{{provider}} keeps crashing. Check the provider CLI and try again.",
       sessionRepaired:
         "The session was corrupted upstream. Started a clean {{provider}} session with the transcript.",
+      shrinkingTools:
+        "{{provider}} accepts fewer tools than this chat exposes. Retrying with a smaller tool set.",
     },
     voice: {
       offline: "Connect to this host to configure voice.",

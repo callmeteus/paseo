@@ -2627,6 +2627,7 @@ export const zhCN: TranslationResources = {
       retryingProvider: "{{provider}} 崩溃了。正在同一提供商上重试…",
       crashPersists: "{{provider}} 反复崩溃。请检查提供商的 CLI 后重试。",
       sessionRepaired: "上游会话已损坏。已使用对话记录启动新的 {{provider}} 会话。",
+      shrinkingTools: "{{provider}} 接受的工具数量少于本聊天提供的数量。正在减少工具后重试。",
       targetCount: "{{count}} 个目标",
       usePreset: "使用预设",
       wizard: {

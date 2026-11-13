@@ -2666,6 +2666,8 @@ export const ko: TranslationResources = {
       crashPersists: "{{provider}}이(가) 계속 충돌합니다. 공급자 CLI를 확인하고 다시 시도하세요.",
       sessionRepaired:
         "업스트림 세션이 손상되었습니다. 기록을 포함한 새 {{provider}} 세션을 시작했습니다.",
+      shrinkingTools:
+        "{{provider}} 은(는) 이 채팅이 노출하는 것보다 적은 도구만 허용합니다. 도구를 줄여 다시 시도합니다.",
       targetCount: "대상 {{count}}개",
       usePreset: "프리셋 사용",
       wizard: {

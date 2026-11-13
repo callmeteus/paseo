@@ -2687,6 +2687,8 @@ export const ar: TranslationResources = {
       retryingProvider: "تعطل {{provider}}. تتم إعادة المحاولة على نفس المزود…",
       crashPersists: "يتعطل {{provider}} باستمرار. تحقق من واجهة سطر الأوامر للمزود وحاول مجددًا.",
       sessionRepaired: "كانت الجلسة معطوبة في المصدر. بدأت جلسة {{provider}} نظيفة مع السجل.",
+      shrinkingTools:
+        "{{provider}} يقبل أدوات أقل مما يعرضه هذا الدردشة. إعادة المحاولة بعدد أدوات أقل.",
       targetCount: "{{count}} أهداف",
       usePreset: "استخدام الإعداد",
       wizard: {

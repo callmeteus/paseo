@@ -26,6 +26,8 @@ export interface ApplyProviderSwitchInput {
   pending: StagedModelTarget;
   persistPreference: (provider: string, modelId: string) => Promise<unknown>;
   onPreferencePersistError?: (error: unknown) => void;
+  /** True allows a same provider+model port, used to repair a corrupt session. */
+  force?: boolean;
 }
 
 export interface ApplyProviderSwitchResult {
@@ -60,6 +62,7 @@ export async function applyProviderSwitch(
       archivePrevious: false,
       persistPreference: input.persistPreference,
       onPreferencePersistError: input.onPreferencePersistError,
+      ...(input.force ? { force: true } : {}),
     });
     return {
       client: input.sourceClient,

@@ -21,6 +21,7 @@ import {
   AGENT_LIFECYCLE_STATUSES,
   type AgentLifecycleStatus,
 } from "@getpaseo/protocol/agent-lifecycle";
+import { parseToolItemLimit } from "@getpaseo/protocol/model-router";
 import {
   getParentAgentIdFromLabels,
   hasOpenAgentTab,
@@ -1190,6 +1191,12 @@ export class AgentManager {
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
+  /**
+   * The tool-list ceiling each remote model enforces, learned from a rejected
+   * turn. Keyed `provider::model`. A model that rejects the list once keeps
+   * rejecting it, so the next request must be smaller instead of failing again.
+   */
+  private readonly toolSurfaceLimits = new Map<string, number>();
   private readonly resolvePaseoToolPolicy: (
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
@@ -1970,6 +1977,7 @@ export class AgentManager {
       paseoToolPolicy,
       options?.env,
       { reason: "create", purpose: "interactive", workspaceId: options.workspaceId ?? null },
+      storedConfig.model,
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     const createOptions = this.buildCreateSessionOptions(options);
@@ -2114,6 +2122,7 @@ export class AgentManager {
         purpose,
         workspaceId: options?.workspaceId ?? null,
       },
+      storedConfig.model,
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     const session = await client.resumeSession(
@@ -2180,6 +2189,7 @@ export class AgentManager {
       paseoToolPolicy,
       undefined,
       { reason: "import", purpose: "interactive", workspaceId: input.workspaceId },
+      storedConfig.model,
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     const imported = await client.importSession(
@@ -2281,6 +2291,7 @@ export class AgentManager {
       paseoToolPolicy,
       undefined,
       { reason: "refresh", purpose: "interactive", workspaceId: existing.workspaceId },
+      storedConfig.model,
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     if (
@@ -5612,7 +5623,10 @@ export class AgentManager {
     }
     if (previousRows.length === 0) {
       const imported = await registry.get(agentId);
-      if (imported && isCursorImportedRecord(imported)) {
+      // A record that was itself ported keeps its conversation in
+      // `portedTimeline`. Reading it here is what stops a repair of a repaired
+      // chat from starting with an empty transcript.
+      if (imported && (isCursorImportedRecord(imported) || imported.migratedFrom)) {
         previousRows = this.fetchImportedTimeline(
           agentId,
           (imported.portedTimeline ?? []) as AgentTimelineRow[],
@@ -5639,6 +5653,12 @@ export class AgentManager {
           // ignore
         }
       }
+    }
+    if (previousRows.length === 0) {
+      this.logger.warn(
+        { agentId },
+        "Porting a chat with no readable transcript; the ported agent starts empty",
+      );
     }
     return previousRows;
   }
@@ -6411,6 +6431,7 @@ export class AgentManager {
       agent.lifecycle = "error";
     }
     agent.lastError = event.error;
+    this.learnToolSurfaceLimit(agent, event);
     if (!options?.fromHistory) {
       this.dropPromptForFailedTurn(agent, eventTurnId);
     }
@@ -6424,6 +6445,35 @@ export class AgentManager {
     if (!isForegroundEvent && !agent.activeForegroundTurnId) {
       this.emitState(agent);
     }
+  }
+
+  /**
+   * A model that rejects a request for carrying too many tools names its own
+   * ceiling. Remember it so the next request is pruned to fit instead of
+   * failing the same way, and so the repair never turns into a fresh session
+   * on the same oversized surface.
+   */
+  private learnToolSurfaceLimit(
+    agent: ActiveManagedAgent,
+    event: { error?: string | null; code?: string | null; diagnostic?: string | null },
+  ): void {
+    const limit = parseToolItemLimit({
+      error: event.error,
+      code: event.code,
+      diagnostic: event.diagnostic,
+    });
+    if (!limit) return;
+    const key = `${agent.provider}::${agent.config.model ?? ""}`;
+    if (this.toolSurfaceLimits.get(key) === limit) return;
+    this.toolSurfaceLimits.set(key, limit);
+    this.logger.warn(
+      { agentId: agent.id, provider: agent.provider, model: agent.config.model, maxTools: limit },
+      "Model rejects requests above a tool-list ceiling; pruning the Paseo tool surface",
+    );
+  }
+
+  private toolSurfaceLimitFor(provider: string, model: string | null | undefined): number | null {
+    return this.toolSurfaceLimits.get(`${provider}::${model ?? ""}`) ?? null;
   }
 
   private onStreamTurnCanceled(params: {
@@ -7249,12 +7299,15 @@ export class AgentManager {
     client: AgentClient,
     cwd: string,
     paseoToolPolicy: ProviderPaseoToolsPolicy | undefined,
-    env?: Record<string, string>,
-    opening?: {
-      reason: PluginSessionOpenRequest["reason"];
-      purpose: PluginSessionOpenRequest["purpose"];
-      workspaceId?: string | null;
-    },
+    env: Record<string, string> | undefined,
+    opening:
+      | {
+          reason: PluginSessionOpenRequest["reason"];
+          purpose: PluginSessionOpenRequest["purpose"];
+          workspaceId?: string | null;
+        }
+      | undefined,
+    model: string | null | undefined,
   ): Promise<AgentLaunchContext> {
     if (this.pluginLifecycle) {
       const request: PluginSessionOpenRequest = {
@@ -7277,6 +7330,8 @@ export class AgentManager {
         PASEO_AGENT_CWD: cwd,
       },
     };
+    const maxTools = this.toolSurfaceLimitFor(client.provider, model);
+    if (maxTools) context.maxTools = maxTools;
     if (
       this.paseoToolsEnabled &&
       isPaseoToolPolicyEnabled(paseoToolPolicy) &&

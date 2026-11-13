@@ -2694,6 +2694,8 @@ export const ptBR: TranslationResources = {
       crashPersists: "{{provider}} continua travando. Verifique o CLI do provider e tente de novo.",
       sessionRepaired:
         "A sessão estava corrompida no upstream. Iniciei uma sessão limpa de {{provider}} com o histórico.",
+      shrinkingTools:
+        "{{provider}} aceita menos ferramentas do que este chat expõe. Tentando de novo com menos ferramentas.",
       targetCount: "{{count}} destinos",
       usePreset: "Usar preset",
       wizard: {

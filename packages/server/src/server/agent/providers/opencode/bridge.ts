@@ -35,6 +35,12 @@ interface OpenCodeBridgeOptions {
 interface OpenCodeSessionBinding {
   env: Record<string, string>;
   tools?: PaseoToolCatalog;
+  /**
+   * The ceiling the target model enforces on the request's tool list, learned
+   * from a rejected turn. The plugin prunes to it instead of letting every
+   * request fail.
+   */
+  maxTools?: number;
 }
 
 interface BindOpenCodeSessionInput extends OpenCodeSessionBinding {
@@ -44,6 +50,17 @@ interface BindOpenCodeSessionInput extends OpenCodeSessionBinding {
 interface OpenCodePluginOptions {
   baseUrl: string;
   token: string;
+}
+
+function sessionContextPayload(
+  binding: OpenCodeSessionBinding,
+  includeTools: boolean,
+): Record<string, unknown> {
+  return {
+    env: binding.env,
+    ...(includeTools ? { tools: [...(binding.tools?.tools.keys() ?? [])] } : {}),
+    ...(binding.maxTools ? { maxTools: binding.maxTools } : {}),
+  };
 }
 
 interface OpenCodeConfig {
@@ -97,6 +114,7 @@ export class OpenCodeBridge {
     const binding: OpenCodeSessionBinding = {
       env: { ...input.env },
       ...(input.tools ? { tools: input.tools } : {}),
+      ...(input.maxTools && input.maxTools > 0 ? { maxTools: input.maxTools } : {}),
     };
     this.sessions.set(input.sessionId, binding);
     return () => {
@@ -173,12 +191,7 @@ export class OpenCodeBridge {
           sendJson(response, 404, { error: "OpenCode session is not bound to a Paseo agent" });
           return;
         }
-        sendJson(response, 200, {
-          env: binding.env,
-          ...(url.searchParams.has("tools")
-            ? { tools: [...(binding.tools?.tools.keys() ?? [])] }
-            : {}),
-        });
+        sendJson(response, 200, sessionContextPayload(binding, url.searchParams.has("tools")));
         return;
       }
 

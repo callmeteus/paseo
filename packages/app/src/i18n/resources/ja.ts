@@ -2684,6 +2684,8 @@ export const ja: TranslationResources = {
         "{{provider}} が繰り返しクラッシュします。プロバイダーの CLI を確認して再試行してください。",
       sessionRepaired:
         "上流でセッションが破損していました。履歴を含む新しい {{provider}} セッションを開始しました。",
+      shrinkingTools:
+        "{{provider}} はこのチャットが公開するより少ないツールしか受け付けません。ツールを減らして再試行します。",
       targetCount: "{{count}} 個の対象",
       usePreset: "プリセットを使用",
       wizard: {

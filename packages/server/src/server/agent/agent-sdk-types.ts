@@ -660,6 +660,13 @@ export interface AgentLaunchContext {
    */
   paseoTools?: PaseoToolCatalog;
   /**
+   * The model's ceiling on a request's tool list, when a rejected turn taught
+   * it to the daemon. Providers that own the tool surface (OpenCode) prune to
+   * it. Runtime only: the number is a property of the remote model, not of the
+   * chat.
+   */
+  maxTools?: number;
+  /**
    * Reads the connected Hub credential at prompt time. Runtime only.
    */
   hubAutomations?: () => { origin: string; daemonId: string; credential: string } | null;

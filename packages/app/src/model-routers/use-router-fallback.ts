@@ -1,19 +1,22 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  isProviderCrashFailure,
-  isRetryableRouterFailure,
-  isSessionCorruptionFailure,
-  selectFallbackTarget,
-  type ModelRouterTarget,
-} from "@getpaseo/protocol/model-router";
+import { selectFallbackTarget, type ModelRouterTarget } from "@getpaseo/protocol/model-router";
 import { applyProviderSwitch } from "@/composer/agent-controls/apply-provider-switch";
 import { getProviderSwitch } from "@/composer/agent-controls/pending-provider-switch";
+import {
+  finishPortingActivity,
+  startPortingActivity,
+} from "@/composer/agent-controls/porting-activity";
 import { useToast } from "@/contexts/toast-context";
 import { selectAgentSentMessages, useSessionStore } from "@/stores/session-store";
 import { generateMessageId } from "@/types/stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import {
+  decideRouterFailure,
+  MAX_SESSION_REPAIRS,
+  type RouterFailureAction,
+} from "./router-failure-decision";
 
 interface UseRouterFallbackInput {
   serverId: string;
@@ -31,6 +34,13 @@ interface RoutedAgent {
   modelRouterId?: string | null;
 }
 
+const RESEND_RETRY_DELAY_MS = 1200;
+/** Crashes are local: keep retrying the same provider, never port away. */
+const MAX_CRASH_RETRIES = 5;
+/** A port creates the new agent server-side before the client can see it. */
+const AGENT_ARRIVAL_TIMEOUT_MS = 5_000;
+const AGENT_ARRIVAL_POLL_MS = 100;
+
 interface PortContext {
   client: DaemonClient;
   serverId: string;
@@ -40,10 +50,6 @@ interface PortContext {
   onPorted: (provider: string) => void;
 }
 
-const RESEND_RETRY_DELAY_MS = 1200;
-/** Crashes are local: keep retrying the same provider, never port away. */
-const MAX_CRASH_RETRIES = 5;
-
 /**
  * The ported runtime can still be starting when the fallback lands, so the
  * carry-over prompt is retried once before giving up.
@@ -52,30 +58,70 @@ async function resendFailedPrompt(
   client: DaemonClient,
   agentId: string,
   text: string,
-): Promise<void> {
-  const send = () =>
-    client.sendAgentMessage(agentId, text, {
+): Promise<boolean> {
+  const send = async () => {
+    await client.sendAgentMessage(agentId, text, {
       messageId: generateMessageId(),
       activeTurnBehavior: "interrupt",
     });
+  };
   try {
     await send();
-    return;
+    return true;
   } catch (error) {
     console.warn("[RouterFallback] failed to resend the failed prompt", error);
   }
   await new Promise((resolve) => setTimeout(resolve, RESEND_RETRY_DELAY_MS));
   try {
     await send();
+    return true;
   } catch (error) {
     console.warn("[RouterFallback] failed to resend the failed prompt after a retry", error);
+    return false;
   }
+}
+
+/**
+ * Counts how many ports already produced this chat. A chat that has been
+ * repaired twice is being rejected for a reason a fresh session cannot fix, and
+ * another repair would only archive the tab the user is reading.
+ */
+function countPortedChain(serverId: string, agentId: string): number {
+  const agents = useSessionStore.getState().sessions[serverId]?.agents;
+  if (!agents) return 0;
+  let length = 0;
+  let current = agents.get(agentId)?.migratedFrom?.agentId;
+  while (current && length < MAX_SESSION_REPAIRS + 1) {
+    length += 1;
+    current = agents.get(current)?.migratedFrom?.agentId;
+  }
+  return length;
+}
+
+/**
+ * A ported agent exists on the daemon a moment before the client learns about
+ * it. Navigating first resolves the workspace from a missing record, which is
+ * how a repaired chat ended up on the previous tab.
+ */
+async function waitForAgentArrival(serverId: string, agentId: string): Promise<boolean> {
+  const deadline = Date.now() + AGENT_ARRIVAL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const agent = useSessionStore.getState().sessions[serverId]?.agents.get(agentId);
+    if (agent) return true;
+    await new Promise((resolve) => setTimeout(resolve, AGENT_ARRIVAL_POLL_MS));
+  }
+  return false;
 }
 
 /**
  * A provider session rejected upstream (invalid tool call in its stored
  * history) can only be fixed by opening a new session on the same provider and
  * model, seeded with the ported transcript.
+ *
+ * The repair runs through the same pipeline as a user-initiated switch: the
+ * source chat stays open while the new session starts, the porting activity
+ * keeps the ported chat out of the tab bar until the client arrives, and the
+ * source is archived only after the user has been moved to the new tab.
  */
 async function repairCorruptedSession(
   input: {
@@ -84,27 +130,44 @@ async function repairCorruptedSession(
     agent: RoutedAgent;
     lastUserText: string | null;
   },
-  onRepaired: () => void,
+  onRepaired: (provider: string) => void,
   onFailed: (error: unknown) => void,
 ): Promise<void> {
   const { client, serverId, agent, lastUserText } = input;
+  startPortingActivity(serverId, agent.id, { toProvider: agent.provider });
   try {
-    const result = await client.swapAgentProvider({
+    const applied = await applyProviderSwitch({
+      sourceClient: client,
+      sourceServerId: serverId,
       agentId: agent.id,
-      targetProvider: agent.provider,
-      targetModel: agent.model ?? null,
+      workspaceId: agent.workspaceId ?? null,
+      pending: {
+        kind: "model",
+        targetServerId: serverId,
+        provider: agent.provider,
+        modelId: agent.model ?? "",
+        clearRouter: false,
+        routerId: agent.modelRouterId ?? undefined,
+      },
+      persistPreference: async () => {},
       force: true,
     });
-    if (!result.newAgentId) throw new Error(result.error ?? "Session repair failed");
-    if (lastUserText) await resendFailedPrompt(client, result.newAgentId, lastUserText);
+    await waitForAgentArrival(serverId, applied.agentId);
+    if (lastUserText) await resendFailedPrompt(client, applied.agentId, lastUserText);
     navigateToAgent({
       serverId,
-      agentId: result.newAgentId,
+      agentId: applied.agentId,
       workspaceId: agent.workspaceId ?? undefined,
+      pin: true,
     });
-    onRepaired();
+    onRepaired(agent.provider);
+    void applied.finalize().catch((error: unknown) => {
+      console.warn("[RouterFallback] failed to archive the repaired source agent", error);
+    });
   } catch (error) {
     onFailed(error);
+  } finally {
+    finishPortingActivity(serverId, agent.id);
   }
 }
 
@@ -146,11 +209,13 @@ async function portToNextTarget(context: PortContext): Promise<void> {
     },
     persistPreference: async () => {},
   });
+  await waitForAgentArrival(serverId, applied.agentId);
   if (lastUserText) await resendFailedPrompt(applied.client, applied.agentId, lastUserText);
   navigateToAgent({
     serverId: applied.serverId,
     agentId: applied.agentId,
     workspaceId: agent.workspaceId ?? undefined,
+    pin: true,
   });
   void applied.finalize().catch((error: unknown) => {
     console.warn("[RouterFallback] failed to archive the ported source agent", error);
@@ -179,6 +244,7 @@ interface RouterFailureHandlerInput {
     retrying: (provider: string) => void;
     crashPersists: (provider: string) => void;
     repaired: (provider: string) => void;
+    shrinking: (provider: string) => void;
     noTargets: () => void;
     ported: (provider: string) => void;
   };
@@ -186,61 +252,52 @@ interface RouterFailureHandlerInput {
     attemptedKey: { current: string | null };
     inFlight: { current: boolean };
     crashRetries: { current: Map<string, number> };
+    shrinkAttemptedKey: { current: string | null };
   };
 }
 
-/** Decides between retrying in place, repairing the session, or porting away. */
-function handleRouterFailure(input: RouterFailureHandlerInput): void {
-  const { client, serverId, agentId, errorKey, notify, state } = input;
-  const crash = isProviderCrashFailure({ error: errorKey });
-  const corrupted = isSessionCorruptionFailure({ error: errorKey });
-  if (!crash && !corrupted && !isRetryableRouterFailure({ error: errorKey })) return;
-
-  const session = useSessionStore.getState().sessions[serverId];
-  const liveAgent = session?.agents?.get(agentId);
-  if (!liveAgent || liveAgent.archivedAt) return;
-  const provider = liveAgent.provider;
-  const lastUserText = selectAgentSentMessages(session, agentId)[0] ?? null;
-  const agent: RoutedAgent = {
-    id: agentId,
-    provider,
-    model: liveAgent.model ?? null,
-    workspaceId: liveAgent.workspaceId ?? null,
-    modelRouterId: liveAgent.modelRouterId ?? null,
-  };
-
-  if (crash) {
-    const crashKey = `${serverId}:${agentId}:${errorKey}`;
-    const attempts = state.crashRetries.current.get(crashKey) ?? 0;
-    if (attempts >= MAX_CRASH_RETRIES) {
-      notify.crashPersists(provider);
-      return;
-    }
-    if (!lastUserText) return;
-    state.crashRetries.current.set(crashKey, attempts + 1);
-    notify.retrying(provider);
-    void resendFailedPrompt(client, agentId, lastUserText);
+/** A local provider crash: retry the same provider, never port away from it. */
+function retryCrashedProvider(input: {
+  client: DaemonClient;
+  serverId: string;
+  agentId: string;
+  errorKey: string;
+  provider: string;
+  lastUserText: string | null;
+  notify: RouterFailureHandlerInput["notify"];
+  state: RouterFailureHandlerInput["state"];
+}): void {
+  const { client, serverId, agentId, errorKey, provider, lastUserText, notify, state } = input;
+  const crashKey = `${serverId}:${agentId}:${errorKey}`;
+  const attempts = state.crashRetries.current.get(crashKey) ?? 0;
+  if (attempts >= MAX_CRASH_RETRIES) {
+    notify.crashPersists(provider);
     return;
   }
+  if (!lastUserText) return;
+  state.crashRetries.current.set(crashKey, attempts + 1);
+  notify.retrying(provider);
+  void resendFailedPrompt(client, agentId, lastUserText);
+}
 
-  if (corrupted) {
-    void repairCorruptedSession(
-      { client, serverId, agent, lastUserText },
-      () => notify.repaired(provider),
-      (error) => {
-        console.warn("[RouterFallback] session repair failed", error);
-      },
-    );
-    return;
-  }
-
+/** Hand the chat to the next router target. */
+function startRouterPort(input: {
+  client: DaemonClient;
+  serverId: string;
+  agentId: string;
+  errorKey: string;
+  agent: RoutedAgent;
+  lastUserText: string | null;
+  notify: RouterFailureHandlerInput["notify"];
+  state: RouterFailureHandlerInput["state"];
+}): void {
+  const { client, serverId, agentId, errorKey, agent, lastUserText, notify, state } = input;
   // A ported agent can fail before the resend lands: keep walking the chain
   // even when there is no prompt left to carry over.
   const attemptKey = `${serverId}:${agentId}:${errorKey}:${lastUserText ?? ""}`;
   if (state.attemptedKey.current === attemptKey || state.inFlight.current) return;
   state.attemptedKey.current = attemptKey;
   state.inFlight.current = true;
-
   void portToNextTarget({
     client,
     serverId,
@@ -257,13 +314,92 @@ function handleRouterFailure(input: RouterFailureHandlerInput): void {
     });
 }
 
+/** Decides between retrying in place, repairing the session, or porting away. */
+function handleRouterFailure(input: RouterFailureHandlerInput): void {
+  const { client, serverId, agentId, errorKey, notify, state } = input;
+  const session = useSessionStore.getState().sessions[serverId];
+  const liveAgent = session?.agents?.get(agentId);
+  if (!liveAgent || liveAgent.archivedAt) return;
+  const provider = liveAgent.provider;
+  const lastUserText = selectAgentSentMessages(session, agentId)[0] ?? null;
+  const agent: RoutedAgent = {
+    id: agentId,
+    provider,
+    model: liveAgent.model ?? null,
+    workspaceId: liveAgent.workspaceId ?? null,
+    modelRouterId: liveAgent.modelRouterId ?? null,
+  };
+
+  const action: RouterFailureAction = decideRouterFailure({
+    errorKey,
+    repairChainLength: countPortedChain(serverId, agentId),
+    alreadyShrunkTools: state.shrinkAttemptedKey.current === `${agentId}:${errorKey}`,
+    hasRouterTarget: Boolean(agent.modelRouterId?.trim()),
+  });
+
+  switch (action.kind) {
+    case "retry-same":
+      retryCrashedProvider({
+        client,
+        serverId,
+        agentId,
+        errorKey,
+        provider,
+        lastUserText,
+        notify,
+        state,
+      });
+      return;
+
+    case "repair-session":
+      void repairCorruptedSession(
+        { client, serverId, agent, lastUserText },
+        () => notify.repaired(provider),
+        (error) => {
+          console.warn("[RouterFallback] session repair failed", error);
+        },
+      );
+      return;
+
+    case "shrink-tools":
+      // The daemon learned the model's ceiling from the failure it just
+      // recorded, so the next request is pruned to fit. One retry is enough:
+      // a second rejection means the ceiling cannot be met at all.
+      state.shrinkAttemptedKey.current = `${agentId}:${errorKey}`;
+      if (!lastUserText) return;
+      notify.shrinking(provider);
+      void resendFailedPrompt(client, agentId, lastUserText);
+      return;
+
+    case "port":
+      startRouterPort({
+        client,
+        serverId,
+        agentId,
+        errorKey,
+        agent,
+        lastUserText,
+        notify,
+        state,
+      });
+      return;
+
+    case "surface":
+      // Nothing left to try that could change the outcome. The chat keeps its
+      // error card, which is the honest place for the failure.
+      return;
+  }
+}
+
 /**
  * Option A fallback: when a chat fails with a retryable provider error and the
  * default router is a fallback chain, port the chat to the next target, resend
  * the failed prompt there, and move the UI to the ported agent.
  *
- * Crashes are retried on the same provider and never port; a session whose
- * history the upstream rejects is rebuilt on the same provider and model.
+ * Crashes are retried on the same provider and never port. A session whose
+ * history the upstream rejects is rebuilt on the same provider and model, at
+ * most {@link MAX_SESSION_REPAIRS} times. A request rejected for carrying too
+ * many tools is retried once against the ceiling the daemon just learned.
  */
 export function useRouterFallback({
   serverId,
@@ -276,6 +412,7 @@ export function useRouterFallback({
   const attemptedKeyRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
   const crashRetriesRef = useRef(new Map<string, number>());
+  const shrinkAttemptedKeyRef = useRef<string | null>(null);
   const errorKey = useSessionStore((state) => selectFailureError(state, serverId, agentId));
 
   useEffect(() => {
@@ -289,6 +426,7 @@ export function useRouterFallback({
         attemptedKey: attemptedKeyRef,
         inFlight: inFlightRef,
         crashRetries: crashRetriesRef,
+        shrinkAttemptedKey: shrinkAttemptedKeyRef,
       },
       notify: {
         retrying: (provider) =>
@@ -300,6 +438,11 @@ export function useRouterFallback({
           toast.error(t("settings.modelRouters.crashPersists", { provider })),
         repaired: (provider) =>
           toast.show(t("settings.modelRouters.sessionRepaired", { provider }), {
+            variant: "info",
+            durationMs: 4000,
+          }),
+        shrinking: (provider) =>
+          toast.show(t("settings.modelRouters.shrinkingTools", { provider }), {
             variant: "info",
             durationMs: 4000,
           }),

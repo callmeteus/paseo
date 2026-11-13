@@ -555,7 +555,7 @@ describe("ported agent tabs", () => {
       migratedFrom: {
         provider: "codex",
         agentId: "source-agent",
-        portedAt: "2026-03-04T00:00:00.000Z",
+        portedAt: new Date().toISOString(),
       },
     });
     const result = deriveWorkspaceAgentVisibility({
@@ -565,6 +565,27 @@ describe("ported agent tabs", () => {
 
     expect(result.activeAgentIds.has("ported-agent")).toBe(true);
     expect(result.autoOpenAgentIds.has("ported-agent")).toBe(false);
+  });
+
+  it("auto-opens a ported chat once the handoff window expired without a message", () => {
+    // A repair whose carry-over prompt never landed used to stay out of the tab
+    // bar forever, so the app kept falling back to the previous tab.
+    const ported = makeAgent({
+      id: "ported-agent",
+      cwd: "/repo/worktree",
+      workspaceId: WORKSPACE_ID,
+      migratedFrom: {
+        provider: "codex",
+        agentId: "source-agent",
+        portedAt: "2026-03-04T00:00:00.000Z",
+      },
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map([[ported.id, ported]]),
+      workspaceId: WORKSPACE_ID,
+    });
+
+    expect(result.autoOpenAgentIds.has("ported-agent")).toBe(true);
   });
 
   it("keeps the ported chat out while the source port is running", () => {

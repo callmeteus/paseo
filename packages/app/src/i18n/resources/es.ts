@@ -2708,6 +2708,8 @@ export const es: TranslationResources = {
         "{{provider}} sigue fallando. Revisa el CLI del proveedor e inténtalo de nuevo.",
       sessionRepaired:
         "La sesión estaba corrupta en el upstream. Inicié una sesión limpia de {{provider}} con el historial.",
+      shrinkingTools:
+        "{{provider}} acepta menos herramientas de las que expone este chat. Reintentando con menos herramientas.",
       targetCount: "{{count}} destinos",
       usePreset: "Usar preset",
       wizard: {

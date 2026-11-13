@@ -39,6 +39,31 @@ function trackAgentTabLabels(input: {
   }
 }
 
+/**
+ * How long a ported chat may wait for its carry-over prompt before it is
+ * treated as an ordinary chat.
+ *
+ * The old rule was `!agent.lastUserMessageAt`, with no deadline. A repaired
+ * chat whose prompt never landed therefore stayed out of the tab bar forever,
+ * which is why the app kept falling back to the previous tab.
+ */
+const PORTED_HANDOFF_WINDOW_MS = 120_000;
+
+function isAwaitingPortedHandoff(source: { portedAt?: string } | undefined): boolean {
+  if (!source?.portedAt) return false;
+  const portedAt = Date.parse(source.portedAt);
+  if (!Number.isFinite(portedAt)) return false;
+  return Date.now() - portedAt < PORTED_HANDOFF_WINDOW_MS;
+}
+
+function isPortPending(input: { serverId: string | undefined; agent: Agent }): boolean {
+  const source = input.agent.migratedFrom;
+  if (!source) return false;
+  const portSource = getPortingActivity(source.host ?? input.serverId ?? "", source.agentId);
+  if (portSource) return true;
+  return !input.agent.lastUserMessageAt && isAwaitingPortedHandoff(source);
+}
+
 export function deriveWorkspaceAgentVisibility(input: {
   serverId?: string;
   sessionAgents: Map<string, Agent> | undefined;
@@ -80,11 +105,7 @@ export function deriveWorkspaceAgentVisibility(input: {
       // A ported chat stays out of the tab bar while its source port is running,
       // even though it already carries the source's historical user messages. The
       // caller navigates to it explicitly once the port finishes.
-      const source = agent.migratedFrom;
-      const portSource = source
-        ? getPortingActivity(source.host ?? input.serverId ?? "", source.agentId)
-        : null;
-      const isPendingPort = Boolean(source) && (Boolean(portSource) || !agent.lastUserMessageAt);
+      const isPendingPort = isPortPending({ serverId: input.serverId, agent });
       if (isWorkspaceRootAgent(agent, parentAgent) && !isPendingPort) {
         autoOpenAgentIds.add(agent.id);
       }

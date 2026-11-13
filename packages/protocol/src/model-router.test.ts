@@ -3,7 +3,9 @@ import {
   isProviderCrashFailure,
   isRetryableRouterFailure,
   isSessionCorruptionFailure,
+  isToolSurfaceOverflowFailure,
   normalizeRouterTargets,
+  parseToolItemLimit,
   selectDistributionTarget,
   selectFallbackTarget,
   selectRouterEntryTarget,
@@ -240,6 +242,13 @@ describe("isSessionCorruptionFailure", () => {
     ).toBe(true);
   });
 
+  it("does not treat an oversized tool list as a corrupt session", () => {
+    const error =
+      "Upstream request failed: [invalid_value] Invalid value for 'tools': maximum number of items is 128.";
+    expect(isSessionCorruptionFailure({ error })).toBe(false);
+    expect(isSessionCorruptionFailure({ error, diagnostic: error })).toBe(false);
+  });
+
   it("detects an assistant turn missing reasoning_content", () => {
     expect(
       isSessionCorruptionFailure({
@@ -265,4 +274,47 @@ describe("isSessionCorruptionFailure", () => {
       expect(isSessionCorruptionFailure({ error })).toBe(false);
     },
   );
+});
+
+describe("isToolSurfaceOverflowFailure", () => {
+  it.each([
+    "Upstream request failed: [invalid_value] Invalid value for 'tools': maximum number of items is 128.",
+    "Upstream request failed: [invalid_value] Invalid value for 'tools': maximum number of items is 64.",
+    "invalid request: too many tools for this model",
+  ])("treats %s as a tool surface overflow", (error) => {
+    expect(isToolSurfaceOverflowFailure({ error })).toBe(true);
+  });
+
+  it.each([
+    "Upstream request failed: [invalid_value] Validation: `messages[451].tool_calls[0].function.arguments` must be a valid JSON object string",
+    "Free usage limit reached",
+    "",
+  ])("does not treat %s as a tool surface overflow", (error) => {
+    expect(isToolSurfaceOverflowFailure({ error })).toBe(false);
+  });
+
+  it("reads the overflow from the diagnostic", () => {
+    expect(
+      isToolSurfaceOverflowFailure({
+        error: "Internal error",
+        diagnostic: "Invalid value for 'tools': maximum number of items is 128.",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("parseToolItemLimit", () => {
+  it("reads the ceiling the provider names", () => {
+    expect(
+      parseToolItemLimit({
+        error:
+          "Upstream request failed: [invalid_value] Invalid value for 'tools': maximum number of items is 128.",
+      }),
+    ).toBe(128);
+  });
+
+  it("returns null when the failure names no ceiling", () => {
+    expect(parseToolItemLimit({ error: "too many tools for this model" })).toBeNull();
+    expect(parseToolItemLimit({ error: "quota exceeded" })).toBeNull();
+  });
 });

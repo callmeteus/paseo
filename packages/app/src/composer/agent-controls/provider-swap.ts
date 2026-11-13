@@ -11,6 +11,8 @@ export interface AgentProviderSwapClient {
     targetModel: string | null;
     modelRouterId?: string | null;
     archivePrevious?: boolean;
+    /** Allows a same provider+model port, used to repair a corrupt session. */
+    force?: boolean;
   }): Promise<AgentProviderSwapResult>;
 }
 
@@ -30,6 +32,8 @@ export interface PerformAgentProviderSwapInput {
   modelRouterId?: string | null;
   /** False keeps the source agent open until the caller archives it. */
   archivePrevious?: boolean;
+  /** True allows a same provider+model port, used to repair a corrupt session. */
+  force?: boolean;
   persistPreference: (provider: string, modelId: string) => Promise<unknown>;
   onPreferencePersistError?: (error: unknown) => void;
 }
@@ -52,6 +56,7 @@ export async function performAgentProviderSwap(
     targetModel: input.modelId || null,
     ...(input.modelRouterId !== undefined ? { modelRouterId: input.modelRouterId } : {}),
     ...(input.archivePrevious === false ? { archivePrevious: false } : {}),
+    ...(input.force ? { force: true } : {}),
   });
 
   if (result.error) {

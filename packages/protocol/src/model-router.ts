@@ -212,7 +212,55 @@ export function isProviderCrashFailure(input: {
  * so it needs the same fresh-session repair.
  */
 const SESSION_CORRUPTION_PATTERN =
-  /(tool_calls.*function\.arguments|must be a valid JSON object string|invalid_value|missing required parameter:?\s*'?messages\[\d+\]\.reasoning_content'?|needs the reasoning of every earlier assistant message)/i;
+  /(tool_calls.*function\.arguments|must be a valid JSON object string|missing required parameter:?\s*'?messages\[\d+\]\.reasoning_content'?|needs the reasoning of every earlier assistant message)/i;
+
+/**
+ * `invalid_value` on its own is not corruption: `[invalid_value] Invalid value
+ * for 'tools': maximum number of items is 128` is a request-shape failure, and
+ * repairing it produced an endless chain of new agents. Keep only the
+ * message-scoped form, where the stored history really is malformed.
+ */
+const SESSION_INVALID_MESSAGE_PATTERN =
+  /(invalid_value[\s\S]{0,200}messages\[\d+\])|(messages\[\d+\][\s\S]{0,200}invalid_value)/i;
+
+/**
+ * The provider rejected the request because it carried more tools than the
+ * model accepts. Nothing about the stored history is wrong, so replying with a
+ * fresh session fails the same way: the fix is a smaller tool surface.
+ *
+ * `invalid_value` alone is not corruption — `[invalid_value] Invalid value for
+ * 'tools': maximum number of items is 128` used to be classified as a corrupt
+ * session, and repairing it produced an endless chain of new agents.
+ */
+const TOOL_SURFACE_OVERFLOW_PATTERN =
+  /((?:^|[^\w])tools[^\n]{0,80}(?:maximum number of items|too many|exceeds?))|(?:maximum number of items is \d+[^\n]{0,40}tools)|(?:too many tools)/i;
+
+export function isToolSurfaceOverflowFailure(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): boolean {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  return text.length > 0 && TOOL_SURFACE_OVERFLOW_PATTERN.test(text);
+}
+
+/**
+ * The ceiling the provider enforces on the request's tool list, when it names
+ * one. Models differ, so the daemon learns the number from the failure instead
+ * of hardcoding it.
+ */
+export function parseToolItemLimit(input: {
+  error?: string | null;
+  code?: string | null;
+  diagnostic?: string | null;
+}): number | null {
+  const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
+  if (!text || !isToolSurfaceOverflowFailure(input)) return null;
+  const match = /maximum number of items is (\d+)/i.exec(text);
+  if (!match) return null;
+  const limit = Number(match[1]);
+  return Number.isFinite(limit) && limit > 0 ? limit : null;
+}
 
 export function isSessionCorruptionFailure(input: {
   error?: string | null;
@@ -220,7 +268,10 @@ export function isSessionCorruptionFailure(input: {
   diagnostic?: string | null;
 }): boolean {
   const text = [input.error, input.code, input.diagnostic].filter(Boolean).join(" ");
-  return text.length > 0 && SESSION_CORRUPTION_PATTERN.test(text);
+  if (text.length === 0) return false;
+  // A tool-surface overflow rejects every session, so it is never a corrupt one.
+  if (isToolSurfaceOverflowFailure(input)) return false;
+  return SESSION_CORRUPTION_PATTERN.test(text) || SESSION_INVALID_MESSAGE_PATTERN.test(text);
 }
 
 /**
