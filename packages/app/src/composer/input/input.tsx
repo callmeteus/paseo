@@ -86,7 +86,11 @@ import {
 import { InlineChipEditor } from "@/composer/inline-chip-editor";
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
-import { continueComposerList, hasComposerListMarker } from "@/composer/list-format";
+import {
+  breaksComposerLineOnEnter,
+  continueComposerList,
+  hasComposerListMarker,
+} from "@/composer/list-format";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
@@ -486,11 +490,12 @@ function handleDesktopKeyPressImpl(
   }
 
   if (event.nativeEvent.key !== "Enter") return;
-  if (shiftKey) {
-    continueListOnShiftEnter(event, ctx, { metaKey, ctrlKey, altKey });
+  if (
+    breaksComposerLineOnEnter({ shiftKey: Boolean(shiftKey), submitOnEnter: ctx.submitOnEnter })
+  ) {
+    continueListOnEnter(event, ctx, { metaKey, ctrlKey, altKey });
     return;
   }
-  if (!ctx.submitOnEnter) return;
 
   if (ctx.isSubmitDisabled || ctx.isSubmitLoading || ctx.disabled) return;
   event.preventDefault();
@@ -501,7 +506,7 @@ function handleDesktopKeyPressImpl(
   ctx.handleDefaultSendAction();
 }
 
-function continueListOnShiftEnter(
+function continueListOnEnter(
   event: WebTextInputKeyPressEvent,
   ctx: DesktopKeyPressContext,
   modifiers: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean },

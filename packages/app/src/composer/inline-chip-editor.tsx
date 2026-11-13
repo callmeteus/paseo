@@ -198,6 +198,21 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       paint(text, selection);
     }, [paint, publish]);
 
+    const breakLine = useCallback(
+      (selection: TextSelection) => {
+        const next =
+          continueComposerList(textRef.current, selection) ??
+          insertTextAtSelection({
+            text: textRef.current,
+            selection,
+            insert: "\n",
+          });
+        paint(next.text, next.selection);
+        publish(next.text, next.selection);
+      },
+      [paint, publish],
+    );
+
     const handleKeyDown = useCallback(
       (event: ReactKeyboardEvent<HTMLDivElement>) => {
         const native = event.nativeEvent;
@@ -246,20 +261,12 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           !native.altKey
         ) {
           event.preventDefault();
-          const next =
-            continueComposerList(textRef.current, selection) ??
-            insertTextAtSelection({
-              text: textRef.current,
-              selection,
-              insert: "\n",
-            });
-          paint(next.text, next.selection);
-          publish(next.text, next.selection);
+          breakLine(selection);
           return;
         }
         onKeyPressRef.current?.(native);
       },
-      [paint, publish, readCaret],
+      [breakLine, paint, publish, readCaret],
     );
 
     const handleBeforeInput = useCallback(
@@ -268,17 +275,12 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
         if (!(native instanceof InputEvent)) return;
         if (native.inputType !== "insertParagraph" && native.inputType !== "insertLineBreak")
           return;
+        // Enter here is a line break, not a submit (compact web, or a keyboard
+        // whose keydown did not reach the composer), so keep the list going.
         event.preventDefault();
-        const selection = readCaret();
-        const next = insertTextAtSelection({
-          text: textRef.current,
-          selection,
-          insert: "\n",
-        });
-        paint(next.text, next.selection);
-        publish(next.text, next.selection);
+        breakLine(readCaret());
       },
-      [paint, publish, readCaret],
+      [breakLine, readCaret],
     );
 
     const handleMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {

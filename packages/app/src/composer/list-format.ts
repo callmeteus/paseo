@@ -57,6 +57,18 @@ export interface ComposerListContinuation {
 }
 
 /**
+ * Enter submits only where the composer offers Enter-to-send (desktop web).
+ * Everywhere else it breaks the line, and a break inside a list opens the next
+ * item, so compact web must not be treated as a submit.
+ */
+export function breaksComposerLineOnEnter(input: {
+  shiftKey: boolean;
+  submitOnEnter: boolean;
+}): boolean {
+  return input.shiftKey || !input.submitOnEnter;
+}
+
+/**
  * Opens the next item of the list the caret is in.
  * An empty item is removed and the line stays blank, so pressing the break
  * again ends the list. Returns null when this break should be a plain newline.
