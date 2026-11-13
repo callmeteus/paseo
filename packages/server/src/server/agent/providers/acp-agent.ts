@@ -127,7 +127,6 @@ import {
   buildStringCommandShellInvocation,
   createStringCommandShellEnvOverlay,
 } from "../../../utils/string-command-shell.js";
-import { ClosedProviderSessionError } from "../stale-provider-session-error.js";
 import { spawnProcess } from "../../../utils/spawn.js";
 import {
   type DiagnosticEntry,
@@ -2243,7 +2242,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     options?: AgentRunOptions,
   ): Promise<{ turnId: string }> {
     if (this.closed) {
-      throw new ClosedProviderSessionError(this.provider);
+      throw new Error(`${this.provider} session is closed`);
     }
     if (!this.connection || !this.sessionId) {
       throw new Error(`${this.provider} session is not initialized`);

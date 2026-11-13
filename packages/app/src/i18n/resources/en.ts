@@ -810,6 +810,8 @@ export const en = {
           fallback: "Choose another folder…",
           moved: "Workspace moved to {{path}}",
           failed: "Couldn't move the workspace",
+          searchPlaceholder: "Search folders",
+          noResults: "No folders found.",
         },
         moveChat: {
           title: "Move chat to workspace",
@@ -1542,7 +1544,6 @@ export const en = {
         openSettings: "Open project settings",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
         remove: "Remove project",
         removing: "Removing...",
@@ -3321,14 +3322,6 @@ export const en = {
           title: "Release idle agents",
           hint: "Free up memory after an hour of inactivity.",
           info: "Stops the agent's process while keeping its conversation. Send a message to resume.\n\nActive work, pending notifications, and provider safety checks prevent cleanup.",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "Allow HTTP",
-          hint: "Let the CLI reach a Hub over HTTP when it is not on localhost. Login credentials travel in cleartext.",
-          info: "Off, the CLI accepts HTTP only for localhost, 127.0.0.1, and [::1]. On, it also accepts HTTP for other hosts, such as a Hub on a private network without TLS. The same switch is hub.allowHttp in the host config.",
         },
       },
       workspaces: {

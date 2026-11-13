@@ -1,4 +1,4 @@
-import { hubAllowHttpEnabled, type HubCredentialStore } from "./credentials.js";
+import type { HubCredentialStore } from "./credentials.js";
 import { HubCommandError } from "./error.js";
 import { normalizeHubOrigin } from "./origin.js";
 
@@ -11,7 +11,6 @@ interface ResolveHubInput {
   options: HubAuthorityOptions;
   env: Readonly<Record<string, string | undefined>>;
   credentials: HubCredentialStore;
-  allowHttp?: boolean;
 }
 
 export const DEFAULT_HUB_ORIGIN = "https://hub.paseo.sh";
@@ -20,8 +19,7 @@ export function resolveHubOrigin(input: ResolveHubInput): string {
   const configuredOrigin = input.options.origin ?? input.env.PASEO_HUB_URL;
   const selectedOrigin =
     configuredOrigin ?? input.credentials.active()?.origin ?? DEFAULT_HUB_ORIGIN;
-  const allowHttp = input.allowHttp ?? hubAllowHttpEnabled(input.env);
-  return normalizeHubOrigin(selectedOrigin, { allowHttp });
+  return normalizeHubOrigin(selectedOrigin);
 }
 
 export function resolveHubCredential(input: ResolveHubInput & { origin: string }): string {

@@ -812,6 +812,8 @@ export const zhCN: TranslationResources = {
           fallback: "选择其他文件夹…",
           moved: "工作区已移动到 {{path}}",
           failed: "无法移动工作区",
+          searchPlaceholder: "搜索文件夹",
+          noResults: "未找到文件夹。",
         },
         moveChat: {
           title: "将聊天移动到工作区",
@@ -1521,7 +1523,6 @@ export const zhCN: TranslationResources = {
         openSettings: "打开 project 设置",
         openNewWindow: "在新窗口中打开",
         openNewWindowFailed: "无法打开新窗口",
-        openFolder: "在文件管理器中打开",
         openFolderFailed: "无法打开文件夹",
         remove: "移除 project",
         removing: "正在移除...",
@@ -3145,14 +3146,6 @@ export const zhCN: TranslationResources = {
           title: "释放空闲 Agent",
           hint: "空闲一小时后释放内存。",
           info: "停止 Agent 进程，但保留对话。发送消息即可继续。\n\n进行中的工作、待处理的通知和 Provider 安全检查会阻止清理。",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "允许 HTTP",
-          hint: "允许 CLI 通过 HTTP 连接不在 localhost 上的 Hub。登录凭据以明文传输。",
-          info: "关闭时，CLI 只接受发往 localhost、127.0.0.1 和 [::1] 的 HTTP。打开后，也接受其他主机的 HTTP，例如没有 TLS 的私有网络上的 Hub。同一个开关是主机配置里的 hub.allowHttp。",
         },
       },
       workspaces: {

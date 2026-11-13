@@ -68,8 +68,17 @@ export class CreationService {
       const fingerprint = digest(input.request);
       let record = await this.read(identity);
       if (!record) record = await this.readLegacyAgent(input, fingerprint);
-      if (record && record.fingerprint !== fingerprint)
-        throw new Error(`${input.kind}_request_key_conflict`);
+      if (record && record.fingerprint !== fingerprint) {
+        // A known failure that owns no uncertain resource is the same intent with adjusted
+        // parameters: the caller keeps its key while it fixes a model, a provider, or a mode.
+        // Refusing it locked that key forever, because every retry after an edit has a new
+        // fingerprint. In-flight, ambiguous, and completed records still conflict.
+        const adjustedRetry =
+          record.snapshot.phase === "failed" && !record.snapshot.outcomeUnknown && !record.inFlight;
+        if (!adjustedRetry) throw new Error(`${input.kind}_request_key_conflict`);
+        record = { ...record, fingerprint };
+        await this.write(identity, record);
+      }
       const running = this.active.get(identity);
       if (running && record) return { completion: running, snapshot: record.snapshot };
       if (record?.snapshot.phase === "completed") await this.validateCompleted(record.snapshot);

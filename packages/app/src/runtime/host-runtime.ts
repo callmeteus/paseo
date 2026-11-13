@@ -77,6 +77,7 @@ import {
 import { mountBrowserAutomationDaemonClientHandler } from "@/desktop/browser/automation/handler";
 import { schedulesQueryBaseKey } from "@/schedules/aggregated-schedules";
 import { dispatchComposerAgentMessage, sendQueuedComposerMessageNow } from "@/composer/actions";
+import { hydrateQueuedMessages, persistAgentMessageQueue } from "@/composer/queue-persistence";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { encodeImages } from "@/utils/encode-images";
@@ -267,6 +268,22 @@ const PROBE_INACTIVE_WHILE_ONLINE_MS = 120_000;
 const ADAPTIVE_SWITCH_THRESHOLD_MS = 40;
 const ADAPTIVE_SWITCH_CONSECUTIVE_PROBES = 3;
 const CONFIGURED_OVERRIDE_BOOTSTRAP_RETRY_MS = 1_000;
+const CLIENT_CLOSE_TIMEOUT_MS = 2_000;
+// A socket left idle in a backgrounded mobile tab is usually dead, but the
+// browser only reports that after a full probe round trip. Past this hidden
+// window the foreground path replaces the socket instead of waiting for it.
+const FOREGROUND_STALE_SOCKET_MS = 10_000;
+const FOREGROUND_VERIFY_TIMEOUT_MS = 1_500;
+
+function settleWithin(promise: Promise<unknown>, timeoutMs: number): Promise<void> {
+  return Promise.race([
+    promise.then(
+      () => undefined,
+      () => undefined,
+    ),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
 
 function toActiveConnection(connection: HostConnection): ActiveConnection {
   if (connection.type === "routed")
@@ -616,12 +633,17 @@ function createDefaultDeps(
         localCredential: () => readDesktopManagedLocalCredential(connection),
       } satisfies Omit<DaemonClientConfig, "url">;
       if (connection.type === "routed") {
-        const origin = resolveOrigin(connection.originServerId);
-        if (!origin) throw new Error(`Origin host ${connection.originServerId} is unavailable`);
         return new DaemonClient({
           ...base,
           url: "ws://routed-host/ws",
-          transportFactory: createHostChannelTransport(origin, host.serverId, clientId, null),
+          // Resolve the origin on every attempt: a probe can replace the origin
+          // client, and a captured stale client would leave this routed host
+          // unable to reconnect.
+          transportFactory: (options) => {
+            const origin = resolveOrigin(connection.originServerId);
+            if (!origin) throw new Error(`Origin host ${connection.originServerId} is unavailable`);
+            return createHostChannelTransport(origin, host.serverId, clientId, null)(options);
+          },
         });
       }
       if (connection.type === "directSocket" || connection.type === "directPipe") {
@@ -886,6 +908,51 @@ export class HostRuntimeController {
     this.activeClient?.ensureConnected(options);
   }
 
+  /**
+   * Foreground recovery. A browser tab can be frozen mid-connect or mid-probe,
+   * leaving a promise that never settles and a probe cycle that would swallow
+   * every later retry. Reset those paths instead of waiting for the timers the
+   * browser suspended.
+   */
+  recoverNow(options?: { hiddenForMs?: number }): void {
+    if (!this.started) return;
+    const hiddenForMs = options?.hiddenForMs ?? 0;
+    const fromForeground = options?.hiddenForMs !== undefined;
+    const staleSocket = hiddenForMs >= FOREGROUND_STALE_SOCKET_MS;
+    if (this.connectionMachineState.tag === "connecting") {
+      // visibilitychange and focus often fire together. Restarting a healthy
+      // attempt would kill the connection that is already being opened. Origin
+      // recovery goes through recoverNow() without a hidden window and does
+      // need to restart a failed switch.
+      if (fromForeground && this.isSwitchInFlight() && !staleSocket) return;
+      this.probeRequestVersion += 1;
+      this.switchRequestVersion += 1;
+      const connectionId = this.snapshot.activeConnectionId ?? this.host.connections[0]?.id;
+      if (connectionId) {
+        void this.switchToConnection({ connectionId }).catch(() => undefined);
+        return;
+      }
+    }
+    this.recoverActiveClient(staleSocket);
+    if (this.connectionMachineState.tag === "online") return;
+    void this.runProbeCycleNow({ force: true }).catch(() => undefined);
+  }
+
+  private recoverActiveClient(staleSocket: boolean): void {
+    const client = this.activeClient;
+    // An auth failure is not something waking the tab can fix; the host card
+    // owns the password prompt, and retrying would only re-lock the connection.
+    if (!client || client.authFailureReason) return;
+    // forceReconnect resets the reconnect backoff a suspended tab accumulated,
+    // verifies a socket that still claims to be connected, and retries now
+    // instead of waiting for a throttled timer. After a long freeze the socket
+    // is presumed dead: replace it instead of spending a probe timeout on it.
+    client.forceReconnect({
+      verifyConnected: !staleSocket,
+      verifyTimeoutMs: FOREGROUND_VERIFY_TIMEOUT_MS,
+    });
+  }
+
   markAgentDirectorySyncLoading(): void {
     const status = this.snapshot.hasEverLoadedAgentDirectory ? "revalidating" : "initial_loading";
     this.updateSnapshot({
@@ -934,12 +1001,17 @@ export class HostRuntimeController {
     await this.switchToConnection(input);
   }
 
-  async runProbeCycleNow(): Promise<void> {
+  async runProbeCycleNow(options?: { force?: boolean }): Promise<void> {
     if (this.probeCycleInFlight) {
-      return this.probeCycleInFlight;
+      if (!options?.force) {
+        return this.probeCycleInFlight;
+      }
+      // Invalidate the frozen cycle so its probes cannot activate a connection
+      // that the fresh cycle is replacing.
+      this.probeRequestVersion += 1;
     }
 
-    const cycle = this.runProbeCycle().finally(() => {
+    const cycle = this.runProbeCycle(options?.force === true).finally(() => {
       if (this.probeCycleInFlight === cycle) {
         this.probeCycleInFlight = null;
       }
@@ -948,7 +1020,7 @@ export class HostRuntimeController {
     return cycle;
   }
 
-  private async runProbeCycle(): Promise<void> {
+  private async runProbeCycle(force = false): Promise<void> {
     const requestVersion = ++this.probeRequestVersion;
     if (this.host.connections.length === 0) {
       if (!this.isCurrentProbeRequest(requestVersion)) {
@@ -991,6 +1063,7 @@ export class HostRuntimeController {
 
     const connectionsToProbe = this.host.connections.filter((connection) => {
       if (this.authRejectedConnectionIds.has(connection.id)) return false;
+      if (force) return true;
       const lastProbed = this.connectionLastProbedAt.get(connection.id);
       if (lastProbed == null) {
         return true;
@@ -1040,7 +1113,12 @@ export class HostRuntimeController {
       connectionId: string,
       client: DaemonClient,
     ): Promise<boolean> => {
-      while (!this.snapshot.activeConnectionId) {
+      // A failed switch keeps `activeConnectionId` (the UI still names the
+      // endpoint) while dropping the client. Gating on the id alone left those
+      // hosts unreachable: every probe connected, then closed its client because
+      // the id was already set. Gate on a live client instead, and leave an
+      // in-flight switch alone so a probe cannot race a healthy connect.
+      while (!this.snapshot.client && !this.isSwitchInFlight()) {
         if (!activationLock) {
           activationLock = this.switchToConnection({
             connectionId,
@@ -1354,6 +1432,19 @@ export class HostRuntimeController {
     return version === this.probeRequestVersion;
   }
 
+  /**
+   * True while a switch is plausibly still working. A tab frozen mid-connect
+   * keeps the "connecting" state with no progress; past the watchdog window the
+   * probe cycle may take the connection over instead of waiting for it.
+   */
+  private isSwitchInFlight(): boolean {
+    return (
+      this.connectionMachineState.tag === "connecting" &&
+      this.connectingSince !== null &&
+      Date.now() - this.connectingSince < CONNECTING_WATCHDOG_MS
+    );
+  }
+
   private canProceedForProbe(expectedProbeVersion: number | undefined): boolean {
     if (expectedProbeVersion === undefined) {
       return true;
@@ -1408,7 +1499,10 @@ export class HostRuntimeController {
     if (this.activeClient) {
       const previousClient = this.activeClient;
       this.activeClient = null;
-      await previousClient.close().catch(() => undefined);
+      // The transport is already disposed synchronously. A frozen tab can leave
+      // a subscription release pending forever, so bound the wait instead of
+      // blocking the replacement connection behind it.
+      await settleWithin(previousClient.close(), CLIENT_CLOSE_TIMEOUT_MS);
     }
   }
 
@@ -1858,6 +1952,11 @@ export class HostRuntimeStore {
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private queuedAgentDrainInFlight = new Set<string>();
+  private messageQueuesHydratedServers = new Set<string>();
+  private messageQueueHydrationInFlight = new Set<string>();
+  private onlineServerIds = new Set<string>();
+  private observedServerIds = new Set<string>();
+  private hiddenSince: number | null = null;
   private directorySyncByServer = new Map<string, DirectorySync>();
   private nextCancellationRequestId = 0;
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
@@ -2642,7 +2741,10 @@ export class HostRuntimeStore {
         {
           onAgentStoppedRunning: (agentId) => this.drainQueuedAgentMessage(host.serverId, agentId),
           markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
-          markAgentReady: () => controller.markAgentDirectorySyncReady(),
+          markAgentReady: () => {
+            controller.markAgentDirectorySyncReady();
+            this.drainHydratedMessageQueues(host.serverId);
+          },
           markAgentError: (error) => controller.markAgentDirectorySyncError(error),
         },
         this.replicaCache,
@@ -2733,6 +2835,10 @@ export class HostRuntimeStore {
   }
 
   private syncSessionReplica(serverId: string, snapshot: HostRuntimeSnapshot): void {
+    // Presence is per host, not per client: an offline snapshot usually has no
+    // client, and skipping it would leave the host marked online forever. That
+    // stale flag is what kept routed hosts from waking when their origin healed.
+    this.syncOnlinePresence(serverId, snapshot);
     if (!snapshot.client) {
       return;
     }
@@ -2745,12 +2851,91 @@ export class HostRuntimeStore {
     const serverInfo = snapshot.client.getLastServerInfoMessage();
     if (serverInfo) {
       sessionStore.updateSessionServerInfo(serverId, toDaemonServerInfo(serverInfo));
+      if (
+        serverInfo.features?.agentMessageQueue === true &&
+        !this.messageQueuesHydratedServers.has(serverId) &&
+        !this.messageQueueHydrationInFlight.has(serverId)
+      ) {
+        void this.hydrateMessageQueues(serverId, snapshot.client);
+      }
     }
+    this.syncOnlinePresence(serverId, snapshot);
+  }
+
+  private syncOnlinePresence(serverId: string, snapshot: HostRuntimeSnapshot): void {
+    const firstObservation = !this.observedServerIds.has(serverId);
+    this.observedServerIds.add(serverId);
+    const isOnline = snapshot.connectionStatus === "online";
+    if (isOnline) {
+      const wasOnline = this.onlineServerIds.has(serverId);
+      this.onlineServerIds.add(serverId);
+      if (!firstObservation && !wasOnline) this.recoverRoutedHosts(serverId);
+    } else {
+      this.onlineServerIds.delete(serverId);
+    }
+  }
+
+  private recoverRoutedHosts(originServerId: string): void {
+    for (const host of this.hosts) {
+      const routed = host.connections.some(
+        (connection) =>
+          connection.type === "routed" && connection.originServerId === originServerId,
+      );
+      if (routed) this.controllers.get(host.serverId)?.recoverNow();
+    }
+  }
+
+  private async hydrateMessageQueues(serverId: string, client: DaemonClient): Promise<void> {
+    this.messageQueueHydrationInFlight.add(serverId);
+    try {
+      const queues = await client.listAgentMessageQueues();
+      const hydrated = await Promise.all(
+        Object.entries(queues).map(async ([agentId, items]) => {
+          return [agentId, await hydrateQueuedMessages(items)] as const;
+        }),
+      );
+      useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
+        const next = new Map(previous);
+        for (const [agentId, items] of hydrated) {
+          if ((next.get(agentId)?.length ?? 0) === 0) next.set(agentId, items);
+        }
+        return next;
+      });
+      this.messageQueuesHydratedServers.add(serverId);
+      this.drainHydratedMessageQueues(serverId);
+    } catch (error) {
+      console.warn("[HostRuntime] Failed to restore persisted message queues", error);
+    } finally {
+      this.messageQueueHydrationInFlight.delete(serverId);
+    }
+  }
+
+  private drainHydratedMessageQueues(serverId: string): void {
+    if (!this.messageQueuesHydratedServers.has(serverId)) return;
+    const session = useSessionStore.getState().sessions[serverId];
+    if (!session) return;
+    for (const agentId of session.queuedMessages.keys()) {
+      if (session.agentDetails.get(agentId)?.turn.phase !== "idle") continue;
+      this.drainQueuedAgentMessage(serverId, agentId);
+    }
+  }
+
+  private persistQueuedAgentMessage(serverId: string, agentId: string, client: DaemonClient): void {
+    const session = useSessionStore.getState().sessions[serverId];
+    if (session?.serverInfo?.features?.agentMessageQueue !== true) return;
+    const items = session.queuedMessages.get(agentId) ?? [];
+    void persistAgentMessageQueue(client, agentId, items).catch((error) => {
+      console.error("[HostRuntime] Failed to persist queued agent messages", error);
+    });
   }
 
   private clearHostReplica(serverId: string): void {
     useSessionStore.getState().clearSession(serverId);
     useWorkspaceSetupStore.getState().clearServer(serverId);
+    this.messageQueuesHydratedServers.delete(serverId);
+    this.messageQueueHydrationInFlight.delete(serverId);
+    this.onlineServerIds.delete(serverId);
+    this.observedServerIds.delete(serverId);
   }
 
   private syncDirectoryConnection(serverId: string): void {
@@ -3003,6 +3188,7 @@ export class HostRuntimeStore {
           // into that turn instead of interrupting it; with no turn running, the daemon starts
           // a normal one.
           activeTurnBehavior: "steer",
+          messageId: next.id,
         });
       },
     })
@@ -3018,6 +3204,7 @@ export class HostRuntimeStore {
       })
       .finally(() => {
         this.queuedAgentDrainInFlight.delete(drainKey);
+        this.persistQueuedAgentMessage(serverId, agentId, client);
       });
   }
 
@@ -3138,12 +3325,16 @@ export class HostRuntimeStore {
     // Keep normal reconnect backoff running while hidden, for as long as the OS
     // lets us execute. Foregrounding bypasses that backoff without closing healthy sockets.
     if (!visible) {
+      if (this.hiddenSince === null) this.hiddenSince = Date.now();
       void this.replicaCache.flush();
       return;
     }
 
-    this.ensureConnectedAll({ verify: true });
-    void this.runProbeCycleNow().catch(() => undefined);
+    const hiddenForMs = this.hiddenSince === null ? 0 : Date.now() - this.hiddenSince;
+    this.hiddenSince = null;
+    for (const controller of this.controllers.values()) {
+      controller.recoverNow({ hiddenForMs });
+    }
   }
 
   runProbeCycleNow(serverId?: string): Promise<void> {

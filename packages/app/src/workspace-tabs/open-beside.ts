@@ -1,5 +1,5 @@
 import { revealWorkspaceTab } from "./navigation";
-import type { OpenInSidePanePreferences, WorkspaceOpenLocation } from "@/hooks/use-settings";
+import type { OpenInSidePanePreferences } from "@/hooks/use-settings";
 import {
   collectAllTabs,
   collectAllPanes,
@@ -14,7 +14,7 @@ import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 
 export type OpenInSidePaneSource = keyof OpenInSidePanePreferences;
-export type WorkspaceTargetOpenLocation = WorkspaceOpenLocation;
+export type WorkspaceTargetOpenLocation = "main" | "side";
 
 interface OpenWorkspaceTargetInput {
   workspaceKey: string | null;
@@ -97,7 +97,7 @@ export function openPreferredWorkspaceTarget(
   });
 }
 
-/** Opens an implicit target at the user's preferred main, side, or Explorer location. */
+/** Opens an implicit target at the user's preferred main or side location. */
 export function openWorkspaceTargetAtLocation(
   input: OpenWorkspaceTargetAtLocationInput,
 ): string | null {
@@ -110,10 +110,7 @@ export function openWorkspaceTargetAtLocation(
   );
   const shouldOpenBeside = canOpenBeside() && input.location === "side";
   let placement: WorkspaceTabPlacement | undefined;
-  if (input.location === "explorer") {
-    const paneId = store.ensureExplorerSidebar(input.workspaceKey);
-    placement = paneId ? { mode: "prefer", paneId } : undefined;
-  } else if (shouldOpenBeside && !targetAlreadyExists) {
+  if (shouldOpenBeside && !targetAlreadyExists) {
     const paneId = store.ensureSidePane(input.workspaceKey);
     placement = paneId ? { mode: "prefer", paneId } : undefined;
   } else if (!shouldOpenBeside && layout && input.parentTabId) {

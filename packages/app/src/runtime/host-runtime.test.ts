@@ -81,6 +81,8 @@ class FakeDaemonClient {
   private latencyMeasurementsRequested: Array<{ timeoutMs?: number }> = [];
   public connectCalls = 0;
   public ensureConnectedCalls = 0;
+  public forceReconnectCalls = 0;
+  public forceReconnectOptions: Array<{ verifyConnected?: boolean; verifyTimeoutMs?: number }> = [];
   public connectionVerifications = 0;
   public reconnectEnabledChanges: boolean[] = [];
   public fetchAgentsCalls: FetchAgentsOptions[] = [];
@@ -173,6 +175,16 @@ class FakeDaemonClient {
     if (this.state.status !== "connected") {
       this.setConnectionState({ status: "connected" });
     }
+  }
+
+  forceReconnect(options?: { verifyConnected?: boolean; verifyTimeoutMs?: number }): void {
+    this.forceReconnectCalls += 1;
+    this.forceReconnectOptions.push(options ?? {});
+    if (this.state.status === "connected") {
+      if (options?.verifyConnected !== false) this.connectionVerifications += 1;
+      return;
+    }
+    this.setConnectionState({ status: "connected" });
   }
 
   get isConnected(): boolean {
@@ -1814,6 +1826,113 @@ describe("HostRuntimeController", () => {
     expect(createdClients[0]?.isDisposed()).toBe(true);
   });
 
+  it("reconnects a wedged connect even when closing the old client never resolves", async () => {
+    useHostRuntimeClock();
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    const gate = createDeferred<void>();
+    const createdClients: FakeDaemonClient[] = [];
+
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          const client = new FakeDaemonClient();
+          createdClients.push(client);
+          if (createdClients.length === 1) {
+            client.connect = async () => {
+              client.connectCalls += 1;
+              await gate.promise;
+              client.setConnectionState({ status: "connected" });
+            };
+            // A frozen tab can leave a subscription release pending forever.
+            client.close = () => new Promise<void>(() => {});
+          }
+          return client as unknown as DaemonClient;
+        },
+        connectToDaemon: async () => {
+          throw new Error("probe unavailable");
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+    await controller.start({ autoProbe: false });
+
+    const firstSwitch = controller.activateConnection({ connectionId: "direct:lan:17000" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getSnapshot().connectionStatus).toBe("connecting");
+
+    controller.recoverNow({ hiddenForMs: 60_000 });
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(createdClients).toHaveLength(2);
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+    expect(controller.getSnapshot().activeConnectionId).toBe("direct:lan:17000");
+
+    gate.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.allSettled([firstSwitch]);
+    await controller.stop();
+  });
+
+  it("leaves a fresh connect attempt running when focus and visibility fire together", async () => {
+    useHostRuntimeClock();
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    const gate = createDeferred<void>();
+    const createdClients: FakeDaemonClient[] = [];
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          const client = new FakeDaemonClient();
+          createdClients.push(client);
+          if (createdClients.length === 1) {
+            client.connect = async () => {
+              client.connectCalls += 1;
+              await gate.promise;
+              client.setConnectionState({ status: "connected" });
+            };
+          }
+          return client as unknown as DaemonClient;
+        },
+        connectToDaemon: async () => {
+          throw new Error("probe unavailable");
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+    await controller.start({ autoProbe: false });
+
+    const switching = controller.activateConnection({ connectionId: "direct:lan:17000" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(createdClients).toHaveLength(1);
+
+    controller.recoverNow({ hiddenForMs: 0 });
+    controller.recoverNow({ hiddenForMs: 0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(createdClients).toHaveLength(1);
+
+    gate.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.allSettled([switching]);
+    await controller.stop();
+  });
+
   it("coalesces overlapping probe cycles instead of invalidating the in-flight result", async () => {
     const host = makeHost({
       connections: [
@@ -1863,6 +1982,113 @@ describe("HostRuntimeController", () => {
       status: "available",
       latencyMs: 900,
     });
+  });
+
+  it("force-starts a fresh cycle when the in-flight probe is stuck", async () => {
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    const probes = [createDeferred<number>(), createDeferred<number>()];
+    let probeCalls = 0;
+
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => new FakeDaemonClient() as unknown as DaemonClient,
+        connectToDaemon: async ({ host: hostProfile }) => {
+          const index = probeCalls;
+          probeCalls += 1;
+          const client = new FakeDaemonClient();
+          client.connectCalls = 1;
+          client.setConnectionState({ status: "connected" });
+          client.ping = async () => ({ rttMs: await probes[index]!.promise });
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: hostProfile.serverId,
+            hostname: hostProfile.label ?? null,
+          };
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+
+    const first = controller.runProbeCycleNow();
+    const waitUntil = async (predicate: () => boolean): Promise<void> => {
+      const timeoutAt = Date.now() + 500;
+      while (!predicate()) {
+        if (Date.now() >= timeoutAt) throw new Error("timed out waiting for forced probe");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    };
+    await waitUntil(() => probeCalls >= 1);
+    const forced = controller.runProbeCycleNow({ force: true });
+    await waitUntil(() => probeCalls >= 2);
+
+    probes[0]!.resolve(10);
+    probes[1]!.resolve(20);
+    await Promise.allSettled([first, forced]);
+    expect(probeCalls).toBe(2);
+  });
+
+  it("re-activates a connection whose switch failed while the id stayed active", async () => {
+    useHostRuntimeClock();
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    let probeAvailable = false;
+    const probeClients: FakeDaemonClient[] = [];
+
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          const client = new FakeDaemonClient();
+          client.connect = async () => {
+            client.connectCalls += 1;
+            throw new Error("network unavailable");
+          };
+          return client as unknown as DaemonClient;
+        },
+        connectToDaemon: async ({ host: hostProfile }) => {
+          if (!probeAvailable) throw new Error("probe unavailable");
+          const client = new FakeDaemonClient();
+          client.connectCalls = 1;
+          client.setConnectionState({ status: "connected" });
+          probeClients.push(client);
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: hostProfile.serverId,
+            hostname: hostProfile.label ?? null,
+          };
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+    await controller.start({ autoProbe: false });
+
+    await controller.activateConnection({ connectionId: "direct:lan:17000" });
+    expect(controller.getSnapshot().connectionStatus).toBe("error");
+    expect(controller.getSnapshot().activeConnectionId).toBe("direct:lan:17000");
+
+    probeAvailable = true;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await controller.runProbeCycleNow();
+
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+    expect(controller.getSnapshot().client).not.toBeNull();
+    expect(probeClients).toHaveLength(1);
   });
 
   it("keeps active client generation stable during background probe cycles", async () => {
@@ -2008,6 +2234,130 @@ describe("HostRuntimeStore", () => {
     },
   );
 
+  it("wakes routed hosts when their origin recovers from a failed switch", async () => {
+    useHostRuntimeClock();
+    const originConnection: HostConnection = {
+      id: "direct:a:17000",
+      type: "directTcp",
+      endpoint: "a:17000",
+    };
+    const routedConnection: HostConnection = {
+      id: "via:srv_a",
+      type: "routed",
+      originServerId: "srv_a",
+    };
+    const hostA = makeHost({
+      serverId: "srv_a",
+      connections: [originConnection],
+      preferredConnectionId: originConnection.id,
+    });
+    const hostB = makeHost({
+      serverId: "srv_b",
+      connections: [routedConnection],
+      preferredConnectionId: routedConnection.id,
+    });
+
+    let failSwitch = false;
+    const routedClients: FakeDaemonClient[] = [];
+    const store = new HostRuntimeStore({
+      storage: createMemoryHostRuntimeStorage({
+        "@paseo:daemon-registry": JSON.stringify([hostA, hostB]),
+      }),
+      deps: {
+        createClient: () => {
+          const client = new FakeDaemonClient();
+          client.connect = async () => {
+            client.connectCalls += 1;
+            if (failSwitch) throw new Error("network unavailable");
+            client.setConnectionState({ status: "connected" });
+          };
+          return client as unknown as DaemonClient;
+        },
+        connectToDaemon: async ({ host }) => {
+          const client = new FakeDaemonClient();
+          client.connectCalls = 1;
+          client.setConnectionState({ status: "connected" });
+          if (host.serverId === "srv_b") routedClients.push(client);
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: host.serverId,
+            hostname: null,
+          };
+        },
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+    store.boot();
+    await waitForHostOnline(store, "srv_a");
+    await waitForHostOnline(store, "srv_b");
+    const routedClient = routedClients.at(-1)!;
+    routedClient.setConnectionState({ status: "disconnected", reason: "channel lost" });
+
+    // A failed switch drops the origin's client but keeps the connection id.
+    failSwitch = true;
+    await store.setHostPassword("srv_a", "rotated");
+    await onceHostSnapshotMatches(
+      store,
+      "srv_a",
+      (snapshot) => snapshot?.connectionStatus === "error",
+    );
+    expect(store.getSnapshot("srv_a")?.connectionStatus).toBe("error");
+    expect(store.getSnapshot("srv_a")?.client).toBeNull();
+
+    failSwitch = false;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await store.runProbeCycleNow("srv_a");
+
+    expect(store.getSnapshot("srv_a")?.connectionStatus).toBe("online");
+    expect(routedClient.forceReconnectCalls).toBe(1);
+    expect(store.getSnapshot("srv_b")?.connectionStatus).toBe("online");
+
+    store.syncHosts([]);
+  });
+
+  it("replaces a stale socket after a long background instead of waiting for a probe", async () => {
+    useHostRuntimeClock();
+    const host = makeHost({
+      connections: [
+        {
+          id: "direct:lan:17000",
+          type: "directTcp",
+          endpoint: "lan:17000",
+        },
+      ],
+    });
+    const client = new FakeDaemonClient();
+    client.setConnectionState({ status: "connected" });
+    const store = new HostRuntimeStore({
+      storage: createMemoryHostRuntimeStorage(),
+      deps: {
+        createClient: () => client as unknown as DaemonClient,
+        connectToDaemon: async ({ host: probeHost }) => ({
+          client: client as unknown as DaemonClient,
+          serverId: probeHost.serverId,
+          hostname: probeHost.label,
+        }),
+        getClientId: async () => "cid_foreground",
+      },
+    });
+
+    try {
+      store.syncHosts([host]);
+      await vi.advanceTimersByTimeAsync(0);
+      await waitForHostOnline(store, host.serverId);
+
+      store.setAppVisible(false);
+      await vi.advanceTimersByTimeAsync(11_000);
+      store.setAppVisible(true);
+
+      expect(client.forceReconnectOptions).toEqual([
+        { verifyConnected: false, verifyTimeoutMs: 1_500 },
+      ]);
+    } finally {
+      store.syncHosts([]);
+    }
+  });
+
   it.each(["active", "inactive", "background"] as const)(
     "keeps reconnect enabled through inactive/background and resumes immediately (mounted %s)",
     async (currentState) => {
@@ -2094,10 +2444,12 @@ describe("HostRuntimeStore", () => {
       changeAppState("active");
       expect(clientA.reconnectEnabledChanges.at(-1)).toBe(true);
       expect(clientB.reconnectEnabledChanges.at(-1)).toBe(true);
-      expect(clientA.ensureConnectedCalls).toBe(1);
-      expect(clientA.connectionVerifications).toBe(1);
-      expect(clientB.connectionVerifications).toBe(1);
-      expect(clientB.ensureConnectedCalls).toBe(1);
+      // Foreground recovery goes through forceReconnect: it drops the backoff a
+      // suspended tab accumulated instead of waiting for the next scheduled retry.
+      expect(clientA.forceReconnectCalls).toBe(1);
+      expect(clientB.forceReconnectCalls).toBe(1);
+      expect(clientA.ensureConnectedCalls).toBe(0);
+      expect(clientB.ensureConnectedCalls).toBe(0);
       expect(store.getSnapshot(hostA.serverId)?.connectionStatus).toBe("online");
       expect(store.getSnapshot(hostB.serverId)?.connectionStatus).toBe("online");
 

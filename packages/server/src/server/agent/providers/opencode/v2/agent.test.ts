@@ -748,6 +748,58 @@ describe("OpenCode v2 session lifecycle", () => {
     }
     await expect(session.startTurn("after close")).rejects.toThrow("OpenCode session is closed");
   });
+  test("keeps the chat usable when an MCP server fails", async () => {
+    const harness = new V2Harness();
+    harness.mcpAddFailures.add("broken");
+    harness.mcpConnectFailures.set("cloudflare", "Error POSTing to endpoint: (HTTP 401)");
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({
+      provider: "opencode",
+      cwd: "/tmp/project",
+      mcpServers: {
+        broken: { type: "stdio", command: "broken" },
+        cloudflare: { type: "remote", url: "https://example.test/mcp" },
+        tools: { type: "stdio", command: "tools" },
+      },
+    });
+    try {
+      expect(harness.mcpAdds).toEqual(["broken", "cloudflare", "tools"]);
+      await session.startTurn("hello");
+      expect(harness.prompts).toEqual(["hello"]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("does not add an MCP server the location already provides", async () => {
+    const harness = new V2Harness();
+    harness.mcpExisting.add("cloudflare");
+    harness.mcpExisting.add("paseo");
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({
+      provider: "opencode",
+      cwd: "/tmp/project",
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=a" },
+        cloudflare: { type: "remote", url: "https://example.test/mcp" },
+        tools: { type: "stdio", command: "tools" },
+      },
+    });
+    try {
+      expect(harness.mcpAdds).toEqual(["tools"]);
+      await session.startTurn("hello");
+      expect(harness.prompts).toEqual(["hello"]);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("fails initialization when the event stream ends before connecting", async () => {
     const harness = new V2Harness();
     harness.api.event.subscribe = async function* () {};

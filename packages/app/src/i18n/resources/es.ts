@@ -821,6 +821,8 @@ export const es: TranslationResources = {
           fallback: "Elegir otra carpeta…",
           moved: "Espacio de trabajo movido a {{path}}",
           failed: "No se pudo mover el espacio de trabajo",
+          searchPlaceholder: "Buscar carpetas",
+          noResults: "No se encontraron carpetas.",
         },
         moveChat: {
           title: "Mover chat a espacio de trabajo",
@@ -1573,7 +1575,6 @@ export const es: TranslationResources = {
         openSettings: "Abrir la configuración del proyecto",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "Abrir en el gestor de archivos",
         openFolderFailed: "No se pudo abrir la carpeta",
         remove: "Eliminar proyecto",
         removing: "Eliminando...",
@@ -3241,14 +3242,6 @@ export const es: TranslationResources = {
           title: "Liberar agentes inactivos",
           hint: "Libera memoria tras una hora de inactividad.",
           info: "Detiene el proceso del agente y conserva la conversación. Envía un mensaje para reanudarla.\n\nEl trabajo activo, las notificaciones pendientes y las comprobaciones de seguridad del proveedor impiden la limpieza.",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "Permitir HTTP",
-          hint: "Permite que la CLI llegue a un Hub por HTTP cuando no está en localhost. Las credenciales de inicio de sesión viajan en texto claro.",
-          info: "Desactivado, la CLI acepta HTTP solo para localhost, 127.0.0.1 y [::1]. Activado, también acepta HTTP para otros hosts, como un Hub en una red privada sin TLS. El mismo interruptor es hub.allowHttp en la configuración del host.",
         },
       },
       workspaces: {

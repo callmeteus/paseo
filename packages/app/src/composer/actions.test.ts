@@ -811,7 +811,11 @@ describe("sendQueuedComposerMessageNow", () => {
     const queue = createFakeQueue(
       new Map([["agent", [{ id: "msg-1", text: "send me", attachments: [review] }]]]),
     );
-    const submitted: Array<{ text: string; attachments: ComposerAttachment[] }> = [];
+    const submitted: Array<{
+      text: string;
+      attachments: ComposerAttachment[];
+      messageId: string;
+    }> = [];
     const result = await sendQueuedComposerMessageNow({
       agentId: "agent",
       messageId: "msg-1",
@@ -822,7 +826,7 @@ describe("sendQueuedComposerMessageNow", () => {
     });
     expect(result).toEqual({ status: "submitted" });
     expect(queue.state.get("agent")).toEqual([]);
-    expect(submitted).toEqual([{ text: "send me", attachments: [review] }]);
+    expect(submitted).toEqual([{ text: "send me", attachments: [review], messageId: "msg-1" }]);
   });
 
   it("restores the queued entry to the front and surfaces the error message on failure", async () => {

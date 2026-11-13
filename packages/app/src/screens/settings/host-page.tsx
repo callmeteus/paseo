@@ -69,7 +69,6 @@ import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { useProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
-import { HubAllowHttpSection } from "./hub-allow-http-card";
 import { IdleRuntimeCleanupCard } from "./idle-runtime-cleanup-card";
 import { ModelRoutersCard } from "./model-routers-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
@@ -407,8 +406,6 @@ export function HostSettingsPage({
       <HostConnectionError serverId={serverId} />
 
       <HostAppearanceSection host={host} />
-
-      <HubAllowHttpSection serverId={serverId} />
 
       {isLocalDaemon ? <LocalDaemonSection /> : null}
 

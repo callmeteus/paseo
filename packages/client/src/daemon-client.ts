@@ -37,6 +37,7 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type AgentQueuedMessage,
   type DetectedMcpServer,
   type McpBridgeServer,
   type McpBridgeTool,
@@ -1708,7 +1709,7 @@ export class DaemonClient {
     );
   }
 
-  ensureConnected(options?: { verify?: boolean }): void {
+  ensureConnected(options?: { verify?: boolean; verifyTimeoutMs?: number }): void {
     if (this.connectionState.status === "disposed") {
       return;
     }
@@ -1716,7 +1717,7 @@ export class DaemonClient {
       this.shouldReconnect = true;
     }
     if (this.connectionState.status === "connected") {
-      if (options?.verify) this.verifyConnection();
+      if (options?.verify) this.verifyConnection(options.verifyTimeoutMs);
       return;
     }
     if (this.connectionState.status === "connecting") {
@@ -1739,19 +1740,19 @@ export class DaemonClient {
    * arrive minutes late after the tab regains focus. Foreground recovery calls
    * this to reopen the socket without waiting for that timer.
    */
-  forceReconnect(): void {
+  forceReconnect(options?: { verifyConnected?: boolean; verifyTimeoutMs?: number }): void {
     if (this.connectionState.status === "disposed") return;
     this.shouldReconnect = true;
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
-    if (this.connectionState.status === "connected") {
-      this.verifyConnection();
+    if (this.connectionState.status === "connected" && options?.verifyConnected !== false) {
+      this.verifyConnection(options?.verifyTimeoutMs);
       return;
     }
     // A real attempt is already in flight; let its connect timeout own it.
-    if (this.connectPromise) return;
+    if (this.connectionState.status !== "connected" && this.connectPromise) return;
     this.reconnectAttempt = 0;
     this.disposeTransport(1001, "Forced reconnect");
     void this.attemptConnect(true).catch((error: unknown) =>
@@ -1759,13 +1760,13 @@ export class DaemonClient {
     );
   }
 
-  private verifyConnection(): void {
+  private verifyConnection(timeoutMs = 3_000): void {
     const transport = this.transport;
     if (!transport || this.connectionVerification === transport) return;
     this.connectionVerification = transport;
     // A session probe has its own deadline, independent of a heartbeat that the OS
     // may have suspended. A successful response also proves the session can serve RPCs.
-    void this.ping({ timeoutMs: 3_000 })
+    void this.ping({ timeoutMs })
       .catch((error: unknown) => {
         if (this.transport !== transport || this.connectionState.status !== "connected") return;
         this.disposeTransport(1001, "Connection verification failed");
@@ -6141,6 +6142,35 @@ export class DaemonClient {
       responseType: "mcp.catalog.test.response",
     });
     return { ok: payload.ok, tools: payload.tools, error: payload.error };
+  }
+
+  async listAgentMessageQueues(requestId?: string): Promise<Record<string, AgentQueuedMessage[]>> {
+    const payload = await this.sendCorrelatedSessionRequest<"agent.message_queue.list.response">({
+      requestId,
+      message: { type: "agent.message_queue.list.request", requestId: requestId ?? "" },
+      responseType: "agent.message_queue.list.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.queues;
+  }
+
+  async setAgentMessageQueue(
+    agentId: string,
+    items: AgentQueuedMessage[],
+    requestId?: string,
+  ): Promise<AgentQueuedMessage[]> {
+    const payload = await this.sendCorrelatedSessionRequest<"agent.message_queue.set.response">({
+      requestId,
+      message: {
+        type: "agent.message_queue.set.request",
+        requestId: requestId ?? "",
+        agentId,
+        items,
+      },
+      responseType: "agent.message_queue.set.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.items;
   }
 
   async writeProjectConfig(input: WriteProjectConfigInput): Promise<WriteProjectConfigPayload> {

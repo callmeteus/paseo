@@ -37,9 +37,7 @@ export type SendBehavior = ActiveTurnBehavior | "queue";
 export type ReleaseChannel = "stable" | "beta";
 export type ServiceUrlBehavior = "ask" | "in-app" | "external";
 export type WorkspaceTitleSource = "title" | "branch";
-/** Where an implicit desktop open lands: the main pane, the side pane, or Explorer. */
-export type WorkspaceOpenLocation = "main" | "side" | "explorer";
-export type PullRequestOpenLocation = WorkspaceOpenLocation;
+export type PullRequestOpenLocation = "main" | "side" | "explorer";
 /** What a sidebar workspace row shows in the space to the right of its title. */
 export type SidebarWorkspaceTrailing = "diff" | "timestamp" | "none";
 /** How much of an agent's work the chat shows between the user's message and the reply. */
@@ -111,8 +109,6 @@ export interface AppSettings {
   filePanelAssociations: Record<string, string>;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
-  /** Where clicking a file or link in an agent chat opens it. */
-  chatFileOpenLocation: WorkspaceOpenLocation;
   pullRequestOpenLocation: PullRequestOpenLocation;
 }
 
@@ -125,6 +121,7 @@ export type AppSettingsUpdate =
 export interface OpenInSidePanePreferences {
   explorerFiles: boolean;
   diffs: boolean;
+  chatFiles: boolean;
   diffFiles: boolean;
   subagents: boolean;
 }
@@ -132,6 +129,7 @@ export interface OpenInSidePanePreferences {
 export const DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES: OpenInSidePanePreferences = {
   explorerFiles: false,
   diffs: false,
+  chatFiles: false,
   diffFiles: false,
   subagents: false,
 };
@@ -169,7 +167,6 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   vimKeybindings: false,
   filePanelAssociations: {},
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
-  chatFileOpenLocation: "explorer",
   pullRequestOpenLocation: "explorer",
 };
 
@@ -281,25 +278,21 @@ const StoredAppSettingsSchema = z
         // COMPAT(diffDestinationPreference): legacy split preferences, remove after 2027-02-26.
         explorerChanges: z.boolean().optional(),
         changesLinks: z.boolean().optional(),
-        // COMPAT(chatFileOpenLocation): legacy side-pane toggle, remove after 2027-02-26.
-        chatFiles: z.boolean().optional(),
+        chatFiles: z.boolean().catch(false),
         diffFiles: z.boolean().catch(false),
         subagents: z.boolean().catch(false),
         // COMPAT(pullRequestOpenLocation): legacy side-pane toggle, remove after 2027-02-26.
         pullRequests: z.boolean().optional(),
       })
-      .transform(({ explorerChanges, changesLinks, pullRequests, chatFiles, ...preferences }) => ({
+      .transform(({ explorerChanges, changesLinks, pullRequests, ...preferences }) => ({
         ...preferences,
         diffs: preferences.diffs ?? explorerChanges ?? changesLinks ?? false,
         legacyPullRequestsInSidePane: pullRequests,
-        legacyChatFilesInSidePane: chatFiles,
       }))
       .catch({
         ...DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
         legacyPullRequestsInSidePane: undefined,
-        legacyChatFilesInSidePane: undefined,
       }),
-    chatFileOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
@@ -308,8 +301,7 @@ const StoredAppSettingsSchema = z
     releaseChannel: z.enum(["stable", "beta"]).optional().catch(undefined),
   })
   .transform((stored) => {
-    const { legacyPullRequestsInSidePane, legacyChatFilesInSidePane, ...openInSidePane } =
-      stored.openInSidePane;
+    const { legacyPullRequestsInSidePane, ...openInSidePane } = stored.openInSidePane;
     const needsWrite =
       (stored.uiBaseFontSize === undefined && stored.uiFontSize !== undefined) ||
       stored.contentFontSize === undefined;
@@ -330,8 +322,6 @@ const StoredAppSettingsSchema = z
     return {
       ...stored,
       openInSidePane,
-      chatFileOpenLocation:
-        stored.chatFileOpenLocation ?? (legacyChatFilesInSidePane ? "side" : "explorer"),
       pullRequestOpenLocation:
         stored.pullRequestOpenLocation ?? (legacyPullRequestsInSidePane ? "side" : "explorer"),
       uiBaseFontSize,

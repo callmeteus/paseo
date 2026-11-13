@@ -145,6 +145,48 @@ test("a failed agent startup retries only that stage with the reserved IDs", asy
   expect(attempts).toBe(2);
 });
 
+test("a known failure accepts adjusted parameters instead of locking its request key", async () => {
+  const f = await fixture();
+  let attempts = 0;
+  f.input.createAgent = async (_id, readyWorkspace, onReady) => {
+    attempts++;
+    expect(readyWorkspace).toEqual(workspace);
+    if (attempts === 1) throw new Error("Provider 'opencode' is not available");
+    await onReady(agent);
+    return { agent, initialPromptStarted: true };
+  };
+  expect(await f.service.create(f.input)).toMatchObject({
+    phase: "failed",
+    failedStage: "agent",
+    outcomeUnknown: false,
+    workspace,
+  });
+  const adjusted = { ...f.input, request: { ...f.input.request, model: "another-model" } };
+  expect(await new CreationService(f.directory, silentLogger).create(adjusted)).toMatchObject({
+    phase: "completed",
+    agent,
+  });
+  expect(attempts).toBe(2);
+  expect(f.calls).toEqual(["workspace"]);
+});
+
+test("an ambiguous failure still rejects a changed intent under the same key", async () => {
+  const f = await fixture();
+  f.input.createAgent = async (_id, _workspace, onReady) => {
+    await onReady(agent);
+    throw new Error("connection lost after the provider accepted the prompt");
+  };
+  expect(await f.service.create(f.input)).toMatchObject({
+    phase: "failed",
+    failedStage: "prompt",
+    outcomeUnknown: true,
+  });
+  const adjusted = { ...f.input, request: { ...f.input.request, model: "another-model" } };
+  await expect(new CreationService(f.directory, silentLogger).create(adjusted)).rejects.toThrow(
+    "workspace_request_key_conflict",
+  );
+});
+
 test("an uncertain prompt outcome never resends or removes its workspace and agent", async () => {
   const f = await fixture();
   let prompts = 0;

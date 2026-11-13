@@ -85,8 +85,11 @@ export function AssistantSelectionCopySurface({
         setAction(null);
         return;
       }
-      // A retained panel that is display:none still owns the selection.
-      if (root.getClientRects().length === 0) {
+      // A retained panel that is display:none still owns the selection, but its
+      // range has no client rects. Check the range, not the root: the root is
+      // display:contents and never has a box of its own.
+      const range = selection.getRangeAt(0);
+      if (range.getClientRects().length === 0) {
         setAction(null);
         return;
       }
@@ -95,7 +98,7 @@ export function AssistantSelectionCopySurface({
         setAction(null);
         return;
       }
-      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      const rect = range.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) {
         setAction(null);
         return;

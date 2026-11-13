@@ -126,10 +126,7 @@ import {
   projectAgentMessages,
 } from "./agent-messages/index.js";
 import { planSkillPrompt, type SkillTurnPlan } from "./agent-skill.js";
-import {
-  isClosedProviderSessionError,
-  isStaleProviderSessionError,
-} from "./stale-provider-session-error.js";
+import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
 import type { McpBridgeManager } from "../mcp/bridge.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
@@ -1182,7 +1179,6 @@ export class AgentManager {
   // resumed after a restart must not be reaped on the next idle sweep.
   private readonly runtimeLoadedAt = new WeakMap<AgentSession, number>();
   private readonly collectingRuntimes = new Set<string>();
-  private readonly reopeningClosedSessions = new Set<string>();
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
@@ -3860,9 +3856,6 @@ export class AgentManager {
       if (pendingRun.settled) {
         throw error;
       }
-      if (isClosedProviderSessionError(error) && !this.reopeningClosedSessions.has(agentId)) {
-        throw error;
-      }
       if (isStaleProviderSessionError(error)) {
         pendingRun.start = { status: "failed", error: error.message };
         agent.pendingReplacement = false;
@@ -3889,31 +3882,6 @@ export class AgentManager {
       this.runs.settleForegroundRun(agentId, pendingRun.token);
       throw error;
     }
-  }
-
-  private shouldReopenClosedSession(agentId: string, error: unknown, settled: boolean): boolean {
-    return (
-      !settled && !this.reopeningClosedSessions.has(agentId) && isClosedProviderSessionError(error)
-    );
-  }
-
-  private async *reopenClosedSessionAndStream(
-    agentId: string,
-    prompt: AgentPromptInput,
-    options: AgentRunOptions | undefined,
-  ): AsyncGenerator<AgentStreamEvent> {
-    this.logger.info({ agentId }, "Reopening a closed provider session for the prompt");
-    await this.waitForAgentClose(agentId);
-    if (this.agents.has(agentId)) {
-      await this.reloadAgentSession(agentId);
-    } else if (this.registry) {
-      await ensureAgentLoaded(agentId, {
-        agentManager: this,
-        agentStorage: this.requireRegistry(),
-        logger: this.logger,
-      });
-    }
-    yield* this.streamAgent(agentId, prompt, options);
   }
 
   private async *streamAfterRuntimeCollection(
@@ -3976,27 +3944,13 @@ export class AgentManager {
     const streamForwarder = async function* streamForwarder(this: AgentManager) {
       let turnId: string;
       let turnStream: ReturnType<AgentRunState["createTurnStream"]> | null = null;
-      try {
-        turnId = await this.startPendingForegroundTurn({
-          agent,
-          agentId,
-          pendingRun,
-          prompt,
-          options,
-        });
-      } catch (error) {
-        if (!this.shouldReopenClosedSession(agentId, error, pendingRun.settled)) {
-          throw error;
-        }
-        this.reopeningClosedSessions.add(agentId);
-        try {
-          this.runs.settleForegroundRun(agentId, pendingRun.token);
-          yield* this.reopenClosedSessionAndStream(agentId, prompt, options);
-        } finally {
-          this.reopeningClosedSessions.delete(agentId);
-        }
-        return;
-      }
+      turnId = await this.startPendingForegroundTurn({
+        agent,
+        agentId,
+        pendingRun,
+        prompt,
+        options,
+      });
 
       if (isReplacement) {
         agent.pendingReplacement = false;

@@ -148,9 +148,7 @@ test("a subagent's parent pill returns to its parent", async ({ page }) => {
   }
 });
 
-test("a preferred chat file link opens in Explorer instead of the parent pane", async ({
-  page,
-}) => {
+test("a preferred chat file link still opens beside its right-pane agent", async ({ page }) => {
   const target = "linked.ts:3";
   const workspace = await seedMockAgentWorkspace({
     repoPrefix: "chat-file-origin-pane-",
@@ -175,10 +173,8 @@ test("a preferred chat file link opens in Explorer instead of the parent pane", 
     await expect(fileLink).toBeVisible({ timeout: 15_000 });
     await fileLink.click();
 
-    const explorer = page.getByTestId("workspace-explorer-sidebar");
-    await expect(explorer.getByTestId("workspace-tab-file_linked.ts")).toBeVisible();
+    await expect(right.getByTestId("workspace-tab-file_linked.ts")).toBeVisible();
     await expect(left.getByTestId("workspace-tab-file_linked.ts")).toHaveCount(0);
-    await expect(right.getByTestId("workspace-tab-file_linked.ts")).toHaveCount(0);
   } finally {
     await workspace.cleanup();
   }

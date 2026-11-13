@@ -4481,7 +4481,11 @@ class OpenCodeAgentSession implements AgentSession {
       const turnId = this.activeForegroundTurnId;
       if (turnId) {
         this.finishForegroundTurn(
-          { type: "turn_failed", provider: "opencode", error: input.error.message },
+          {
+            type: "turn_failed",
+            provider: "opencode",
+            error: toDiagnosticErrorMessage(input.error),
+          },
           turnId,
         );
       }

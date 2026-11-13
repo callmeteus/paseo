@@ -4,8 +4,8 @@ import { SettingsSection, SettingsCard, SettingsSelect } from "@/components/sett
 import {
   useAppSettings,
   type OpenInSidePanePreferences,
+  type PullRequestOpenLocation,
   type ServiceUrlBehavior,
-  type WorkspaceOpenLocation,
 } from "@/hooks/use-settings";
 
 const SOURCES = [
@@ -14,8 +14,7 @@ const SOURCES = [
   "chatFiles",
   "diffFiles",
   "subagents",
-  "pullRequests",
-] as const;
+] as const satisfies readonly (keyof OpenInSidePanePreferences)[];
 
 const SERVICE_URL_BEHAVIORS: readonly ServiceUrlBehavior[] = ["ask", "in-app", "external"];
 
@@ -25,7 +24,7 @@ const SERVICE_URL_LABEL_KEYS: Record<ServiceUrlBehavior, string> = {
   external: "settings.general.serviceUrls.options.external",
 };
 
-type OpenLocationSource = (typeof SOURCES)[number];
+type OpenLocationSource = keyof OpenInSidePanePreferences | "pullRequests";
 
 function OpenLocationRow({
   source,
@@ -34,9 +33,9 @@ function OpenLocationRow({
   onDestinationChange,
 }: {
   source: OpenLocationSource;
-  destination: WorkspaceOpenLocation;
+  destination: PullRequestOpenLocation;
   allowExplorer?: boolean;
-  onDestinationChange(source: OpenLocationSource, destination: WorkspaceOpenLocation): void;
+  onDestinationChange(source: OpenLocationSource, destination: PullRequestOpenLocation): void;
 }) {
   const { t } = useTranslation();
   const options = useMemo(() => {
@@ -49,7 +48,7 @@ function OpenLocationRow({
     }));
   }, [allowExplorer, t]);
   const change = useCallback(
-    (value: WorkspaceOpenLocation) => onDestinationChange(source, value),
+    (value: PullRequestOpenLocation) => onDestinationChange(source, value),
     [source, onDestinationChange],
   );
   return (
@@ -84,31 +83,14 @@ function ServiceUrlRow() {
   );
 }
 
-function destinationFor(
-  settings: {
-    openInSidePane: OpenInSidePanePreferences;
-    chatFileOpenLocation: WorkspaceOpenLocation;
-    pullRequestOpenLocation: WorkspaceOpenLocation;
-  },
-  source: OpenLocationSource,
-): WorkspaceOpenLocation {
-  if (source === "chatFiles") return settings.chatFileOpenLocation;
-  if (source === "pullRequests") return settings.pullRequestOpenLocation;
-  return settings.openInSidePane[source] ? "side" : "main";
-}
-
 /** Where things open: files, diffs, subagents, pull requests, and script URLs. Desktop only. */
 export function OpenLocationSection() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
   const handleDestinationChange = useCallback(
-    (source: OpenLocationSource, destination: WorkspaceOpenLocation) => {
+    (source: OpenLocationSource, destination: PullRequestOpenLocation) => {
       if (source === "pullRequests") {
         void updateSettings({ pullRequestOpenLocation: destination });
-        return;
-      }
-      if (source === "chatFiles") {
-        void updateSettings({ chatFileOpenLocation: destination });
         return;
       }
       void updateSettings({
@@ -124,11 +106,16 @@ export function OpenLocationSection() {
           <OpenLocationRow
             key={source}
             source={source}
-            destination={destinationFor(settings, source)}
-            allowExplorer={source === "chatFiles" || source === "pullRequests"}
+            destination={settings.openInSidePane[source] ? "side" : "main"}
             onDestinationChange={handleDestinationChange}
           />
         ))}
+        <OpenLocationRow
+          source="pullRequests"
+          destination={settings.pullRequestOpenLocation}
+          allowExplorer
+          onDestinationChange={handleDestinationChange}
+        />
         <ServiceUrlRow />
       </SettingsCard>
     </SettingsSection>

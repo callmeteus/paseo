@@ -812,6 +812,8 @@ export const ar: TranslationResources = {
           fallback: "اختيار مجلد آخر…",
           moved: "تم نقل مساحة العمل إلى {{path}}",
           failed: "تعذر نقل مساحة العمل",
+          searchPlaceholder: "البحث عن مجلدات",
+          noResults: "لم يتم العثور على مجلدات.",
         },
         moveChat: {
           title: "نقل المحادثة إلى مساحة العمل",
@@ -1531,7 +1533,6 @@ export const ar: TranslationResources = {
         openSettings: "افتح إعدادات المشروع",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",
-        openFolder: "فتح في مدير الملفات",
         openFolderFailed: "تعذر فتح المجلد",
         remove: "إزالة المشروع",
         removing: "جارٍ الإزالة...",
@@ -3210,14 +3211,6 @@ export const ar: TranslationResources = {
           title: "تحرير الوكلاء الخاملين",
           hint: "تحرير الذاكرة بعد ساعة من الخمول.",
           info: "يوقف عملية الوكيل مع الاحتفاظ بمحادثته. أرسل رسالة لاستئنافها.\n\nيمنع العمل النشط والإشعارات المعلّقة وفحوصات أمان المزوّد عملية التنظيف.",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "السماح بـ HTTP",
-          hint: "يتيح لواجهة CLI الوصول إلى Hub عبر HTTP عندما لا يكون على localhost. تنتقل بيانات تسجيل الدخول كنص واضح.",
-          info: "عند الإيقاف، تقبل CLI بروتوكول HTTP فقط لعناوين localhost و127.0.0.1 و[::1]. عند التشغيل، تقبل HTTP أيضًا للمضيفين الآخرين، مثل Hub على شبكة خاصة بلا TLS. المفتاح نفسه هو hub.allowHttp في إعدادات المضيف.",
         },
       },
       workspaces: {

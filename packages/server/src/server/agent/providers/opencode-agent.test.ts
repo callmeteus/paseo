@@ -2321,6 +2321,29 @@ describe("OpenCode adapter startTurn error handling", () => {
     ]);
   });
 
+  test("keeps the transport cause when the OpenCode helper server exits mid-turn", async () => {
+    const { parent: session, openCode } = await createParentSession("ses_helper_exit_cause");
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    openCode.sessionPromptAsyncEvents = [];
+
+    try {
+      await session.startTurn("hello");
+      const transportError = Object.assign(new Error("Transport"), {
+        cause: new Error("OpenCode helper server exited (3)"),
+      });
+      openCode.emitEvent({ type: "server-exited", error: transportError });
+
+      await vi.waitFor(() => expect(countEvents(events, "turn_failed")).toBe(1));
+      const failed = events.find((event) => event.type === "turn_failed");
+      if (failed?.type !== "turn_failed") throw new Error("expected turn_failed");
+      expect(failed.error).toContain("Transport");
+      expect(failed.error).toContain("OpenCode helper server exited (3)");
+    } finally {
+      await session.close();
+    }
+  });
+
   test("emits turn_failed when client.session.promptAsync throws synchronously", async () => {
     // Yield the server-connected event, then park forever. The adapter waits
     // for that first event before sending the prompt.

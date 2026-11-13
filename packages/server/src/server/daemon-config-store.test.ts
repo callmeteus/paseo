@@ -10,10 +10,6 @@ import { readSpeechSettings } from "./speech/speech-settings.js";
 import type { PersistedConfig } from "./persisted-config.js";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-function hubAllowHttpFromPersisted(persisted: PersistedConfig): boolean {
-  return persisted.hub?.allowHttp === true;
-}
-
 function reloadableConfig(
   persisted: PersistedConfig,
   options: { relayEnabledFallback?: boolean } = {},
@@ -33,7 +29,6 @@ function reloadableConfig(
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: daemon.enableTerminalAgentHooks ?? false,
     idleRuntimeCleanup: agents.idleRuntimeCleanup !== false,
-    hubAllowHttp: hubAllowHttpFromPersisted(persisted),
     appendSystemPrompt: daemon.appendSystemPrompt ?? "",
     terminalProfiles: daemon.terminalProfiles,
     agentProfiles: daemon.agentProfiles,
@@ -873,29 +868,6 @@ describe("DaemonConfigStore", () => {
     expect(persisted.daemon?.enableTerminalAgentHooks).toBe(true);
   });
 
-  test("patch persists hub allow HTTP into config.json and defaults it off", () => {
-    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
-    tempDirs.push(paseoHome);
-
-    const store = new DaemonConfigStore(paseoHome, {
-      mcp: { injectIntoAgents: false },
-      providers: {},
-      metadataGeneration: { providers: [] },
-      autoArchiveAfterMerge: false,
-      enableTerminalAgentHooks: false,
-      appendSystemPrompt: "",
-    });
-
-    expect(store.get().hubAllowHttp).toBeUndefined();
-    store.patch({ hubAllowHttp: true });
-    expect(store.get().hubAllowHttp).toBe(true);
-    expect(loadPersistedConfig(paseoHome).hub?.allowHttp).toBe(true);
-
-    store.patch({ hubAllowHttp: false });
-    expect(store.get().hubAllowHttp).toBe(false);
-    expect(loadPersistedConfig(paseoHome).hub?.allowHttp).toBe(false);
-  });
-
   test("patch persists metadata generation providers into config.json", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
@@ -1119,25 +1091,6 @@ describe("DaemonConfigStore reload", () => {
     });
     expect(store.get().browserTools.enabled).toBe(true);
     expect(store.get().git).toEqual({ maxProcessesPerSecond: 12, maxProcessConcurrency: 3 });
-  });
-
-  test("reloads hub allow HTTP in both directions without requiring a restart", () => {
-    const { paseoHome, store, persisted } = createReloadableStore();
-    writeConfig(paseoHome, { ...persisted, hub: { allowHttp: true } });
-    expect(store.reload()).toEqual({
-      appliedPaths: ["hub.allowHttp"],
-      restartRequiredPaths: [],
-      overrideControlledPaths: [],
-    });
-    expect(store.get().hubAllowHttp).toBe(true);
-
-    writeConfig(paseoHome, { ...persisted, hub: { allowHttp: false } });
-    expect(store.reload()).toEqual({
-      appliedPaths: ["hub.allowHttp"],
-      restartRequiredPaths: [],
-      overrideControlledPaths: [],
-    });
-    expect(store.get().hubAllowHttp).toBe(false);
   });
 
   test("reloads idle runtime cleanup in both directions without requiring a restart", () => {

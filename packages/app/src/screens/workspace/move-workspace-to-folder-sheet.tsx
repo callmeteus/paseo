@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -34,6 +34,13 @@ interface WorkspaceFolderRowModel {
   name: string;
   project: string;
   isCurrent: boolean;
+}
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase();
 }
 
 function folderName(directory: string): string {
@@ -141,10 +148,14 @@ export function MoveWorkspaceToFolderSheet() {
     request ? state.sessions[request.serverId]?.workspaces : undefined,
   );
   const [movingTo, setMovingTo] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const current = request && workspaces ? workspaces.get(request.workspaceId) : undefined;
   const canPickDirectory = Boolean(getDesktopHost()?.dialog);
   const visible = Boolean(request && client && current);
-  const header = useMemo(() => ({ title: t("workspace.tabs.menu.moveWorkspace.title") }), [t]);
+
+  useEffect(() => {
+    if (!visible) setSearchInput("");
+  }, [visible]);
 
   const rows = useMemo<WorkspaceFolderRowModel[]>(() => {
     const currentDirectory = current?.workspaceDirectory;
@@ -164,6 +175,35 @@ export function MoveWorkspaceToFolderSheet() {
       return left.name.localeCompare(right.name);
     });
   }, [current?.workspaceDirectory, workspaces]);
+
+  const query = normalizeSearchValue(searchInput.trim());
+  const filteredRows = useMemo(() => {
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.name, row.project, row.directory].some((value) =>
+        normalizeSearchValue(value).includes(query),
+      ),
+    );
+  }, [query, rows]);
+  const canSearch = rows.length > 1;
+  const header = useMemo(
+    () => ({
+      title: t("workspace.tabs.menu.moveWorkspace.title"),
+      ...(visible && canSearch
+        ? {
+            search: {
+              onChange: setSearchInput,
+              placeholder: t("workspace.tabs.menu.moveWorkspace.searchPlaceholder"),
+              // The compact sheet keeps its content mounted while hidden, so
+              // the field has to be told to drop the text the state already dropped.
+              resetKey: visible ? "open" : "closed",
+              testID: "move-workspace-to-folder-search",
+            },
+          }
+        : {}),
+    }),
+    [canSearch, t, visible],
+  );
 
   const relocate = useCallback(
     async (targetPath: string, rowId: string) => {
@@ -222,10 +262,14 @@ export function MoveWorkspaceToFolderSheet() {
       testID="move-workspace-to-folder-sheet"
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {rows.length <= 1 ? (
-          <Text style={styles.empty}>{t("workspace.tabs.menu.moveWorkspace.empty")}</Text>
+        {filteredRows.length === 0 || (!query && rows.length <= 1) ? (
+          <Text style={styles.empty}>
+            {query
+              ? t("workspace.tabs.menu.moveWorkspace.noResults")
+              : t("workspace.tabs.menu.moveWorkspace.empty")}
+          </Text>
         ) : (
-          rows.map((row) => (
+          filteredRows.map((row) => (
             <WorkspaceFolderRow
               key={row.directory}
               row={row}

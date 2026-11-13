@@ -148,6 +148,7 @@ import { createSpeechSettingsOwner } from "./speech/speech-settings.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { generateGoalObjective } from "./agent/goal-objective-rewriter.js";
 import { AgentStorage } from "./agent/agent-storage.js";
+import { MessageQueueStore } from "./agent/message-queue-store.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import { createBridgeMcpServer } from "./agent/bridge-mcp-server.js";
@@ -448,7 +449,6 @@ export interface PaseoDaemonConfig {
   };
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
-  hubAllowHttp?: boolean;
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
@@ -621,7 +621,6 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     modelRouters: config.modelRouters ?? { routers: [] },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
-    hubAllowHttp: config.hubAllowHttp === true,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
@@ -1020,6 +1019,10 @@ export async function createPaseoDaemon(
   }
 
   const agentStorage = new AgentStorage(config.agentStoragePath, logger);
+  const messageQueueStore = new MessageQueueStore({
+    paseoHome: config.paseoHome,
+    logger,
+  });
   const projectRegistry = new FileBackedProjectRegistry(
     path.join(config.paseoHome, "projects", "projects.json"),
     logger,
@@ -2005,6 +2008,7 @@ export async function createPaseoDaemon(
                 startPaused: true,
                 mcpBridgeAuthority: sharedMcpAuthority,
                 mcpCatalog,
+                messageQueueStore,
               },
               workspaceAutoName,
               workspaceRuntimeStore,

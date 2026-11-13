@@ -20,7 +20,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { Command } from "commander";
 import { DEFAULT_HUB_ORIGIN, resolveHubCredential } from "./authority.js";
-import { hubAllowHttpEnabled, type HubCredentialStore } from "./credentials.js";
+import type { HubCredentialStore } from "./credentials.js";
 import type { HubDaemonConnection } from "./daemon-client.js";
 import { withHubDaemon } from "./daemon-client.js";
 import { HubCommandError } from "./error.js";
@@ -259,18 +259,14 @@ async function ensureLogin(
               : activeOrigin,
           validate(value) {
             try {
-              normalizeHubOrigin(value ?? "", {
-                allowHttp: hubAllowHttpEnabled(environment.env),
-              });
+              normalizeHubOrigin(value ?? "");
             } catch {
               return "Enter a valid Hub URL";
             }
             return undefined;
           },
         });
-  const normalizedOrigin = normalizeHubOrigin(origin, {
-    allowHttp: hubAllowHttpEnabled(environment.env),
-  });
+  const normalizedOrigin = normalizeHubOrigin(origin);
   if (environment.credentials.get(normalizedOrigin) !== null) {
     log.success(`Logged in to ${normalizedOrigin}`);
     return normalizedOrigin;

@@ -155,28 +155,7 @@ export class OpenCodeV2Session implements AgentSession {
     await waitForLocationReady({ client: this.client, location, signal: this.abort.signal });
     if (this.requiresPaseoPlugin)
       await awaitPaseoPlugin({ client: this.client, location, signal: this.abort.signal });
-    for (const [server, config] of Object.entries(this.config.mcpServers ?? {})) {
-      await this.client.mcp.add({
-        server,
-        location,
-        config:
-          config.type === "stdio"
-            ? {
-                type: "local",
-                command: [config.command, ...(config.args ?? [])],
-                environment: config.env,
-                codemode: false,
-              }
-            : {
-                type: "remote",
-                url: config.url,
-                headers: config.headers,
-                oauth: false,
-                codemode: false,
-              },
-      });
-      await this.awaitMcp(server);
-    }
+    await this.configureMcpServers(location);
     const system = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
@@ -187,6 +166,90 @@ export class OpenCodeV2Session implements AgentSession {
         key: "paseo",
         value: system,
       });
+  }
+  /**
+   * A missing MCP server costs its tools, not the conversation. Register every
+   * server, then wait for the healthy ones in parallel so one unreachable MCP
+   * (expired token, dead endpoint) cannot block the session or multiply the
+   * startup wait by the number of configured servers.
+   */
+  private async configureMcpServers(location: { directory: string }) {
+    const configured = Object.entries(this.config.mcpServers ?? {});
+    if (configured.length === 0) return;
+    // The location may already provide these servers from its own config
+    // (opencode.json, plugins, a previous session). Adding the same name again
+    // registers a second copy of every tool, and that duplicate tool surface is
+    // what overflows the model's context. An existing server wins.
+    const existing = await this.listMcpServerNames(location);
+    const registered: string[] = [];
+    for (const [server, config] of configured) {
+      if (existing.has(server)) {
+        this.logger.debug(
+          { server },
+          "OpenCode already provides this MCP server; skipping duplicate registration",
+        );
+        continue;
+      }
+      try {
+        await this.client.mcp.add(
+          {
+            server,
+            location,
+            config:
+              config.type === "stdio"
+                ? {
+                    type: "local",
+                    command: [config.command, ...(config.args ?? [])],
+                    environment: config.env,
+                    codemode: false,
+                  }
+                : {
+                    type: "remote",
+                    url: config.url,
+                    headers: config.headers,
+                    oauth: false,
+                    codemode: false,
+                  },
+          },
+          { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]) },
+        );
+        registered.push(server);
+        existing.add(server);
+      } catch (error) {
+        this.abort.signal.throwIfAborted();
+        this.reportMcpUnavailable(server, error);
+      }
+    }
+    await Promise.all(
+      registered.map((server) =>
+        this.awaitMcp(server).catch((error: unknown) => {
+          this.abort.signal.throwIfAborted();
+          this.reportMcpUnavailable(server, error);
+        }),
+      ),
+    );
+  }
+  private async listMcpServerNames(location: { directory: string }): Promise<Set<string>> {
+    try {
+      const catalog = await this.client.mcp.list(
+        { location },
+        { signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]) },
+      );
+      return new Set(catalog.data.map((server) => server.name));
+    } catch (error) {
+      this.abort.signal.throwIfAborted();
+      this.logger.warn(
+        { error: toDiagnosticErrorMessage(error) },
+        "Could not list OpenCode MCP servers; registering configured servers",
+      );
+      return new Set();
+    }
+  }
+  private reportMcpUnavailable(server: string, error: unknown) {
+    this.logger.warn(
+      { server, error: toDiagnosticErrorMessage(error) },
+      "OpenCode MCP server is unavailable; continuing without its tools",
+    );
   }
   private async startStream() {
     let ready!: () => void;
@@ -243,7 +306,7 @@ export class OpenCodeV2Session implements AgentSession {
     };
   }
   private async awaitMcp(server: string) {
-    const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(30_000)]);
+    const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]);
     while (true) {
       const catalog = await this.client.mcp.list(
         { location: { directory: this.config.cwd } },

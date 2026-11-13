@@ -29,7 +29,6 @@ interface SupportedMutableConfigPatch {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   idleRuntimeCleanup?: boolean;
-  hubAllowHttp?: boolean;
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
@@ -200,7 +199,6 @@ const RELOADABLE_PATHS = [
   "daemon.mcpBridges",
   "app.baseUrl",
   "agents.idleRuntimeCleanup",
-  "hub.allowHttp",
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
   "agents.metadataGeneration",
@@ -230,7 +228,6 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.mcpBridges", "mcpBridges"],
   ["app.baseUrl", "app.baseUrl"],
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
-  ["hub.allowHttp", "hubAllowHttp"],
   ["agents.providers", "providers"],
   ["agents.catalogRefreshTimeoutMs", "catalogRefreshTimeoutMs"],
   ["agents.metadataGeneration", "metadataGeneration"],
@@ -286,12 +283,6 @@ function pickRelayPatch(
   return Object.keys(picked).length > 0 ? { relay: picked } : {};
 }
 
-function pickHubAllowHttpPatch(
-  patch: MutableDaemonConfigPatch,
-): Pick<SupportedMutableConfigPatch, "hubAllowHttp"> {
-  return patch.hubAllowHttp !== undefined ? { hubAllowHttp: patch.hubAllowHttp } : {};
-}
-
 function pickMcpConfigPatch(
   patch: MutableDaemonConfigPatch,
 ): Pick<SupportedMutableConfigPatch, "mcpServers" | "mcpShares" | "mcpBridges"> {
@@ -327,7 +318,6 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.idleRuntimeCleanup !== undefined
       ? { idleRuntimeCleanup: patch.idleRuntimeCleanup }
       : {}),
-    ...pickHubAllowHttpPatch(patch),
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
       : {}),
@@ -693,9 +683,6 @@ function mergeMutablePatchIntoPersistedConfig(params: {
     ...withSpeech,
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
-    ...(patch.hubAllowHttp !== undefined
-      ? { hub: { ...persisted.hub, allowHttp: patch.hubAllowHttp } }
-      : {}),
     ...(daemon ? { daemon } : { daemon: undefined }),
     ...(agents ? { agents } : { agents: undefined }),
   } as PersistedConfig;

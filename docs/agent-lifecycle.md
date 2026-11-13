@@ -31,8 +31,8 @@ Idle resumable runtimes are collected after one hour without activity, checked o
 Loading a runtime (opening a chat, resuming after a restart) starts its own idle clock, so a stale
 stored `updatedAt` cannot make a freshly resumed runtime eligible. Collection releases the process
 and preserves the agent record, conversation, relationships, and provider session. The next prompt
-resumes that session, including a prompt that arrives while the runtime is still closing. Set
-`agents.idleRuntimeCleanup: false` in host config to disable automatic collection. The host setting applies immediately; config-file edits apply on reload. Disabling
+resumes that session. Set `agents.idleRuntimeCleanup: false` in host config to disable automatic
+collection. The host setting applies immediately; config-file edits apply on reload. Disabling
 invalidates pending safety checks and close admission. A close already started finishes.
 Re-enabling keeps the existing idle timestamps.
 

@@ -6,6 +6,7 @@ import { ConnectedHostSession } from "./connected-hosts/index.js";
 import type { ConnectedHosts } from "./connected-hosts/index.js";
 import type { McpBridgeAuthority } from "./mcp/authority.js";
 import type { McpCatalogService } from "./mcp/catalog.js";
+import type { MessageQueueStore } from "./agent/message-queue-store.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import { searchChatsAcrossChats } from "./agent/chat-search/cross-chat-search.js";
 import { isSameOrDescendantPath } from "./path-utils.js";
@@ -465,6 +466,7 @@ export interface SessionOptions {
   connectedHosts?: ConnectedHosts;
   mcpBridgeAuthority?: McpBridgeAuthority;
   mcpCatalog?: McpCatalogService;
+  messageQueueStore?: MessageQueueStore;
   sourceId?: string;
   routed?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
@@ -708,6 +710,7 @@ export class Session {
   private readonly connectedHostSession: ConnectedHostSession | null;
   private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
   private readonly mcpCatalog: McpCatalogService | undefined;
+  private readonly messageQueueStore: MessageQueueStore | undefined;
   private routed = false;
   private hopPath: string[] = [];
   private originServerId: string | null = null;
@@ -949,6 +952,7 @@ export class Session {
     this.hostSourceId = hostSource(options);
     this.mcpBridgeAuthority = options.mcpBridgeAuthority;
     this.mcpCatalog = options.mcpCatalog;
+    this.messageQueueStore = options.messageQueueStore;
     this.connectedHostSession = createHostSession(options, this);
     this.onMessage = onMessage;
     this.onMessageToSource = onMessageToSource
@@ -2706,6 +2710,79 @@ export class Session {
     }
   }
 
+  private dispatchAgentMessageQueueMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "agent.message_queue.list.request":
+        return this.handleAgentMessageQueueList(msg);
+      case "agent.message_queue.set.request":
+        return this.handleAgentMessageQueueSet(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleAgentMessageQueueList(
+    msg: Extract<SessionInboundMessage, { type: "agent.message_queue.list.request" }>,
+  ): Promise<void> {
+    if (!this.messageQueueStore) {
+      this.emit({
+        type: "agent.message_queue.list.response",
+        payload: {
+          requestId: msg.requestId,
+          queues: {},
+          error: "Message queue persistence is unavailable",
+        },
+      });
+      return;
+    }
+    try {
+      const queues = await this.messageQueueStore.list();
+      this.emit({
+        type: "agent.message_queue.list.response",
+        payload: { requestId: msg.requestId, queues, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.message_queue.list.response",
+        payload: { requestId: msg.requestId, queues: {}, error: toErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleAgentMessageQueueSet(
+    msg: Extract<SessionInboundMessage, { type: "agent.message_queue.set.request" }>,
+  ): Promise<void> {
+    if (!this.messageQueueStore) {
+      this.emit({
+        type: "agent.message_queue.set.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          items: [],
+          error: "Message queue persistence is unavailable",
+        },
+      });
+      return;
+    }
+    try {
+      const items = await this.messageQueueStore.set(msg.agentId, msg.items);
+      this.emit({
+        type: "agent.message_queue.set.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, items, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.message_queue.set.response",
+        payload: {
+          requestId: msg.requestId,
+          agentId: msg.agentId,
+          items: [],
+          error: toErrorMessage(error),
+        },
+      });
+    }
+  }
+
   private dispatchSubscriptionMessage(
     msg: SessionInboundMessage,
     source?: object,
@@ -2714,6 +2791,8 @@ export class Session {
     if (bridge) return bridge;
     const catalog = this.dispatchMcpCatalogMessage(msg);
     if (catalog) return catalog;
+    const messageQueue = this.dispatchAgentMessageQueueMessage(msg);
+    if (messageQueue) return messageQueue;
     if (msg.type === "workspace.setup.subscribe.request") return this.subscribeWorkspaceSetup(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
@@ -3863,6 +3942,7 @@ export class Session {
     try {
       await this.agentStorage.remove(agentId);
       await this.agentManager.deleteAgentState(agentId);
+      await this.messageQueueStore?.delete(agentId);
     } catch (error) {
       this.sessionLogger.error({ err: error, agentId }, `Failed to fully delete agent ${agentId}`);
     }
@@ -8556,6 +8636,7 @@ export class Session {
       for (const agentId of agentIds) {
         await this.agentStorage.remove(agentId).catch(() => {});
         await this.agentManager.deleteAgentState(agentId).catch(() => {});
+        await this.messageQueueStore?.delete(agentId).catch(() => {});
       }
 
       await this.workspaceRegistry.remove(request.workspaceId);

@@ -1,20 +1,15 @@
 import { HubCommandError } from "./error.js";
 
-export interface NormalizeHubOriginOptions {
-  allowHttp?: boolean;
-}
-
-export function normalizeHubOrigin(value: string, options: NormalizeHubOriginOptions = {}): string {
+export function normalizeHubOrigin(value: string): string {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw invalidHubOrigin();
   }
-  const remoteHttp = url.protocol === "http:" && !isLoopbackHostname(url.hostname);
   if (
     !["http:", "https:"].includes(url.protocol) ||
-    (remoteHttp && options.allowHttp !== true) ||
+    (url.protocol === "http:" && !isLoopbackHostname(url.hostname)) ||
     url.username ||
     url.password ||
     url.pathname !== "/" ||
@@ -33,6 +28,6 @@ function isLoopbackHostname(hostname: string): boolean {
 function invalidHubOrigin(): HubCommandError {
   return new HubCommandError(
     "HUB_INVALID_ORIGIN",
-    "Hub URL must be an HTTPS origin without credentials, path, query, or hash. HTTP is allowed for localhost, 127.0.0.1, and [::1]. Enable Allow HTTP in the host settings to use HTTP for other hosts.",
+    "Hub URL must be an HTTPS origin without credentials, path, query, or hash. HTTP is allowed only for localhost, 127.0.0.1, or [::1].",
   );
 }

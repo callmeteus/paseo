@@ -28,6 +28,12 @@ export class V2Harness {
   readonly prompts: string[] = [];
   readonly environments: Array<{ sessionID: string; variables: Record<string, string> }> = [];
   readonly mcpAdds: string[] = [];
+  /** Servers the location already provides from its own config. */
+  readonly mcpExisting = new Set<string>();
+  /** Servers whose `mcp.add` call rejects. */
+  readonly mcpAddFailures = new Set<string>();
+  /** Servers that register but never reach the connected state. */
+  readonly mcpConnectFailures = new Map<string, string>();
   releases = 0;
   active = false;
   activeReads = 0;
@@ -117,12 +123,17 @@ export class V2Harness {
     mcp: {
       add: async (input) => {
         this.mcpAdds.push(input.server);
+        if (this.mcpAddFailures.has(input.server)) {
+          throw new Error(`OpenCode could not register MCP server ${input.server}`);
+        }
       },
       list: async (input) => ({
         location: { directory: input?.location?.directory ?? this.info.location.directory },
-        data: this.mcpAdds.map((name) => ({
+        data: [...new Set([...this.mcpExisting, ...this.mcpAdds])].map((name) => ({
           name,
-          status: { status: "connected" as const },
+          status: this.mcpConnectFailures.has(name)
+            ? { status: "failed" as const, error: this.mcpConnectFailures.get(name)! }
+            : { status: "connected" as const },
         })),
       }),
     },

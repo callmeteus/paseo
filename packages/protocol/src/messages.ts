@@ -135,6 +135,26 @@ export {
   type McpCatalogTestResponse,
 } from "./mcp-catalog/rpc-schemas.js";
 import {
+  AgentMessageQueueListRequestSchema,
+  AgentMessageQueueListResponseSchema,
+  AgentMessageQueueSetRequestSchema,
+  AgentMessageQueueSetResponseSchema,
+} from "./message-queue/rpc-schemas.js";
+export {
+  AgentMessageQueueListRequestSchema,
+  AgentMessageQueueListResponseSchema,
+  AgentMessageQueueSetRequestSchema,
+  AgentMessageQueueSetResponseSchema,
+  AgentQueuedMessageImageSchema,
+  AgentQueuedMessageSchema,
+  type AgentMessageQueueListRequest,
+  type AgentMessageQueueListResponse,
+  type AgentMessageQueueSetRequest,
+  type AgentMessageQueueSetResponse,
+  type AgentQueuedMessage,
+  type AgentQueuedMessageImage,
+} from "./message-queue/rpc-schemas.js";
+import {
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -365,8 +385,6 @@ export const MutableDaemonConfigSchema = z
     // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, keep optional while old daemons are supported.
     // Persisted host-wide value, applied live by the daemon.
     idleRuntimeCleanup: z.boolean().optional(),
-    // COMPAT(hubAllowHttpSetting): added in v0.13.1, keep optional while old daemons are supported.
-    hubAllowHttp: z.boolean().optional(),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -396,7 +414,6 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     idleRuntimeCleanup: z.boolean().optional(),
-    hubAllowHttp: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -3785,6 +3802,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   McpCatalogScanRequestSchema,
   McpCatalogImportRequestSchema,
   McpCatalogTestRequestSchema,
+  AgentMessageQueueListRequestSchema,
+  AgentMessageQueueSetRequestSchema,
 
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
@@ -4270,8 +4289,6 @@ export const ServerInfoStatusPayloadSchema = z
         skillManagement: z.boolean().optional(),
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: z.boolean().optional(),
-        // COMPAT(hubAllowHttpSetting): added in v0.13.1, remove gate after 2027-05-12.
-        hubAllowHttpSetting: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -4404,6 +4421,8 @@ export const ServerInfoStatusPayloadSchema = z
         mcpCatalog: z.boolean().optional(),
         // COMPAT(globalSkills): added in v0.13.3, remove gate after 2027-04-01.
         globalSkills: z.boolean().optional(),
+        // COMPAT(agentMessageQueue): added in v0.13.4, remove gate after 2027-05-15.
+        agentMessageQueue: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
       })
@@ -7685,6 +7704,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   McpCatalogScanResponseSchema,
   McpCatalogImportResponseSchema,
   McpCatalogTestResponseSchema,
+  AgentMessageQueueListResponseSchema,
+  AgentMessageQueueSetResponseSchema,
 
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

@@ -33,19 +33,9 @@ import { InlineChipDisclosure } from "./inline-context-chip";
 
 const chipStore = new WeakMap<HTMLElement, InlineChip>();
 
-export interface InlineChipEditSnapshot {
-  text: string;
-  selection: TextSelection;
-}
-
 export interface InlineChipEditorProps {
   initialText: string;
   initialSelection: TextSelection;
-  /**
-   * Text that was on screen before this editor mounted with a chip. The first
-   * paint is an editing command from that text, so Ctrl+Z can undo the paste.
-   */
-  undoBaseline?: InlineChipEditSnapshot | null;
   style?: StyleProp<TextStyle>;
   editable: boolean;
   accessibilityLabel: string;
@@ -70,9 +60,6 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
     const rootRef = useRef<HTMLDivElement>(null);
     const textRef = useRef(props.initialText);
     const selectionRef = useRef<TextSelection>(props.initialSelection);
-    const undoBaselineRef = useRef(props.undoBaseline ?? null);
-    const undoStackRef = useRef<InlineChipEditSnapshot[]>([]);
-    const redoStackRef = useRef<InlineChipEditSnapshot[]>([]);
     const restoringRef = useRef(false);
     const composingRef = useRef(false);
     const onChangeTextRef = useRef(props.onChangeText);
@@ -101,78 +88,22 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       onSelectionChangeRef.current(selection);
     }, []);
 
-    const skillPaint = useCallback(
-      (): SkillPaint => ({ names: skillNamesRef.current, color: skillColorRef.current }),
-      [],
-    );
-
-    const commitDocument = useCallback(
-      (text: string, selection: TextSelection, recordUndo: boolean) => {
-        const root = rootRef.current;
-        if (!root) return;
-        const skills = skillPaint();
-        const theme = getUnistylesAppTheme();
-        const snapshot: InlineChipEditSnapshot = {
-          text: textRef.current,
-          selection: selectionRef.current,
-        };
-        restoringRef.current = true;
-        const changed = text !== snapshot.text;
-        // replaceChildren drops Chromium's undo stack, which is also what Electron's
-        // Edit > Undo calls. insertHTML keeps the paste on that stack.
-        const recorded =
-          changed && recordUndo && applyUndoableHtml(root, editorHtml(text, theme, skills));
-        if (!recorded) {
-          renderDocument(root, text, theme, skills);
-          if (changed) {
-            undoStackRef.current = [];
-            redoStackRef.current = [];
-          }
-        } else {
-          undoStackRef.current.push(snapshot);
-          redoStackRef.current = [];
-        }
-        textRef.current = text;
-        selectionRef.current = selection;
-        setRawSelection(root, selection);
-        rangeSignatureRef.current = skillRangeSignature(text, skills.names);
-        paintedSignatureRef.current = skillPaintSignature(skills.names, skills.color);
-        restoringRef.current = false;
-      },
-      [skillPaint],
-    );
-
-    const paint = useCallback(
-      (text: string, selection: TextSelection) => {
-        commitDocument(text, selection, false);
-      },
-      [commitDocument],
-    );
-
-    const commitInitialUndo = useCallback(
-      (
-        root: HTMLElement,
-        baseline: InlineChipEditSnapshot,
-        text: string,
-        selection: TextSelection,
-      ) => {
-        const skills = skillPaint();
-        const theme = getUnistylesAppTheme();
-        restoringRef.current = true;
-        renderDocument(root, baseline.text, theme, skills);
-        const recorded = applyUndoableHtml(root, editorHtml(text, theme, skills));
-        if (!recorded) renderDocument(root, text, theme, skills);
-        undoStackRef.current = recorded ? [baseline] : [];
-        redoStackRef.current = [];
-        textRef.current = text;
-        selectionRef.current = selection;
-        setRawSelection(root, selection);
-        rangeSignatureRef.current = skillRangeSignature(text, skills.names);
-        paintedSignatureRef.current = skillPaintSignature(skills.names, skills.color);
-        restoringRef.current = false;
-      },
-      [skillPaint],
-    );
+    const paint = useCallback((text: string, selection: TextSelection) => {
+      const root = rootRef.current;
+      if (!root) return;
+      restoringRef.current = true;
+      renderDocument(root, text, getUnistylesAppTheme(), {
+        names: skillNamesRef.current,
+        color: skillColorRef.current,
+      });
+      rangeSignatureRef.current = skillRangeSignature(text, skillNamesRef.current);
+      paintedSignatureRef.current = skillPaintSignature(
+        skillNamesRef.current,
+        skillColorRef.current,
+      );
+      setRawSelection(root, selection);
+      restoringRef.current = false;
+    }, []);
 
     const skillSignature = skillPaintSignature(skillNamesRef.current, skillColorRef.current);
     // React renders this div with no children, so a parent render wipes the chips.
@@ -180,12 +111,6 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
     useLayoutEffect(() => {
       const root = rootRef.current;
       if (!root || restoringRef.current) return;
-      const baseline = undoBaselineRef.current;
-      if (baseline) {
-        undoBaselineRef.current = null;
-        commitInitialUndo(root, baseline, textRef.current, selectionRef.current);
-        return;
-      }
       if (
         readDocument(root) === textRef.current &&
         paintedSignatureRef.current === skillSignature
@@ -193,7 +118,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
         return;
       }
       paint(textRef.current, selectionRef.current);
-    }, [commitInitialUndo, paint, skillSignature]);
+    }, [paint, skillSignature]);
 
     useLayoutEffect(() => {
       if (!isWeb || themeEpoch === 0) return;
@@ -212,15 +137,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       ref,
       () => ({
         focus() {
-          const root = rootRef.current;
-          if (!root) return;
-          // A chip-only editor focuses with the caret in front of the chip, and
-          // backspace there deletes nothing.
-          const selection = selectionRef.current;
-          restoringRef.current = true;
-          root.focus();
-          setRawSelection(root, selection);
-          restoringRef.current = false;
+          rootRef.current?.focus();
         },
         blur() {
           rootRef.current?.blur();
@@ -233,9 +150,9 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
         },
         replaceText(text: string, selection?: TextSelection) {
           const nextSelection = selection ?? { start: text.length, end: text.length };
-          const root = rootRef.current;
-          const recordUndo = root !== null && document.activeElement === root;
-          commitDocument(text, nextSelection, recordUndo);
+          textRef.current = text;
+          selectionRef.current = nextSelection;
+          paint(text, nextSelection);
         },
         setSelection(selection: TextSelection) {
           selectionRef.current = selection;
@@ -254,7 +171,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           return rootRef.current;
         },
       }),
-      [commitDocument, paint],
+      [paint],
     );
 
     const readCaret = useCallback((): TextSelection => {
@@ -263,49 +180,23 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
       return readSelection(root, selectionRef.current);
     }, []);
 
-    const handleInput = useCallback(
-      (event?: FormEvent<HTMLDivElement>) => {
-        if (restoringRef.current || composingRef.current) return;
-        const root = rootRef.current;
-        if (!root) return;
-        const native = event?.nativeEvent;
-        const inputType = native instanceof InputEvent ? native.inputType : "";
-        const text = readDocument(root);
-        const selection = readSelection(root, selectionRef.current);
-        if (inputType === "historyUndo" || inputType === "historyRedo") {
-          const restored = takeHistorySnapshot(
-            inputType,
-            undoStackRef.current,
-            redoStackRef.current,
-            text,
-            { text: textRef.current, selection: selectionRef.current },
-          );
-          if (restored) {
-            restoringRef.current = true;
-            setRawSelection(root, restored.selection);
-            restoringRef.current = false;
-            publish(text, restored.selection);
-            return;
-          }
-        }
-        if (text !== textRef.current) {
-          if (inputType !== "historyUndo" && inputType !== "historyRedo") {
-            redoStackRef.current = [];
-          }
-          publish(text, selection);
-        }
-        // A native delete can remove the line break and leave the empty-line
-        // placeholder behind, which would keep a line the text no longer has.
-        if (!text.endsWith("\n") && hasTrailingLinePlaceholder(root)) {
-          paint(text, selection);
-          return;
-        }
-        const signature = skillRangeSignature(text, skillNamesRef.current);
-        if (signature === rangeSignatureRef.current) return;
+    const handleInput = useCallback(() => {
+      if (restoringRef.current || composingRef.current) return;
+      const root = rootRef.current;
+      if (!root) return;
+      const text = readDocument(root);
+      const selection = readSelection(root, selectionRef.current);
+      if (text !== textRef.current) publish(text, selection);
+      // A native delete can remove the line break and leave the empty-line
+      // placeholder behind, which would keep a line the text no longer has.
+      if (!text.endsWith("\n") && hasTrailingLinePlaceholder(root)) {
         paint(text, selection);
-      },
-      [paint, publish],
-    );
+        return;
+      }
+      const signature = skillRangeSignature(text, skillNamesRef.current);
+      if (signature === rangeSignatureRef.current) return;
+      paint(text, selection);
+    }, [paint, publish]);
 
     const handleKeyDown = useCallback(
       (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -322,7 +213,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           });
           if (removed) {
             event.preventDefault();
-            commitDocument(removed.text, removed.selection, true);
+            paint(removed.text, removed.selection);
             publish(removed.text, removed.selection);
             return;
           }
@@ -343,7 +234,7 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           event.preventDefault();
           const nextText = textRef.current.slice(0, -1);
           const nextSelection = { start: nextText.length, end: nextText.length };
-          commitDocument(nextText, nextSelection, true);
+          paint(nextText, nextSelection);
           publish(nextText, nextSelection);
           return;
         }
@@ -362,13 +253,13 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
               selection,
               insert: "\n",
             });
-          commitDocument(next.text, next.selection, true);
+          paint(next.text, next.selection);
           publish(next.text, next.selection);
           return;
         }
         onKeyPressRef.current?.(native);
       },
-      [commitDocument, publish, readCaret],
+      [paint, publish, readCaret],
     );
 
     const handleBeforeInput = useCallback(
@@ -384,17 +275,17 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           selection,
           insert: "\n",
         });
-        commitDocument(next.text, next.selection, true);
+        paint(next.text, next.selection);
         publish(next.text, next.selection);
       },
-      [commitDocument, publish, readCaret],
+      [paint, publish, readCaret],
     );
 
     const handleMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
       const chip = chipElementFromEvent(event.nativeEvent);
       if (!chip) return;
       event.preventDefault();
-      const stored = chipFromElement(chip);
+      const stored = chipStore.get(chip);
       if (!stored) return;
       setPreview({ chip: stored, anchor: chip.getBoundingClientRect() });
     }, []);
@@ -508,39 +399,6 @@ function skillRangeSignature(text: string, names: readonly string[]): string {
     .join(",");
 }
 
-function editorHtml(text: string, theme: Theme, skills: SkillPaint): string {
-  const holder = document.createElement("div");
-  renderDocument(holder, text, theme, skills);
-  return holder.innerHTML;
-}
-
-function applyUndoableHtml(root: HTMLElement, html: string): boolean {
-  root.focus();
-  const selection = document.getSelection();
-  if (!selection) return false;
-  const range = document.createRange();
-  range.selectNodeContents(root);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  return document.execCommand("insertHTML", false, html);
-}
-
-function takeHistorySnapshot(
-  kind: "historyUndo" | "historyRedo",
-  undo: InlineChipEditSnapshot[],
-  redo: InlineChipEditSnapshot[],
-  text: string,
-  current: InlineChipEditSnapshot,
-): InlineChipEditSnapshot | null {
-  const stack = kind === "historyUndo" ? undo : redo;
-  const entry = stack[stack.length - 1];
-  if (!entry || entry.text !== text) return null;
-  stack.pop();
-  const inverse = kind === "historyUndo" ? redo : undo;
-  inverse.push(current);
-  return entry;
-}
-
 function renderDocument(root: HTMLElement, text: string, theme: Theme, skills: SkillPaint): void {
   root.replaceChildren();
   for (const part of parseInlineParts(text)) {
@@ -626,36 +484,12 @@ function appendSkillText(root: HTMLElement, text: string, color: string): void {
 function createChipElement(chip: InlineChip, theme: Theme): HTMLSpanElement {
   const span = document.createElement("span");
   span.dataset.inlineChip = "true";
-  span.dataset.chipId = chip.id;
-  span.dataset.chipKind = chip.kind;
-  span.dataset.chipLabel = chip.label;
-  span.dataset.chipBody = chip.body;
   span.contentEditable = "false";
   span.textContent = chip.label;
   span.setAttribute("role", "button");
   applyInlineChipDomStyle(span, theme);
   chipStore.set(span, chip);
   return span;
-}
-
-function chipElement(node: Node): HTMLElement | null {
-  if (!(node instanceof HTMLElement) || node.dataset.inlineChip !== "true") return null;
-  return node;
-}
-
-/** insertHTML clones the chip, so the record has to live on the element, not only the WeakMap. */
-function chipFromElement(node: HTMLElement): InlineChip | null {
-  const cached = chipStore.get(node);
-  if (cached) return cached;
-  const id = node.dataset.chipId;
-  const kind = node.dataset.chipKind;
-  const label = node.dataset.chipLabel;
-  const body = node.dataset.chipBody;
-  if (!id || !label || body === undefined) return null;
-  if (kind !== "paste" && kind !== "mention") return null;
-  const chip: InlineChip = { id, kind, label, body };
-  chipStore.set(node, chip);
-  return chip;
 }
 
 function readDocument(root: HTMLElement): string {
@@ -681,12 +515,8 @@ function readNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
   if (isTrailingLinePlaceholder(node)) return "";
-  const chipNode = chipElement(node);
-  if (chipNode) {
-    const chip = chipFromElement(chipNode);
-    if (chip) return serializeInlineChip(chip);
-    return chipNode.textContent ?? "";
-  }
+  const chip = chipStore.get(node);
+  if (chip) return serializeInlineChip(chip);
   if (node.tagName === "BR") return "\n";
   const inner = readElement(node);
   if (node.tagName === "DIV" || node.tagName === "P") return `\n${inner}`;
@@ -724,7 +554,7 @@ function rawOffset(root: HTMLElement, container: Node, offset: number): number {
       total += node.textContent?.length ?? 0;
       return;
     }
-    if (chipElement(node)) {
+    if (node instanceof HTMLElement && chipStore.has(node)) {
       total += serializedLength(node);
       return;
     }
@@ -743,11 +573,8 @@ function serializedLength(node: Node): number {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
   if (!(node instanceof HTMLElement)) return 0;
   if (isTrailingLinePlaceholder(node)) return 0;
-  const chipNode = chipElement(node);
-  if (chipNode) {
-    const chip = chipFromElement(chipNode);
-    return chip ? serializeInlineChip(chip).length : (chipNode.textContent?.length ?? 0);
-  }
+  const chip = chipStore.get(node);
+  if (chip) return serializeInlineChip(chip).length;
   if (node.tagName === "BR") return 1;
   let total = 0;
   node.childNodes.forEach((child) => {
@@ -777,7 +604,7 @@ function placeOffset(root: HTMLElement, target: number): { node: Node; offset: n
       remaining -= length;
       return null;
     }
-    if (chipElement(node)) {
+    if (node instanceof HTMLElement && chipStore.has(node)) {
       const length = serializedLength(node);
       const parent = node.parentNode ?? root;
       if (remaining <= 0) return { node: parent, offset: childIndex(node) };

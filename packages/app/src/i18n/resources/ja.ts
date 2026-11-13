@@ -824,6 +824,8 @@ export const ja: TranslationResources = {
           fallback: "別のフォルダーを選択…",
           moved: "ワークスペースを {{path}} へ移動しました",
           failed: "ワークスペースを移動できませんでした",
+          searchPlaceholder: "フォルダーを検索",
+          noResults: "フォルダーが見つかりません。",
         },
         moveChat: {
           title: "チャットをワークスペースへ移動",
@@ -1554,7 +1556,6 @@ export const ja: TranslationResources = {
         openSettings: "プロジェクト設定を開く",
         openNewWindow: "新しいウィンドウで開く",
         openNewWindowFailed: "新しいウィンドウを開けませんでした",
-        openFolder: "ファイルマネージャーで開く",
         openFolderFailed: "フォルダーを開けませんでした",
         remove: "プロジェクトを削除",
         removing: "削除中...",
@@ -3210,14 +3211,6 @@ export const ja: TranslationResources = {
           title: "アイドル状態のエージェントを解放",
           hint: "1 時間のアイドル状態の後にメモリを解放します。",
           info: "会話を保持したままエージェントのプロセスを停止します。メッセージを送信すると再開します。\n\n実行中の作業、保留中の通知、プロバイダーの安全性チェックがある場合は解放しません。",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "HTTP を許可",
-          hint: "localhost 以外の Hub へ CLI が HTTP で接続できるようにします。ログイン資格情報は平文で送られます。",
-          info: "オフのとき、CLI は localhost、127.0.0.1、[::1] への HTTP だけを受け付けます。オンにすると、TLS のないプライベートネットワーク上の Hub など、他のホストへの HTTP も受け付けます。同じスイッチはホスト設定の hub.allowHttp です。",
         },
       },
       workspaces: {

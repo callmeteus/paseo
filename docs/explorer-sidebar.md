@@ -152,13 +152,13 @@ new target and never yanks an existing tab out of a user-selected pane.
 ## Routing preferences
 
 Desktop **Settings → Layout → Open location** has independent Main panel or On the side choices for
-Explorer Files, diffs, files opened from diffs, and subagents. They default to Main panel. Mobile
-ignores them.
+Explorer Files, diffs, chat files, files opened from diffs, and subagents. They default to Main
+panel. Mobile ignores them.
 
-Chat files and pull requests have a three-way open location: Main panel, On the side, or Explorer
-sidebar. Explorer sidebar is the default. Compact layouts open chat files in a sheet and pull
-requests in Explorer regardless of this desktop preference.
+Pull requests have a three-way open location: Main panel, On the side, or Explorer sidebar. Explorer
+sidebar is the default. Compact layouts always open pull requests in Explorer regardless of this
+desktop preference.
 
 Panels request an implicit open through the narrow `openPreferredTarget(target, source)` pane
-contract. Entry points outside panels use `openPreferredWorkspaceTarget` or
-`openWorkspaceTargetAtLocation`. Do not branch on a specific shell inside a panel.
+contract. Entry points outside panels use `openPreferredWorkspaceTarget`. Do not branch on a
+specific shell inside a panel.

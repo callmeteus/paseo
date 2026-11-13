@@ -143,7 +143,7 @@ Paseo never stores or transmits provider API keys. Agents run in your user conte
 
 Hub CLI login and daemon enrollment are separate identities. `paseo hub login [origin]` stores a durable organization-scoped human credential in a private file under `PASEO_HOME`, keyed by the normalized Hub origin. A stored credential is never sent to another origin. Protect `PASEO_HOME` as sensitive local state.
 
-Hub CLI credentials are bearer secrets. Remote Hub origins use HTTPS. Cleartext HTTP is accepted for loopback development origins (`localhost`, `127.0.0.1`, and `[::1]`). Allow HTTP in the host settings (`hub.allowHttp`) also accepts HTTP for other origins. That switch stays off until you enable it, and credentials then travel in cleartext.
+Hub CLI credentials are bearer secrets. Remote Hub origins must use HTTPS; cleartext HTTP is accepted only for loopback development origins (`localhost`, `127.0.0.1`, and `[::1]`).
 
 `paseo hub connect [origin]` uses that credential, or an explicit API key, only to request a short-lived one-time enrollment token. The daemon exchanges the token and retains its own independently generated relationship credential. Logging out of the CLI does not silently remove daemon authority. Interactive logout completes any accepted same-origin daemon disconnection before deleting the login. In JSON and noninteractive use, `logout` never prompts or disconnects; pass `--disconnect-daemon` only when automation intends to remove both identities.
 

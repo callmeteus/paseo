@@ -817,6 +817,8 @@ export const ko: TranslationResources = {
           fallback: "다른 폴더 선택…",
           moved: "워크스페이스를 {{path}}(으)로 이동했습니다",
           failed: "워크스페이스를 이동하지 못했습니다",
+          searchPlaceholder: "폴더 검색",
+          noResults: "폴더를 찾을 수 없습니다.",
         },
         moveChat: {
           title: "채팅을 워크스페이스로 이동",
@@ -1542,7 +1544,6 @@ export const ko: TranslationResources = {
         openSettings: "프로젝트 설정 열기",
         openNewWindow: "새 창에서 열기",
         openNewWindowFailed: "새 창을 열 수 없습니다",
-        openFolder: "파일 관리자에서 열기",
         openFolderFailed: "폴더를 열 수 없습니다.",
         remove: "프로젝트 제거",
         removing: "제거하는 중...",
@@ -3190,14 +3191,6 @@ export const ko: TranslationResources = {
           title: "유휴 에이전트 해제",
           hint: "1시간 동안 활동이 없으면 메모리를 확보합니다.",
           info: "대화를 유지하면서 에이전트 프로세스를 중지합니다. 메시지를 보내면 다시 이어집니다.\n\n진행 중인 작업, 대기 중인 알림, 프로바이더 안전 검사가 있으면 정리하지 않습니다.",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "HTTP 허용",
-          hint: "localhost가 아닌 Hub에 CLI가 HTTP로 접속하게 합니다. 로그인 자격 증명은 평문으로 전송됩니다.",
-          info: "끄면 CLI는 localhost, 127.0.0.1, [::1]에 대한 HTTP만 받습니다. 켜면 TLS가 없는 사설 네트워크의 Hub처럼 다른 호스트에 대한 HTTP도 받습니다. 같은 스위치는 호스트 구성의 hub.allowHttp입니다.",
         },
       },
       workspaces: {

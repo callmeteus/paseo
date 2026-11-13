@@ -14,13 +14,11 @@ import {
   collectAllPanes,
   collectAllTabs,
   findPaneById,
-  selectIsExplorerSidebarVisible,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import {
   openPreferredWorkspacePreview,
   openPreferredWorkspaceTarget,
-  openWorkspaceTargetAtLocation,
   openWorkspaceTargetBeside,
 } from "@/workspace-tabs/open-beside";
 
@@ -174,58 +172,5 @@ describe("opening beside", () => {
     expect(useWorkspaceLayoutStore.getState().sidePaneIdByWorkspace[WORKSPACE_KEY]).toBeFalsy();
     expect(paneIdHolding(preferredTabId)).toBe("main");
     expect(paneIdHolding(besideTabId)).toBe("main");
-  });
-});
-
-describe("opening in Explorer", () => {
-  function paneIdHolding(tabId: string | null): string | undefined {
-    const root = useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].root;
-    return collectAllPanes(root).find((pane) => pane.tabIds.includes(tabId ?? ""))?.id;
-  }
-
-  it("opens a chat file in Explorer instead of the parent chat pane", () => {
-    const store = useWorkspaceLayoutStore.getState();
-    const parentTabId = store.openTab({
-      workspaceKey: WORKSPACE_KEY,
-      target: { kind: "agent", agentId: "agent-1" },
-      intent: "reveal",
-    });
-
-    const tabId = openWorkspaceTargetAtLocation({
-      workspaceKey: WORKSPACE_KEY,
-      target: { kind: "file", path: "docs/guide.md" },
-      location: "explorer",
-      parentTabId,
-    });
-
-    const state = useWorkspaceLayoutStore.getState();
-    const explorerPaneId = state.explorerSidebarPaneIdByWorkspace[WORKSPACE_KEY];
-    expect(paneIdHolding(tabId)).toBe(explorerPaneId);
-    expect(paneIdHolding(parentTabId)).toBe("main");
-    expect(selectIsExplorerSidebarVisible(state, WORKSPACE_KEY)).toBe(true);
-  });
-
-  it("keeps compact chat files in the sheet when Explorer is the desktop destination", () => {
-    const store = useWorkspaceLayoutStore.getState();
-    const parentTabId = store.openTab({
-      workspaceKey: WORKSPACE_KEY,
-      target: { kind: "agent", agentId: "agent-1" },
-      intent: "reveal",
-    });
-    store.setLayoutMode("compact");
-
-    const tabId = openWorkspaceTargetAtLocation({
-      workspaceKey: WORKSPACE_KEY,
-      target: { kind: "file", path: "docs/guide.md" },
-      location: "explorer",
-      parentTabId,
-    });
-
-    const state = useWorkspaceLayoutStore.getState();
-    expect(state.sheetsByWorkspace[WORKSPACE_KEY]?.at(-1)?.tab).toMatchObject({
-      tabId,
-      target: { kind: "file", path: "docs/guide.md" },
-    });
-    expect(paneIdHolding(parentTabId)).toBe("main");
   });
 });

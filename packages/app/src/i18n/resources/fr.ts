@@ -825,6 +825,8 @@ export const fr: TranslationResources = {
           fallback: "Choisir un autre dossier…",
           moved: "Espace de travail déplacé vers {{path}}",
           failed: "Impossible de déplacer l'espace de travail",
+          searchPlaceholder: "Rechercher des dossiers",
+          noResults: "Aucun dossier trouvé.",
         },
         moveChat: {
           title: "Déplacer la conversation",
@@ -1571,7 +1573,6 @@ export const fr: TranslationResources = {
         openSettings: "Ouvrir les paramètres du projet",
         openNewWindow: "Ouvrir dans une nouvelle fenêtre",
         openNewWindowFailed: "Impossible d’ouvrir une nouvelle fenêtre",
-        openFolder: "Ouvrir dans le gestionnaire de fichiers",
         openFolderFailed: "Impossible d’ouvrir le dossier",
         remove: "Retirer le projet",
         removing: "Retrait…",
@@ -3246,14 +3247,6 @@ export const fr: TranslationResources = {
           title: "Libérer les agents inactifs",
           hint: "Libère de la mémoire après une heure d’inactivité.",
           info: "Arrête le processus de l’agent tout en conservant sa conversation. Envoyez un message pour la reprendre.\n\nLe travail en cours, les notifications en attente et les vérifications de sécurité du fournisseur empêchent le nettoyage.",
-        },
-      },
-      hub: {
-        title: "Hub",
-        allowHttp: {
-          title: "Autoriser HTTP",
-          hint: "Permet à la CLI d’atteindre un Hub en HTTP lorsqu’il n’est pas sur localhost. Les identifiants de connexion circulent en clair.",
-          info: "Désactivé, la CLI accepte HTTP uniquement pour localhost, 127.0.0.1 et [::1]. Activé, elle accepte aussi HTTP pour d’autres hôtes, comme un Hub sur un réseau privé sans TLS. Le même interrupteur est hub.allowHttp dans la configuration de l’hôte.",
         },
       },
       workspaces: {

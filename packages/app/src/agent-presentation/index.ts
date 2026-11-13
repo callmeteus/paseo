@@ -3,17 +3,7 @@ import { useProviderIcon } from "@/components/provider-icons";
 import type { PanelDescriptor } from "@/panels/panel-registry";
 import { useSessionStore, selectAgentTurnPresentation, type Agent } from "@/stores/session-store";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
-
-function formatProviderLabel(provider: Agent["provider"]): string {
-  if (!provider) {
-    return "Agent";
-  }
-  return provider
-    .split(/[-_\s]+/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
+import { providerDisplayName } from "@/utils/provider-display-name";
 
 export function resolveAgentLabel(title: string | null | undefined): string | null {
   if (typeof title !== "string") {
@@ -64,12 +54,13 @@ export function buildAgentDescriptor(input: {
   icon: PanelDescriptor["icon"];
 }): PanelDescriptor {
   const provider = input.provider;
+  const providerName = provider ? providerDisplayName(provider) : "Agent";
   const label = resolveAgentLabel(input.title);
 
   return {
     label: label ?? "",
-    subtitle: `${formatProviderLabel(provider)} agent`,
-    tooltip: label ?? `${formatProviderLabel(provider)} agent`,
+    subtitle: `${providerName} agent`,
+    tooltip: label ?? `${providerName} agent`,
     titleState: label ? "ready" : "loading",
     icon: input.icon,
     statusBucket: input.status

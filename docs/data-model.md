@@ -91,7 +91,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `lastActivityAt`     | `string?` (ISO 8601)                     | Last activity timestamp                                                                                                                                                                                                                                                                                                                                                             |
 | `lastUserMessageAt`  | `string?` (ISO 8601)                     | Last user message timestamp                                                                                                                                                                                                                                                                                                                                                         |
 | `title`              | `string?`                                | User-visible title                                                                                                                                                                                                                                                                                                                                                                  |
-| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage and client-scoped `paseo.open-agent-tab.*` labels while managed subagent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                                                                                           |
+| `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage and shared `paseo.open-agent-tab` plus legacy client-scoped `paseo.open-agent-tab.*` labels while managed agent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                                                    |
 | `lastStatus`         | `AgentStatus`                            | One of: `"initializing"`, `"idle"`, `"running"`, `"error"`, `"closed"`. `closed` means the record is resumable but has no live provider runtime; archive remains represented separately by `archivedAt`.                                                                                                                                                                            |
 | `lastModeId`         | `string?`                                | Last active mode ID                                                                                                                                                                                                                                                                                                                                                                 |
 | `config`             | `SerializableConfig?`                    | Agent session configuration (see below)                                                                                                                                                                                                                                                                                                                                             |
@@ -219,9 +219,6 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
   app: {
     baseUrl: string
   },
-  hub?: {
-    allowHttp?: boolean     // CLI may use HTTP Hub origins that are not loopback; off unless set
-  },
   worktrees?: {
     root?: string            // optional root for new worktrees; defaults to $PASEO_HOME/worktrees
     servicePorts?: {         // optional dynamic service port allocation policy
@@ -331,6 +328,11 @@ host; `host` is the owner, `via` is an optional intermediate host for multi-hop,
 owner-side name. The daemon resolves each bridge to a local `/mcp/bridge/<name>` endpoint before
 injecting it into an agent. The bridge endpoint keeps the upstream process and credentials on the
 owner host.
+
+`$PASEO_HOME/message-queues/` stores composer queues per agent. Each file keeps the composer
+attachment payload and any image bytes so a different client can restore the queue after a refresh.
+The daemon only persists the queue; the client drains it when the agent goes idle. Deleting an agent
+deletes its queue file.
 
 `agents.metadataGeneration.providers` selects the models for daemon-side metadata tasks: commit messages, PR text, branch names, and generated titles. An empty list is Automatic; a non-empty list is Manual and only those models are tried. See [public-docs/metadata-generation.md](../public-docs/metadata-generation.md#how-a-model-is-chosen).
 

@@ -31,6 +31,7 @@ import { useTranslation } from "react-i18next";
 import type { PendingPermission } from "@/types/shared";
 import type { StreamItem } from "@/types/stream";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
+import { providerDisplayName } from "@/utils/provider-display-name";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
@@ -73,14 +74,6 @@ function ProviderSubagentChildTrack({
   );
 }
 
-function formatProviderLabel(provider: string): string {
-  return provider
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function useProviderSubagentDescriptor(
   target: { kind: "provider_subagent"; parentAgentId: string; subagentId: string },
   context: { serverId: string },
@@ -97,7 +90,7 @@ function useProviderSubagentDescriptor(
   // The task names the tab; the subagent type is supporting detail beside the provider.
   const subagentType = descriptor?.title?.trim();
   const label = descriptor?.description?.trim() || subagentType || "Subagent";
-  const providerLabel = `${formatProviderLabel(provider)} subagent`;
+  const providerLabel = `${providerDisplayName(provider)} subagent`;
   return {
     label,
     subtitle:

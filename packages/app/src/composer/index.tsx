@@ -100,6 +100,7 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
+import { persistAgentMessageQueue } from "@/composer/queue-persistence";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1664,6 +1665,9 @@ function ComposerContentImpl({
   const queuedMessages = queuedMessagesRaw ?? EMPTY_ARRAY;
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
+  const supportsAgentMessageQueue = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.agentMessageQueue === true,
+  );
 
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
@@ -1860,6 +1864,7 @@ function ComposerContentImpl({
         text: string,
         attachments: ComposerAttachment[],
         activeTurnBehavior: "interrupt" | "steer",
+        messageId?: string,
       ) => Promise<void>)
     | null
   >(null);
@@ -1913,7 +1918,7 @@ function ComposerContentImpl({
   }, [focusInput, onFocusInput]);
 
   const submitMessage = useCallback(
-    async (text: string, submitAttachments: ComposerAttachment[]) => {
+    async (text: string, submitAttachments: ComposerAttachment[], messageId?: string) => {
       onMessageSent?.();
       if (onSubmitMessageRef.current) {
         await onSubmitMessageRef.current({ text, attachments: submitAttachments, cwd });
@@ -1927,6 +1932,7 @@ function ComposerContentImpl({
         text,
         submitAttachments,
         appSettings.sendBehavior === "steer" ? "steer" : "interrupt",
+        messageId,
       );
     },
     [appSettings.sendBehavior, cwd, onMessageSent, t],
@@ -1942,6 +1948,7 @@ function ComposerContentImpl({
       text: string,
       sendAttachments: ComposerAttachment[],
       activeTurnBehavior: "interrupt" | "steer",
+      messageId?: string,
     ) => {
       if (!client) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
@@ -2007,6 +2014,7 @@ function ComposerContentImpl({
                   applied.agentId,
                 ).turnId ?? undefined)
               : undefined,
+          ...(messageId ? { messageId } : {}),
         });
         usePendingComposerSendStore.getState().remember({
           serverId: applied.serverId,
@@ -2076,12 +2084,23 @@ function ComposerContentImpl({
   );
   const hasAgent = agentState.status !== null;
 
+  const persistQueue = useCallback(() => {
+    if (!client || !supportsAgentMessageQueue) return;
+    const items = useSessionStore.getState().sessions[serverId]?.queuedMessages.get(agentId) ?? [];
+    void persistAgentMessageQueue(client, agentId, items).catch((error) => {
+      console.error("[Composer] Failed to persist message queue", error);
+    });
+  }, [agentId, client, serverId, supportsAgentMessageQueue]);
+
   const queueWriter = useMemo<QueueWriter>(
     () => ({
       read: (id) => useSessionStore.getState().sessions[serverId]?.queuedMessages?.get(id) ?? [],
-      write: (updater) => setQueuedMessages(serverId, updater),
+      write: (updater) => {
+        setQueuedMessages(serverId, updater);
+        persistQueue();
+      },
     }),
-    [serverId, setQueuedMessages],
+    [persistQueue, serverId, setQueuedMessages],
   );
 
   const queueMessage = useCallback(
@@ -2410,8 +2429,8 @@ function ComposerContentImpl({
         agentId,
         messageId: id,
         queue: queueWriter,
-        submitMessage: ({ text, attachments: queuedAttachments }) =>
-          submitMessage(text, queuedAttachments),
+        submitMessage: ({ text, attachments: queuedAttachments, messageId }) =>
+          submitMessage(text, queuedAttachments, messageId),
         failedToSendMessage: t("composer.errors.failedToSend"),
       });
       if (result.status === "failed") {

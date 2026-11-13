@@ -25,6 +25,7 @@ import type { AgentManager, AgentMetricsSnapshot } from "./agent/agent-manager.j
 import type { AgentStorage } from "./agent/agent-storage.js";
 import type { McpBridgeAuthority } from "./mcp/authority.js";
 import type { McpCatalogService } from "./mcp/catalog.js";
+import type { MessageQueueStore } from "./agent/message-queue-store.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import type pino from "pino";
@@ -184,6 +185,7 @@ interface WebSocketServerConfig {
   startPaused?: boolean;
   mcpBridgeAuthority?: McpBridgeAuthority;
   mcpCatalog?: McpCatalogService;
+  messageQueueStore?: MessageQueueStore;
 }
 
 type WebSocketRuntimeMetrics = SessionRuntimeMetrics & CheckoutDiffMetrics;
@@ -589,6 +591,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly connectedHosts: ConnectedHosts;
   private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
   private readonly mcpCatalog: McpCatalogService | undefined;
+  private readonly messageQueueStore: MessageQueueStore | undefined;
 
   toolHosts() {
     return createToolHosts(this.connectedHosts);
@@ -782,6 +785,7 @@ export class VoiceAssistantWebSocketServer {
     this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
     this.mcpBridgeAuthority = wsConfig.mcpBridgeAuthority;
     this.mcpCatalog = wsConfig.mcpCatalog;
+    this.messageQueueStore = wsConfig.messageQueueStore;
     this.passwordHash = auth?.password;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
@@ -1604,6 +1608,7 @@ export class VoiceAssistantWebSocketServer {
       connectedHosts: this.connectedHosts,
       mcpBridgeAuthority: this.mcpBridgeAuthority,
       mcpCatalog: this.mcpCatalog,
+      messageQueueStore: this.messageQueueStore,
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -2068,8 +2073,6 @@ export class VoiceAssistantWebSocketServer {
         skillManagement: true,
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: true,
-        // COMPAT(hubAllowHttpSetting): added in v0.13.1, remove gate after 2027-05-12.
-        hubAllowHttpSetting: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": true,
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -2189,6 +2192,8 @@ export class VoiceAssistantWebSocketServer {
         mcpCatalog: true,
         // COMPAT(globalSkills): added in v0.13.3, remove gate after 2027-04-01.
         globalSkills: true,
+        // COMPAT(agentMessageQueue): added in v0.13.4, remove gate after 2027-05-15.
+        agentMessageQueue: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
       },
