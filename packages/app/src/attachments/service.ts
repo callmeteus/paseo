@@ -125,6 +125,7 @@ export async function encodeAttachmentsForSend(
 }
 
 export async function resolveAttachmentPreviewUrl(attachment: AttachmentMetadata): Promise<string> {
+  if (attachment.storageType === "inline") return attachment.storageKey;
   const store = await getAttachmentStore();
   return await store.resolvePreviewUrl({ attachment });
 }
@@ -133,6 +134,7 @@ export async function releaseAttachmentPreviewUrl(input: {
   attachment: AttachmentMetadata;
   url: string;
 }): Promise<void> {
+  if (input.attachment.storageType === "inline") return;
   const store = await getAttachmentStore();
   if (!store.releasePreviewUrl) {
     return;

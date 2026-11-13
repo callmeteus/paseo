@@ -821,6 +821,11 @@ const ToolCallTimelineItemPayloadSchema: z.ZodType<ToolCallTimelineItem, unknown
     ToolCallCanceledPayloadSchema,
   ]);
 
+const TimelineUserImageSchema = z.object({
+  mimeType: z.string(),
+  data: z.string(),
+});
+
 // zod-aot 0.20.4 miscompiles this as a nested discriminated union by omitting
 // the inner tool_call branch from the generated outer dispatch.
 export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknown> = z.union([
@@ -829,6 +834,9 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     clientMessageId: z.string().optional(),
+    images: z.array(TimelineUserImageSchema).optional(),
+    // Attachment schemas are declared further down. The getter runs at parse time.
+    attachments: z.array(z.lazy(() => timelineUserAttachmentSchema)).optional(),
   }),
   z.object({
     type: z.literal("assistant_message"),
@@ -1390,6 +1398,27 @@ export const UploadedFileAttachmentSchema = z.object({
   size: z.number().int().nonnegative(),
   path: z.string(),
 });
+
+// Pure copy of a text attachment. The send-path schema transforms contextKind;
+// a timeline item cannot, because inbound validators only compile pure schemas.
+const TimelineTextAttachmentSchema = z.object({
+  type: z.literal("text"),
+  mimeType: z.literal("text/plain"),
+  contextKind: z.literal("chat_history").optional(),
+  title: z.string().nullable().optional(),
+  text: z.string(),
+  externalResource: ExternalResourceAttachmentMetadataSchema.optional(),
+});
+
+const timelineUserAttachmentSchema: z.ZodType<AgentAttachment> = z.discriminatedUnion("type", [
+  ForgeChangeRequestAttachmentSchema,
+  ForgeIssueAttachmentSchema,
+  GitHubPrAttachmentSchema,
+  GitHubIssueAttachmentSchema,
+  TimelineTextAttachmentSchema,
+  ReviewAttachmentSchema,
+  UploadedFileAttachmentSchema,
+]);
 
 export const AgentAttachmentSchema = z.discriminatedUnion("type", [
   ForgeChangeRequestAttachmentSchema,

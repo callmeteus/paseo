@@ -144,6 +144,35 @@ describe("wire schema compatibility", () => {
     });
   });
 
+  test("user timeline images and attachments are optional on the wire", () => {
+    expect(
+      AgentTimelineItemPayloadSchema.parse({
+        type: "user_message",
+        text: "plain",
+      }),
+    ).toEqual({ type: "user_message", text: "plain" });
+    expect(
+      AgentTimelineItemPayloadSchema.parse({
+        type: "user_message",
+        text: "with media",
+        images: [{ mimeType: "image/png", data: "abc" }],
+        attachments: [
+          {
+            type: "github_issue",
+            mimeType: "application/github-issue",
+            number: 12,
+            title: "Broken preview",
+            url: "https://github.com/getpaseo/paseo/issues/12",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      text: "with media",
+      images: [{ mimeType: "image/png", data: "abc" }],
+      attachments: [{ type: "github_issue", number: 12 }],
+    });
+  });
+
   test("assistant timeline message ids are optional on the wire", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

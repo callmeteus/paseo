@@ -391,7 +391,15 @@ export interface AgentTaskItem {
 }
 
 export type AgentTimelineItem =
-  | { type: "user_message"; text: string; messageId?: string; clientMessageId?: string }
+  | {
+      type: "user_message";
+      text: string;
+      messageId?: string;
+      clientMessageId?: string;
+      /** Bytes the sending client attached. Other instances render these; the sender keeps its local copy. */
+      images?: Array<{ mimeType: string; data: string }>;
+      attachments?: AgentAttachment[];
+    }
   | { type: "assistant_message"; text: string; messageId?: string }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

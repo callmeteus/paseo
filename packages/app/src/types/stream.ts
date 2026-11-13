@@ -262,6 +262,8 @@ function produceUserMessage(
     clientMessageId: incoming.clientMessageId ?? existing.clientMessageId,
     messageId: incoming.messageId ?? existing.messageId,
     timelineCursor: incoming.timelineCursor ?? existing.timelineCursor,
+    images: firstPresent(presentation.images, incoming.images, existing.images),
+    attachments: firstPresent(presentation.attachments, incoming.attachments, existing.attachments),
   });
   if (
     existing.id === merged.id &&
@@ -970,6 +972,28 @@ export function handoffCreatedAgentUserMessageToStream(params: {
   });
 }
 
+function firstPresent<T>(...groups: Array<T[] | undefined>): T[] | undefined {
+  for (const group of groups) {
+    if (group && group.length > 0) return group;
+  }
+  return undefined;
+}
+
+function timelineUserImages(
+  images: Array<{ mimeType: string; data: string }> | undefined,
+  clientMessageId?: string,
+): UserMessageImageAttachment[] | undefined {
+  if (!images || images.length === 0) return undefined;
+  const seed = clientMessageId ?? "user";
+  return images.map((image, index) => ({
+    id: `${seed}:image:${index}`,
+    mimeType: image.mimeType,
+    storageType: "inline",
+    storageKey: `data:${image.mimeType};base64,${image.data}`,
+    createdAt: 0,
+  }));
+}
+
 function appendUserMessage(
   state: StreamItem[],
   text: string,
@@ -979,13 +1003,18 @@ function appendUserMessage(
   clientMessageId?: string,
   timelineCursor?: TimelinePosition,
   turnId?: string,
+  media?: {
+    images?: UserMessageImageAttachment[];
+    attachments?: AgentAttachment[];
+  },
 ): StreamItem[] {
   const { chunk, hasContent } = normalizeChunk(text);
-  if (!hasContent) {
+  const hasMedia = (media?.images?.length ?? 0) > 0 || (media?.attachments?.length ?? 0) > 0;
+  if (!hasContent && !hasMedia) {
     return state;
   }
 
-  const chunkSeed = chunk.trim() || chunk;
+  const chunkSeed = chunk.trim() || chunk || "attachment";
   const nextItem = createUserMessage({
     id: messageId ?? createUniqueTimelineId(state, "user", chunkSeed, timestamp),
     clientMessageId,
@@ -994,6 +1023,8 @@ function appendUserMessage(
     turnId,
     text: chunk,
     timestamp,
+    images: media?.images,
+    attachments: media?.attachments,
   });
   return upsertUserMessage(state, nextItem);
 }
@@ -1638,6 +1669,10 @@ function reduceTimelineEvent(
           item.clientMessageId,
           timelineCursor,
           event.turnId,
+          {
+            images: timelineUserImages(item.images, item.clientMessageId),
+            attachments: item.attachments,
+          },
         ),
       );
     case "assistant_message":

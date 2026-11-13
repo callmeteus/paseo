@@ -4,6 +4,7 @@ import {
   buildAgentBranchNameSeed,
   buildAgentPrompt,
   renderPromptAttachmentAsText,
+  submittedPromptMedia,
 } from "./prompt-attachments.js";
 
 describe("prompt attachments", () => {
@@ -23,18 +24,22 @@ describe("prompt attachments", () => {
       url: "https://github.com/getpaseo/paseo/issues/55",
     };
 
-    expect(
-      buildAgentPrompt(
-        "  Take a different approach  ",
-        [{ data: "image-data", mimeType: "image/png" }],
-        [issue, chatHistory],
-      ),
-    ).toEqual([
+    const prompt = buildAgentPrompt(
+      "  Take a different approach  ",
+      [{ data: "image-data", mimeType: "image/png" }],
+      [issue, chatHistory],
+    );
+    expect(prompt).toEqual([
       chatHistory,
       { type: "text", text: "Take a different approach" },
       { type: "image", data: "image-data", mimeType: "image/png" },
       issue,
     ]);
+    expect(submittedPromptMedia(prompt)).toEqual({
+      images: [{ data: "image-data", mimeType: "image/png" }],
+      attachments: [chatHistory, issue],
+    });
+    expect(submittedPromptMedia("plain text")).toEqual({});
   });
 
   it("renders github_pr attachments as readable text", () => {

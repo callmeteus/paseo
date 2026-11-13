@@ -1560,6 +1560,44 @@ describe("stream reducer canonical tool calls", () => {
     assert.strictEqual(message.timestamp.getTime(), submittedTimestamp.getTime());
   });
 
+  it("shows echoed images on an instance that did not send them", () => {
+    const event: AgentStreamEventPayload = {
+      type: "timeline",
+      provider: "claude",
+      item: {
+        type: "user_message",
+        text: "Look at this",
+        messageId: "msg-remote",
+        clientMessageId: "client-remote",
+        images: [{ mimeType: "image/png", data: "abc" }],
+        attachments: [
+          {
+            type: "github_issue",
+            mimeType: "application/github-issue",
+            number: 12,
+            title: "Broken preview",
+            url: "https://github.com/getpaseo/paseo/issues/12",
+          },
+        ],
+      },
+    };
+
+    const state = reduceStreamUpdate([], event, new Date("2025-01-01T11:10:00Z"));
+    const message = state.find((item) => item.kind === "user_message");
+
+    assert.ok(message);
+    assert.deepStrictEqual(message.images, [
+      {
+        id: "client-remote:image:0",
+        mimeType: "image/png",
+        storageType: "inline",
+        storageKey: "data:image/png;base64,abc",
+        createdAt: 0,
+      },
+    ]);
+    assert.strictEqual(message.attachments?.[0]?.type, "github_issue");
+  });
+
   it("keeps canonical assistant/user/assistant order during replay", () => {
     const state: StreamItem[] = [
       {
