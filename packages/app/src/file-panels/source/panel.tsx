@@ -26,6 +26,7 @@ import { FilePanelLoading } from "../loading";
 import type { FileConflictAlertState } from "./conflict-alert";
 import { FileEditorModel, getFileConflictCallout } from "./editor/model";
 import { FileEditorView } from "./editor/view";
+import { nextFrozenPreview, type FrozenPreview } from "./frozen-preview";
 import { selectSourcePresentation } from "./readonly/presentation";
 import { FileSourceView } from "./readonly/view";
 import { TextFileToolbar, type TextFileView } from "./toolbar";
@@ -119,6 +120,13 @@ function ReadonlyTextFile({
   const text = useFileText(file);
   const { t } = useTranslation();
   const [view, setView] = useTextFileView(params, revision);
+  const showPreview = Preview !== undefined && view === "preview";
+  const [frozenPreview, setFrozenPreview] = useState<FrozenPreview | null>(null);
+  const nextPreview = nextFrozenPreview(frozenPreview, {
+    active: showPreview,
+    text: text.status === "ready" ? text.text : undefined,
+  });
+  if (nextPreview !== frozenPreview) setFrozenPreview(nextPreview);
   const sourceLocation = useMemo(
     () => ({ path: params.path, lineStart: params.lineStart, lineEnd: params.lineEnd }),
     [params.lineEnd, params.lineStart, params.path],
@@ -131,7 +139,6 @@ function ReadonlyTextFile({
       </View>
     );
   }
-  const showPreview = Preview !== undefined && view === "preview";
   return (
     <View style={styles.container}>
       <PlanHeader path={params.path} />
@@ -142,7 +149,12 @@ function ReadonlyTextFile({
         onViewChange={Preview ? setView : undefined}
       />
       {showPreview ? (
-        <Preview text={text.text} params={params} workspaceId={workspaceId} host={host} />
+        <Preview
+          text={frozenPreview?.text ?? text.text}
+          params={params}
+          workspaceId={workspaceId}
+          host={host}
+        />
       ) : (
         <ThemedFileSourceView
           content={text.text}
@@ -172,6 +184,14 @@ function EditableTextFile({
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [vimMode, setVimMode] = useState<string | null>(settings.vimKeybindings ? "NORMAL" : null);
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
+  const showPreview = Preview !== undefined && view === "preview";
+  const [frozenPreview, setFrozenPreview] = useState<FrozenPreview | null>(null);
+  const nextPreview = nextFrozenPreview(frozenPreview, {
+    active: showPreview,
+    text:
+      snapshot.status === "loading" || snapshot.status === "failed" ? undefined : snapshot.content,
+  });
+  if (nextPreview !== frozenPreview) setFrozenPreview(nextPreview);
 
   useEffect(() => {
     model.open();
@@ -226,7 +246,6 @@ function EditableTextFile({
       onOverwrite: handleOverwrite,
     };
   }
-  const showPreview = Preview !== undefined && view === "preview";
   return (
     <View style={styles.container}>
       <PlanHeader path={params.path} />
@@ -241,7 +260,12 @@ function EditableTextFile({
         conflict={conflict}
       />
       {showPreview ? (
-        <Preview text={snapshot.content} params={params} workspaceId={workspaceId} host={host} />
+        <Preview
+          text={frozenPreview?.text ?? snapshot.content}
+          params={params}
+          workspaceId={workspaceId}
+          host={host}
+        />
       ) : (
         <SourceEditor
           model={model}
