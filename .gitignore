@@ -111,3 +111,9 @@ app.json
 
 # Stillmark
 .stillmark/plans/
+
+# Generated Expo/Vitest artifacts in packages/app. Its own .gitignore is
+# UTF-16, which git does not parse.
+packages/app/expo-env.d.ts
+packages/app/.vitest-screenshots/
+packages/app/.vitest-attachments/
