@@ -150,6 +150,7 @@ import { generateGoalObjective } from "./agent/goal-objective-rewriter.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
+import { createBridgeMcpServer } from "./agent/bridge-mcp-server.js";
 import {
   createPaseoToolCatalog,
   createPaseoAgentToolManifest,
@@ -169,6 +170,10 @@ import {
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
+import { UpstreamMcpRegistry } from "./mcp/upstream.js";
+import { SharedMcpAuthority } from "./mcp/authority.js";
+import { McpCatalogService } from "./mcp/catalog.js";
+import { McpBridgeManager } from "./mcp/bridge.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
@@ -198,6 +203,8 @@ import type {
   AgentProfile,
   AgentSkillSelection,
   FirstAgentContext,
+  McpBridge,
+  McpShare,
   PluginSource,
   TerminalProfile,
 } from "@getpaseo/protocol/messages";
@@ -446,6 +453,8 @@ export interface PaseoDaemonConfig {
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   mcpServers?: Record<string, McpServerConfig>;
+  mcpShares?: Record<string, McpShare>;
+  mcpBridges?: Record<string, McpBridge>;
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
@@ -619,6 +628,8 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     plugins: config.plugins ?? {},
     skills: { selection: config.skillSelection },
     mcpServers: config.mcpServers,
+    mcpShares: config.mcpShares,
+    mcpBridges: config.mcpBridges,
   };
 
   if (config.terminalProfiles !== undefined) {
@@ -678,6 +689,21 @@ export async function createPaseoDaemon(
       },
     },
   });
+  const upstreamMcpRegistry = new UpstreamMcpRegistry({
+    getServers: () => daemonConfigStore.get().mcpServers ?? {},
+    logger,
+  });
+  const sharedMcpAuthority = new SharedMcpAuthority(
+    upstreamMcpRegistry,
+    () => daemonConfigStore.get().mcpShares ?? {},
+  );
+  const mcpCatalog = new McpCatalogService({
+    home: homedir(),
+    env: process.env,
+    getServers: () => daemonConfigStore.get().mcpServers ?? {},
+    patchConfig: async (patch) => daemonConfigStore.patch(patch),
+    upstream: upstreamMcpRegistry,
+  });
   const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
   void orchestrationSkills.autoUpdate().catch((error) => {
     logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
@@ -723,6 +749,7 @@ export async function createPaseoDaemon(
   // no plaintext available). Mirrors the /api/files/download capability-token
   // pattern.
   const agentMcpAuthToken = randomUUID();
+  const mcpBridgeAuthToken = randomUUID();
 
   const listenTarget = parseListenString(config.listen);
 
@@ -1928,6 +1955,7 @@ export async function createPaseoDaemon(
                   ? (value as Record<string, McpServerConfig>)
                   : null,
               );
+              upstreamMcpRegistry.invalidateAll();
             });
             const relayEnabled = config.relayEnabled ?? true;
             const relayEndpoint = config.relayEndpoint ?? "relay.paseo.sh:443";
@@ -1975,6 +2003,8 @@ export async function createPaseoDaemon(
                 daemonStatusRpc: dependencies.serverFeatureOverrides?.daemonStatusRpc,
                 relayConfig: dependencies.serverFeatureOverrides?.relayConfig,
                 startPaused: true,
+                mcpBridgeAuthority: sharedMcpAuthority,
+                mcpCatalog,
               },
               workspaceAutoName,
               workspaceRuntimeStore,
@@ -2034,6 +2064,60 @@ export async function createPaseoDaemon(
               workspaceLabelService,
             );
             if (skillCatalog) wsServer.setCursorSkillCatalog(skillCatalog);
+            const mcpBridgeManager = new McpBridgeManager({
+              hosts: wsServer.getConnectedHosts(),
+              selfServerId: wsServer.getServerId(),
+              getBridges: () => daemonConfigStore.get().mcpBridges ?? {},
+            });
+            mcpBridgeManager.setAuthToken(mcpBridgeAuthToken);
+            mcpBridgeManager.setBaseUrl(agentMcpBaseUrl ? new URL(agentMcpBaseUrl).origin : null);
+            agentManager.setMcpBridgeManager(mcpBridgeManager);
+            daemonConfigStore.onFieldChange("mcpBridges", () => {
+              mcpBridgeManager.invalidate();
+            });
+            const handleMcpBridgeRequest = async (
+              req: express.Request,
+              res: express.Response,
+            ): Promise<void> => {
+              const bridgeName = req.params.bridgeName;
+              try {
+                if (
+                  !(await isAgentMcpRequestAuthorized({
+                    password: config.auth?.password,
+                    capabilityToken: mcpBridgeAuthToken,
+                    authorizationHeader: req.header("authorization"),
+                  }))
+                ) {
+                  res.status(401).json({ error: "Unauthorized" });
+                  return;
+                }
+                const bridgeServer = await createBridgeMcpServer({
+                  bridgeName,
+                  manager: mcpBridgeManager,
+                });
+                const transport = new StreamableHTTPServerTransport({
+                  sessionIdGenerator: undefined,
+                  enableDnsRebindingProtection: false,
+                });
+                await bridgeServer.connect(transport);
+                try {
+                  await transport.handleRequest(req, res, req.body);
+                } finally {
+                  await transport.close().catch(() => undefined);
+                  await bridgeServer.close().catch(() => undefined);
+                }
+              } catch (error) {
+                logger.warn({ err: error, bridgeName }, "MCP bridge request failed");
+                if (!res.headersSent) {
+                  res.status(502).json({
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                }
+              }
+            };
+            app.all("/mcp/bridge/:bridgeName", (req, res) => {
+              void handleMcpBridgeRequest(req, res);
+            });
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();

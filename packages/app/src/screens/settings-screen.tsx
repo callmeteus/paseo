@@ -39,6 +39,7 @@ import {
   Sparkles,
   Mic,
   Blocks,
+  Plug,
   Globe,
   PanelLeft,
   MessageSquare,
@@ -109,6 +110,7 @@ import {
   HostConnectionsPage,
   HostPairDevicePage,
   HostAgentsPage,
+  HostMcpPage,
   HostSettingsPage,
   HostProvidersPage,
   HostUsagePage,
@@ -241,6 +243,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
   { id: "pair-device", labelKey: "openProject.tiles.pairDevice.title", icon: Smartphone },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
+  { id: "mcp", labelKey: "settings.hostSections.mcp", icon: Plug },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
   { id: "voice", labelKey: "settings.hostSections.voice", icon: Mic },
   { id: "workspaces", labelKey: "settings.hostSections.workspaces", icon: FolderGit2 },
@@ -263,6 +266,8 @@ function renderHostSettingsContent(
       return <HostPairDevicePage serverId={view.serverId} />;
     case "agents":
       return <HostAgentsPage serverId={view.serverId} />;
+    case "mcp":
+      return <HostMcpPage serverId={view.serverId} />;
     case "metadata":
       return <MetadataGenerationPage serverId={view.serverId} />;
     case "voice":

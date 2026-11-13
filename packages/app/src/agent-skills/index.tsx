@@ -4,7 +4,11 @@ import { Text, View } from "react-native";
 import { useFocusEffect } from "expo-router/react-navigation";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ArrowUpRight, Blocks, Check, Settings2 } from "lucide-react-native";
-import type { AgentSkillOperation, AgentSkillsStatus } from "@getpaseo/protocol/messages";
+import type {
+  AgentGlobalSkill,
+  AgentSkillOperation,
+  AgentSkillsStatus,
+} from "@getpaseo/protocol/messages";
 import type { TFunction } from "i18next";
 import { Button } from "@/components/ui/button";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -35,6 +39,20 @@ function formatUpdateMessage(ops: readonly AgentSkillOperation[], t: TFunction):
     .join("\n");
 }
 
+function resolveDisplayState(
+  status: AgentSkillsStatus | null,
+  maintenanceOps: readonly AgentSkillOperation[],
+): AgentSkillsStatus["state"] | null {
+  if (status?.state === "drift" && maintenanceOps.length === 0) return "up-to-date";
+  return status?.state ?? null;
+}
+
+function computeHasSelected(status: AgentSkillsStatus | null): boolean {
+  if (!status) return false;
+  if (status.selection.mode === "all") return status.available.length > 0;
+  return status.selection.skills.some((name) => status.available.includes(name));
+}
+
 export function AgentSkillsSection({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const skills = useAgentSkills(serverId);
@@ -52,14 +70,9 @@ export function AgentSkillsSection({ serverId }: { serverId: string }) {
     () => skills.status?.ops.filter((op) => op.kind !== "delete") ?? [],
     [skills.status?.ops],
   );
-  const state =
-    skills.status?.state === "drift" && maintenanceOps.length === 0
-      ? "up-to-date"
-      : (skills.status?.state ?? null);
-  const hasSelected =
-    (skills.status?.selection.mode === "all" && skills.status.available.length > 0) ||
-    (skills.status?.selection.mode === "custom" &&
-      skills.status.selection.skills.some((name) => skills.status?.available.includes(name)));
+  const state = resolveDisplayState(skills.status, maintenanceOps);
+  const hasSelected = computeHasSelected(skills.status);
+  const globalSkills = skills.status?.global;
 
   const handleReconcile = useCallback(async () => {
     if (skills.isWorking) return;
@@ -175,7 +188,59 @@ export function AgentSkillsSection({ serverId }: { serverId: string }) {
           onClose={handleClose}
         />
       ) : null}
+      {globalSkills ? <AgentSkillsGlobalCard skills={globalSkills} /> : null}
     </SettingsSection>
+  );
+}
+
+function AgentSkillsGlobalCard({ skills }: { skills: AgentGlobalSkill[] }) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.globalBlock}>
+      <Text style={styles.globalTitle}>{t("settings.host.skills.global.title")}</Text>
+      <View style={settingsStyles.card} testID="host-agent-skills-global">
+        {skills.length === 0 ? (
+          <View style={settingsStyles.row}>
+            <Text style={styles.mutedText}>{t("settings.host.skills.global.empty")}</Text>
+          </View>
+        ) : (
+          skills.map((skill, index) => (
+            <GlobalSkillRow key={skill.name} skill={skill} isFirst={index === 0} />
+          ))
+        )}
+      </View>
+    </View>
+  );
+}
+
+function GlobalSkillRow({ skill, isFirst }: { skill: AgentGlobalSkill; isFirst: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <View
+      style={[settingsStyles.row, !isFirst && settingsStyles.rowBorder]}
+      testID={`host-agent-skills-global-${skill.name}`}
+    >
+      <View style={settingsStyles.rowContent}>
+        <View style={styles.globalNameRow}>
+          <Text style={settingsStyles.rowTitle}>{skill.name}</Text>
+          {skill.managed ? (
+            <Text style={styles.badge}>{t("settings.host.skills.global.managed")}</Text>
+          ) : null}
+        </View>
+        {skill.description ? (
+          <Text style={settingsStyles.rowHint} numberOfLines={2}>
+            {skill.description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.sourceList}>
+        {skill.sources.map((source) => (
+          <Text key={source} style={styles.badge}>
+            {t(`settings.host.skills.global.sources.${source}`)}
+          </Text>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -235,4 +300,27 @@ const styles = StyleSheet.create((theme) => ({
   mutedText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   actionsRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   emptyCard: { padding: theme.spacing[4] },
+  globalBlock: { gap: theme.spacing[2] },
+  globalTitle: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    marginLeft: theme.spacing[1],
+  },
+  globalNameRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  sourceList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+    maxWidth: 140,
+  },
+  badge: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize["2xs"],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing[1],
+    paddingVertical: 1,
+  },
 }));

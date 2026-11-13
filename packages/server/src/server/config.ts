@@ -541,6 +541,8 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
     terminalProfiles: persisted.daemon?.terminalProfiles,
     agentProfiles: persisted.daemon?.agentProfiles,
     mcpServers: persisted.daemon?.mcpServers,
+    mcpShares: persisted.daemon?.mcpShares,
+    mcpBridges: persisted.daemon?.mcpBridges,
   };
 }
 
@@ -594,6 +596,8 @@ export function resolveConfigFromPersisted(
     terminalProfiles,
     agentProfiles,
     mcpServers,
+    mcpShares,
+    mcpBridges,
     hostnames,
     trustedProxies,
     appBaseUrl,
@@ -641,6 +645,8 @@ export function resolveConfigFromPersisted(
     terminalProfiles,
     agentProfiles,
     mcpServers,
+    mcpShares,
+    mcpBridges,
     skillSelection: persisted.agents?.skills?.selection,
     pluginsEnabled: persisted.pluginsEnabled ?? false,
     plugins: persisted.plugins,

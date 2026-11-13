@@ -5,6 +5,7 @@ import { AgentDirectory } from "./agent/directory.js";
 import { ConnectedHostSession } from "./connected-hosts/index.js";
 import type { ConnectedHosts } from "./connected-hosts/index.js";
 import type { McpBridgeAuthority } from "./mcp/authority.js";
+import type { McpCatalogService } from "./mcp/catalog.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import { searchChatsAcrossChats } from "./agent/chat-search/cross-chat-search.js";
 import { isSameOrDescendantPath } from "./path-utils.js";
@@ -463,6 +464,7 @@ type AgentMcpTransportFactory = () => Promise<unknown>;
 export interface SessionOptions {
   connectedHosts?: ConnectedHosts;
   mcpBridgeAuthority?: McpBridgeAuthority;
+  mcpCatalog?: McpCatalogService;
   sourceId?: string;
   routed?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
@@ -705,6 +707,7 @@ interface ClientActivity {
 export class Session {
   private readonly connectedHostSession: ConnectedHostSession | null;
   private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
+  private readonly mcpCatalog: McpCatalogService | undefined;
   private routed = false;
   private hopPath: string[] = [];
   private originServerId: string | null = null;
@@ -945,6 +948,7 @@ export class Session {
     this.sessionId = uuidv4();
     this.hostSourceId = hostSource(options);
     this.mcpBridgeAuthority = options.mcpBridgeAuthority;
+    this.mcpCatalog = options.mcpCatalog;
     this.connectedHostSession = createHostSession(options, this);
     this.onMessage = onMessage;
     this.onMessageToSource = onMessageToSource
@@ -2597,12 +2601,119 @@ export class Session {
     }
   }
 
+  private dispatchMcpCatalogMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "mcp.catalog.scan.request":
+        return this.handleMcpCatalogScan(msg);
+      case "mcp.catalog.import.request":
+        return this.handleMcpCatalogImport(msg);
+      case "mcp.catalog.test.request":
+        return this.handleMcpCatalogTest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleMcpCatalogScan(
+    msg: Extract<SessionInboundMessage, { type: "mcp.catalog.scan.request" }>,
+  ): Promise<void> {
+    if (!this.mcpCatalog) {
+      this.emit({
+        type: "mcp.catalog.scan.response",
+        payload: { requestId: msg.requestId, servers: [], errors: ["MCP catalog is unavailable"] },
+      });
+      return;
+    }
+    try {
+      const result = await this.mcpCatalog.scan();
+      this.emit({
+        type: "mcp.catalog.scan.response",
+        payload: { requestId: msg.requestId, servers: result.servers, errors: result.errors },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.catalog.scan.response",
+        payload: { requestId: msg.requestId, servers: [], errors: [toErrorMessage(error)] },
+      });
+    }
+  }
+
+  private async handleMcpCatalogImport(
+    msg: Extract<SessionInboundMessage, { type: "mcp.catalog.import.request" }>,
+  ): Promise<void> {
+    if (!this.mcpCatalog) {
+      this.emit({
+        type: "mcp.catalog.import.response",
+        payload: {
+          requestId: msg.requestId,
+          imported: [],
+          skipped: [],
+          errors: ["MCP catalog is unavailable"],
+        },
+      });
+      return;
+    }
+    try {
+      const result = await this.mcpCatalog.importEntries(msg.entries);
+      this.emit({
+        type: "mcp.catalog.import.response",
+        payload: { requestId: msg.requestId, ...result },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.catalog.import.response",
+        payload: {
+          requestId: msg.requestId,
+          imported: [],
+          skipped: [],
+          errors: [toErrorMessage(error)],
+        },
+      });
+    }
+  }
+
+  private async handleMcpCatalogTest(
+    msg: Extract<SessionInboundMessage, { type: "mcp.catalog.test.request" }>,
+  ): Promise<void> {
+    if (!this.mcpCatalog) {
+      this.emit({
+        type: "mcp.catalog.test.response",
+        payload: {
+          requestId: msg.requestId,
+          ok: false,
+          tools: [],
+          error: "MCP catalog is unavailable",
+        },
+      });
+      return;
+    }
+    try {
+      const result = await this.mcpCatalog.test(msg.config);
+      this.emit({
+        type: "mcp.catalog.test.response",
+        payload: { requestId: msg.requestId, ...result },
+      });
+    } catch (error) {
+      this.emit({
+        type: "mcp.catalog.test.response",
+        payload: {
+          requestId: msg.requestId,
+          ok: false,
+          tools: [],
+          error: toErrorMessage(error),
+        },
+      });
+    }
+  }
+
   private dispatchSubscriptionMessage(
     msg: SessionInboundMessage,
     source?: object,
   ): Promise<void> | undefined {
     const bridge = this.dispatchMcpBridgeMessage(msg);
     if (bridge) return bridge;
+    const catalog = this.dispatchMcpCatalogMessage(msg);
+    if (catalog) return catalog;
     if (msg.type === "workspace.setup.subscribe.request") return this.subscribeWorkspaceSetup(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
@@ -10026,6 +10137,9 @@ function createHostSession(options: SessionOptions, session: Session): Connected
     () => session.isRouted(),
     session.getSessionId(),
     () => options.getConnectedHostBufferedAmount?.() ?? 0,
+    () => session.getHopPath(),
+    () => session.getOriginServerId(),
+    () => session.getMaxHops(),
   );
 }
 

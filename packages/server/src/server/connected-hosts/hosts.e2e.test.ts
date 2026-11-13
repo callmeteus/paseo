@@ -137,7 +137,7 @@ test("SDK saves unreachable hosts, rejects syntax and preserves source identity 
   expect((await paseo.hosts.list()).hosts).toEqual([]);
 });
 
-test("ordinary routed APIs isolate scopes and enforce one-hop, disable and origin disposal", async () => {
+test("ordinary routed APIs isolate scopes, allow explicit routes, disable and origin disposal", async () => {
   const b = await daemon();
   const wire = await hostWire(b);
   const a = await daemon();
@@ -157,7 +157,7 @@ test("ordinary routed APIs isolate scopes and enforce one-hop, disable and origi
   expect(wire.active()).toBe(1);
   expect((await second.workspaces.list()).entries).toEqual([]);
   await expect(second.hosts.client(directory.self.serverId)).rejects.toMatchObject({
-    code: "unsupported_capability",
+    code: "host_loop",
   });
   await paseo.hosts.update(saved.registrationId, { enabled: false });
   await expect(paseo.hosts.client(serverId)).rejects.toMatchObject({ code: "host_disabled" });
@@ -181,6 +181,31 @@ test("ordinary routed APIs isolate scopes and enforce one-hop, disable and origi
   expect(wire.active()).toBe(1);
   await observation.release();
   await paseo.dispose();
+});
+
+test("a routed session can open a second hop and rejects loops back to the origin", async () => {
+  const c = await daemon();
+  const a = await daemon();
+  const b = await daemon();
+  const apiA = await api(a);
+  const apiB = await api(b);
+  await apiA.paseo.hosts.add({ connection: `127.0.0.1:${c.port}`, label: "C" });
+  await apiB.paseo.hosts.add({ connection: `127.0.0.1:${a.port}`, label: "A" });
+  const directoryA = await online(apiA.paseo);
+  const directoryB = await online(apiB.paseo);
+  const cServerId = directoryA.hosts[0]!.serverId!;
+  const aServerId = directoryB.hosts[0]!.serverId!;
+
+  const routedToA = await apiB.paseo.hosts.client(aServerId);
+  const routedToC = await routedToA.hosts.client(cServerId);
+  expect((await routedToC.workspaces.list()).entries).toEqual([]);
+
+  await expect(routedToA.hosts.client(directoryB.self.serverId)).rejects.toMatchObject({
+    code: "host_loop",
+  });
+
+  await routedToC.dispose();
+  await routedToA.dispose();
 });
 
 test("routed authority is bounded by the caller, with isolated simultaneous sessions", async () => {

@@ -23,6 +23,7 @@ import {
 } from "@getpaseo/protocol/terminal-profiles";
 import { AgentProfilesSection } from "@/agent-profiles";
 import { AgentSkillsSection } from "@/agent-skills";
+import { McpServersSection } from "@/mcp-servers";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { HostPasswordPrompt } from "@/components/host-password-prompt";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
@@ -321,6 +322,16 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       <AgentProfilesSection serverId={serverId} />
     </View>
   );
+}
+
+export function HostMcpPage({ serverId }: { serverId: string }) {
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  return <McpServersSection serverId={serverId} />;
 }
 
 export function HostWorkspacesPage({ serverId }: { serverId: string }) {

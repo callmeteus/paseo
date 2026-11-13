@@ -106,6 +106,35 @@ export {
   type McpBridgeTool,
 } from "./mcp-bridge/rpc-schemas.js";
 import {
+  McpCatalogImportRequestSchema,
+  McpCatalogImportResponseSchema,
+  McpCatalogScanRequestSchema,
+  McpCatalogScanResponseSchema,
+  McpCatalogTestRequestSchema,
+  McpCatalogTestResponseSchema,
+} from "./mcp-catalog/rpc-schemas.js";
+export {
+  DetectedMcpServerSchema,
+  McpCatalogImportRequestSchema,
+  McpCatalogImportResponseSchema,
+  McpCatalogImportTargetSchema,
+  McpCatalogScanRequestSchema,
+  McpCatalogScanResponseSchema,
+  McpCatalogSourceSchema,
+  McpCatalogTestRequestSchema,
+  McpCatalogTestResponseSchema,
+  McpCatalogTransportSchema,
+  type DetectedMcpServer,
+  type McpCatalogImportRequest,
+  type McpCatalogImportResponse,
+  type McpCatalogImportTarget,
+  type McpCatalogScanRequest,
+  type McpCatalogScanResponse,
+  type McpCatalogSource,
+  type McpCatalogTestRequest,
+  type McpCatalogTestResponse,
+} from "./mcp-catalog/rpc-schemas.js";
+import {
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -1784,12 +1813,25 @@ export const AgentSkillOperationSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentSkillOperation = z.infer<typeof AgentSkillOperationSchema>;
 
+export const AgentGlobalSkillSchema = z.object({
+  name: z.string(),
+  sources: z.array(
+    z.enum(["agents", "claude", "codex", "cursor", "grok", "opencode", "pi", "unknown"]),
+  ),
+  paths: z.array(z.string()),
+  description: z.string().nullable(),
+  managed: z.boolean(),
+});
+export type AgentGlobalSkill = z.infer<typeof AgentGlobalSkillSchema>;
+
 export const AgentSkillsStatusSchema = z.object({
   state: z.enum(["not-installed", "up-to-date", "drift"]),
   ops: z.array(AgentSkillOperationSchema),
   available: z.array(z.string()),
   installed: z.array(z.string()),
   selection: AgentSkillSelectionSchema,
+  // COMPAT(globalSkills): optional because older daemons omit it.
+  global: z.array(AgentGlobalSkillSchema).optional(),
 });
 export type AgentSkillsStatus = z.infer<typeof AgentSkillsStatusSchema>;
 
@@ -3740,6 +3782,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   McpBridgeListServersRequestSchema,
   McpBridgeListToolsRequestSchema,
   McpBridgeCallToolRequestSchema,
+  McpCatalogScanRequestSchema,
+  McpCatalogImportRequestSchema,
+  McpCatalogTestRequestSchema,
 
   BrowserHostRegisterRequestSchema,
   SubscriptionReleaseRequestSchema,
@@ -4355,6 +4400,10 @@ export const ServerInfoStatusPayloadSchema = z
         mcpBridge: z.boolean().optional(),
         // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.
         mcpBridgeMultiHop: z.boolean().optional(),
+        // COMPAT(mcpCatalog): added in v0.13.3, remove gate after 2027-04-01.
+        mcpCatalog: z.boolean().optional(),
+        // COMPAT(globalSkills): added in v0.13.3, remove gate after 2027-04-01.
+        globalSkills: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
       })
@@ -7633,6 +7682,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   McpBridgeListServersResponseSchema,
   McpBridgeListToolsResponseSchema,
   McpBridgeCallToolResponseSchema,
+  McpCatalogScanResponseSchema,
+  McpCatalogImportResponseSchema,
+  McpCatalogTestResponseSchema,
 
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

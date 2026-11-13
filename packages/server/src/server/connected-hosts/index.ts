@@ -47,6 +47,35 @@ interface Route {
   close(code?: string, message?: string): void;
 }
 
+function assertHostRouteAllowed(input: {
+  serverId: string;
+  originServerId?: string;
+  hopPath: readonly string[];
+  maxHops: number;
+}): void {
+  if (input.originServerId && input.originServerId === input.serverId) {
+    throw new HostError(
+      "host_loop",
+      "Host route would loop back to the originating daemon",
+      input.serverId,
+    );
+  }
+  if (input.hopPath.includes(input.serverId)) {
+    throw new HostError(
+      "host_loop",
+      "Host route would loop back through a daemon already on this path",
+      input.serverId,
+    );
+  }
+  if (input.hopPath.length >= input.maxHops) {
+    throw new HostError(
+      "resource_limit",
+      `Host route limit reached (${input.maxHops} hops)`,
+      input.serverId,
+    );
+  }
+}
+
 /** Daemon-owned configuration, identity pinning, retry and routed session lifetime. */
 export class ConnectedHosts {
   private readonly budget = new HostTransportBudget();
@@ -86,6 +115,10 @@ export class ConnectedHosts {
       self: { ...this.self },
       hosts: this.rows.map(({ connection: _secret, ...row }) => structuredClone(row)),
     };
+  }
+
+  getSelfServerId(): string {
+    return this.self.serverId;
   }
   observe(changed: () => void): () => void {
     this.listeners.add(changed);
@@ -354,12 +387,23 @@ export class ConnectedHosts {
     scopeId: string;
     sourceId: string;
     originSessionId: string;
+    originServerId?: string;
+    hopPath?: readonly string[];
+    maxHops?: number;
     permissions: readonly DaemonPermission[];
     signal: AbortSignal;
     frame(data: string | Uint8Array): void;
     ended(code: string, message: string): void;
   }): Promise<{ send(data: string | Uint8Array): void; close(): void }> {
     await this.ready;
+    const hopPath = input.hopPath ?? [];
+    const maxHops = input.maxHops ?? 3;
+    assertHostRouteAllowed({
+      serverId: input.serverId,
+      originServerId: input.originServerId,
+      hopPath,
+      maxHops,
+    });
     const row = this.rows.find((entry) => entry.serverId === input.serverId);
     if (!row) throw new HostError("host_unknown", `Unknown host ${input.serverId}`, input.serverId);
     if (!row.enabled)
@@ -501,6 +545,9 @@ export class ConnectedHosts {
               routed: true,
               producer: { serverId: this.self.serverId, sourceId: input.sourceId },
               sessionPermissions: input.permissions,
+              ...(input.originServerId ? { originServerId: input.originServerId } : {}),
+              ...(input.hopPath ? { hopPath: input.hopPath } : {}),
+              maxHops,
               auth: undefined,
             }),
           );

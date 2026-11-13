@@ -26,7 +26,11 @@ routed API scope. Each scope owns an isolated virtual session on B. A derives it
 admitted origin session, producer, and logical SDK scope. B admits virtual sessions under the actual
 physical link principal, then intersects forwarded caller grants with that link's current authority.
 Changing or resuming a parent's grants closes its existing channels; reconnect re-admits demand with
-current authority. A routed API cannot select a second hop, and saving a host grants no reverse access.
+current authority. A routed API can open a further route through a host it is connected to. Each hop intersects the
+caller's grants with that link's authority, carries the original `originServerId`, and appends the
+intermediate daemon to `hopPath`. A route that would revisit the origin or any daemon already on the
+path is rejected as `host_loop`; a path at the hop limit is rejected as `resource_limit`. Saving a
+host grants no reverse access.
 
 A producer that registers a host through a routed API is qualified on B as
 `route:<B principal>:<A serverId>:<A producer>`, with each component percent-encoded. This namespace belongs to the authenticated link

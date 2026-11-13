@@ -14,7 +14,11 @@ import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protoco
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
 import { ModelRouterSettingsSchema } from "@getpaseo/protocol/model-router";
-import { McpServerConfigSchema } from "@getpaseo/protocol/messages";
+import {
+  McpBridgeSchema,
+  McpServerConfigSchema,
+  McpShareSchema,
+} from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -274,6 +278,8 @@ export const PersistedConfigSchema = z
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
+        mcpShares: z.record(z.string(), McpShareSchema).optional(),
+        mcpBridges: z.record(z.string(), McpBridgeSchema).optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),

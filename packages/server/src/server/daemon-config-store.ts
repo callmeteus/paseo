@@ -34,6 +34,8 @@ interface SupportedMutableConfigPatch {
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   mcpServers?: MutableDaemonConfig["mcpServers"];
+  mcpShares?: MutableDaemonConfig["mcpShares"];
+  mcpBridges?: MutableDaemonConfig["mcpBridges"];
   skills?: MutableDaemonConfig["skills"];
   pluginsEnabled?: boolean;
   plugins?: MutableDaemonConfig["plugins"];
@@ -194,6 +196,8 @@ const RELOADABLE_PATHS = [
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "daemon.mcpServers",
+  "daemon.mcpShares",
+  "daemon.mcpBridges",
   "app.baseUrl",
   "agents.idleRuntimeCleanup",
   "hub.allowHttp",
@@ -222,6 +226,8 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["daemon.mcpServers", "mcpServers"],
+  ["daemon.mcpShares", "mcpShares"],
+  ["daemon.mcpBridges", "mcpBridges"],
   ["app.baseUrl", "app.baseUrl"],
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
   ["hub.allowHttp", "hubAllowHttp"],
@@ -286,9 +292,20 @@ function pickHubAllowHttpPatch(
   return patch.hubAllowHttp !== undefined ? { hubAllowHttp: patch.hubAllowHttp } : {};
 }
 
+function pickMcpConfigPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "mcpServers" | "mcpShares" | "mcpBridges"> {
+  return {
+    ...(patch.mcpServers !== undefined ? { mcpServers: patch.mcpServers } : {}),
+    ...(patch.mcpShares !== undefined ? { mcpShares: patch.mcpShares } : {}),
+    ...(patch.mcpBridges !== undefined ? { mcpBridges: patch.mcpBridges } : {}),
+  };
+}
+
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
+    ...pickMcpConfigPatch(patch),
     ...(patch.mcp?.injectIntoAgents !== undefined
       ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
       : {}),
@@ -316,7 +333,6 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.terminalProfiles !== undefined ? { terminalProfiles: patch.terminalProfiles } : {}),
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
-    ...(patch.mcpServers !== undefined ? { mcpServers: patch.mcpServers } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(patch.features !== undefined ? { features: patch.features } : {}),
@@ -419,6 +435,8 @@ export class DaemonConfigStore {
     }
     if (parsedPatch.plugins !== undefined) merged.plugins = parsedPatch.plugins;
     if (parsedPatch.mcpServers !== undefined) merged.mcpServers = parsedPatch.mcpServers;
+    if (parsedPatch.mcpShares !== undefined) merged.mcpShares = parsedPatch.mcpShares;
+    if (parsedPatch.mcpBridges !== undefined) merged.mcpBridges = parsedPatch.mcpBridges;
     const next = MutableDaemonConfigSchema.parse(
       omitMetadataGenerationProvidersFromConfig(
         omitProvidersFromConfig(merged, removedProviders),
@@ -765,5 +783,7 @@ function mergeMutableDaemonPatch(
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   if (patch.mcpServers !== undefined) next.mcpServers = patch.mcpServers;
+  if (patch.mcpShares !== undefined) next.mcpShares = patch.mcpShares;
+  if (patch.mcpBridges !== undefined) next.mcpBridges = patch.mcpBridges;
   return Object.keys(next).length > 0 ? next : undefined;
 }

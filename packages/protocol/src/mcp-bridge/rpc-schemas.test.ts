@@ -22,11 +22,11 @@ describe("MCP bridge RPC schemas", () => {
         type: "mcp.bridge.list_servers.response",
         payload: {
           requestId: "req-1",
-          servers: [{ name: "local", extra: true }],
+          servers: [{ server: "local", description: "Local server", tools: ["echo"] }],
           error: null,
         },
       }).payload.servers,
-    ).toEqual([{ name: "local", extra: true }]);
+    ).toEqual([{ server: "local", description: "Local server", tools: ["echo"] }]);
 
     expect(
       McpBridgeListToolsRequestSchema.parse({
@@ -42,11 +42,14 @@ describe("MCP bridge RPC schemas", () => {
         payload: {
           requestId: "req-2",
           server: "local",
-          tools: [{ name: "echo" }],
+          tools: [{ name: "echo", description: "Echo the text", inputSchema: { type: "object" } }],
           error: "MCP bridge is unavailable",
         },
-      }).payload.error,
-    ).toBe("MCP bridge is unavailable");
+      }).payload,
+    ).toMatchObject({
+      tools: [{ name: "echo", description: "Echo the text", inputSchema: { type: "object" } }],
+      error: "MCP bridge is unavailable",
+    });
 
     expect(
       McpBridgeCallToolRequestSchema.parse({
@@ -69,5 +72,15 @@ describe("MCP bridge RPC schemas", () => {
         },
       }).payload.result,
     ).toEqual({ ok: true });
+  });
+
+  it("rejects empty bridge names", () => {
+    expect(() =>
+      McpBridgeListToolsRequestSchema.parse({
+        type: "mcp.bridge.list_tools.request",
+        requestId: "req-4",
+        server: "",
+      }),
+    ).toThrow();
   });
 });

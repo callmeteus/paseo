@@ -521,6 +521,7 @@ export const HOST_SECTION_SLUGS = [
   "connections",
   "pair-device",
   "agents",
+  "mcp",
   "metadata",
   "voice",
   "workspaces",

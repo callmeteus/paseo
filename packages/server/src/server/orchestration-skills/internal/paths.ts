@@ -16,6 +16,7 @@ export function resolveBundledSkillsDir(moduleUrl: string | URL = import.meta.ur
 
 export function resolveSkillTargets(home: string = os.homedir()): SkillTargets {
   return {
+    home,
     sourceDir: resolveBundledSkillsDir(),
     agentsDir: path.join(home, ".agents", "skills"),
     claudeDir: path.join(home, ".claude", "skills"),

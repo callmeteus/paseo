@@ -37,8 +37,11 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type DetectedMcpServer,
   type McpBridgeServer,
   type McpBridgeTool,
+  type McpCatalogImportTarget,
+  type McpServerConfig,
   type ServerInfoStatusPayload,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
@@ -6098,6 +6101,46 @@ export class DaemonClient {
     });
     if (payload.error) throw new Error(payload.error);
     return payload.result;
+  }
+
+  async scanMcpCatalog(requestId?: string): Promise<{
+    servers: DetectedMcpServer[];
+    errors: string[];
+  }> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.catalog.scan.response">({
+      requestId,
+      message: { type: "mcp.catalog.scan.request", requestId: requestId ?? "" },
+      responseType: "mcp.catalog.scan.response",
+    });
+    return { servers: payload.servers, errors: payload.errors };
+  }
+
+  async importMcpCatalog(
+    entries: McpCatalogImportTarget[],
+    requestId?: string,
+  ): Promise<{ imported: string[]; skipped: string[]; errors: string[] }> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.catalog.import.response">({
+      requestId,
+      message: { type: "mcp.catalog.import.request", requestId: requestId ?? "", entries },
+      responseType: "mcp.catalog.import.response",
+    });
+    return { imported: payload.imported, skipped: payload.skipped, errors: payload.errors };
+  }
+
+  async testMcpServer(
+    config: McpServerConfig,
+    requestId?: string,
+  ): Promise<{ ok: boolean; tools: string[]; error: string | null }> {
+    const payload = await this.sendCorrelatedSessionRequest<"mcp.catalog.test.response">({
+      requestId,
+      message: {
+        type: "mcp.catalog.test.request",
+        requestId: requestId ?? "",
+        config: config as unknown as Record<string, unknown>,
+      },
+      responseType: "mcp.catalog.test.response",
+    });
+    return { ok: payload.ok, tools: payload.tools, error: payload.error };
   }
 
   async writeProjectConfig(input: WriteProjectConfigInput): Promise<WriteProjectConfigPayload> {

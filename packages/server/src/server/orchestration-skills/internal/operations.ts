@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
+import type { AgentGlobalSkill, AgentSkillSelection } from "@getpaseo/protocol/messages";
 import {
   isLegacyCodexCopy,
   listFilesRecursive,
@@ -9,6 +9,7 @@ import {
   removeSkill,
   syncSkills,
 } from "./sync.js";
+import { listGlobalSkills } from "./global-skills.js";
 
 export type SkillsState = "not-installed" | "up-to-date" | "drift";
 
@@ -31,9 +32,11 @@ export interface SkillsStatus {
    * there is anything on disk to delete — this can.
    */
   installed: string[];
+  global: AgentGlobalSkill[];
 }
 
 export interface SkillTargets {
+  home: string;
   sourceDir: string;
   agentsDir: string;
   claudeDir: string;
@@ -183,11 +186,12 @@ export async function getSkillsStatus(
   ops.sort((a, b) => compareStrings(a.name, b.name));
   const allDisks = [...disks, codexDisk];
   const installed = installedSkillNames(allDisks, names);
+  const global = await listGlobalSkills(targets.home, new Set(names));
 
   if (!hasInstalledPaseoSkill(allDisks))
-    return { state: "not-installed", ops, available, installed };
-  if (ops.length === 0) return { state: "up-to-date", ops, available, installed };
-  return { state: "drift", ops, available, installed };
+    return { state: "not-installed", ops, available, installed, global };
+  if (ops.length === 0) return { state: "up-to-date", ops, available, installed, global };
+  return { state: "drift", ops, available, installed, global };
 }
 
 async function applySkills(

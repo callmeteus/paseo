@@ -31,6 +31,9 @@ export class ConnectedHostSession {
     private readonly routed: () => boolean,
     private readonly originSessionId: string,
     private readonly bufferedAmount: (source: object) => number | null,
+    private readonly hopPath: () => readonly string[],
+    private readonly originServerId: () => string | null,
+    private readonly maxHops: () => number,
   ) {}
   binary(frame: HostRouteFrame, source: object): void {
     const route = this.routes.get(frame.routeId);
@@ -58,14 +61,29 @@ export class ConnectedHostSession {
   }
   private async handle(message: SessionInboundMessage): Promise<void> {
     try {
-      if (this.routed() && message.type.startsWith("hosts.route."))
-        throw new HostError(
-          "unsupported_capability",
-          "Connected hosts support one hop. Connect to the managing daemon to select a host.",
-        );
+      if (this.routed() && message.type === "hosts.route.open.request") {
+        this.assertMultiHopAllowed(message.serverId);
+      }
       await this.execute(message);
     } catch (error) {
       this.fail(message, error);
+    }
+  }
+
+  private assertMultiHopAllowed(targetServerId: string): void {
+    const hopPath = this.hopPath();
+    const originServerId = this.originServerId();
+    if (originServerId && originServerId === targetServerId) {
+      throw new HostError("host_loop", "Host route would loop back to the originating daemon");
+    }
+    if (hopPath.includes(targetServerId)) {
+      throw new HostError(
+        "host_loop",
+        "Host route would loop back through a daemon already on this path",
+      );
+    }
+    if (hopPath.length >= this.maxHops()) {
+      throw new HostError("resource_limit", `Host route limit reached (${this.maxHops()} hops)`);
     }
   }
   private fail(message: SessionInboundMessage, error: unknown): void {
@@ -199,11 +217,16 @@ export class ConnectedHostSession {
       fail,
     });
     try {
+      const hopPath = [...this.hopPath(), this.hosts.getSelfServerId()];
+      const originServerId = this.originServerId() ?? hopPath[0];
       const route = await this.hosts.openRoute({
         serverId: message.serverId,
         scopeId: message.scopeId,
         sourceId: this.actor.sourceId,
         originSessionId: this.originSessionId,
+        originServerId,
+        hopPath,
+        maxHops: this.maxHops(),
         permissions: this.permissions(),
         signal: owner.signal,
         frame: (data) => {

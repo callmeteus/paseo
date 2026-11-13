@@ -187,6 +187,9 @@ Single file, validated with `PersistedConfigSchema`.
 one serialized owner. Codex discovers the shared directory. Updates retire unchanged files from
 Paseo-managed copies in `~/.codex/skills`, preserving user edits and untracked files.
 
+The skills status also reports read-only global skills found in the user skill directories of
+Agents, Claude, Codex, Cursor, Grok, OpenCode, and Pi. Paseo never writes to those directories.
+
 `paseo reload` reads and validates this file once inside the daemon. That snapshot drives resolution,
 classification, application, and reload bookkeeping. `DaemonConfigStore` owns applying runtime-safe
 fields and their removal/default semantics; session handlers and the CLI only relay the structured
@@ -203,6 +206,8 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     trustedProxies: true | string[], // defaults to ["loopback"]; Express proxy names/CIDRs
     mcp: { enabled: boolean, injectIntoAgents: boolean },
     mcpServers: Record<string, McpServerConfig>, // host-wide servers shared with every agent
+    mcpShares: Record<string, { hosts: string[]; tools?: string[] }>, // owner-side bridge allowlist
+    mcpBridges: Record<string, { host: string; via?: string; server: string }>, // consumer-side bridge references
     git: { maxProcessesPerSecond: number, maxProcessConcurrency: number },
     appendSystemPrompt: string,    // appended to supported provider system/developer prompts
     terminalProfiles: TerminalProfile[],  // named shell commands; omitted means DEFAULT_TERMINAL_PROFILES
@@ -319,6 +324,13 @@ session rather than an already-running one.
 resume in addition to Paseo's own `paseo` server. An agent that defines a server with the same name
 overrides the shared one; the reserved name `paseo` always stays with Paseo. Shared servers are never
 written into the agent's persisted `config.mcpServers`.
+
+`daemon.mcpShares` exposes selected `mcpServers` to other Paseo hosts. Each entry allowlists the
+origin host IDs and, optionally, the tool names. `daemon.mcpBridges` references a server on another
+host; `host` is the owner, `via` is an optional intermediate host for multi-hop, and `server` is the
+owner-side name. The daemon resolves each bridge to a local `/mcp/bridge/<name>` endpoint before
+injecting it into an agent. The bridge endpoint keeps the upstream process and credentials on the
+owner host.
 
 `agents.metadataGeneration.providers` selects the models for daemon-side metadata tasks: commit messages, PR text, branch names, and generated titles. An empty list is Automatic; a non-empty list is Manual and only those models are tried. See [public-docs/metadata-generation.md](../public-docs/metadata-generation.md#how-a-model-is-chosen).
 

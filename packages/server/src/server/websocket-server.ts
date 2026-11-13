@@ -24,6 +24,7 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { AgentManager, AgentMetricsSnapshot } from "./agent/agent-manager.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
 import type { McpBridgeAuthority } from "./mcp/authority.js";
+import type { McpCatalogService } from "./mcp/catalog.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { TerminalManager } from "../terminal/terminal-manager.js";
 import type pino from "pino";
@@ -182,6 +183,7 @@ interface WebSocketServerConfig {
   relayConfig?: boolean;
   startPaused?: boolean;
   mcpBridgeAuthority?: McpBridgeAuthority;
+  mcpCatalog?: McpCatalogService;
 }
 
 type WebSocketRuntimeMetrics = SessionRuntimeMetrics & CheckoutDiffMetrics;
@@ -586,6 +588,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly paseoHome: string;
   private readonly connectedHosts: ConnectedHosts;
   private readonly mcpBridgeAuthority: McpBridgeAuthority | undefined;
+  private readonly mcpCatalog: McpCatalogService | undefined;
 
   toolHosts() {
     return createToolHosts(this.connectedHosts);
@@ -778,6 +781,7 @@ export class VoiceAssistantWebSocketServer {
     this.paseoHome = paseoHome;
     this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
     this.mcpBridgeAuthority = wsConfig.mcpBridgeAuthority;
+    this.mcpCatalog = wsConfig.mcpCatalog;
     this.passwordHash = auth?.password;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
@@ -1599,6 +1603,7 @@ export class VoiceAssistantWebSocketServer {
     return new Session({
       connectedHosts: this.connectedHosts,
       mcpBridgeAuthority: this.mcpBridgeAuthority,
+      mcpCatalog: this.mcpCatalog,
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -2180,6 +2185,10 @@ export class VoiceAssistantWebSocketServer {
         mcpBridge: true,
         // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.
         mcpBridgeMultiHop: true,
+        // COMPAT(mcpCatalog): added in v0.13.3, remove gate after 2027-04-01.
+        mcpCatalog: true,
+        // COMPAT(globalSkills): added in v0.13.3, remove gate after 2027-04-01.
+        globalSkills: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
       },
