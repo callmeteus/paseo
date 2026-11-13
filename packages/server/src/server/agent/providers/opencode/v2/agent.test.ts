@@ -6,6 +6,14 @@ import type { AgentStreamEvent } from "../../../agent-sdk-types.js";
 import { OpenCodeV2AgentClient } from "./agent.js";
 import { V2Harness } from "../test-utils/v2-harness.js";
 import type { V2Api } from "./api.js";
+import type { OpenCodeBridge } from "../bridge.js";
+
+function toolBridge(): OpenCodeBridge {
+  return {
+    bindSession: () => () => undefined,
+    decorateV2ServerEnv: async (env: Record<string, string>) => env,
+  } as unknown as OpenCodeBridge;
+}
 
 function isRetryTimelineEvent(event: AgentStreamEvent): boolean {
   return event.type === "timeline" && event.transient === true && event.item.type === "error";
@@ -788,6 +796,30 @@ describe("OpenCode v2 session lifecycle", () => {
       mcpServers: {
         paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=a" },
         cloudflare: { type: "remote", url: "https://example.test/mcp" },
+        tools: { type: "stdio", command: "tools" },
+      },
+    });
+    try {
+      expect(harness.mcpAdds).toEqual(["tools"]);
+      await session.startTurn("hello");
+      expect(harness.prompts).toEqual(["hello"]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("does not register the Paseo MCP server when the tool plugin carries the catalog", async () => {
+    const harness = new V2Harness();
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+      bridge: toolBridge(),
+    });
+    const session = await client.createSession({
+      provider: "opencode",
+      cwd: "/tmp/project",
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=a" },
         tools: { type: "stdio", command: "tools" },
       },
     });

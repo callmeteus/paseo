@@ -183,6 +183,16 @@ export class OpenCodeV2Session implements AgentSession {
     const existing = await this.listMcpServerNames(location);
     const registered: string[] = [];
     for (const [server, config] of configured) {
+      // The Paseo tool bridge plugin already exposes the whole catalog for this
+      // session, bound to the agent and filtered by its policy. Registering the
+      // `paseo` MCP server too sends every one of those tools a second time.
+      if (this.requiresPaseoPlugin && server === "paseo") {
+        this.logger.debug(
+          { server },
+          "Paseo tool plugin already provides this catalog; skipping MCP registration",
+        );
+        continue;
+      }
       if (existing.has(server)) {
         this.logger.debug(
           { server },
