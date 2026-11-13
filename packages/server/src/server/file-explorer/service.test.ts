@@ -190,6 +190,24 @@ describe("file explorer service", () => {
     }
   });
 
+  it("creates a missing file when createIfMissing is set", async () => {
+    const root = await createTempDir("paseo-file-create-");
+    try {
+      const result = await writeExplorerFile({
+        root,
+        relativePath: "created.txt",
+        content: "new file",
+        expectedModifiedAt: "",
+        createIfMissing: true,
+      });
+
+      expect(result).toMatchObject({ status: "written", size: 8 });
+      await expect(readFile(path.join(root, "created.txt"), "utf-8")).resolves.toBe("new file");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("never creates a missing file through the write API", async () => {
     const root = await createTempDir("paseo-file-missing-");
     try {

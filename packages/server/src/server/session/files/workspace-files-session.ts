@@ -15,6 +15,7 @@ import type {
   FileEntryRenameRequest,
   FileExplorerRequest,
   FileUploadRequest,
+  FileSearchRequest,
   FileSubscribeRequest,
   FileUnsubscribeRequest,
   FileWriteRequest,
@@ -35,6 +36,7 @@ import {
   writeExplorerFile,
 } from "../../file-explorer/service.js";
 import { workspaceFileObserver, type FileObserver } from "../../file-explorer/observer.js";
+import { searchWorkspaceFiles } from "../../file-explorer/search.js";
 import { getProjectIcon } from "../../../utils/project-icon.js";
 
 /**
@@ -163,11 +165,55 @@ export class WorkspaceFilesSession {
       contentEncoding: request.contentEncoding,
       expectedModifiedAt: request.expectedModifiedAt,
       expectedRevision: request.expectedRevision,
+      createIfMissing: request.createIfMissing === true,
     });
     this.host.emit({
       type: "fs.file.write.response",
       payload: { result, requestId: request.requestId },
     });
+  }
+
+  async handleFileSearchRequest(request: FileSearchRequest): Promise<void> {
+    try {
+      const result = await searchWorkspaceFiles({
+        root: request.cwd,
+        relativePath: request.path,
+        query: request.query,
+        mode: request.mode,
+        caseSensitive: request.caseSensitive === true,
+        maxResults: request.maxResults,
+        maxFileBytes: request.maxFileBytes,
+      });
+      this.host.emit({
+        type: "fs.search.response",
+        payload: {
+          cwd: request.cwd,
+          path: result.path,
+          query: request.query,
+          mode: request.mode,
+          matches: result.matches,
+          filesScanned: result.filesScanned,
+          truncated: result.truncated,
+          error: null,
+          requestId: request.requestId,
+        },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "fs.search.response",
+        payload: {
+          cwd: request.cwd,
+          path: request.path ?? ".",
+          query: request.query,
+          mode: request.mode,
+          matches: [],
+          filesScanned: 0,
+          truncated: false,
+          error: getErrorMessage(error),
+          requestId: request.requestId,
+        },
+      });
+    }
   }
 
   async handleFileEntryCreateRequest(request: FileEntryCreateRequest): Promise<void> {

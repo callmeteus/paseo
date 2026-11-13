@@ -214,6 +214,36 @@ export const PASEO_TOOL_CATALOG = {
     detail: { inputOrder: WORKSPACE_FIELDS, outputFields: ["workspaceId", "projectId"] },
   },
   list_hosts: { label: "List hosts" },
+  list_remote_files: {
+    label: "List remote files",
+    context: field("path"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "path"] },
+  },
+  read_remote_file: {
+    label: "Read remote file",
+    context: field("path"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "path"] },
+  },
+  search_remote_files: {
+    label: "Search remote files",
+    context: field("query"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "path", "query", "mode"] },
+  },
+  write_remote_file: {
+    label: "Write remote file",
+    context: field("path"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "path", "content"] },
+  },
+  edit_remote_file: {
+    label: "Edit remote file",
+    context: field("path"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "path", "oldText", "newText"] },
+  },
+  run_remote_command: {
+    label: "Run remote command",
+    context: field("command"),
+    detail: { inputOrder: ["serverId", "workspaceId", "cwd", "command", "args"] },
+  },
   list_workspaces: { label: "List workspaces" },
   rename_workspace: {
     label: "Rename workspace",

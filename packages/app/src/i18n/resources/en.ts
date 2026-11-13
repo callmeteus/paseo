@@ -2677,6 +2677,40 @@ export const en = {
       plugins: "Plugins",
       host: "Overview",
     },
+    remoteAccess: {
+      title: "Remote access",
+      inboundTitle: "Let other hosts act here",
+      inboundHint:
+        "Allow agents on the hosts you select to read or change files and run commands here. Off means no remote MCP action is allowed on this host.",
+      outboundTitle: "Let agents here act on other hosts",
+      outboundHint:
+        "Allow agents on this host to use the remote file and command tools on the hosts you select. The destination must also allow this host.",
+      peers: "Allowed hosts",
+      peersEmpty: "Connect another host to grant access.",
+      files: "Files",
+      filesOff: "Off",
+      filesRead: "Read",
+      filesWrite: "Read and write",
+      commands: "Commands",
+      commandsOff: "Off",
+      commandsAllowlist: "Allowlist",
+      commandsAny: "Any",
+      allowlistHint: "One executable per line, for example git or npm",
+      apply: "Apply allowlist",
+      anyWarning:
+        "Any command runs as your user on this host, including destructive ones. Continue?",
+      confirm: "Enable any command",
+      cancel: "Cancel",
+      chats: "Chat search",
+      chatsHint: "Search this host's chats from another host.",
+      agents: "Agent control",
+      agentsHint:
+        "Create, prompt, and control agents on this host from another host. This is equivalent to remote code execution.",
+      restrictToWorkspaces: "Limit to workspaces",
+      restrictHint:
+        "When off, remote file and command tools may target any directory this daemon can read.",
+      disconnected: "Connect to this host to change remote access.",
+    },
     plugins: {
       title: "Plugins",
       screens: {

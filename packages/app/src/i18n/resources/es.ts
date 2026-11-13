@@ -2665,6 +2665,40 @@ export const es: TranslationResources = {
       plugins: "Plugins",
       host: "Resumen",
     },
+    remoteAccess: {
+      title: "Acceso remoto",
+      inboundTitle: "Permitir que otros hosts actúen aquí",
+      inboundHint:
+        "Permite que los agentes de los hosts seleccionados lean o cambien archivos y ejecuten comandos aquí. Desactivado significa que no se permite ninguna acción remota del MCP en este host.",
+      outboundTitle: "Permitir que los agentes de aquí actúen en otros hosts",
+      outboundHint:
+        "Permite que los agentes de este host usen las herramientas remotas de archivos y comandos en los hosts seleccionados. El destino también debe permitir este host.",
+      peers: "Hosts permitidos",
+      peersEmpty: "Conecta otro host para conceder acceso.",
+      files: "Archivos",
+      filesOff: "Desactivado",
+      filesRead: "Leer",
+      filesWrite: "Leer y escribir",
+      commands: "Comandos",
+      commandsOff: "Desactivado",
+      commandsAllowlist: "Lista permitida",
+      commandsAny: "Cualquiera",
+      allowlistHint: "Un ejecutable por línea, por ejemplo git o npm",
+      apply: "Aplicar lista",
+      anyWarning:
+        "Cualquier comando se ejecuta como tu usuario en este host, incluidos los destructivos. ¿Continuar?",
+      confirm: "Habilitar cualquier comando",
+      cancel: "Cancelar",
+      chats: "Búsqueda de chats",
+      chatsHint: "Buscar los chats de este host desde otro host.",
+      agents: "Control de agentes",
+      agentsHint:
+        "Crear, promptear y controlar agentes en este host desde otro host. Equivale a ejecución remota de código.",
+      restrictToWorkspaces: "Limitar a workspaces",
+      restrictHint:
+        "Si está desactivado, las herramientas remotas pueden usar cualquier directorio que este daemon pueda leer.",
+      disconnected: "Conéctate a este host para cambiar el acceso remoto.",
+    },
     plugins: pluginSettings.es,
     metadataGeneration: {
       title: "Generación de metadatos",

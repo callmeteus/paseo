@@ -5613,12 +5613,40 @@ export class DaemonClient {
     contentEncoding?: "utf-8" | "base64";
     expectedModifiedAt: string;
     expectedRevision?: string;
+    createIfMissing?: boolean;
   }): Promise<FileWriteResult> {
     const payload = await this.sendCorrelatedSessionRequest({
       message: { type: "fs.file.write.request", ...input },
       responseType: "fs.file.write.response",
     });
     return payload.result;
+  }
+
+  async searchFiles(input: {
+    cwd: string;
+    path?: string;
+    query: string;
+    mode: "name" | "content";
+    caseSensitive?: boolean;
+    maxResults?: number;
+    maxFileBytes?: number;
+  }): Promise<CorrelatedResponsePayload<"fs.search.response">> {
+    return this.sendNamespacedCorrelatedSessionRequest<"fs.search.response">({
+      message: { type: "fs.search.request", ...input },
+    });
+  }
+
+  async runCommand(input: {
+    cwd: string;
+    command: string;
+    args?: string[];
+    shell?: boolean;
+    timeoutMs?: number;
+    maxOutputBytes?: number;
+  }): Promise<CorrelatedResponsePayload<"process.exec.response">> {
+    return this.sendNamespacedCorrelatedSessionRequest<"process.exec.response">({
+      message: { type: "process.exec.request", ...input },
+    });
   }
 
   async createFileEntry(input: {

@@ -2652,6 +2652,40 @@ export const ptBR: TranslationResources = {
       plugins: "Plugins",
       host: "Visão geral",
     },
+    remoteAccess: {
+      title: "Acesso remoto",
+      inboundTitle: "Permitir que outros hosts ajam aqui",
+      inboundHint:
+        "Permita que agentes dos hosts selecionados leiam ou alterem arquivos e executem comandos aqui. Desligado significa que nenhuma ação remota do MCP é permitida neste host.",
+      outboundTitle: "Permitir que agentes daqui ajam em outros hosts",
+      outboundHint:
+        "Permita que agentes deste host usem as ferramentas remotas de arquivo e comando nos hosts selecionados. O destino também precisa permitir este host.",
+      peers: "Hosts permitidos",
+      peersEmpty: "Conecte outro host para conceder acesso.",
+      files: "Arquivos",
+      filesOff: "Desligado",
+      filesRead: "Ler",
+      filesWrite: "Ler e escrever",
+      commands: "Comandos",
+      commandsOff: "Desligado",
+      commandsAllowlist: "Lista permitida",
+      commandsAny: "Qualquer",
+      allowlistHint: "Um executável por linha, por exemplo git ou npm",
+      apply: "Aplicar lista",
+      anyWarning:
+        "Qualquer comando roda como seu usuário neste host, inclusive os destrutivos. Continuar?",
+      confirm: "Habilitar qualquer comando",
+      cancel: "Cancelar",
+      chats: "Busca de chats",
+      chatsHint: "Buscar os chats deste host a partir de outro host.",
+      agents: "Controle de agentes",
+      agentsHint:
+        "Criar, promptar e controlar agentes neste host a partir de outro host. Isso equivale a execução remota de código.",
+      restrictToWorkspaces: "Limitar a workspaces",
+      restrictHint:
+        "Quando desligado, as ferramentas remotas podem usar qualquer diretório que este daemon consiga ler.",
+      disconnected: "Conecte-se a este host para alterar o acesso remoto.",
+    },
     plugins: pluginSettings["pt-BR"],
     metadataGeneration: {
       title: "Geração de metadados",

@@ -9,6 +9,7 @@ import {
   MutableDaemonConfigPatchSchema,
 } from "@getpaseo/protocol/messages";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
+import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import type { SpeechSettingsPatch } from "@getpaseo/protocol/speech/rpc-schemas";
 import { mergeSpeechSettingsPatch, type SpeechSettingsOwner } from "./speech/speech-settings.js";
 
@@ -28,6 +29,7 @@ interface SupportedMutableConfigPatch {
   modelRouters?: MutableDaemonConfigPatch["modelRouters"];
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
+  remoteAccess?: MutableDaemonConfigPatch["remoteAccess"];
   idleRuntimeCleanup?: boolean;
   idleRuntimeCleanupAfter?: MutableDaemonConfig["idleRuntimeCleanupAfter"];
   hubAllowHttp?: boolean;
@@ -193,6 +195,7 @@ const RELOADABLE_PATHS = [
   "daemon.git.maxProcessConcurrency",
   "daemon.autoArchiveAfterMerge",
   "daemon.enableTerminalAgentHooks",
+  "daemon.remoteAccess",
   "daemon.appendSystemPrompt",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
@@ -224,6 +227,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.git.maxProcessConcurrency", "git.maxProcessConcurrency"],
   ["daemon.autoArchiveAfterMerge", "autoArchiveAfterMerge"],
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
+  ["daemon.remoteAccess", "remoteAccess"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
@@ -335,6 +339,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.enableTerminalAgentHooks !== undefined
       ? { enableTerminalAgentHooks: patch.enableTerminalAgentHooks }
       : {}),
+    ...(patch.remoteAccess !== undefined ? { remoteAccess: patch.remoteAccess } : {}),
     ...(patch.idleRuntimeCleanup !== undefined
       ? { idleRuntimeCleanup: patch.idleRuntimeCleanup }
       : {}),
@@ -780,6 +785,19 @@ function mergeMutableAgentPatch(
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }
 
+function mergeRemoteAccessPatch(
+  current: MutableDaemonConfig["remoteAccess"],
+  patch: NonNullable<MutableDaemonConfigPatch["remoteAccess"]>,
+): MutableDaemonConfig["remoteAccess"] {
+  return RemoteAccessConfigSchema.parse({
+    ...current,
+    ...(patch.outbound !== undefined
+      ? { outbound: { ...current?.outbound, ...patch.outbound } }
+      : {}),
+    ...(patch.inbound !== undefined ? { inbound: { ...current?.inbound, ...patch.inbound } } : {}),
+  });
+}
+
 function mergeMutableDaemonPatch(
   persistedDaemon: PersistedConfig["daemon"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -803,6 +821,9 @@ function mergeMutableDaemonPatch(
   }
   if (patch.enableTerminalAgentHooks !== undefined) {
     next.enableTerminalAgentHooks = patch.enableTerminalAgentHooks;
+  }
+  if (patch.remoteAccess !== undefined) {
+    next.remoteAccess = mergeRemoteAccessPatch(next.remoteAccess, patch.remoteAccess);
   }
   if (patch.appendSystemPrompt !== undefined) next.appendSystemPrompt = patch.appendSystemPrompt;
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;

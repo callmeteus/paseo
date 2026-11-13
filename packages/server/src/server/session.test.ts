@@ -28,6 +28,8 @@ import {
   type FileTransferFrame,
 } from "@getpaseo/protocol/binary-frames/index";
 import { Session } from "./session.js";
+import { StaticRemoteAccessPolicy } from "./remote-access/policy.js";
+import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { StructuredAgentFallbackError } from "./agent/agent-response-loop.js";
@@ -338,6 +340,7 @@ interface SessionForTestOptions {
   pluginRuntime?: SessionOptions["pluginRuntime"];
   orchestrationSkills?: SessionOptions["orchestrationSkills"];
   workspaceLabelService?: WorkspaceLabelService;
+  remoteAccess?: SessionOptions["remoteAccess"];
 }
 
 function createSessionForTest(options: SessionForTestOptions = {}): Session {
@@ -448,6 +451,7 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     daemonVersion: options.daemonVersion,
     daemonRuntimeConfig: options.daemonRuntimeConfig,
     permissions: options.permissions ?? OWNER_PERMISSIONS,
+    remoteAccess: options.remoteAccess,
   };
   if (options.sendToSource) sessionOptions.onMessageToSource = options.sendToSource;
   return new Session(sessionOptions);
@@ -5927,4 +5931,104 @@ test("a failing direct source observes fire-and-forget file replies without unha
     await session.cleanup();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("denies remote MCP tool families when inbound access is off", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    remoteAccess: new StaticRemoteAccessPolicy(RemoteAccessConfigSchema.parse({})),
+  });
+  session.setRemoteToolSource(true);
+  session.setOriginServerId("srv_origin");
+  await session.handleMessage({
+    type: "chat.search.request",
+    requestId: "req_chat",
+    query: "anything",
+  });
+  expect(messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "rpc_error",
+        payload: expect.objectContaining({
+          requestId: "req_chat",
+          code: "access_denied",
+        }),
+      }),
+    ]),
+  );
+  await session.cleanup();
+});
+
+test("denies remote agent control when the agents capability is off", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    remoteAccess: new StaticRemoteAccessPolicy(
+      RemoteAccessConfigSchema.parse({
+        inbound: { enabled: true, peers: ["srv_origin"], chats: true, agents: false },
+      }),
+    ),
+  });
+  session.setRemoteToolSource(true);
+  session.setOriginServerId("srv_origin");
+  await session.handleMessage({
+    type: "create_agent_request",
+    requestId: "req_agent",
+    config: { provider: "codex", model: "gpt-5" },
+    initialPrompt: "hello",
+  } as never);
+  expect(messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "rpc_error",
+        payload: expect.objectContaining({ requestId: "req_agent", code: "access_denied" }),
+      }),
+    ]),
+  );
+  await session.cleanup();
+});
+
+test("leaves non-MCP routed sessions under their ordinary authority", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    remoteAccess: new StaticRemoteAccessPolicy(RemoteAccessConfigSchema.parse({})),
+  });
+  // A routed SDK/app session, not an MCP-origin route.
+  session.setRemoteToolSource(false);
+  session.setOriginServerId("srv_origin");
+  await session.handleMessage({
+    type: "chat.search.request",
+    requestId: "req_plain",
+    query: "anything",
+  });
+  expect(messages.some((message) => message.type === "rpc_error")).toBe(false);
+  await session.cleanup();
+});
+
+test("runs process.exec requests and returns the exit code and output", async () => {
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({ messages });
+  await session.handleMessage({
+    type: "process.exec.request",
+    requestId: "req_exec",
+    cwd: tmpdir(),
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('ok')"],
+  });
+  expect(messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "process.exec.response",
+        payload: expect.objectContaining({
+          requestId: "req_exec",
+          status: "exited",
+          exitCode: 0,
+          stdout: "ok",
+        }),
+      }),
+    ]),
+  );
+  await session.cleanup();
 });

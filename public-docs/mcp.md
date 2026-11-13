@@ -12,10 +12,12 @@ category: Orchestration
 
 ## Configuration
 
-| Setting                       | Default | Purpose                                            |
-| ----------------------------- | ------- | -------------------------------------------------- |
-| `daemon.mcp.enabled`          | `true`  | Run the MCP server.                                |
-| `daemon.mcp.injectIntoAgents` | `false` | Give agents launched by Paseo access to its tools. |
+| Setting                                | Default | Purpose                                              |
+| -------------------------------------- | ------- | ---------------------------------------------------- |
+| `daemon.mcp.enabled`                   | `true`  | Run the MCP server.                                  |
+| `daemon.mcp.injectIntoAgents`          | `false` | Give agents launched by Paseo access to its tools.   |
+| `daemon.remoteAccess.outbound.enabled` | `false` | Let this host's agents act on other connected hosts. |
+| `daemon.remoteAccess.inbound.enabled`  | `false` | Let other hosts' agents act here.                    |
 
 Depending on the provider, Paseo delivers tools through its native tool interface or MCP. The capabilities are the same. Start a new agent or reload an existing one after changing injection settings.
 
@@ -112,6 +114,21 @@ Paseo agents receive finish, error, and permission notifications by default; set
 | `archive_workspace` | Archive a workspace and the sessions it owns.                                                                                                                                                                                                                                                                   |
 
 For worktree isolation, `create_workspace` accepts the same useful choices as the app: branch off from a base, check out an existing branch, or check out a pull request. The worktree remains an implementation detail of the workspace lifecycle.
+
+### Remote hosts
+
+Remote tools act on another connected host. They require an explicit `serverId` and exactly one of `workspaceId` or `cwd`, and both hosts must allow the capability in `daemon.remoteAccess`. They are off by default.
+
+| Tool                  | Function                                                                          |
+| --------------------- | --------------------------------------------------------------------------------- |
+| `list_remote_files`   | List a directory on another host.                                                 |
+| `read_remote_file`    | Read a text file; binary files return metadata only.                              |
+| `search_remote_files` | Search file names or text content inside a remote workspace.                      |
+| `write_remote_file`   | Create or overwrite a file with revision checks.                                  |
+| `edit_remote_file`    | Replace exact text, refusing ambiguous matches unless `replaceAll` is set.        |
+| `run_remote_command`  | Run a command in a remote workspace and return its exit code, stdout, and stderr. |
+
+`search_chats` and the agent tools accept `serverId`; `search_chats` also accepts `allHosts` to merge results from every allowed host. See [Remote access](/docs/remote-access).
 
 ### Workspace scripts
 

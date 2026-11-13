@@ -1,6 +1,7 @@
 import type { AgentStreamEvent } from "../agent-sdk-types.js";
 import { parentAddressLabels } from "@getpaseo/protocol/agent-labels";
 import type { ActiveTurnBehavior, AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { DaemonPermission } from "@getpaseo/protocol/messages";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -16,7 +17,6 @@ import type { ConnectedHosts } from "../../connected-hosts/index.js";
 import { resolveRequiredProviderModel } from "../mcp-shared.js";
 import { selectAgentListItems } from "../agent-projections.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
-import { searchChatsAcrossChats } from "../chat-search/cross-chat-search.js";
 import { expandUserPath } from "../../path-utils.js";
 import type { PaseoToolExecutionContext, PaseoToolResult } from "../tools/types.js";
 
@@ -75,6 +75,7 @@ export interface ToolHosts {
     serverId: string,
     action: (client: DaemonClient) => Promise<T>,
     signal?: AbortSignal,
+    options?: { permissions?: readonly DaemonPermission[] },
   ): Promise<T>;
 }
 
@@ -82,9 +83,10 @@ export interface ToolHosts {
 export function createToolHosts(hosts: ConnectedHosts): ToolHosts {
   return {
     directory: () => hosts.list(),
-    async use(serverId, action, signal) {
+    async use(serverId, action, signal, options) {
       const lifetime = new AbortController();
       let routeFailure: unknown;
+      const permissions = options?.permissions ?? OWNER_PERMISSIONS;
       const transportFactory: DaemonTransportFactory = () => {
         const opens = new Set<() => void>();
         const closes = new Set<(event?: unknown) => void>();
@@ -98,7 +100,7 @@ export function createToolHosts(hosts: ConnectedHosts): ToolHosts {
             scopeId: randomUUID(),
             sourceId: "mcp",
             originSessionId: "mcp",
-            permissions: OWNER_PERMISSIONS,
+            permissions,
             signal: signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal,
             frame: (data) => {
               for (const listener of messages) listener(data, typeof data !== "string");
@@ -341,53 +343,17 @@ export function createHostResolver(input: {
           },
           async searchChats(args) {
             const query = z.string().min(1).parse(args.query);
-            const { entries } = await client.fetchAgents({
-              includeBackground: args.includeBackground === true,
-              filter: { includeArchived: args.includeArchived === true },
-            });
-            const candidates = selectAgentListItems(
-              entries.map((entry) => entry.agent),
-              {
-                cwd: (args.cwd as string | undefined)?.trim()
-                  ? expandUserPath(args.cwd as string)
-                  : undefined,
-                sinceHours: args.sinceHours as number | undefined,
-                limit: (args.maxChats as number | undefined) ?? 25,
-              },
-            );
-            const chats = await searchChatsAcrossChats({
+            const payload = await client.searchChats({
               query,
+              cwd: (args.cwd as string | undefined)?.trim()
+                ? expandUserPath(args.cwd as string)
+                : undefined,
+              includeArchived: args.includeArchived !== false,
+              sinceHours: args.sinceHours as number | undefined,
               limit: (args.maxChats as number | undefined) ?? 25,
-              matchesPerChat: (args.matchesPerChat as number | undefined) ?? 3,
-              // MCP callers asked for this explicitly, so they can wait for a full scan.
-              deadlineMs: 5_000,
-              chats: candidates.map((agent) => ({
-                agentId: agent.id,
-                title: agent.title,
-                provider: agent.provider,
-                status: agent.status,
-                cwd: agent.cwd,
-                updatedAt: agent.updatedAt,
-                archivedAt: agent.archivedAt ?? null,
-              })),
-              loadEntries: async (agentId) => {
-                const timeline = await client.fetchAgentTimeline(agentId, {
-                  direction: "tail",
-                  limit: 0,
-                  projection: "projected",
-                });
-                return timeline.entries.map((entry) => ({
-                  seq: entry.seqEnd,
-                  item: {
-                    type: entry.item.type,
-                    ...("text" in entry.item && typeof entry.item.text === "string"
-                      ? { text: entry.item.text }
-                      : {}),
-                  },
-                }));
-              },
             });
-            return result({ query, chats });
+            if (payload.error) throw new Error(payload.error);
+            return result({ query, chats: payload.chats });
           },
           async createWorkspace(args) {
             const isolation = z.enum(["local", "worktree"]).parse(args.isolation);

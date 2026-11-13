@@ -10,10 +10,12 @@ nav: MCP 参考
 
 ## 配置 {#configuration}
 
-| 设置                          | 默认值  | 用途                                     |
-| ----------------------------- | ------- | ---------------------------------------- |
-| `daemon.mcp.enabled`          | `true`  | 运行 MCP 服务器。                        |
-| `daemon.mcp.injectIntoAgents` | `false` | 让 Paseo 启动的 Agent 可以使用它的工具。 |
+| 设置                                   | 默认值  | 用途                                     |
+| -------------------------------------- | ------- | ---------------------------------------- |
+| `daemon.mcp.enabled`                   | `true`  | 运行 MCP 服务器。                        |
+| `daemon.mcp.injectIntoAgents`          | `false` | 让 Paseo 启动的 Agent 可以使用它的工具。 |
+| `daemon.remoteAccess.outbound.enabled` | `false` | 允许此主机的 Agent 操作其他已连接主机。  |
+| `daemon.remoteAccess.inbound.enabled`  | `false` | 允许其他主机的 Agent 在此操作。          |
 
 根据 Provider 的不同，Paseo 通过其原生工具接口或 MCP 提供工具，能力是相同的。修改注入设置后，请启动新的 Agent 或重新加载已有的 Agent。
 
@@ -104,6 +106,21 @@ Paseo Agent 默认会收到完成、错误和权限通知；设置 `notifyOnFini
 | `archive_workspace` | 归档工作区及其拥有的会话。                                                                                                                                                                                                                       |
 
 对于 worktree 隔离，`create_workspace` 接受与应用中相同的常用选择：从某个基础分支分出、检出一个已有分支，或检出一个 Pull Request。worktree 仍然是工作区生命周期的实现细节。
+
+### 远程主机 {#remote-hosts}
+
+远程工具操作另一台已连接的主机。它们需要显式的 `serverId`，以及 `workspaceId` 或 `cwd` 之一，并且两端都必须在 `daemon.remoteAccess` 中允许相应能力。默认全部关闭。
+
+| 工具                  | 功能                                                    |
+| --------------------- | ------------------------------------------------------- |
+| `list_remote_files`   | 列出另一台主机上的目录。                                |
+| `read_remote_file`    | 读取文本文件；二进制文件只返回元数据。                  |
+| `search_remote_files` | 在远程工作区中搜索文件名或文本内容。                    |
+| `write_remote_file`   | 带版本校验地创建或覆盖文件。                            |
+| `edit_remote_file`    | 替换精确文本；匹配不唯一时拒绝，除非设置 `replaceAll`。 |
+| `run_remote_command`  | 在远程工作区运行命令并返回退出码、stdout 和 stderr。    |
+
+`search_chats` 和 Agent 工具接受 `serverId`；`search_chats` 还接受 `allHosts` 以合并所有允许主机的结果。参见[远程访问](/docs/remote-access)。
 
 ### 工作区脚本 {#workspace-scripts}
 

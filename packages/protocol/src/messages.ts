@@ -38,6 +38,24 @@ export {
 } from "./plugin-config.js";
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
+import { RemoteAccessConfigSchema } from "./remote-access.js";
+export {
+  RemoteAccessConfigSchema,
+  RemoteAccessScopeSchema,
+  RemoteCommandConfigSchema,
+  RemoteCommandModeSchema,
+  RemoteFileAccessSchema,
+  DEFAULT_REMOTE_ACCESS,
+  commandMatchesAllowlist,
+  scopeAllowsCapability,
+  type RemoteAccessCapability,
+  type RemoteAccessConfig,
+  type RemoteAccessScope,
+  type RemoteCommandConfig,
+  type RemoteCommandMode,
+  type RemoteDirection,
+  type RemoteFileAccess,
+} from "./remote-access.js";
 import { ModelRouterSettingsSchema } from "./model-router.js";
 export {
   MODEL_ROUTER_MODES,
@@ -386,6 +404,9 @@ export const MutableDaemonConfigSchema = z
     modelRouters: ModelRouterSettingsSchema.optional(),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
+    // Remote agent control. Off by default in both directions.
+    // COMPAT(remoteAccess): added in v0.13.3, optional because older daemons omit it.
+    remoteAccess: RemoteAccessConfigSchema.optional(),
     // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, keep optional while old daemons are supported.
     // Persisted host-wide value, applied live by the daemon.
     idleRuntimeCleanup: z.boolean().optional(),
@@ -421,6 +442,7 @@ export const MutableDaemonConfigPatchSchema = z
     modelRouters: ModelRouterSettingsSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
+    remoteAccess: RemoteAccessConfigSchema.partial().optional(),
     idleRuntimeCleanup: z.boolean().optional(),
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
     hubAllowHttp: z.boolean().optional(),
@@ -3431,6 +3453,49 @@ export const FileWriteRequestSchema = z.object({
   contentEncoding: z.enum(["utf-8", "base64"]).optional(),
   expectedModifiedAt: z.string(),
   expectedRevision: z.string().optional(),
+  // COMPAT(remoteAccess): added in v0.13.3. Older daemons report a missing file as a conflict.
+  createIfMissing: z.boolean().optional(),
+  requestId: z.string(),
+});
+
+const FileSearchMatchSchema = z.object({
+  path: z.string(),
+  line: z.number().int().positive().optional(),
+  column: z.number().int().positive().optional(),
+  preview: z.string().optional(),
+});
+
+export const FileSearchRequestSchema = z.object({
+  type: z.literal("fs.search.request"),
+  cwd: z.string(),
+  path: z.string().optional(),
+  query: z.string().min(1),
+  mode: z.enum(["name", "content"]),
+  caseSensitive: z.boolean().optional(),
+  maxResults: z.number().int().positive().max(1000).optional(),
+  maxFileBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(16 * 1024 * 1024)
+    .optional(),
+  requestId: z.string(),
+});
+
+export const ProcessExecRequestSchema = z.object({
+  type: z.literal("process.exec.request"),
+  cwd: z.string(),
+  command: z.string().min(1),
+  args: z.array(z.string()).max(256).optional(),
+  /** Requires the destination's command mode to be `any`. */
+  shell: z.boolean().optional(),
+  timeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+  maxOutputBytes: z
+    .number()
+    .int()
+    .min(1_024)
+    .max(16 * 1024 * 1024)
+    .optional(),
   requestId: z.string(),
 });
 
@@ -4018,6 +4083,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FileSubscribeRequestSchema,
   FileUnsubscribeRequestSchema,
   FileWriteRequestSchema,
+  FileSearchRequestSchema,
+  ProcessExecRequestSchema,
   FileEntryCreateRequestSchema,
   FileEntryRenameRequestSchema,
   FileEntryDuplicateRequestSchema,
@@ -4261,6 +4328,8 @@ export const ServerInfoStatusPayloadSchema = z
         providersSnapshot: z.boolean().optional(),
         connectedHosts: z.boolean().optional(),
         hostMultiplexing: z.boolean().optional(),
+        // COMPAT(remoteAccess): added in v0.13.3, remove gate after 2027-07-01 once every host has it.
+        remoteAccess: z.boolean().optional(),
         usageSources: z.boolean().optional(),
         // COMPAT(providersSnapshotCwd): added in v0.3.2, remove gate after 2027-02-10.
         providersSnapshotCwd: z.boolean().optional(),
@@ -6889,6 +6958,38 @@ export const FileWriteResponseSchema = z.object({
   }),
 });
 
+export const FileSearchResponseSchema = z.object({
+  type: z.literal("fs.search.response"),
+  payload: z.object({
+    cwd: z.string(),
+    path: z.string(),
+    query: z.string(),
+    mode: z.enum(["name", "content"]),
+    matches: z.array(FileSearchMatchSchema),
+    filesScanned: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
+export const ProcessExecResponseSchema = z.object({
+  type: z.literal("process.exec.response"),
+  payload: z.object({
+    cwd: z.string(),
+    command: z.string(),
+    status: z.enum(["exited", "timeout", "error"]),
+    exitCode: z.number().int().nullable(),
+    signal: z.string().nullable(),
+    stdout: z.string(),
+    stderr: z.string(),
+    truncated: z.boolean(),
+    durationMs: z.number().nonnegative(),
+    error: z.string().nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const FileEntryCreateResponseSchema = z.object({
   type: z.literal("fs.entry.create.response"),
   payload: z.object({
@@ -7939,6 +8040,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FileSubscribeResponseSchema,
   FileUnsubscribeResponseSchema,
   FileWriteResponseSchema,
+  FileSearchResponseSchema,
+  ProcessExecResponseSchema,
   FileEntryCreateResponseSchema,
   FileEntryRenameResponseSchema,
   FileEntryDuplicateResponseSchema,
@@ -8412,6 +8515,10 @@ export type FileUnsubscribeRequest = z.infer<typeof FileUnsubscribeRequestSchema
 export type FileUnsubscribeResponse = z.infer<typeof FileUnsubscribeResponseSchema>;
 export type FileWriteRequest = z.infer<typeof FileWriteRequestSchema>;
 export type FileWriteResponse = z.infer<typeof FileWriteResponseSchema>;
+export type FileSearchRequest = z.infer<typeof FileSearchRequestSchema>;
+export type FileSearchResponse = z.infer<typeof FileSearchResponseSchema>;
+export type ProcessExecRequest = z.infer<typeof ProcessExecRequestSchema>;
+export type ProcessExecResponse = z.infer<typeof ProcessExecResponseSchema>;
 export type FileEntryCreateRequest = z.infer<typeof FileEntryCreateRequestSchema>;
 export type FileEntryCreateResponse = z.infer<typeof FileEntryCreateResponseSchema>;
 export type FileEntryRenameRequest = z.infer<typeof FileEntryRenameRequestSchema>;

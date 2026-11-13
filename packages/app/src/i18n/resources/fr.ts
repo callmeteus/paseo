@@ -2669,6 +2669,40 @@ export const fr: TranslationResources = {
       plugins: "Plugins",
       host: "Aperçu",
     },
+    remoteAccess: {
+      title: "Accès distant",
+      inboundTitle: "Autoriser d'autres hôtes à agir ici",
+      inboundHint:
+        "Autorisez les agents des hôtes sélectionnés à lire ou modifier des fichiers et exécuter des commandes ici. Désactivé signifie qu'aucune action MCP distante n'est permise sur cet hôte.",
+      outboundTitle: "Autoriser les agents d'ici à agir sur d'autres hôtes",
+      outboundHint:
+        "Autorisez les agents de cet hôte à utiliser les outils distants de fichiers et de commandes sur les hôtes sélectionnés. La destination doit aussi autoriser cet hôte.",
+      peers: "Hôtes autorisés",
+      peersEmpty: "Connectez un autre hôte pour accorder l'accès.",
+      files: "Fichiers",
+      filesOff: "Désactivé",
+      filesRead: "Lire",
+      filesWrite: "Lire et écrire",
+      commands: "Commandes",
+      commandsOff: "Désactivé",
+      commandsAllowlist: "Liste autorisée",
+      commandsAny: "Toute",
+      allowlistHint: "Un exécutable par ligne, par exemple git ou npm",
+      apply: "Appliquer la liste",
+      anyWarning:
+        "Toute commande s'exécute en votre nom sur cet hôte, y compris les commandes destructrices. Continuer ?",
+      confirm: "Autoriser toute commande",
+      cancel: "Annuler",
+      chats: "Recherche de chats",
+      chatsHint: "Rechercher les chats de cet hôte depuis un autre hôte.",
+      agents: "Contrôle des agents",
+      agentsHint:
+        "Créer, solliciter et contrôler des agents sur cet hôte depuis un autre hôte. Cela équivaut à une exécution de code à distance.",
+      restrictToWorkspaces: "Limiter aux workspaces",
+      restrictHint:
+        "Désactivé, les outils distants peuvent cibler n'importe quel répertoire lisible par ce daemon.",
+      disconnected: "Connectez-vous à cet hôte pour modifier l'accès distant.",
+    },
     plugins: pluginSettings.fr,
     metadataGeneration: {
       title: "Génération de métadonnées",

@@ -561,6 +561,7 @@ function resolveStaticLoadConfigSettings(
       cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
+    remoteAccess: persisted.daemon?.remoteAccess,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
@@ -596,6 +597,7 @@ export function resolveConfigFromPersisted(
     mcpInjectIntoAgents,
     browserToolsEnabled,
     autoArchiveAfterMerge,
+    remoteAccess,
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,
@@ -644,6 +646,7 @@ export function resolveConfigFromPersisted(
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
+    remoteAccess,
     hubAllowHttp: resolveHubAllowHttp(persisted),
     appendSystemPrompt,
     terminalProfiles,

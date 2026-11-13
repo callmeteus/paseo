@@ -64,6 +64,9 @@ immediately through the same path. Neither notice claims the child finished. Int
 until the parent accepts dispatch, then is consumed; reconnecting does not restore that watch. The
 parent decides whether to inspect the child or delegate again.
 
+Delegation, file access, command execution, and chat search from an MCP-origin route require the
+destination's opt-in policy. See [remote access](remote-access.md).
+
 A definitely unsent prompt returns a tool error and creates no notification. An ambiguous prompt
 response retains intent because the destination may have admitted it; observation then follows the
 same retry policy. A confirmed missing child reports unavailability.

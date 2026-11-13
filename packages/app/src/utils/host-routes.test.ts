@@ -254,6 +254,7 @@ describe("host settings section slugs", () => {
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
     expect(normalizeHostSectionSlug("providers")).toBe("providers");
     expect(normalizeHostSectionSlug("usage")).toBe("usage");
+    expect(normalizeHostSectionSlug("remote")).toBe("remote");
     expect(normalizeHostSectionSlug("host")).toBe("host");
   });
 

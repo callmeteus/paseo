@@ -2640,6 +2640,40 @@ export const ja: TranslationResources = {
       plugins: "プラグイン",
       host: "概要",
     },
+    remoteAccess: {
+      title: "リモートアクセス",
+      inboundTitle: "他のホストからの操作を許可",
+      inboundHint:
+        "選択したホストのエージェントに、このホストでのファイルの読み書きとコマンド実行を許可します。オフの場合、このホストではリモート MCP 操作を一切許可しません。",
+      outboundTitle: "このホストのエージェントに他のホストでの操作を許可",
+      outboundHint:
+        "このホストのエージェントが、選択したホストでリモートのファイル・コマンドツールを使えるようにします。接続先のホスト側でも許可が必要です。",
+      peers: "許可するホスト",
+      peersEmpty: "アクセスを許可するには別のホストに接続してください。",
+      files: "ファイル",
+      filesOff: "オフ",
+      filesRead: "読み取り",
+      filesWrite: "読み取りと書き込み",
+      commands: "コマンド",
+      commandsOff: "オフ",
+      commandsAllowlist: "許可リスト",
+      commandsAny: "すべて",
+      allowlistHint: "1 行に 1 つの実行ファイル（例: git、npm）",
+      apply: "リストを適用",
+      anyWarning:
+        "すべてのコマンドがこのホストであなたのユーザーとして実行されます。破壊的なコマンドも含まれます。続行しますか？",
+      confirm: "すべてのコマンドを有効化",
+      cancel: "キャンセル",
+      chats: "チャット検索",
+      chatsHint: "他のホストからこのホストのチャットを検索します。",
+      agents: "エージェント制御",
+      agentsHint:
+        "他のホストからこのホストのエージェントを作成・指示・制御します。リモートコード実行と同等です。",
+      restrictToWorkspaces: "ワークスペースに限定",
+      restrictHint:
+        "オフにすると、リモートツールはこのデーモンが読める任意のディレクトリを対象にできます。",
+      disconnected: "リモートアクセスを変更するにはこのホストに接続してください。",
+    },
     plugins: pluginSettings.ja,
     metadataGeneration: {
       title: "メタデータ生成",

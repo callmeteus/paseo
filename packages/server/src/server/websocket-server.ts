@@ -34,6 +34,7 @@ import type { ProjectUpdate } from "./workspace-reconciliation-service.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-manager.js";
 import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
+import { DaemonConfigRemoteAccessPolicy } from "./remote-access/policy.js";
 import {
   type ServerInfoStatusPayload,
   type ScriptStatusUpdateMessage,
@@ -1609,6 +1610,7 @@ export class VoiceAssistantWebSocketServer {
       mcpBridgeAuthority: this.mcpBridgeAuthority,
       mcpCatalog: this.mcpCatalog,
       messageQueueStore: this.messageQueueStore,
+      remoteAccess: new DaemonConfigRemoteAccessPolicy(this.daemonConfigStore),
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -1978,6 +1980,7 @@ export class VoiceAssistantWebSocketServer {
         ? `route:${[principalId, producer.serverId, producer.sourceId].map(encodeURIComponent).join(":")}`
         : principalId;
     connection.session.setHostSource(sourceId);
+    connection.session.setRemoteToolSource(hello.routed === true && producer?.sourceId === "mcp");
     if (hello.originServerId) {
       connection.session.setOriginServerId(hello.originServerId);
     } else if (hello.routed && producer) {
@@ -2000,6 +2003,7 @@ export class VoiceAssistantWebSocketServer {
       features: {
         connectedHosts: true,
         hostMultiplexing: true,
+        remoteAccess: true,
         // COMPAT(relayProtectedSecurity): added in v0.13.0, remove gate after 2027-04-21.
         relayProtectedSecurity: true,
         usageSources: true,

@@ -35,6 +35,11 @@ Connected-host management uses `tunnel.manage`; source-owned connection and meta
 requires the producer or `access.manage`. Routed operations retain both caller and link authority,
 see [Connected hosts](connected-hosts.md#ownership-and-authority).
 
+Remote MCP tools add a configuration gate on top of permissions: the destination's
+`daemon.remoteAccess.inbound` policy must allow the origin and capability. A routed link is admitted
+with owner authority, so the policy, not the permission list, decides whether an MCP route may read
+files, write them, or run commands. See [Remote access](remote-access.md).
+
 Owner, operator, and viewer are UI presets expanded into explicit permissions. Do not persist them as roles. Adding a permission must not silently widen an existing principal.
 
 Permissions are additive allows. Missing authority denies the operation. Do not add deny precedence.

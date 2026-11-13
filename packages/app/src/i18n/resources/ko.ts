@@ -2624,6 +2624,40 @@ export const ko: TranslationResources = {
       plugins: "플러그인",
       host: "개요",
     },
+    remoteAccess: {
+      title: "원격 액세스",
+      inboundTitle: "다른 호스트의 작업 허용",
+      inboundHint:
+        "선택한 호스트의 에이전트가 이 호스트에서 파일을 읽거나 변경하고 명령을 실행하도록 허용합니다. 끄면 이 호스트에서는 원격 MCP 작업이 허용되지 않습니다.",
+      outboundTitle: "이 호스트의 에이전트가 다른 호스트에서 작업하도록 허용",
+      outboundHint:
+        "이 호스트의 에이전트가 선택한 호스트에서 원격 파일 및 명령 도구를 사용하도록 허용합니다. 대상 호스트도 이 호스트를 허용해야 합니다.",
+      peers: "허용된 호스트",
+      peersEmpty: "액세스를 허용하려면 다른 호스트를 연결하세요.",
+      files: "파일",
+      filesOff: "끔",
+      filesRead: "읽기",
+      filesWrite: "읽기 및 쓰기",
+      commands: "명령",
+      commandsOff: "끔",
+      commandsAllowlist: "허용 목록",
+      commandsAny: "모두",
+      allowlistHint: "한 줄에 하나의 실행 파일 (예: git, npm)",
+      apply: "목록 적용",
+      anyWarning:
+        "모든 명령이 이 호스트에서 사용자 권한으로 실행되며 파괴적인 명령도 포함됩니다. 계속하시겠습니까?",
+      confirm: "모든 명령 활성화",
+      cancel: "취소",
+      chats: "채팅 검색",
+      chatsHint: "다른 호스트에서 이 호스트의 채팅을 검색합니다.",
+      agents: "에이전트 제어",
+      agentsHint:
+        "다른 호스트에서 이 호스트의 에이전트를 생성, 프롬프트, 제어합니다. 원격 코드 실행과 같습니다.",
+      restrictToWorkspaces: "워크스페이스로 제한",
+      restrictHint:
+        "끄면 원격 도구가 이 데몬이 읽을 수 있는 모든 디렉터리를 대상으로 할 수 있습니다.",
+      disconnected: "원격 액세스를 변경하려면 이 호스트에 연결하세요.",
+    },
     plugins: pluginSettings.ko,
     metadataGeneration: {
       title: "메타데이터 생성",

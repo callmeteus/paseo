@@ -69,6 +69,7 @@ import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { useProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
+import { RemoteAccessSection } from "./remote-access-card";
 import { IdleRuntimeCleanupCard } from "./idle-runtime-cleanup-card";
 import { ModelRoutersCard } from "./model-routers-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
@@ -331,6 +332,21 @@ export function HostMcpPage({ serverId }: { serverId: string }) {
   }
 
   return <McpServersSection serverId={serverId} />;
+}
+
+export function HostRemoteAccessPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  return (
+    <SettingsSection title={t("settings.remoteAccess.title")}>
+      <RemoteAccessSection serverId={serverId} />
+    </SettingsSection>
+  );
 }
 
 export function HostWorkspacesPage({ serverId }: { serverId: string }) {

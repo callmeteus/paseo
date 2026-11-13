@@ -8,6 +8,10 @@ import {
   type HostOperations,
   type ToolHosts,
 } from "../host-operations/index.js";
+import { createRemoteActions } from "../host-operations/remote-actions.js";
+import { DaemonConfigRemoteAccessPolicy } from "../../remote-access/policy.js";
+import type { RemoteAccessCapability } from "@getpaseo/protocol/remote-access";
+import { hasRemoteToolsConfigured, registerRemoteTools } from "./remote-tools.js";
 import { AgentDirectory } from "../directory.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, relative } from "node:path";
@@ -667,6 +671,15 @@ function recordCreateAgentMultitaskFailure(input: {
   }
 }
 
+function compareChatsByUpdatedAt(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): number {
+  const rightTime = Date.parse(String(right.updatedAt ?? "")) || 0;
+  const leftTime = Date.parse(String(left.updatedAt ?? "")) || 0;
+  return rightTime - leftTime;
+}
+
 function createAgentToolGuidance(input: {
   callerAgentId: string | null | undefined;
   notifyOnFinish: boolean;
@@ -835,6 +848,98 @@ function createToolCatalog(
       searchChats: (args, context) => localHostOperations.get("search_chats")!(args, context),
     },
   });
+  function chatsFromResult(response: PaseoToolResult): Array<Record<string, unknown>> {
+    const value = (response.structuredContent as { chats?: unknown } | undefined)?.chats;
+    return Array.isArray(value) ? (value as Array<Record<string, unknown>>) : [];
+  }
+
+  function remoteCapabilityForTool(name: string): RemoteAccessCapability | null {
+    if (name === "search_chats") return "chats";
+    if (name === "create_agent" || name === "send_agent_prompt" || name === "create_workspace") {
+      return "agents";
+    }
+    return null;
+  }
+
+  function assertRemoteCapability(
+    serverId: string,
+    capability: RemoteAccessCapability | null,
+  ): void {
+    if (!capability || !serverId || serverId === options.serverId) return;
+    if (!options.daemonConfigStore) return;
+    const policy = new DaemonConfigRemoteAccessPolicy(options.daemonConfigStore);
+    const decision = policy.outboundDecision(serverId, capability);
+    if (!decision.allowed) {
+      throw new PaseoToolInputError(decision.reason ?? "Remote access denied");
+    }
+  }
+
+  async function collectHostChats(
+    serverId: string,
+    base: Record<string, unknown>,
+    context: PaseoToolExecutionContext,
+  ): Promise<{ chats: Array<Record<string, unknown>>; error: string | null }> {
+    try {
+      const response = await hostResolver.use(serverId, (remote) =>
+        remote.searchChats(base, context),
+      );
+      return { chats: chatsFromResult(response), error: null };
+    } catch (error) {
+      return {
+        chats: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async function searchChatsAcrossHosts(
+    input: Record<string, unknown>,
+    context: PaseoToolExecutionContext,
+  ): Promise<PaseoToolResult> {
+    const outboundPolicy = options.daemonConfigStore
+      ? new DaemonConfigRemoteAccessPolicy(options.daemonConfigStore)
+      : null;
+    const outboundScope = outboundPolicy?.scope("outbound");
+    if (!outboundScope || !outboundScope.enabled || !outboundScope.chats) {
+      throw new PaseoToolInputError(
+        "Remote chat search is off. Enable daemon.remoteAccess.outbound.chats first.",
+      );
+    }
+    const base = { ...input };
+    delete base.allHosts;
+    delete base.serverId;
+    const local = await localHostOperations.get("search_chats")!(base, context);
+    const localServerId = options.serverId ?? "self";
+    const chats: Array<Record<string, unknown>> = chatsFromResult(local).map((chat) =>
+      Object.assign({}, chat, { serverId: localServerId }),
+    );
+    const errors: Array<{ serverId: string; error: string }> = [];
+    const directory = await hostResolver.directory();
+    for (const host of directory.hosts) {
+      const serverId = host.serverId;
+      if (!serverId || !host.enabled || host.status === "offline") continue;
+      if (!outboundScope.peers.includes(serverId)) continue;
+      const collected = await collectHostChats(serverId, base, context);
+      if (collected.error) {
+        errors.push({ serverId, error: collected.error });
+        continue;
+      }
+      for (const chat of collected.chats) {
+        chats.push(Object.assign({}, chat, { serverId }));
+      }
+    }
+    const limit =
+      typeof base.maxChats === "number" && base.maxChats > 0 ? Math.floor(base.maxChats) : 25;
+    chats.sort(compareChatsByUpdatedAt);
+    return {
+      content: [],
+      structuredContent: ensureValidJson({
+        query: String(base.query ?? ""),
+        chats: chats.slice(0, limit),
+        errors,
+      }),
+    };
+  }
   const registerTool = (
     name: string,
     config: PaseoToolConfig,
@@ -866,6 +971,10 @@ function createToolCatalog(
         const destination = serverId ?? options.serverId;
         const remoteNotification = await prepareRemoteNotification(name, destination, input);
         try {
+          if (name === "search_chats" && input.allHosts === true) {
+            return await searchChatsAcrossHosts(input, context);
+          }
+          assertRemoteCapability(serverId, remoteCapabilityForTool(name));
           const response = await hostResolver.use(serverId, (host) =>
             host[operation](input, context),
           );
@@ -2457,12 +2566,18 @@ function createToolCatalog(
     {
       title: "Search chats",
       description:
-        'Search every Paseo conversation on this host (including archived chats) for a text query and return the matching chats with short excerpts. A query matches chat titles as well as message text, so a title-only match returns no excerpts. Use it whenever the user refers to something discussed earlier in another chat (for example "we talked about X recently", "what did that chat conclude"), before asking them to repeat themselves. Follow up with get_agent_activity on the matching agentId to read the full conversation.',
+        "Search Paseo conversations for a text query and return the matching chats with short excerpts. Searches this host by default; pass serverId to search one connected host, or allHosts to search every allowed host and merge the results. A query matches chat titles as well as message text, so a title-only match returns no excerpts. Follow up with get_agent_activity on the matching agentId (and its serverId) to read the full conversation.",
       inputSchema: {
         query: z
           .string()
           .min(1)
           .describe("Words to find. Spaces are treated as a phrase; matching ignores case."),
+        allHosts: z
+          .boolean()
+          .optional()
+          .describe(
+            "Search this host and every allowed connected host. Requires remote chat access on both sides.",
+          ),
         cwd: z.string().optional().describe("Only search chats working in this directory."),
         sinceHours: z
           .number()
@@ -2494,6 +2609,7 @@ function createToolCatalog(
             cwd: z.string(),
             updatedAt: z.string(),
             archivedAt: z.string().nullable(),
+            serverId: z.string().optional(),
             titleMatch: z.boolean(),
             matches: z.array(
               z.object({
@@ -3825,6 +3941,21 @@ function createToolCatalog(
       };
     },
   );
+
+  if (options.hosts && options.daemonConfigStore) {
+    const remotePolicy = new DaemonConfigRemoteAccessPolicy(options.daemonConfigStore);
+    if (hasRemoteToolsConfigured(remotePolicy)) {
+      registerRemoteTools({
+        register: (name, config, handler) => registerTool(name, config, handler),
+        actions: createRemoteActions({
+          serverId: options.serverId ?? "self",
+          hosts: options.hosts,
+          policy: () => remotePolicy,
+        }),
+        policy: () => remotePolicy,
+      });
+    }
+  }
 
   return toCatalog();
 }

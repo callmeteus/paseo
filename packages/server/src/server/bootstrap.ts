@@ -208,6 +208,7 @@ import type {
   McpBridge,
   McpShare,
   PluginSource,
+  RemoteAccessConfig,
   TerminalProfile,
 } from "@getpaseo/protocol/messages";
 import type {
@@ -450,6 +451,7 @@ export interface PaseoDaemonConfig {
   };
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
+  remoteAccess?: RemoteAccessConfig;
   hubAllowHttp?: boolean;
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
@@ -628,6 +630,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     modelRouters: config.modelRouters ?? { routers: [] },
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
+    remoteAccess: config.remoteAccess,
     hubAllowHttp: config.hubAllowHttp === true,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
     idleRuntimeCleanupAfter: initialIdleRuntimeCleanupAfter(config),

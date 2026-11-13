@@ -20,6 +20,7 @@ import {
   McpServerConfigSchema,
   McpShareSchema,
 } from "@getpaseo/protocol/messages";
+import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -275,6 +276,7 @@ export const PersistedConfigSchema = z
           .optional(),
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
+        remoteAccess: RemoteAccessConfigSchema.optional(),
         appendSystemPrompt: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),

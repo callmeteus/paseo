@@ -10,6 +10,9 @@ import type { MessageQueueStore } from "./agent/message-queue-store.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import { searchChatsAcrossChats } from "./agent/chat-search/cross-chat-search.js";
 import { isSameOrDescendantPath } from "./path-utils.js";
+import { operationCarriesCwd, remoteOperationFamily } from "./remote-access/operation-families.js";
+import type { RemoteAccessPolicy } from "./remote-access/policy.js";
+import { runCommand } from "./process-exec/runner.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
 import type {
@@ -467,6 +470,7 @@ export interface SessionOptions {
   mcpBridgeAuthority?: McpBridgeAuthority;
   mcpCatalog?: McpCatalogService;
   messageQueueStore?: MessageQueueStore;
+  remoteAccess?: RemoteAccessPolicy;
   sourceId?: string;
   routed?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
@@ -715,8 +719,68 @@ export class Session {
   private hopPath: string[] = [];
   private originServerId: string | null = null;
   private maxHops = 3;
+  private remoteToolSource = false;
+  private readonly remoteAccess: RemoteAccessPolicy | undefined;
   isRouted(): boolean {
     return this.routed;
+  }
+  isRemoteToolSource(): boolean {
+    return this.remoteToolSource;
+  }
+  setRemoteToolSource(value: boolean): void {
+    this.remoteToolSource = value;
+  }
+  /**
+   * Host-originated MCP routes carry owner permissions on the link, so the
+   * destination config is the authority for the dangerous capability families.
+   * Non-MCP routes keep their ordinary authority.
+   */
+  private async allowsRemoteToolOperation(msg: SessionInboundMessage): Promise<boolean> {
+    if (!this.remoteToolSource) return true;
+    const family = remoteOperationFamily(msg.type);
+    if (!family) return true;
+    const requestId = sessionRequestId(msg);
+    const deny = (error: string): boolean => {
+      this.sessionLogger.warn(
+        { originServerId: this.originServerId, messageType: msg.type, family, error },
+        "remote_tool.denied",
+      );
+      if (requestId) {
+        this.emit({
+          type: "rpc_error",
+          payload: {
+            requestId,
+            requestType: msg.type,
+            error,
+            code: "access_denied",
+          },
+        });
+      }
+      return false;
+    };
+    const policy = this.remoteAccess;
+    const originServerId = this.originServerId;
+    if (!policy || !originServerId) {
+      return deny("Remote access is not configured for this host");
+    }
+    const decision = policy.inboundDecision(originServerId, family);
+    if (!decision.allowed) return deny(decision.reason ?? "Remote access denied");
+    if (
+      (family === "files.read" || family === "files.write" || family === "commands") &&
+      policy.restrictsToWorkspaces("inbound")
+    ) {
+      const cwd = operationCarriesCwd(msg) ? msg.cwd : null;
+      if (!cwd) return deny("Remote access requires a cwd for this operation");
+      if (!(await this.isActiveWorkspaceCwd(cwd))) {
+        return deny(`Path is not inside an active workspace: ${cwd}`);
+      }
+    }
+    return true;
+  }
+
+  private async isActiveWorkspaceCwd(cwd: string): Promise<boolean> {
+    const workspaces = await this.workspaceRegistry.list();
+    return workspaces.some((workspace) => isSameOrDescendantPath(workspace.cwd, cwd));
   }
   getHopPath(): readonly string[] {
     return this.hopPath;
@@ -944,6 +1008,7 @@ export class Session {
     } = options;
     this.browserToolsBroker = options.browserToolsBroker;
     this.clientId = clientId;
+    this.remoteAccess = options.remoteAccess;
     this.authorization = new SessionAuthorization(permissions);
 
     this.appVersion = appVersion ?? null;
@@ -2300,6 +2365,9 @@ export class Session {
             },
           });
         }
+        return;
+      }
+      if (this.remoteToolSource && !(await this.allowsRemoteToolOperation(msg))) {
         return;
       }
       try {
@@ -3680,6 +3748,89 @@ export class Session {
     }
   }
 
+  private async handleProcessExecRequest(
+    msg: Extract<SessionInboundMessage, { type: "process.exec.request" }>,
+  ): Promise<void> {
+    const command = msg.command.trim();
+    const shell = msg.shell === true;
+    let timeoutMs = msg.timeoutMs ?? 120_000;
+    let maxOutputBytes = msg.maxOutputBytes ?? 1_048_576;
+    const reply = (payload: {
+      status: "exited" | "timeout" | "error";
+      exitCode: number | null;
+      signal: string | null;
+      stdout: string;
+      stderr: string;
+      truncated: boolean;
+      durationMs: number;
+      error: string | null;
+    }) => {
+      this.emit({
+        type: "process.exec.response",
+        payload: {
+          cwd: msg.cwd,
+          command: msg.command,
+          ...payload,
+          requestId: msg.requestId,
+        },
+      });
+    };
+    if (!command) {
+      reply({
+        status: "error",
+        exitCode: null,
+        signal: null,
+        stdout: "",
+        stderr: "",
+        truncated: false,
+        durationMs: 0,
+        error: "command is required",
+      });
+      return;
+    }
+    const policy = this.remoteAccess;
+    if (this.remoteToolSource && policy) {
+      if (!policy.commandAllowed("inbound", command)) {
+        reply({
+          status: "error",
+          exitCode: null,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          truncated: false,
+          durationMs: 0,
+          error: `Command is not in the remote allowlist: ${command}`,
+        });
+        return;
+      }
+      if (shell && policy.commandMode("inbound") !== "any") {
+        reply({
+          status: "error",
+          exitCode: null,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          truncated: false,
+          durationMs: 0,
+          error: "shell execution requires the destination command mode to be any",
+        });
+        return;
+      }
+      const scope = policy.scope("inbound");
+      timeoutMs = Math.min(timeoutMs, scope.commands.timeoutMs);
+      maxOutputBytes = Math.min(maxOutputBytes, scope.commands.maxOutputBytes);
+    }
+    const result = await runCommand({
+      cwd: msg.cwd,
+      command,
+      args: msg.args,
+      shell,
+      timeoutMs,
+      maxOutputBytes,
+    });
+    reply(result);
+  }
+
   private dispatchWorkspaceFileMessage(
     msg: SessionInboundMessage,
     source?: object,
@@ -3693,6 +3844,8 @@ export class Session {
         return this.workspaceFilesSession.handleFileUnsubscribeRequest(msg, this.delivery);
       case "fs.file.write.request":
         return this.workspaceFilesSession.handleFileWriteRequest(msg);
+      case "fs.search.request":
+        return this.workspaceFilesSession.handleFileSearchRequest(msg);
       case "fs.entry.create.request":
         return this.workspaceFilesSession.handleFileEntryCreateRequest(msg);
       case "fs.entry.rename.request":
@@ -3817,6 +3970,9 @@ export class Session {
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
     switch (msg.type) {
+      case "process.exec.request":
+        await this.handleProcessExecRequest(msg);
+        return;
       case "list_commands_request":
         await this.handleListCommandsRequest(msg);
         return;

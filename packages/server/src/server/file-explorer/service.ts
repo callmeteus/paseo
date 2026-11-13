@@ -25,6 +25,8 @@ export interface WriteFileParams extends ReadFileParams {
   contentEncoding?: "utf-8" | "base64";
   expectedModifiedAt: string;
   expectedRevision?: string;
+  /** Creates the file when it does not exist instead of reporting a conflict. */
+  createIfMissing?: boolean;
 }
 
 export type ExplorerFileVersion =
@@ -476,6 +478,117 @@ export async function resolveExplorerFilePath({
   return (await resolveScopedPath({ root, relativePath })).resolvedPath;
 }
 
+type FileWriteInspection =
+  | { outcome: "error"; result: ExplorerFileWriteResult }
+  | { outcome: "proceed"; mode: number; exists: boolean };
+
+async function inspectFileBeforeWrite(input: {
+  filePath: ScopedPath;
+  root: string;
+  relativePath: string;
+  contentEncoding: "utf-8" | "base64";
+  expectedModifiedAt: string;
+  expectedRevision?: string;
+  createIfMissing: boolean;
+}): Promise<FileWriteInspection> {
+  try {
+    const handle = await openFileForRead(input.filePath.resolvedPath);
+    try {
+      const stats = await handle.stat({ bigint: true });
+      if (!stats.isFile()) {
+        return {
+          outcome: "error",
+          result: { status: "error", error: "Requested path is not a file" },
+        };
+      }
+      if (stats.size > BigInt(MAX_EDITABLE_FILE_BYTES)) {
+        return {
+          outcome: "error",
+          result: { status: "error", error: "File is too large to edit" },
+        };
+      }
+      if (input.contentEncoding === "utf-8") {
+        const current = await handle.readFile();
+        if (isLikelyBinary(current) || !isValidUtf8(current)) {
+          return {
+            outcome: "error",
+            result: { status: "error", error: "Binary files cannot be edited" },
+          };
+        }
+      }
+      if (!matchesExpectedRevision(stats, input.expectedModifiedAt, input.expectedRevision)) {
+        return {
+          outcome: "error",
+          result: {
+            status: "conflict",
+            version: {
+              status: "ready",
+              cwd: expandUserPath(input.root),
+              path: normalizeRelativePath({
+                root: input.root,
+                targetPath: input.filePath.requestedPath,
+              }),
+              size: Number(stats.size),
+              modifiedAt: stats.mtime.toISOString(),
+              revision: fileRevision(stats),
+            },
+          },
+        };
+      }
+      return { outcome: "proceed", mode: Number(stats.mode), exists: true };
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (!isMissingEntryError(error)) {
+      return {
+        outcome: "error",
+        result: { status: "error", error: error instanceof Error ? error.message : String(error) },
+      };
+    }
+    if (!input.createIfMissing) {
+      return {
+        outcome: "error",
+        result: {
+          status: "conflict",
+          version: { status: "missing", cwd: expandUserPath(input.root), path: input.relativePath },
+        },
+      };
+    }
+    return { outcome: "proceed", mode: 0o600, exists: false };
+  }
+}
+
+async function checkTargetBeforeRename(input: {
+  filePath: ScopedPath;
+  root: string;
+  exists: boolean;
+  expectedModifiedAt: string;
+  expectedRevision?: string;
+}): Promise<ExplorerFileWriteResult | null> {
+  const stats = await fs.stat(input.filePath.resolvedPath, { bigint: true }).catch(() => null);
+  // A concurrent create won the race; report it instead of overwriting.
+  if (!stats) return null;
+  // When the file did not exist before, any current version is a conflict.
+  if (
+    input.exists &&
+    matchesExpectedRevision(stats, input.expectedModifiedAt, input.expectedRevision)
+  ) {
+    return null;
+  }
+  return {
+    status: "conflict",
+    version: {
+      status: "ready",
+      cwd: expandUserPath(input.root),
+      path: normalizeRelativePath({ root: input.root, targetPath: input.filePath.requestedPath }),
+      size: Number(stats.size),
+      modifiedAt: stats.mtime.toISOString(),
+      revision: fileRevision(stats),
+    },
+  };
+}
+
 export async function writeExplorerFile({
   root,
   relativePath,
@@ -483,6 +596,7 @@ export async function writeExplorerFile({
   contentEncoding = "utf-8",
   expectedModifiedAt,
   expectedRevision,
+  createIfMissing = false,
 }: WriteFileParams): Promise<ExplorerFileWriteResult> {
   const encoded = Buffer.from(content, contentEncoding === "base64" ? "base64" : "utf8");
   if (encoded.byteLength > MAX_EDITABLE_FILE_BYTES) {
@@ -490,51 +604,22 @@ export async function writeExplorerFile({
   }
 
   let filePath: ScopedPath;
-  let currentMode = 0o600;
   try {
     filePath = await resolveScopedPath({ root, relativePath });
-    const handle = await openFileForRead(filePath.resolvedPath);
-    try {
-      const stats = await handle.stat({ bigint: true });
-      if (!stats.isFile()) {
-        return { status: "error", error: "Requested path is not a file" };
-      }
-      if (stats.size > BigInt(MAX_EDITABLE_FILE_BYTES)) {
-        return { status: "error", error: "File is too large to edit" };
-      }
-      if (contentEncoding === "utf-8") {
-        const current = await handle.readFile();
-        if (isLikelyBinary(current) || !isValidUtf8(current)) {
-          return { status: "error", error: "Binary files cannot be edited" };
-        }
-      }
-      currentMode = Number(stats.mode);
-      const modifiedAt = stats.mtime.toISOString();
-      if (!matchesExpectedRevision(stats, expectedModifiedAt, expectedRevision)) {
-        return {
-          status: "conflict",
-          version: {
-            status: "ready",
-            cwd: expandUserPath(root),
-            path: normalizeRelativePath({ root, targetPath: filePath.requestedPath }),
-            size: Number(stats.size),
-            modifiedAt,
-            revision: fileRevision(stats),
-          },
-        };
-      }
-    } finally {
-      await handle.close();
-    }
   } catch (error) {
-    if (isMissingEntryError(error)) {
-      return {
-        status: "conflict",
-        version: { status: "missing", cwd: expandUserPath(root), path: relativePath },
-      };
-    }
     return { status: "error", error: error instanceof Error ? error.message : String(error) };
   }
+  const inspection = await inspectFileBeforeWrite({
+    filePath,
+    root,
+    relativePath,
+    contentEncoding,
+    expectedModifiedAt,
+    expectedRevision,
+    createIfMissing,
+  });
+  if (inspection.outcome === "error") return inspection.result;
+  const { mode: currentMode, exists } = inspection;
 
   const temporaryPath = path.join(
     path.dirname(filePath.resolvedPath),
@@ -550,20 +635,14 @@ export async function writeExplorerFile({
     await temporaryHandle.sync();
     await temporaryHandle.close();
     temporaryHandle = null;
-    const latestStats = await fs.stat(filePath.resolvedPath, { bigint: true });
-    if (!matchesExpectedRevision(latestStats, expectedModifiedAt, expectedRevision)) {
-      return {
-        status: "conflict",
-        version: {
-          status: "ready",
-          cwd: expandUserPath(root),
-          path: normalizeRelativePath({ root, targetPath: filePath.requestedPath }),
-          size: Number(latestStats.size),
-          modifiedAt: latestStats.mtime.toISOString(),
-          revision: fileRevision(latestStats),
-        },
-      };
-    }
+    const conflict = await checkTargetBeforeRename({
+      filePath,
+      root,
+      exists,
+      expectedModifiedAt,
+      expectedRevision,
+    });
+    if (conflict) return conflict;
     await fs.rename(temporaryPath, filePath.resolvedPath);
     const stats = await fs.stat(filePath.resolvedPath, { bigint: true });
     return {
