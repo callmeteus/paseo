@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { readPersistedConfig } from "@getpaseo/server/configuration";
 import { z } from "zod";
 import { HubCommandError } from "./error.js";
 import { normalizeHubOrigin } from "./origin.js";
@@ -23,7 +24,9 @@ const credentialFileSchema = z
     for (const record of value.credentials) {
       let normalized: string;
       try {
-        normalized = normalizeHubOrigin(record.origin);
+        // Stored origins stay readable after Allow HTTP is turned off.
+        // Commands refuse to use a remote HTTP origin until the setting is on again.
+        normalized = normalizeHubOrigin(record.origin, { allowHttp: true });
       } catch {
         context.addIssue({ code: "custom", message: "Credential origin is invalid" });
         continue;
@@ -57,8 +60,10 @@ export interface HubCredentialStore {
 
 export class PrivateHubCredentialStore implements HubCredentialStore {
   private readonly filePath: string;
+  private readonly env: Readonly<Record<string, string | undefined>>;
 
   constructor(env: Readonly<Record<string, string | undefined>> = process.env) {
+    this.env = env;
     this.filePath = path.join(resolvePaseoHome(env), "hub-credentials.json");
   }
 
@@ -69,12 +74,14 @@ export class PrivateHubCredentialStore implements HubCredentialStore {
   }
 
   get(origin: string): StoredHubCredential | null {
-    const normalizedOrigin = normalizeHubOrigin(origin);
+    const normalizedOrigin = normalizeHubOrigin(origin, { allowHttp: true });
     return this.read().credentials.find((record) => record.origin === normalizedOrigin) ?? null;
   }
 
   save(credential: StoredHubCredential): void {
-    const origin = normalizeHubOrigin(credential.origin);
+    const origin = normalizeHubOrigin(credential.origin, {
+      allowHttp: hubAllowHttpEnabled(this.env),
+    });
     const current = this.read();
     const remaining = current.credentials.filter((record) => record.origin !== origin);
     this.write({
@@ -134,6 +141,10 @@ export class PrivateHubCredentialStore implements HubCredentialStore {
       throw credentialStorageError();
     }
   }
+}
+
+export function hubAllowHttpEnabled(env: Readonly<Record<string, string | undefined>>): boolean {
+  return readPersistedConfig(resolvePaseoHome(env)).hub?.allowHttp === true;
 }
 
 function resolvePaseoHome(env: Readonly<Record<string, string | undefined>>): string {

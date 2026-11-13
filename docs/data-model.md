@@ -214,6 +214,9 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
   app: {
     baseUrl: string
   },
+  hub?: {
+    allowHttp?: boolean     // CLI may use HTTP Hub origins that are not loopback; off unless set
+  },
   worktrees?: {
     root?: string            // optional root for new worktrees; defaults to $PASEO_HOME/worktrees
     servicePorts?: {         // optional dynamic service port allocation policy

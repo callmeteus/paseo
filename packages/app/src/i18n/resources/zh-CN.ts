@@ -3144,6 +3144,14 @@ export const zhCN: TranslationResources = {
           info: "停止 Agent 进程，但保留对话。发送消息即可继续。\n\n进行中的工作、待处理的通知和 Provider 安全检查会阻止清理。",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "允许 HTTP",
+          hint: "允许 CLI 通过 HTTP 连接不在 localhost 上的 Hub。登录凭据以明文传输。",
+          info: "关闭时，CLI 只接受发往 localhost、127.0.0.1 和 [::1] 的 HTTP。打开后，也接受其他主机的 HTTP，例如没有 TLS 的私有网络上的 Hub。同一个开关是主机配置里的 hub.allowHttp。",
+        },
+      },
       workspaces: {
         unavailable: "连接到这个 Host 以管理 Workspace",
       },

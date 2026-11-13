@@ -73,7 +73,7 @@ daemon 会在应用任何内容之前校验整个文件。它会应用运行时�
 paseo daemon restart
 ```
 
-运行时安全的设置包括：中继启用、MCP 设置、浏览器工具、主机名、CORS 来源、受信任的代理、Git 进程限制、Agent 和终端配置、Provider 定义、元数据生成、应用基础 URL、Provider 目录超时，以及全局插件开关。删除其中某个设置会应用该字段缺省时的行为；删除某个 Provider 会把它从之后的启动中移除。
+运行时安全的设置包括：中继启用、MCP 设置、浏览器工具、主机名、CORS 来源、受信任的代理、Git 进程限制、Agent 和终端配置、Provider 定义、元数据生成、应用基础 URL、Provider 目录超时、Hub HTTP（`hub.allowHttp`），以及全局插件开关。删除其中某个设置会应用该字段缺省时的行为；删除某个 Provider 会把它从之后的启动中移除。
 
 当你删除 `daemon.relay.enabled` 时，新的主目录会保持中继关闭。如果 daemon 启动时其配置就已经省略了这个字段，它会为了兼容而保持旧版的中继开启行为。编辑较旧的配置时，请显式设置 `daemon.relay.enabled`。
 
@@ -96,6 +96,20 @@ Agent Provider，包括 Paseo 自带的一等 Provider 和你在 `agents.provide
 ```
 
 此设置默认为 `true`。在设置中更改后立即生效；配置文件中的更改在重新加载配置后生效。重新启用会保留现有的空闲计时。没有单个 Agent 的设置。不提供运行时安全检查的 Provider 使用相同的 daemon 基础条件和一小时空闲期。活动中的工作、后代 Agent 和待发送的完成通知都会阻止清理。ACP 适配器还会在 ACP 终端仍运行时保留运行时，即使终端没有输出；已退出的终端不会阻止清理。此检查不检查 Provider 内部启动的进程。
+
+## Hub HTTP {#hub-http}
+
+CLI 对 `localhost`、`127.0.0.1` 和 `[::1]` 接受 HTTP Hub 源。要允许其他主机使用 HTTP，请在 **设置 → 你的主机 → 概览** 中打开 **允许 HTTP**，或设置：
+
+```json
+{ "hub": { "allowHttp": true } }
+```
+
+```bash
+paseo daemon config set hub.allowHttp true
+```
+
+这个开关在你启用之前保持关闭。启用后，CLI 登录凭据会以明文传输。
 
 ## worktree {#worktrees}
 

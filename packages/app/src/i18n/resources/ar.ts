@@ -3209,6 +3209,14 @@ export const ar: TranslationResources = {
           info: "يوقف عملية الوكيل مع الاحتفاظ بمحادثته. أرسل رسالة لاستئنافها.\n\nيمنع العمل النشط والإشعارات المعلّقة وفحوصات أمان المزوّد عملية التنظيف.",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "السماح بـ HTTP",
+          hint: "يتيح لواجهة CLI الوصول إلى Hub عبر HTTP عندما لا يكون على localhost. تنتقل بيانات تسجيل الدخول كنص واضح.",
+          info: "عند الإيقاف، تقبل CLI بروتوكول HTTP فقط لعناوين localhost و127.0.0.1 و[::1]. عند التشغيل، تقبل HTTP أيضًا للمضيفين الآخرين، مثل Hub على شبكة خاصة بلا TLS. المفتاح نفسه هو hub.allowHttp في إعدادات المضيف.",
+        },
+      },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",
       },

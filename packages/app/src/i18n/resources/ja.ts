@@ -3210,6 +3210,14 @@ export const ja: TranslationResources = {
           info: "会話を保持したままエージェントのプロセスを停止します。メッセージを送信すると再開します。\n\n実行中の作業、保留中の通知、プロバイダーの安全性チェックがある場合は解放しません。",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "HTTP を許可",
+          hint: "localhost 以外の Hub へ CLI が HTTP で接続できるようにします。ログイン資格情報は平文で送られます。",
+          info: "オフのとき、CLI は localhost、127.0.0.1、[::1] への HTTP だけを受け付けます。オンにすると、TLS のないプライベートネットワーク上の Hub など、他のホストへの HTTP も受け付けます。同じスイッチはホスト設定の hub.allowHttp です。",
+        },
+      },
       workspaces: {
         unavailable: "ワークスペースを管理するにはこのホストに接続してください",
       },

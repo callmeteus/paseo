@@ -3305,6 +3305,14 @@ export const en = {
           info: "Stops the agent's process while keeping its conversation. Send a message to resume.\n\nActive work, pending notifications, and provider safety checks prevent cleanup.",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "Allow HTTP",
+          hint: "Let the CLI reach a Hub over HTTP when it is not on localhost. Login credentials travel in cleartext.",
+          info: "Off, the CLI accepts HTTP only for localhost, 127.0.0.1, and [::1]. On, it also accepts HTTP for other hosts, such as a Hub on a private network without TLS. The same switch is hub.allowHttp in the host config.",
+        },
+      },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",
       },

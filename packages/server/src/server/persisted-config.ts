@@ -336,6 +336,18 @@ export const PersistedConfigSchema = z
       .strict()
       .optional(),
 
+    hub: z
+      .object({
+        allowHttp: z
+          .boolean()
+          .optional()
+          .describe(
+            "Accept cleartext HTTP Hub origins that are not loopback. Off unless set. CLI credentials then travel without TLS.",
+          ),
+      })
+      .strict()
+      .optional(),
+
     providers: ProvidersSchema.optional(),
     pluginRegistries: PluginRegistriesSchema.optional(),
     pluginsEnabled: z.boolean().optional(),

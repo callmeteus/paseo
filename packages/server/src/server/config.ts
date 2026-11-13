@@ -523,6 +523,10 @@ function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedCon
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
 
+function resolveHubAllowHttp(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
+  return persisted.hub?.allowHttp === true;
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -632,6 +636,7 @@ export function resolveConfigFromPersisted(
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
+    hubAllowHttp: resolveHubAllowHttp(persisted),
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,

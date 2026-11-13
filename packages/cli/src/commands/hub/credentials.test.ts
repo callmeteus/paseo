@@ -90,6 +90,7 @@ describe("Hub CLI credentials", () => {
         options: { origin: "https://explicit.example.com" },
         env: { PASEO_HUB_URL: "https://env.example.com" },
         credentials: store,
+        allowHttp: false,
       }),
       "https://explicit.example.com",
     );
@@ -98,11 +99,12 @@ describe("Hub CLI credentials", () => {
         options: {},
         env: { PASEO_HUB_URL: "https://env.example.com" },
         credentials: store,
+        allowHttp: false,
       }),
       "https://env.example.com",
     );
     assert.equal(
-      resolveHubOrigin({ options: {}, env: {}, credentials: store }),
+      resolveHubOrigin({ options: {}, env: {}, credentials: store, allowHttp: false }),
       "https://stored.example.com",
     );
     assert.equal(
@@ -110,8 +112,62 @@ describe("Hub CLI credentials", () => {
         options: {},
         env: {},
         credentials: new PrivateHubCredentialStore({ PASEO_HOME: temporaryHome() }),
+        allowHttp: false,
       }),
       DEFAULT_HUB_ORIGIN,
+    );
+  });
+
+  it("accepts a remote HTTP origin only when hub.allowHttp is enabled", () => {
+    const disabledHome = temporaryHome();
+    assert.throws(
+      () =>
+        resolveHubOrigin({
+          options: { origin: "http://100.89.201.14:25000" },
+          env: { PASEO_HOME: disabledHome },
+          credentials: new PrivateHubCredentialStore({ PASEO_HOME: disabledHome }),
+        }),
+      { code: "HUB_INVALID_ORIGIN" },
+    );
+    assert.throws(
+      () =>
+        new PrivateHubCredentialStore({ PASEO_HOME: disabledHome }).save({
+          origin: "http://100.89.201.14:25000",
+          credential: "remote-secret",
+        }),
+      { code: "HUB_INVALID_ORIGIN" },
+    );
+
+    const home = temporaryHome();
+    writeFileSync(
+      path.join(home, "config.json"),
+      `${JSON.stringify({ version: 1, hub: { allowHttp: true } }, null, 2)}\n`,
+    );
+    const store = new PrivateHubCredentialStore({ PASEO_HOME: home });
+    assert.equal(
+      resolveHubOrigin({
+        options: { origin: "http://100.89.201.14:25000" },
+        env: { PASEO_HOME: home },
+        credentials: store,
+      }),
+      "http://100.89.201.14:25000",
+    );
+    store.save({ origin: "http://100.89.201.14:25000", credential: "remote-secret" });
+    assert.equal(store.active()?.credential, "remote-secret");
+
+    writeFileSync(
+      path.join(home, "config.json"),
+      `${JSON.stringify({ version: 1, hub: { allowHttp: false } }, null, 2)}\n`,
+    );
+    assert.equal(store.active()?.origin, "http://100.89.201.14:25000");
+    assert.throws(
+      () =>
+        resolveHubOrigin({
+          options: {},
+          env: { PASEO_HOME: home },
+          credentials: store,
+        }),
+      { code: "HUB_INVALID_ORIGIN" },
     );
   });
 

@@ -3189,6 +3189,14 @@ export const ko: TranslationResources = {
           info: "대화를 유지하면서 에이전트 프로세스를 중지합니다. 메시지를 보내면 다시 이어집니다.\n\n진행 중인 작업, 대기 중인 알림, 프로바이더 안전 검사가 있으면 정리하지 않습니다.",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "HTTP 허용",
+          hint: "localhost가 아닌 Hub에 CLI가 HTTP로 접속하게 합니다. 로그인 자격 증명은 평문으로 전송됩니다.",
+          info: "끄면 CLI는 localhost, 127.0.0.1, [::1]에 대한 HTTP만 받습니다. 켜면 TLS가 없는 사설 네트워크의 Hub처럼 다른 호스트에 대한 HTTP도 받습니다. 같은 스위치는 호스트 구성의 hub.allowHttp입니다.",
+        },
+      },
       workspaces: {
         unavailable: "워크스페이스를 관리하려면 이 호스트에 연결하세요",
       },

@@ -75,7 +75,7 @@ The daemon validates the complete file before applying anything. It applies runt
 paseo daemon restart
 ```
 
-Runtime-safe settings include relay enablement, MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
+Runtime-safe settings include relay enablement, MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, Hub HTTP (`hub.allowHttp`), and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
 
 New homes keep relay disabled when you remove `daemon.relay.enabled`. A daemon whose config already omitted this field when it started keeps the legacy relay-enabled behavior for compatibility. Set `daemon.relay.enabled` explicitly when editing an older config.
 
@@ -104,6 +104,20 @@ on config reload. Re-enabling keeps existing idle timestamps. There is no per-ag
 period. Active work, descendants and pending finish notifications prevent cleanup. ACP adapters
 also retain runtimes with running ACP terminals, including silent ones; exited terminals do not
 prevent cleanup. This check does not inspect processes launched internally by the provider.
+
+## Hub HTTP
+
+The CLI accepts HTTP Hub origins for `localhost`, `127.0.0.1`, and `[::1]`. Turn on **Allow HTTP** in **Settings → your host → Overview** to accept HTTP for other hosts, or set:
+
+```json
+{ "hub": { "allowHttp": true } }
+```
+
+```bash
+paseo daemon config set hub.allowHttp true
+```
+
+The switch stays off until you enable it. CLI login credentials then travel in cleartext.
 
 ## Worktrees
 

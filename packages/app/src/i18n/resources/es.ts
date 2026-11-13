@@ -3240,6 +3240,14 @@ export const es: TranslationResources = {
           info: "Detiene el proceso del agente y conserva la conversación. Envía un mensaje para reanudarla.\n\nEl trabajo activo, las notificaciones pendientes y las comprobaciones de seguridad del proveedor impiden la limpieza.",
         },
       },
+      hub: {
+        title: "Hub",
+        allowHttp: {
+          title: "Permitir HTTP",
+          hint: "Permite que la CLI llegue a un Hub por HTTP cuando no está en localhost. Las credenciales de inicio de sesión viajan en texto claro.",
+          info: "Desactivado, la CLI acepta HTTP solo para localhost, 127.0.0.1 y [::1]. Activado, también acepta HTTP para otros hosts, como un Hub en una red privada sin TLS. El mismo interruptor es hub.allowHttp en la configuración del host.",
+        },
+      },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",
       },
