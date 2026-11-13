@@ -30,6 +30,10 @@ describe("Paseo tool policy", () => {
     expect(isPaseoToolEnabled({ enabled: false }, "list_slack_channels")).toBe(true);
     expect(isPaseoToolEnabled({ enabled: false }, "read_slack_messages")).toBe(true);
     expect(isPaseoToolEnabled({ enabled: false }, "plan_create_update")).toBe(true);
+    expect(isPaseoToolEnabled({ enabled: false }, "plan_build")).toBe(true);
+    expect(
+      isPaseoToolEnabled({ enabled: false, disabledTools: ["plan_create_update"] }, "plan_build"),
+    ).toBe(true);
     expect(
       isPaseoToolEnabled(
         { enabled: false, disabledTools: ["plan_create_update"] },

@@ -12,7 +12,13 @@ export interface PlanRecord {
 
 interface PlanStore {
   plans: Record<string, PlanRecord>;
+  /** Plan keys with a build in flight. Runtime-only: never persisted. */
+  building: Record<string, true>;
   setPlan: (plan: PlanRecord) => void;
+  setBuilding: (
+    input: { serverId: string; workspaceId: string; path: string },
+    building: boolean,
+  ) => void;
 }
 
 function normalizePlanPath(path: string): string {
@@ -30,6 +36,7 @@ export const usePlanStore = create<PlanStore>()(
   persist(
     (set) => ({
       plans: {},
+      building: {},
       setPlan: (plan) =>
         set((state) => ({
           plans: {
@@ -37,6 +44,15 @@ export const usePlanStore = create<PlanStore>()(
             [planKey(plan)]: plan,
           },
         })),
+      setBuilding: (input, building) =>
+        set((state) => {
+          const key = planKey(input);
+          if (building === Boolean(state.building[key])) return state;
+          const next = { ...state.building };
+          if (building) next[key] = true;
+          else delete next[key];
+          return { building: next };
+        }),
     }),
     {
       name: "paseo.plans",
@@ -58,4 +74,13 @@ export function usePlan(input: {
         (plan) => plan.serverId === input.serverId && normalizePlanPath(plan.path) === path,
       ) ?? null,
   );
+}
+
+/** True while the daemon reports a build in flight for this plan. */
+export function usePlanBuilding(input: {
+  serverId: string;
+  workspaceId: string;
+  path: string;
+}): boolean {
+  return usePlanStore((state) => Boolean(state.building[planKey(input)]));
 }

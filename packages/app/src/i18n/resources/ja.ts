@@ -2296,6 +2296,7 @@ export const ja: TranslationResources = {
       failedToLoadPreview: "ファイルプレビューの読み込みに失敗しました",
       plan: {
         build: "ビルド",
+        building: "ビルド中",
         buildPrompt:
           "{{path}} の計画を実行してください。まずファイルを読み、その後実装してください。",
       },

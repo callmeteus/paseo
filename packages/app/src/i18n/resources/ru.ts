@@ -2306,6 +2306,7 @@ export const ru: TranslationResources = {
       failedToLoadPreview: "Не удалось загрузить предварительный просмотр файла.",
       plan: {
         build: "Собрать",
+        building: "Сборка",
         buildPrompt: "Выполни план в {{path}}. Сначала прочитай файл, затем реализуй его.",
       },
       editor: {

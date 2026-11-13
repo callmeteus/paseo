@@ -2310,6 +2310,7 @@ export const ptBR: TranslationResources = {
       failedToLoadPreview: "Falha ao carregar prévia do arquivo",
       plan: {
         build: "Construir",
+        building: "Construindo",
         buildPrompt: "Execute o plano em {{path}}. Leia o arquivo primeiro e depois implemente.",
       },
       editor: {

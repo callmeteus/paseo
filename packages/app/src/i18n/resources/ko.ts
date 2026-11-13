@@ -2282,6 +2282,7 @@ export const ko: TranslationResources = {
       failedToLoadPreview: "파일 미리보기를 불러오지 못했습니다",
       plan: {
         build: "빌드",
+        building: "빌드 중",
         buildPrompt: "{{path}}의 계획을 실행하세요. 먼저 파일을 읽고 구현하세요.",
       },
       editor: {

@@ -156,7 +156,11 @@ The plan must include:
 3. Risks, edge cases, and anything that needs a decision from the user.
 4. How to verify the change.
 
-Stop after presenting the plan and ask the user to switch to Agent mode to execute it.`;
+Stop after presenting the plan. When the user asks to build, execute, or implement
+the plan, call plan_build with the plan path instead of asking them to switch modes.
+plan_build switches you to Agent mode, queues the build, and marks the plan as
+building in the sidebar; the build starts as soon as your turn ends, so end the turn
+right after the call instead of implementing anything yourself.`;
 
 const WORKFLOW_MODE_BEHAVIOR: Record<
   WorkflowModeId,

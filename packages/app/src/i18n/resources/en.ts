@@ -2297,6 +2297,7 @@ export const en = {
       failedToLoadPreview: "Failed to load file preview",
       plan: {
         build: "Build",
+        building: "Building",
         buildPrompt: "Execute the plan at {{path}}. Read the file first, then implement it.",
       },
       editor: {

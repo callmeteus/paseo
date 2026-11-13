@@ -63,6 +63,7 @@ describe("workflow modes", () => {
     expect(prompt).toContain("Plan mode");
     expect(prompt).toContain("implementation plan");
     expect(prompt).toContain("Do NOT edit project files");
+    expect(prompt).toContain("plan_build");
     expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
   });
 

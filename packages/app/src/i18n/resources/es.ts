@@ -2323,6 +2323,7 @@ export const es: TranslationResources = {
       failedToLoadPreview: "No se pudo cargar la vista previa del archivo",
       plan: {
         build: "Construir",
+        building: "Construyendo",
         buildPrompt: "Ejecuta el plan en {{path}}. Lee el archivo primero y luego impleméntalo.",
       },
       editor: {

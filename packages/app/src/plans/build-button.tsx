@@ -4,25 +4,28 @@ import { Hammer } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/contexts/toast-context";
 import { usePaneContext } from "@/panels/pane-context";
-import { usePlan } from "@/plans/store";
+import { usePlan, usePlanBuilding } from "@/plans/store";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 
 /**
  * Build button shown on a plan file preview. Switches the plan's agent back to
- * Agent workflow mode and sends the plan file as the task.
+ * Agent workflow mode and sends the plan file as the task. It also mirrors the
+ * build the agent starts itself through the plan_build tool.
  */
 export function PlanBuildButton({ path }: { path: string }) {
   const { serverId, workspaceId } = usePaneContext();
   const plan = usePlan({ serverId, workspaceId, path });
+  const buildingElsewhere = usePlanBuilding({ serverId, workspaceId, path });
   const client = useHostRuntimeClient(serverId);
   const { t } = useTranslation();
   const toast = useToast();
   const [isBuilding, setIsBuilding] = useState(false);
+  const busy = isBuilding || buildingElsewhere;
 
   const handleBuild = useCallback(async () => {
-    if (!plan || !client) return;
+    if (!plan || !client || busy) return;
     setIsBuilding(true);
     try {
       await client.setAgentWorkflowMode(plan.agentId, "agent");
@@ -36,7 +39,7 @@ export function PlanBuildButton({ path }: { path: string }) {
     } finally {
       setIsBuilding(false);
     }
-  }, [client, plan, serverId, t, toast]);
+  }, [busy, client, plan, serverId, t, toast]);
 
   if (!plan) return null;
 
@@ -45,11 +48,11 @@ export function PlanBuildButton({ path }: { path: string }) {
       variant="default"
       size="sm"
       leftIcon={Hammer}
-      loading={isBuilding}
+      loading={busy}
       onPress={handleBuild}
       testID="plan-build-button"
     >
-      {t("panels.file.plan.build")}
+      {busy ? t("panels.file.plan.building") : t("panels.file.plan.build")}
     </Button>
   );
 }

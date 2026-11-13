@@ -1,5 +1,6 @@
 import type { FinishSubscriptions, FinishRegistration } from "../finish-subscriptions/index.js";
 import type { AgentMessageDelivery } from "../agent-messages/index.js";
+import type { PlanBuildEntry, PlanBuildUpdate } from "../../plan-builds.js";
 import {
   createHostResolver,
   HostOperationRejectedError,
@@ -178,12 +179,9 @@ export interface PaseoToolHostDependencies {
   paseoHome?: string;
   worktreesRoot?: string;
   /** Pushes a plan tab to connected clients after plan_create_update writes it. */
-  emitPlanUpdate?: (input: {
-    workspaceId: string;
-    path: string;
-    title: string;
-    agentId: string;
-  }) => void;
+  emitPlanUpdate?: (input: PlanBuildUpdate) => void;
+  /** Marks a plan as building until the caller's turn ends. */
+  markPlanBuilding?: (entry: PlanBuildEntry) => void;
   /**
    * ID of the agent that is using this tool catalog.
    * Used for cwd/mode inheritance when agents spawn child agents.
@@ -736,6 +734,35 @@ function createToolCatalog(
   function finishSubscriptions(): FinishSubscriptions {
     if (!options.finishSubscriptions) throw new Error("Finish subscriptions are not configured");
     return options.finishSubscriptions();
+  }
+  /** Resolves a workspace-relative plan path and proves the file stays in the workspace. */
+  async function resolveWorkspacePlan(requestedPath: string, toolName: string) {
+    if (!callerAgentId) {
+      throw new PaseoToolInputError(`${toolName} requires an agent caller`);
+    }
+    const caller = agentManager.getAgent(callerAgentId);
+    if (!caller) {
+      throw new PaseoToolInputError(`Caller agent ${callerAgentId} not found`);
+    }
+    const workspaceId = caller.workspaceId;
+    if (!workspaceId) {
+      throw new PaseoToolInputError("Caller agent has no workspace");
+    }
+    const workspace = options.workspaceRegistry
+      ? await options.workspaceRegistry.get(workspaceId)
+      : null;
+    const workspaceRoot = workspace?.cwd ?? caller.cwd;
+    const absolutePath = ensureMarkdownPath(resolvePathFromBase(workspaceRoot, requestedPath));
+    if (!isSameOrDescendantPath(workspaceRoot, absolutePath)) {
+      throw new PaseoToolInputError("Plan path must stay inside the workspace");
+    }
+    return {
+      agentId: callerAgentId,
+      workspaceId,
+      absolutePath,
+      planPath: relative(workspaceRoot, absolutePath).replace(/\\/g, "/"),
+      planTitle: basename(absolutePath, extname(absolutePath)),
+    };
   }
   async function prepareRemoteNotification(
     name: string,
@@ -2677,50 +2704,76 @@ function createToolCatalog(
       },
     },
     async ({ path: requestedPath, title, content }) => {
-      if (!callerAgentId) {
-        throw new PaseoToolInputError("plan_create_update requires an agent caller");
-      }
-      const caller = agentManager.getAgent(callerAgentId);
-      if (!caller) {
-        throw new PaseoToolInputError(`Caller agent ${callerAgentId} not found`);
-      }
-      const workspaceId = caller.workspaceId;
-      if (!workspaceId) {
-        throw new PaseoToolInputError("Caller agent has no workspace");
-      }
-      const workspace = options.workspaceRegistry
-        ? await options.workspaceRegistry.get(workspaceId)
-        : null;
-      const workspaceRoot = workspace?.cwd ?? caller.cwd;
-      const absolutePath = ensureMarkdownPath(resolvePathFromBase(workspaceRoot, requestedPath));
-      if (!isSameOrDescendantPath(workspaceRoot, absolutePath)) {
-        throw new PaseoToolInputError("Plan path must stay inside the workspace");
-      }
+      const plan = await resolveWorkspacePlan(requestedPath, "plan_create_update");
       const created = content !== undefined;
       if (created) {
-        await mkdir(dirname(absolutePath), { recursive: true });
-        await writeFile(absolutePath, content, "utf8");
+        await mkdir(dirname(plan.absolutePath), { recursive: true });
+        await writeFile(plan.absolutePath, content, "utf8");
       } else {
         try {
-          await stat(absolutePath);
+          await stat(plan.absolutePath);
         } catch {
           throw new PaseoToolInputError(`Plan file not found: ${requestedPath}`);
         }
       }
-      const planPath = relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
-      const planTitle = title?.trim() || basename(absolutePath, extname(absolutePath));
+      const planTitle = title?.trim() || plan.planTitle;
       options.emitPlanUpdate?.({
-        workspaceId,
-        path: planPath,
+        workspaceId: plan.workspaceId,
+        path: plan.planPath,
         title: planTitle,
-        agentId: callerAgentId,
+        agentId: plan.agentId,
       });
       if (content !== undefined) {
-        await agentManager.appendTimelineItem(callerAgentId, markdownToTodo(content));
+        await agentManager.appendTimelineItem(plan.agentId, markdownToTodo(content));
       }
       return {
         content: [],
-        structuredContent: ensureValidJson({ path: planPath, title: planTitle, created }),
+        structuredContent: ensureValidJson({ path: plan.planPath, title: planTitle, created }),
+      };
+    },
+  );
+
+  registerTool(
+    "plan_build",
+    {
+      title: "Build plan",
+      description:
+        "Start executing a plan the user asked to build, approve, or implement. Switches this agent to Agent workflow mode, queues the build to start as soon as this turn ends, and marks the plan as building in the sidebar. Call it instead of asking the user to switch modes.",
+      inputSchema: {
+        path: z
+          .string()
+          .min(1)
+          .describe("Workspace-relative plan path, as returned by plan_create_update."),
+      },
+      outputSchema: {
+        path: z.string(),
+        title: z.string(),
+      },
+    },
+    async ({ path: requestedPath }) => {
+      const plan = await resolveWorkspacePlan(requestedPath, "plan_build");
+      try {
+        await stat(plan.absolutePath);
+      } catch {
+        throw new PaseoToolInputError(`Plan file not found: ${requestedPath}`);
+      }
+      await agentManager.setAgentWorkflowMode(plan.agentId, "agent");
+      // The daemon dispatches the build prompt when this turn ends, so it runs as
+      // a fresh Agent-mode turn instead of steering into a Plan turn.
+      options.markPlanBuilding?.({
+        workspaceId: plan.workspaceId,
+        path: plan.planPath,
+        title: plan.planTitle,
+        agentId: plan.agentId,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Build queued for ${plan.planPath}. End this turn now; the build starts on its own.`,
+          },
+        ],
+        structuredContent: ensureValidJson({ path: plan.planPath, title: plan.planTitle }),
       };
     },
   );

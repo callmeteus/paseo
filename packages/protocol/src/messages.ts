@@ -4904,6 +4904,10 @@ export const PlanUpdateMessageSchema = z.object({
     path: z.string(),
     title: z.string().optional(),
     agentId: z.string(),
+    // COMPAT(planBuildState): added in v0.13.2, drop the optional gate when floor >= v0.13.2.
+    // Present only on build-state updates. plan_create_update omits it, and old
+    // clients keep treating every plan_update as "the plan file changed".
+    building: z.boolean().optional(),
   }),
 });
 

@@ -255,6 +255,8 @@ import { DaemonExecutions } from "./hub/daemon-executions.js";
 import { PluginService } from "./plugins/index.js";
 import { BuiltinPluginLoader } from "./plugins/builtin/index.js";
 import { ManagedPluginSources } from "./plugins/managed-source.js";
+import { createPlanBuildTracker, type PlanBuildUpdate } from "./plan-builds.js";
+import { sendPromptToAgent } from "./agent/agent-prompt.js";
 
 const MCP_DEBUG_BATCH_LIMIT = 10;
 const MCP_DEBUG_SECRET = "[redacted]";
@@ -1598,6 +1600,29 @@ export async function createPaseoDaemon(
     idleRuntimeCleanup,
   );
 
+  const emitPlanUpdate = (input: PlanBuildUpdate) => {
+    logger.info({ input }, "plan update emitted");
+    wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
+  };
+  const planBuilds = createPlanBuildTracker({
+    emit: emitPlanUpdate,
+    subscribe: (listener) => agentManager.subscribe(listener, { replayState: false }),
+    dispatchBuild: async (entry) => {
+      const { disposition } = await sendPromptToAgent({
+        agentManager,
+        agentStorage,
+        agentId: entry.agentId,
+        prompt: `Execute the plan at ${entry.path}. Read the file first, then implement it.`,
+        activeTurnBehavior: "steer",
+        logger,
+      });
+      logger.info({ entry, disposition }, "plan build dispatched");
+    },
+    onDispatchError: (error, entry) => {
+      logger.error({ err: error, entry }, "plan build dispatch failed");
+    },
+  });
+
   const createAgentToolHostDependencies = (
     runtime: PaseoToolRuntimeContext,
   ): PaseoToolHostDependencies => ({
@@ -1624,10 +1649,8 @@ export async function createPaseoDaemon(
     listActiveWorkspaces: listActiveWorkspacesExternal,
     archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
     emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
-    emitPlanUpdate: (input) => {
-      logger.info({ input }, "plan update emitted");
-      wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
-    },
+    emitPlanUpdate,
+    markPlanBuilding: (entry) => planBuilds.start(entry),
     workspaceRegistry,
     projectRegistry,
     createDirectoryWorkspace: async (cwd, title, projectId, context) => {

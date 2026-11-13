@@ -571,6 +571,20 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           title: message.payload.title ?? message.payload.path,
           agentId: message.payload.agentId,
         });
+        // Build-state updates flip the panel's Build button only. Opening or
+        // navigating here would pull the user away from the chat that started
+        // the build.
+        if (message.payload.building !== undefined) {
+          usePlanStore.getState().setBuilding(
+            {
+              serverId,
+              workspaceId: message.payload.workspaceId,
+              path: message.payload.path,
+            },
+            message.payload.building,
+          );
+          return;
+        }
         const target = { kind: "file" as const, path: message.payload.path };
         const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
         const resolvedWorkspaceId =
