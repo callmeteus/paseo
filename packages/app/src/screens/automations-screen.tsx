@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from "re
 import { Text, View } from "react-native";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import { useTranslation } from "react-i18next";
-import { Workflow } from "lucide-react-native";
+import { ChevronRight, Workflow } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MenuHeader } from "@/components/headers/menu-header";
+import { SettingsCard } from "@/components/settings";
 import { Button } from "@/components/ui/button";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AutomationsHubFrame } from "@/automations/automations-hub-frame";
 import { hubStartStatusId } from "@/automations/hub-start-status";
@@ -210,7 +212,14 @@ async function finishInstall(
   }
 }
 
-function ChooseOriginButton({
+/** The machine name after `@org/`, when the host label is written that way. */
+function hubChoiceName(label: string): string {
+  const slash = label.lastIndexOf("/");
+  if (slash <= 0 || slash === label.length - 1) return label;
+  return label.slice(slash + 1);
+}
+
+function ChooseHubRow({
   label,
   origin,
   onChoose,
@@ -219,13 +228,42 @@ function ChooseOriginButton({
   origin: string;
   onChoose: (origin: string) => void;
 }): ReactElement {
+  const [hovered, setHovered] = useState(false);
   const choose = useCallback(() => {
     onChoose(origin);
   }, [onChoose, origin]);
+  const showHover = useCallback(() => {
+    setHovered(true);
+  }, []);
+  const hideHover = useCallback(() => {
+    setHovered(false);
+  }, []);
+  const rowStyle = useCallback(
+    ({ pressed }: { pressed: boolean }) => [
+      styles.chooseRow,
+      (hovered || pressed) && styles.chooseRowActive,
+    ],
+    [hovered],
+  );
   return (
-    <Button variant="outline" onPress={choose}>
-      {label}
-    </Button>
+    <PressHighlight
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={choose}
+      onHoverIn={showHover}
+      onHoverOut={hideHover}
+      style={rowStyle}
+    >
+      <View style={styles.chooseRowText}>
+        <Text style={styles.chooseName} numberOfLines={1}>
+          {hubChoiceName(label)}
+        </Text>
+        <Text style={styles.chooseOrigin} numberOfLines={1}>
+          {origin}
+        </Text>
+      </View>
+      <ChevronRight size={styles.chooseChevron.width} color={styles.chooseChevron.color} />
+    </PressHighlight>
   );
 }
 
@@ -454,15 +492,22 @@ function AutomationsBody({
   if (view.kind === "choose") {
     return (
       <View style={styles.emptyState} testID="automations-choose">
-        <Text style={styles.emptyTitle}>{t("sidebar.automationsPage.chooseTitle")}</Text>
-        {view.options.map((option) => (
-          <ChooseOriginButton
-            key={option.serverId}
-            label={option.label}
-            origin={option.origin}
-            onChoose={onChoose}
-          />
-        ))}
+        <View style={styles.chooseColumn}>
+          <View style={styles.chooseHeader}>
+            <Text style={styles.chooseTitle}>{t("sidebar.automationsPage.chooseTitle")}</Text>
+            <Text style={styles.chooseBody}>{t("sidebar.automationsPage.chooseBody")}</Text>
+          </View>
+          <SettingsCard>
+            {view.options.map((option) => (
+              <ChooseHubRow
+                key={option.serverId}
+                label={option.label}
+                origin={option.origin}
+                onChoose={onChoose}
+              />
+            ))}
+          </SettingsCard>
+        </View>
       </View>
     );
   }
@@ -572,6 +617,51 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     textAlign: "center",
+  },
+  chooseColumn: {
+    width: "100%",
+    maxWidth: 420,
+    gap: theme.spacing[4],
+  },
+  chooseHeader: {
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[1],
+  },
+  chooseTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+  },
+  chooseBody: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+  },
+  chooseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingVertical: theme.spacing[3],
+    paddingHorizontal: theme.spacing[4],
+    width: "100%",
+  },
+  chooseRowActive: {
+    backgroundColor: theme.colors.interactionHighlight,
+  },
+  chooseRowText: {
+    flex: 1,
+    gap: theme.spacing[1],
+  },
+  chooseName: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+  },
+  chooseOrigin: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  chooseChevron: {
+    color: theme.colors.foregroundMuted,
+    width: theme.iconSize.sm,
   },
   originInput: {
     width: "100%",

@@ -29,6 +29,7 @@ interface SupportedMutableConfigPatch {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   idleRuntimeCleanup?: boolean;
+  idleRuntimeCleanupAfter?: MutableDaemonConfig["idleRuntimeCleanupAfter"];
   hubAllowHttp?: boolean;
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
@@ -200,6 +201,7 @@ const RELOADABLE_PATHS = [
   "daemon.mcpBridges",
   "app.baseUrl",
   "agents.idleRuntimeCleanup",
+  "agents.idleRuntimeCleanupAfter",
   "hub.allowHttp",
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
@@ -230,6 +232,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.mcpBridges", "mcpBridges"],
   ["app.baseUrl", "app.baseUrl"],
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
+  ["agents.idleRuntimeCleanupAfter", "idleRuntimeCleanupAfter"],
   ["hub.allowHttp", "hubAllowHttp"],
   ["agents.providers", "providers"],
   ["agents.catalogRefreshTimeoutMs", "catalogRefreshTimeoutMs"],
@@ -302,6 +305,14 @@ function pickMcpConfigPatch(
   };
 }
 
+function pickIdleRuntimeCleanupAfterPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "idleRuntimeCleanupAfter"> {
+  return patch.idleRuntimeCleanupAfter !== undefined
+    ? { idleRuntimeCleanupAfter: patch.idleRuntimeCleanupAfter }
+    : {};
+}
+
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
@@ -327,6 +338,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.idleRuntimeCleanup !== undefined
       ? { idleRuntimeCleanup: patch.idleRuntimeCleanup }
       : {}),
+    ...pickIdleRuntimeCleanupAfterPatch(patch),
     ...pickHubAllowHttpPatch(patch),
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
@@ -701,6 +713,24 @@ function mergeMutablePatchIntoPersistedConfig(params: {
   } as PersistedConfig;
 }
 
+function idleCleanupPatchAbsent(
+  patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
+): boolean {
+  return patch.idleRuntimeCleanup === undefined && patch.idleRuntimeCleanupAfter === undefined;
+}
+
+function applyIdleCleanupPatch(
+  next: Record<string, unknown>,
+  patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
+): void {
+  if (patch.idleRuntimeCleanup !== undefined) {
+    next["idleRuntimeCleanup"] = patch.idleRuntimeCleanup;
+  }
+  if (patch.idleRuntimeCleanupAfter !== undefined) {
+    next["idleRuntimeCleanupAfter"] = patch.idleRuntimeCleanupAfter;
+  }
+}
+
 function mergeMutableAgentPatch(
   persistedAgents: PersistedConfig["agents"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -711,7 +741,7 @@ function mergeMutableAgentPatch(
     patch.metadataGeneration === undefined &&
     patch.modelRouters === undefined &&
     patch.skills === undefined &&
-    patch.idleRuntimeCleanup === undefined &&
+    idleCleanupPatchAbsent(patch) &&
     removeProviders.length === 0
   ) {
     return persistedAgents;
@@ -748,9 +778,7 @@ function mergeMutableAgentPatch(
     next["modelRouters"] = patch.modelRouters;
   }
 
-  if (patch.idleRuntimeCleanup !== undefined) {
-    next["idleRuntimeCleanup"] = patch.idleRuntimeCleanup;
-  }
+  applyIdleCleanupPatch(next, patch);
 
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }

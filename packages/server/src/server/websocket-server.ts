@@ -2068,6 +2068,8 @@ export class VoiceAssistantWebSocketServer {
         skillManagement: true,
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: true,
+        // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, remove gate after 2027-11-09.
+        idleRuntimeCleanupAfterSetting: true,
         // COMPAT(hubAllowHttpSetting): added in v0.13.1, remove gate after 2027-05-12.
         hubAllowHttpSetting: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.

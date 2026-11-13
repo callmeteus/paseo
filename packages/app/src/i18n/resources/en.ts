@@ -1506,6 +1506,7 @@ export const en = {
       offlineTitle: "No daemon is online",
       offlineBody: "Connect a daemon, then open Automations again.",
       chooseTitle: "Choose a Hub",
+      chooseBody: "Each daemon is connected to a different Hub.",
       setupTitle: "Connect Hub",
       setupBody:
         "Connect a Hub you already have, on this computer or somewhere else, or install one here.",
@@ -3320,6 +3321,17 @@ export const en = {
         idleRuntimeCleanup: {
           title: "Release idle agents",
           hint: "Free up memory after an hour of inactivity.",
+          hintChosen: "Free up memory after the idle time below.",
+          after: {
+            label: "Idle time",
+            "15m": "15 minutes",
+            "30m": "30 minutes",
+            "1h": "1 hour",
+            "2h": "2 hours",
+            "4h": "4 hours",
+            "8h": "8 hours",
+            "24h": "24 hours",
+          },
           info: "Stops the agent's process while keeping its conversation. Send a message to resume.\n\nActive work, pending notifications, and provider safety checks prevent cleanup.",
         },
       },

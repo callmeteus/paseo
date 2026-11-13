@@ -14,6 +14,12 @@ function hubAllowHttpFromPersisted(persisted: PersistedConfig): boolean {
   return persisted.hub?.allowHttp === true;
 }
 
+function defaultIdleAfter(
+  value: MutableDaemonConfig["idleRuntimeCleanupAfter"],
+): NonNullable<MutableDaemonConfig["idleRuntimeCleanupAfter"]> {
+  return value ?? "1h";
+}
+
 function reloadableConfig(
   persisted: PersistedConfig,
   options: { relayEnabledFallback?: boolean } = {},
@@ -33,6 +39,7 @@ function reloadableConfig(
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: daemon.enableTerminalAgentHooks ?? false,
     idleRuntimeCleanup: agents.idleRuntimeCleanup !== false,
+    idleRuntimeCleanupAfter: defaultIdleAfter(agents.idleRuntimeCleanupAfter),
     hubAllowHttp: hubAllowHttpFromPersisted(persisted),
     appendSystemPrompt: daemon.appendSystemPrompt ?? "",
     terminalProfiles: daemon.terminalProfiles,
@@ -1161,6 +1168,35 @@ describe("DaemonConfigStore reload", () => {
       overrideControlledPaths: [],
     });
     expect(store.get().idleRuntimeCleanup).toBe(false);
+  });
+
+  test("reloads the idle period in both directions without requiring a restart", () => {
+    const { paseoHome, store, persisted } = createReloadableStore();
+    const changes: unknown[] = [];
+    store.onFieldChange("idleRuntimeCleanupAfter", (value) => changes.push(value));
+    writeConfig(paseoHome, {
+      ...persisted,
+      agents: { ...persisted.agents, idleRuntimeCleanupAfter: "30m" },
+    });
+    expect(store.reload()).toEqual({
+      appliedPaths: ["agents.idleRuntimeCleanupAfter"],
+      restartRequiredPaths: [],
+      overrideControlledPaths: [],
+    });
+    expect(store.get().idleRuntimeCleanupAfter).toBe("30m");
+    expect(loadConfig(paseoHome, { env: {} }).idleRuntimeCleanupAfter).toBe("30m");
+
+    writeConfig(paseoHome, {
+      ...persisted,
+      agents: { ...persisted.agents, idleRuntimeCleanupAfter: "2h" },
+    });
+    expect(store.reload().restartRequiredPaths).toEqual([]);
+    expect(store.get().idleRuntimeCleanupAfter).toBe("2h");
+    expect(changes).toEqual(["30m", "2h"]);
+
+    store.patch({ idleRuntimeCleanupAfter: "15m" });
+    expect(loadPersistedConfig(paseoHome).agents?.idleRuntimeCleanupAfter).toBe("15m");
+    expect(store.get().idleRuntimeCleanupAfter).toBe("15m");
   });
 
   test("applies the global plugin switch in both directions", () => {

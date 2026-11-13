@@ -27,14 +27,17 @@ Reload releases the old runtime before resuming its durable session: an idle pro
 still own an exclusive writer. A close failure retains that runtime for cleanup and blocks the
 replacement. Once closure succeeds, a failed resume leaves the durable agent closed and retryable.
 
-Idle resumable runtimes are collected after one hour without activity, checked once a minute.
+Idle resumable runtimes are collected after the host idle period, checked once a minute.
+The period is `agents.idleRuntimeCleanupAfter`; omitted means one hour. The choices are on the
+[configuration page](../public-docs/configuration.md#idle-runtimes).
 Loading a runtime (opening a chat, resuming after a restart) starts its own idle clock, so a stale
 stored `updatedAt` cannot make a freshly resumed runtime eligible. Collection releases the process
 and preserves the agent record, conversation, relationships, and provider session. The next prompt
 resumes that session, including a prompt that arrives while the runtime is still closing. Set
 `agents.idleRuntimeCleanup: false` in host config to disable automatic collection. The host setting applies immediately; config-file edits apply on reload. Disabling
 invalidates pending safety checks and close admission. A close already started finishes.
-Re-enabling keeps the existing idle timestamps.
+Re-enabling keeps the existing idle timestamps. Changing the period keeps them too, so a shorter
+period makes an already-idle runtime eligible on the next sweep.
 
 Foreground runs, permissions and responses, queued deliveries, lifecycle operations, and working
 managed or native descendants prevent collection. Outstanding local or remote finish subscriptions
@@ -43,8 +46,8 @@ An idle managed child can still own background work.
 
 The daemon baseline always applies. An optional provider `canStopRuntime()` adds a veto: false,
 errors and timeouts retain ownership, while true cannot override daemon blockers. Without a provider
-check, the baseline decides collection after the same one-hour idle period. Once protected work
-finishes, a fresh idle hour starts. There is no deadline that overrides a veto.
+check, the baseline decides collection after that same idle period. Once protected work
+finishes, a fresh idle period starts. There is no deadline that overrides a veto.
 
 The `idle-runtime-cleanup/` module owns the clocks, eligibility policy and sweep lifetime.
 AgentManager supplies captured runtime capabilities and owns atomic revalidation and shutdown.

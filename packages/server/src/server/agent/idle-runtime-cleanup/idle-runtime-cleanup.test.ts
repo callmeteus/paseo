@@ -1,3 +1,4 @@
+import type { IdleRuntimeCleanupAfter } from "@getpaseo/protocol/messages";
 import { expect, onTestFinished, test } from "vitest";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import { createIdleRuntimeCleanup, type RuntimeCleanupCandidate } from "./index.js";
@@ -41,7 +42,7 @@ class Runtime {
     };
   }
 }
-function scenario(enabled = true) {
+function scenario(enabled = true, idleAfter?: IdleRuntimeCleanupAfter) {
   const runtime = new Runtime();
   const runtimes = [runtime];
   let time = 0;
@@ -49,6 +50,7 @@ function scenario(enabled = true) {
   let tick!: () => void;
   const cleanup = createIdleRuntimeCleanup({
     enabled,
+    idleAfter,
     logger: createTestLogger(),
     now: () => time,
     runtimes: () => runtimes.filter((item) => !item.closed).map((item) => item.capture()),
@@ -81,6 +83,19 @@ test("a runtime without a provider check is collected at exactly one hour", asyn
   expect((await s.sweep(60)).collected).toEqual([
     { agentId: "agent", provider: "test", sessionId: "agent" },
   ]);
+});
+
+test("the chosen idle period replaces the one-hour default", async () => {
+  const s = scenario(true, "15m");
+  expect((await s.sweep(14)).collected).toEqual([]);
+  expect((await s.sweep(15)).collected).toHaveLength(1);
+});
+
+test("a shorter idle period collects on the next sweep without moving the idle clock", async () => {
+  const s = scenario();
+  expect((await s.sweep(20)).collected).toEqual([]);
+  s.cleanup.setIdleAfter("15m");
+  expect((await s.sweep(20)).collected).toHaveLength(1);
 });
 
 test("activity restarts the single one-hour idle period", async () => {

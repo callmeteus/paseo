@@ -1,3 +1,4 @@
+import type { IdleRuntimeCleanupAfter } from "@getpaseo/protocol/messages";
 import type { Logger } from "pino";
 import { withTimeout } from "../../../utils/promise-timeout.js";
 
@@ -19,6 +20,8 @@ interface Options {
   isProtected?(agentId: string): boolean;
   logger: Pick<Logger, "debug" | "info" | "warn">;
   now?: () => number;
+  /** Omitted means one hour. Changing it keeps idle timestamps already recorded. */
+  idleAfter?: IdleRuntimeCleanupAfter;
   schedule?: (tick: () => void, intervalMs: number) => () => void;
 }
 interface CollectionEntry {
@@ -30,7 +33,19 @@ interface CollectionResult {
   collected: CollectionEntry[];
   failures: Array<{ agentId: string; error: unknown }>;
 }
-const IDLE_PERIOD_MS = 60 * 60_000;
+const IDLE_AFTER_MS = {
+  "15m": 15 * 60_000,
+  "30m": 30 * 60_000,
+  "1h": 60 * 60_000,
+  "2h": 2 * 60 * 60_000,
+  "4h": 4 * 60 * 60_000,
+  "8h": 8 * 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+} satisfies Record<IdleRuntimeCleanupAfter, number>;
+
+function periodMs(value: IdleRuntimeCleanupAfter | undefined): number {
+  return value === undefined ? IDLE_AFTER_MS["1h"] : IDLE_AFTER_MS[value];
+}
 
 /** Owns idle clocks, baseline eligibility, optional provider vetoes and the sweep lifetime. */
 export function createIdleRuntimeCleanup(options: Options) {
@@ -38,6 +53,7 @@ export function createIdleRuntimeCleanup(options: Options) {
   let collection: Promise<CollectionResult> | null = null;
   let stopped = false;
   let enabled = options.enabled;
+  let idlePeriodMs = periodMs(options.idleAfter);
   let generation = 0;
   const isProtected = options.isProtected ?? (() => false);
   const now = options.now ?? Date.now;
@@ -76,6 +92,7 @@ export function createIdleRuntimeCleanup(options: Options) {
     const isCurrent = () => enabled && !stopped && generation === sweepGeneration;
     if (!isCurrent()) return result;
     const timestamp = now();
+    const idleLimitMs = idlePeriodMs;
     const runtimes = options.runtimes();
     for (const runtime of runtimes) {
       if (!isCurrent()) break;
@@ -99,7 +116,7 @@ export function createIdleRuntimeCleanup(options: Options) {
           runtime.lastActivityAt,
           protectedAt.get(runtime.identity)?.at ?? 0,
         );
-        if (timestamp - idleSince < IDLE_PERIOD_MS) continue;
+        if (timestamp - idleSince < idleLimitMs) continue;
         const revalidate = () => {
           const currentFamily = familyOf(runtime, options.runtimes());
           return (
@@ -157,6 +174,9 @@ export function createIdleRuntimeCleanup(options: Options) {
       if (enabled === value) return;
       enabled = value;
       generation++;
+    },
+    setIdleAfter(value: IdleRuntimeCleanupAfter) {
+      idlePeriodMs = periodMs(value);
     },
     async close() {
       stopped = true;

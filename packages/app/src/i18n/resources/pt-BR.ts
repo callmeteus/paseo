@@ -1529,6 +1529,7 @@ export const ptBR: TranslationResources = {
       offlineTitle: "Nenhum daemon online",
       offlineBody: "Conecte um daemon e abra Automações de novo.",
       chooseTitle: "Escolha um Hub",
+      chooseBody: "Cada daemon está ligado a um Hub diferente.",
       setupTitle: "Conectar o Hub",
       setupBody:
         "Conecte um Hub que já existe, neste computador ou em outro lugar, ou instale um aqui.",
@@ -3236,6 +3237,17 @@ export const ptBR: TranslationResources = {
         idleRuntimeCleanup: {
           title: "Liberar agentes ociosos",
           hint: "Libera memória após uma hora de inatividade.",
+          hintChosen: "Libera memória depois do tempo de ociosidade abaixo.",
+          after: {
+            label: "Tempo de ociosidade",
+            "15m": "15 minutos",
+            "30m": "30 minutos",
+            "1h": "1 hora",
+            "2h": "2 horas",
+            "4h": "4 horas",
+            "8h": "8 horas",
+            "24h": "24 horas",
+          },
           info: "Encerra o processo do agente e mantém a conversa. Envie uma mensagem para retomar.\n\nTrabalho ativo, notificações pendentes e verificações de segurança do provedor impedem a limpeza.",
         },
       },

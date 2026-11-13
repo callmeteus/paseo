@@ -432,6 +432,13 @@ export async function setIdleAgentRelease(page: Page, enabled: boolean): Promise
   await expectIdleAgentRelease(page, enabled);
 }
 
+export async function setIdleAgentReleaseAfter(page: Page, label: string): Promise<void> {
+  const card = page.getByTestId("host-page-idle-runtime-cleanup-card");
+  await card.getByRole("button", { name: /^Idle time:/ }).click();
+  await page.getByRole("menuitem", { name: label, exact: true }).click();
+  await expect(card.getByRole("button", { name: `Idle time: ${label}` })).toBeVisible();
+}
+
 export async function openHostSection(
   page: Page,
   serverId: string,

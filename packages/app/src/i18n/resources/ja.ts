@@ -1517,6 +1517,7 @@ export const ja: TranslationResources = {
       offlineTitle: "オンラインのデーモンがありません",
       offlineBody: "デーモンを接続してから、自動化を開き直してください。",
       chooseTitle: "Hub を選択",
+      chooseBody: "デーモンごとに別の Hub へ接続しています。",
       setupTitle: "Hub を接続",
       setupBody:
         "すでにある Hub（このコンピュータまたは別の場所）に接続するか、ここでインストールします。",
@@ -3209,6 +3210,17 @@ export const ja: TranslationResources = {
         idleRuntimeCleanup: {
           title: "アイドル状態のエージェントを解放",
           hint: "1 時間のアイドル状態の後にメモリを解放します。",
+          hintChosen: "下で選んだアイドル時間の後にメモリを解放します。",
+          after: {
+            label: "アイドル時間",
+            "15m": "15分",
+            "30m": "30分",
+            "1h": "1時間",
+            "2h": "2時間",
+            "4h": "4時間",
+            "8h": "8時間",
+            "24h": "24時間",
+          },
           info: "会話を保持したままエージェントのプロセスを停止します。メッセージを送信すると再開します。\n\n実行中の作業、保留中の通知、プロバイダーの安全性チェックがある場合は解放しません。",
         },
       },

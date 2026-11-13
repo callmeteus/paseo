@@ -1535,6 +1535,7 @@ export const fr: TranslationResources = {
       offlineTitle: "Aucun daemon en ligne",
       offlineBody: "Connectez un daemon, puis rouvrez Automatisations.",
       chooseTitle: "Choisir un Hub",
+      chooseBody: "Chaque daemon est connecté à un Hub différent.",
       setupTitle: "Connecter Hub",
       setupBody:
         "Connectez un Hub qui existe déjà, sur cet ordinateur ou ailleurs, ou installez-en un ici.",
@@ -3245,6 +3246,17 @@ export const fr: TranslationResources = {
         idleRuntimeCleanup: {
           title: "Libérer les agents inactifs",
           hint: "Libère de la mémoire après une heure d’inactivité.",
+          hintChosen: "Libère de la mémoire après la durée d’inactivité ci-dessous.",
+          after: {
+            label: "Durée d’inactivité",
+            "15m": "15 minutes",
+            "30m": "30 minutes",
+            "1h": "1 heure",
+            "2h": "2 heures",
+            "4h": "4 heures",
+            "8h": "8 heures",
+            "24h": "24 heures",
+          },
           info: "Arrête le processus de l’agent tout en conservant sa conversation. Envoyez un message pour la reprendre.\n\nLe travail en cours, les notifications en attente et les vérifications de sécurité du fournisseur empêchent le nettoyage.",
         },
       },
