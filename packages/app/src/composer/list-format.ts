@@ -118,8 +118,8 @@ export function continueComposerList(
 /**
  * Indents or outdents the list lines the caret is on.
  * Returns null when any touched line is not a list item, so Tab keeps its
- * other job. A list item already at the margin still returns the same text:
- * the key belongs to the list and must not leave the field.
+ * other job. Outdenting an item already at the margin removes its marker, which
+ * takes the item out of the list.
  */
 export function indentComposerList(
   text: string,
@@ -136,7 +136,15 @@ export function indentComposerList(
     if (!edit) return null;
     edits.push(edit);
   }
-  return applyListIndent(text, selection, edits);
+  const result = applyListIndent(text, selection, edits);
+  const removal = edits.length === 1 ? edits[0] : undefined;
+  if (!removal || removal.removedNumber === undefined) return result;
+  // The item left the list, so its ordered siblings keep counting from where it
+  // stopped instead of restarting at the removed number.
+  return {
+    text: renumberOrderedTail(result.text, removal.start, "", removal.removedNumber),
+    selection: result.selection,
+  };
 }
 
 /**
@@ -328,6 +336,8 @@ interface ListIndentEdit {
   added: number;
   removed: number;
   text: string;
+  /** Number of an ordered item that left the list, so its siblings continue from it. */
+  removedNumber?: number;
 }
 
 function textLines(text: string): TextLine[] {
@@ -355,6 +365,16 @@ function touchedLineIndexes(
 function listIndentEdit(line: TextLine, direction: "in" | "out"): ListIndentEdit | null {
   const marker = matchListMarker(line.text);
   if (!marker) return null;
+  if (direction === "out" && marker.indent.length === 0) {
+    // Already at the margin: the marker is what leaves, and the text stays prose.
+    return {
+      start: line.start,
+      added: 0,
+      removed: marker.prefixLength,
+      text: marker.content,
+      ...(marker.kind === "ordered" ? { removedNumber: marker.number } : {}),
+    };
+  }
   const step = marker.prefixLength - marker.indent.length;
   const removed = direction === "out" ? Math.min(marker.indent.length, step) : 0;
   const added = direction === "in" ? step : 0;

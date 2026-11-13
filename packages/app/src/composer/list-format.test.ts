@@ -156,14 +156,29 @@ describe("indenting a composer list", () => {
     });
   });
 
-  it("lifts one level and stays on the item when it is already at the margin", () => {
+  it("lifts one level, and takes a top-level item out of the list", () => {
     expect(indentComposerList("  - Filesystem", { start: 14, end: 14 }, "out")).toEqual({
       text: "- Filesystem",
       selection: { start: 12, end: 12 },
     });
     expect(indentComposerList("- Filesystem", { start: 4, end: 4 }, "out")).toEqual({
-      text: "- Filesystem",
-      selection: { start: 4, end: 4 },
+      text: "Filesystem",
+      selection: { start: 2, end: 2 },
+    });
+    expect(indentComposerList("1. Aqui no composer", { start: 6, end: 6 }, "out")).toEqual({
+      text: "Aqui no composer",
+      selection: { start: 3, end: 3 },
+    });
+  });
+
+  it("keeps the ordered siblings counting after the item leaves the list", () => {
+    expect(indentComposerList("1. a\n2. b\n3. c", { start: 9, end: 9 }, "out")).toEqual({
+      text: "1. a\nb\n2. c",
+      selection: { start: 6, end: 6 },
+    });
+    expect(indentComposerList("1. a\n2. b", { start: 5, end: 5 }, "out")).toEqual({
+      text: "1. a\nb",
+      selection: { start: 5, end: 5 },
     });
   });
 
