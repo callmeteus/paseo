@@ -275,6 +275,38 @@ export interface EditQueuedComposerMessageResult {
   attachments: UserComposerAttachment[];
 }
 
+export function reorderQueuedComposerMessages(input: {
+  agentId: string;
+  orderedIds: readonly string[];
+  queue: QueueWriter;
+}): void {
+  input.queue.write((prev) => {
+    const current = prev.get(input.agentId) ?? [];
+    if (current.length < 2) return prev;
+    const byId = new Map(current.map((item) => [item.id, item]));
+    const nextItems: QueuedComposerMessage[] = [];
+    const seen = new Set<string>();
+    for (const id of input.orderedIds) {
+      const item = byId.get(id);
+      if (!item || seen.has(id)) continue;
+      seen.add(id);
+      nextItems.push(item);
+    }
+    for (const item of current) {
+      if (!seen.has(item.id)) nextItems.push(item);
+    }
+    if (
+      nextItems.length === current.length &&
+      nextItems.every((item, index) => item === current[index])
+    ) {
+      return prev;
+    }
+    const next = new Map(prev);
+    next.set(input.agentId, nextItems);
+    return next;
+  });
+}
+
 export function editQueuedComposerMessage(
   input: EditQueuedComposerMessageInput,
 ): EditQueuedComposerMessageResult | null {

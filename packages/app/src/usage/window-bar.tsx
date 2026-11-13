@@ -32,6 +32,7 @@ export function UsageWindowBar({
   pinLabel,
   pinTestID,
   retained = false,
+  shortReset = false,
 }: {
   retained?: boolean;
   window: UsageWindow;
@@ -43,6 +44,8 @@ export function UsageWindowBar({
   /** What the row pins, naming the source and window: "Pin Claude Session". */
   pinLabel: string;
   pinTestID: string;
+  /** "in 2h" instead of "resets in 2h". The usage tab keeps the full phrase. */
+  shortReset?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const shownPct = displayPercent(window, displayAs);
@@ -55,7 +58,7 @@ export function UsageWindowBar({
     (!retained || Date.parse(window.runsOutAt) > now);
   const trailing = isAtRisk
     ? formatRunsOutLabel(window.runsOutAt, now, t)
-    : formatResetLabel(window.resetsAt, retained, now, t);
+    : formatResetLabel(window.resetsAt, retained, now, t, shortReset);
 
   const value =
     shownPct != null ? formatDisplayPct(shownPct, displayAs, i18n.resolvedLanguage, t) : "—";

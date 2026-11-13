@@ -52,7 +52,28 @@ function renderPiece(piece: ComposerMirrorPiece, skillStyle: StyleProp<TextStyle
       </Text>
     );
   }
+  if (piece.kind === "code") return <InlineCode key={piece.start} source={piece.text} />;
   return <BulletMarker key={piece.start} source={piece.text} />;
+}
+
+function InlineCode({ source }: { source: string }) {
+  const open = leadingBackticks(source);
+  const close = trailingBackticks(source);
+  return (
+    <Text style={styles.code}>
+      <Text style={styles.hidden}>{source.slice(0, open)}</Text>
+      {source.slice(open, source.length - close)}
+      <Text style={styles.hidden}>{source.slice(source.length - close)}</Text>
+    </Text>
+  );
+}
+
+function leadingBackticks(text: string): number {
+  return /^`+/.exec(text)?.[0].length ?? 0;
+}
+
+function trailingBackticks(text: string): number {
+  return /`+$/.exec(text)?.[0].length ?? 0;
 }
 
 function BulletMarker({ source }: { source: string }) {
@@ -68,6 +89,13 @@ function BulletMarker({ source }: { source: string }) {
 const styles = StyleSheet.create((theme) => ({
   marker: {
     color: theme.colors.foregroundMuted,
+  },
+  // The backticks stay in the layout, transparent, so the caret still lands on
+  // them. Their width is the padding around the code.
+  code: {
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.base,
+    color: theme.colors.foreground,
   },
   hidden: {
     color: "transparent",

@@ -312,11 +312,10 @@ const styles = StyleSheet.create((theme) => ({
   trigger: {
     width: "100%",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     overflow: "hidden",
-    // Same row geometry and leading rail as Add project and the footer icons.
-    minHeight: 28,
-    paddingVertical: theme.spacing[1],
+    // Taller than the icon line so each meter's hover cell is easy to land on.
+    minHeight: 36,
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },
@@ -324,7 +323,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     overflow: "hidden",
   },
   // Wide enough that nothing inside wraps or shrinks; each child reports its natural width.
@@ -351,13 +350,13 @@ const styles = StyleSheet.create((theme) => ({
     flexBasis: 0,
   },
   sourceGap: {
-    marginLeft: theme.spacing[3],
+    paddingLeft: theme.spacing[3],
   },
   iconGap: {
     marginLeft: theme.spacing[1.5],
   },
   windowGap: {
-    marginLeft: theme.spacing[2],
+    paddingLeft: theme.spacing[2],
   },
   // Every slot takes an equal share of the leftover width, so the line fills the row.
   meterSlot: {

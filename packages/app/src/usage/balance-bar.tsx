@@ -57,15 +57,18 @@ function fillToneStyle(tone: UsageTone) {
 export function UsageBalanceBar({
   balance,
   retained = false,
+  shortReset = false,
 }: {
   balance: UsageBalance;
   retained?: boolean;
+  /** "in 2h" instead of "resets in 2h". The usage tab keeps the full phrase. */
+  shortReset?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const now = useRelativeTimeTick({ enabled: balance.resetsAt != null });
   const { amountText, usedPct } = resolveBalance({ balance, t, locale: i18n.resolvedLanguage });
   const tone = balance.tone ?? "default";
-  const resetLabel = formatResetLabel(balance.resetsAt, retained, now, t);
+  const resetLabel = formatResetLabel(balance.resetsAt, retained, now, t, shortReset);
 
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
     () => [styles.fill, fillToneStyle(tone), { width: `${clampPct(usedPct ?? 0)}%` }],

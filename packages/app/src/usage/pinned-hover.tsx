@@ -18,6 +18,7 @@ import { UsageBalanceBar } from "./balance-bar";
 import { UsageWindowBar } from "./window-bar";
 
 const ignorePin = () => {};
+const SOURCE_ICON_SIZE = 14;
 
 /**
  * One pinned sidebar meter. Hovering it, and only it, opens the consumption readout the Usage
@@ -41,10 +42,10 @@ export function PinnedUsageHover({
   const showHover = useCallback(() => setHovered(true), []);
   const hideHover = useCallback(() => setHovered(false), []);
   const label = hoverLabel(item, t);
-  if (!isWeb) return <View style={slotStyle}>{children}</View>;
+  if (!isWeb) return <View style={[slotStyle, styles.slot]}>{children}</View>;
   return (
     <HoverCard>
-      <HoverCardTrigger style={slotStyle} accessibilityLabel={label}>
+      <HoverCardTrigger style={[slotStyle, styles.slot]} accessibilityLabel={label}>
         <View
           style={hovered ? [styles.hit, styles.hitHovered] : styles.hit}
           onPointerEnter={showHover}
@@ -88,7 +89,7 @@ export function PinnedUsagePopoverBody({
   return (
     <View>
       <View style={styles.header}>
-        <UsageSourceIcon svg={source.icon} size={14} />
+        <UsageSourceIcon svg={source.icon} size={SOURCE_ICON_SIZE} />
         <Text style={styles.name} numberOfLines={1}>
           {source.label}
         </Text>
@@ -100,17 +101,13 @@ export function PinnedUsagePopoverBody({
           />
         ) : null}
       </View>
-      {source.account ? (
-        <Text style={styles.account} numberOfLines={1}>
-          {source.account}
-        </Text>
-      ) : null}
       {unified ? (
         <UnifiedUsageSummary
           unified={unified}
           displayAs={displayAs}
           retained={resolved?.retained ?? false}
           dense
+          shortReset
         />
       ) : null}
       <View style={styles.bars}>
@@ -125,6 +122,7 @@ export function PinnedUsagePopoverBody({
             onTogglePin={ignorePin}
             pinLabel=""
             pinTestID=""
+            shortReset
           />
         ))}
         {item.kind === "unified"
@@ -133,6 +131,7 @@ export function PinnedUsagePopoverBody({
                 key={balance.id}
                 balance={balance}
                 retained={resolved?.retained ?? false}
+                shortReset
               />
             ))
           : null}
@@ -164,19 +163,16 @@ function hoverLabel(item: PinnedUsageItem, t: TFunction): string {
 
 function sourceIdentity(item: PinnedUsageItem): {
   label: string;
-  account: string | null;
   icon: string | null;
 } {
   if (item.kind === "unified") {
     return {
       label: item.unified.driver.sourceLabel,
-      account: item.unified.driver.accountLabel,
       icon: item.source.icon,
     };
   }
   return {
     label: item.window.sourceLabel,
-    account: item.window.accountLabel,
     icon: item.window.icon,
   };
 }
@@ -192,9 +188,18 @@ function windowsForPin(
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // Each meter owns an equal share of the footer row, including the gaps, so the
+  // hover target is the cell and not the glyphs.
+  slot: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    alignSelf: "stretch",
+  },
   hit: {
     flexGrow: 1,
     flexShrink: 1,
+    alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     minWidth: 0,
@@ -206,31 +211,24 @@ const styles = StyleSheet.create((theme) => ({
   card: {
     width: 300,
     paddingVertical: theme.spacing[3],
-    paddingHorizontal: theme.spacing[2],
-    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    gap: theme.spacing[4],
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
   },
   name: {
     flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },
-  account: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    paddingHorizontal: theme.spacing[2],
-  },
   bars: {
     gap: theme.spacing[1],
   },
   details: {
     gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
   },
   detailRow: {
     flexDirection: "row",

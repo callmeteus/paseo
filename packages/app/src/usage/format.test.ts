@@ -37,10 +37,16 @@ describe("formatAmount", () => {
 
     expect(formatPct(7, "en")).toBe("7%");
     expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("resets 2h");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW, undefined, true)).toBe("in 2h");
     expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("runs out 2h");
+
+    await i18n.changeLanguage("pt-BR");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("redefine em 2 h");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW, undefined, true)).toBe("em 2 h");
 
     await i18n.changeLanguage("ja");
     expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("2時間後にリセット");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW, undefined, true)).toBe("2時間後");
     expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("2時間後に上限に到達");
     expect(formatAgo(threeDaysAgo, NOW)).toBe("3日前");
   });

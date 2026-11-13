@@ -25,6 +25,7 @@ export function UnifiedUsageSummary({
   pinLabel,
   pinTestID,
   dense = false,
+  shortReset = false,
 }: {
   unified: UnifiedUsage;
   displayAs: UsageDisplayAs;
@@ -36,10 +37,12 @@ export function UnifiedUsageSummary({
   pinTestID?: string;
   /** Drops the card padding so a popover can supply its own inset. */
   dense?: boolean;
+  /** "in 2h" instead of "resets in 2h". The usage tab keeps the full phrase. */
+  shortReset?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const now = useRelativeTimeTick({ enabled: unified.driver.resetsAt != null });
-  const reset = formatResetLabel(unified.driver.resetsAt, retained, now, t);
+  const reset = formatResetLabel(unified.driver.resetsAt, retained, now, t, shortReset);
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
   const surface = unifiedSummarySurface(pinned);
   const restingStyle =

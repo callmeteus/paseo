@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   composeComposerMirrorPieces,
   continueComposerList,
+  findComposerInlineCode,
   findComposerListMarkers,
+  hasComposerInlineCode,
   hasComposerListMarker,
+  indentComposerList,
 } from "./list-format";
 
 const SAMPLE = "Falta\n- Formatação\n1. Aqui no composer!";
@@ -134,5 +137,56 @@ describe("continuing a composer list", () => {
       text: "```\ncode\n```\n- item\n- ",
       selection: { start: afterFence.length + 3, end: afterFence.length + 3 },
     });
+  });
+});
+
+describe("indenting a composer list", () => {
+  it("nests the item under the caret and keeps the caret on the same character", () => {
+    expect(indentComposerList("- Filesystem", { start: 12, end: 12 }, "in")).toEqual({
+      text: "  - Filesystem",
+      selection: { start: 14, end: 14 },
+    });
+    expect(indentComposerList("1. Aqui", { start: 6, end: 6 }, "in")).toEqual({
+      text: "   1. Aqui",
+      selection: { start: 9, end: 9 },
+    });
+    expect(indentComposerList("  - Filesystem", { start: 14, end: 14 }, "in")).toEqual({
+      text: "    - Filesystem",
+      selection: { start: 16, end: 16 },
+    });
+  });
+
+  it("lifts one level and stays on the item when it is already at the margin", () => {
+    expect(indentComposerList("  - Filesystem", { start: 14, end: 14 }, "out")).toEqual({
+      text: "- Filesystem",
+      selection: { start: 12, end: 12 },
+    });
+    expect(indentComposerList("- Filesystem", { start: 4, end: 4 }, "out")).toEqual({
+      text: "- Filesystem",
+      selection: { start: 4, end: 4 },
+    });
+  });
+
+  it("indents every selected list line and leaves a mixed selection alone", () => {
+    expect(indentComposerList("- a\n- b", { start: 1, end: 6 }, "in")).toEqual({
+      text: "  - a\n  - b",
+      selection: { start: 3, end: 10 },
+    });
+    expect(indentComposerList("- a\nprose", { start: 0, end: 8 }, "in")).toBeNull();
+    expect(indentComposerList("prose", { start: 2, end: 2 }, "in")).toBeNull();
+    const fenced = "```\n- item\n```";
+    expect(indentComposerList(fenced, { start: 5, end: 5 }, "in")).toBeNull();
+  });
+});
+
+describe("composer inline code", () => {
+  it("finds a closed pair and leaves an open backtick as plain text", () => {
+    expect(findComposerInlineCode("suportar `backticks` agora")).toEqual([{ start: 9, end: 20 }]);
+    expect(hasComposerInlineCode("suportar `backticks")).toBe(false);
+    expect(findComposerInlineCode("```\n`not code`\n```")).toEqual([]);
+    expect(composeComposerMirrorPieces("use `backticks`", [])).toEqual([
+      { start: 0, text: "use ", kind: "plain" },
+      { start: 4, text: "`backticks`", kind: "code" },
+    ]);
   });
 });

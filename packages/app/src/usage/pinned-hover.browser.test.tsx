@@ -8,17 +8,19 @@ import type { UsagePreferences } from "./preferences";
 import { unifiedUsagePin } from "./preferences";
 import type { UsageReportEntry } from "./types";
 
+const resetsAt = new Date(Date.now() + 2 * 60 * 60 * 1000 + 30_000).toISOString();
+
 const claude: UsageReportEntry = {
   id: "claude:default",
-  account: {},
+  account: { label: "gio@even7.dev" },
   fetchedAt: "2026-01-01T00:00:00.000Z",
   sourceId: "claude",
   sourceLabel: "Claude",
   report: {
     status: "available",
     windows: [
-      { id: "five-hour", label: "Session", shortLabel: "5h", usedPct: 31 },
-      { id: "weekly", label: "Weekly", shortLabel: "wk", usedPct: 80 },
+      { id: "five-hour", label: "Session", shortLabel: "5h", usedPct: 31, resetsAt },
+      { id: "weekly", label: "Weekly", shortLabel: "wk", usedPct: 80, resetsAt },
     ],
   },
 };
@@ -69,8 +71,12 @@ it("shows every window for an overall pin and only the pinned window otherwise",
   const overall = container.querySelector("#overall")?.textContent ?? "";
   const window = container.querySelector("#session")?.textContent ?? "";
   expect(overall).toContain("Unified usage");
+  expect(overall).not.toContain("gio@even7.dev");
   expect(overall).toContain("Session");
   expect(overall).toContain("Weekly");
+  expect(overall).toContain("in 2h");
+  expect(overall).not.toContain("resets");
   expect(window).toContain("Session");
+  expect(window).toContain("in 2h");
   expect(window).not.toContain("Weekly");
 });

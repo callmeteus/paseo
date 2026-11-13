@@ -86,7 +86,14 @@ import { InlineChipEditor, type InlineChipEditSnapshot } from "@/composer/inline
 import { composerPasteAction, isPlainTextPasteShortcut } from "@/composer/input/paste";
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
-import { continueComposerList, hasComposerListMarker } from "@/composer/list-format";
+import {
+  continueComposerList,
+  hasComposerInlineCode,
+  hasComposerListMarker,
+  indentComposerList,
+} from "@/composer/list-format";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
@@ -125,7 +132,7 @@ const SKILL_INPUT_COLOR = {
 } as const;
 /**
  * Styles the web mirror copies from the real textarea before painting. The mirror
- * is the only visible text while a list or skill is showing, so any drift here
+ * is the only visible text while a list, skill, or inline code is showing, so any drift here
  * puts the caret on the wrong character.
  */
 const SKILL_MIRROR_COMPUTED_STYLES = [
@@ -501,6 +508,14 @@ function handleDesktopKeyPressImpl(
   ctx.handleDefaultSendAction();
 }
 
+function indentListOnTab(event: KeyboardEvent, snapshot: ComposerInputSnapshot) {
+  if (event.key !== "Tab" || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) {
+    return null;
+  }
+  if (event.isComposing) return null;
+  return indentComposerList(snapshot.text, snapshot.selection, "in");
+}
+
 function continueListOnShiftEnter(
   event: WebTextInputKeyPressEvent,
   ctx: DesktopKeyPressContext,
@@ -861,7 +876,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
   const showMirror =
     !props.readOnly &&
     !props.chipEditor &&
-    (skillRanges.length > 0 || hasComposerListMarker(liveText));
+    (skillRanges.length > 0 || hasComposerListMarker(liveText) || hasComposerInlineCode(liveText));
   const skillMirrorTextRef = useRef<ComponentRef<typeof Text> | null>(null);
   // The mirror is painted from the textarea's own computed styles instead of the
   // style props: responsive padding, line height and box sizing can differ per
@@ -1740,6 +1755,49 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         updateLiveTextPresence,
       ],
     );
+
+    const listIndentHandlerId = useRef(
+      `composer-list-indent:${Math.random().toString(36).slice(2)}`,
+    ).current;
+    const outdentFocusedList = useCallback(
+      (action: KeyboardActionDefinition): boolean => {
+        if (action.id !== "message-input.mode-cycle" || !isInputFocusedRef.current) return false;
+        const snapshot = getComposerInputSnapshot(
+          textInputRef.current,
+          valueRef.current,
+          selectionRef.current,
+        );
+        const next = indentComposerList(snapshot.text, snapshot.selection, "out");
+        if (!next) return false;
+        if (next.text !== snapshot.text) replaceText(next.text, next.selection);
+        return true;
+      },
+      [replaceText],
+    );
+    useKeyboardActionHandler({
+      handlerId: listIndentHandlerId,
+      actions: ["message-input.mode-cycle"],
+      enabled: true,
+      priority: 300,
+      isActive: () => isInputFocusedRef.current,
+      handle: outdentFocusedList,
+    });
+    useEffect(() => {
+      if (!isWeb || !webTextArea) return;
+      const handleKeyDown = (event: KeyboardEvent) => {
+        const snapshot = getComposerInputSnapshot(
+          textInputRef.current,
+          valueRef.current,
+          selectionRef.current,
+        );
+        const next = indentListOnTab(event, snapshot);
+        if (!next) return;
+        event.preventDefault();
+        if (next.text !== snapshot.text) replaceText(next.text, next.selection);
+      };
+      webTextArea.addEventListener("keydown", handleKeyDown);
+      return () => webTextArea.removeEventListener("keydown", handleKeyDown);
+    }, [replaceText, webTextArea]);
 
     useImperativeHandle(ref, () => ({
       focus: () => {

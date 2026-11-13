@@ -63,4 +63,17 @@ describe("composer list formatting", () => {
       path: "/tmp/composer-mirror-text.png",
     });
   });
+
+  it("paints closed backticks as code and hides the marks", () => {
+    const container = mount("Também precisa suportar `backticks`");
+    const code = [...container.querySelectorAll("span")].find(
+      (node) => node.textContent === "`backticks`",
+    );
+    expect(code).toBeTruthy();
+    const codeStyle = window.getComputedStyle(code!);
+    expect(codeStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+    const mark = [...code!.querySelectorAll("span")].find((node) => node.textContent === "`");
+    expect(mark).toBeTruthy();
+    expect(window.getComputedStyle(mark!).color).toBe("rgba(0, 0, 0, 0)");
+  });
 });
