@@ -24,6 +24,7 @@ export function UnifiedUsageSummary({
   onTogglePin,
   pinLabel,
   pinTestID,
+  dense = false,
 }: {
   unified: UnifiedUsage;
   displayAs: UsageDisplayAs;
@@ -33,17 +34,19 @@ export function UnifiedUsageSummary({
   onTogglePin?: () => void;
   pinLabel?: string;
   pinTestID?: string;
+  /** Drops the card padding so a popover can supply its own inset. */
+  dense?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const now = useRelativeTimeTick({ enabled: unified.driver.resetsAt != null });
   const reset = formatResetLabel(unified.driver.resetsAt, retained, now, t);
   const accessibilityState = useMemo(() => ({ checked: pinned }), [pinned]);
   const surface = unifiedSummarySurface(pinned);
+  const restingStyle =
+    surface === "pinned" ? [styles.container, styles.pinnedSurface] : styles.container;
+  const containerStyle = dense ? styles.dense : restingStyle;
   return (
-    <View
-      style={surface === "pinned" ? [styles.container, styles.pinnedSurface] : styles.container}
-      testID="usage-unified-summary"
-    >
+    <View style={containerStyle} testID="usage-unified-summary">
       <View style={styles.header}>
         <ThemedActivity size={14} uniProps={extraMutedIconColorMapping} />
         <Text style={styles.title}>{t("providerUsage.unified.title")}</Text>
@@ -93,6 +96,9 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     padding: theme.spacing[3],
     borderRadius: theme.borderRadius.md,
+  },
+  dense: {
+    gap: theme.spacing[2],
   },
   // Same surface a pinned window row uses.
   pinnedSurface: {
