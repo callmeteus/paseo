@@ -29,6 +29,7 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { useLimitResumeRunner } from "@/agent-stream/limit-resume-run";
 import { getHostRuntimeStore, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { restoreDroppedPrompt } from "@/composer/recover-dropped-prompt";
 import { useVoiceAudioEngineOptional, useVoiceRuntimeOptional } from "@/contexts/voice-context";
 import type { AudioPlaybackSource } from "@/audio";
 import {
@@ -508,6 +509,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         "checkout_status_update",
         "status.server_info",
         "status.agent_commands_changed",
+        "agent_prompt_dropped",
       ],
       { notifications: true },
     );
@@ -620,6 +622,26 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(canOpenInSidebar ? {} : { target }),
         });
       },
+    });
+
+    const unsubPromptDropped = onFeed("agent_prompt_dropped", (message) => {
+      if (message.type !== "agent_prompt_dropped") return;
+      const { agentId, clientMessageId, text } = message.payload;
+      // The daemon dropped a prompt whose turn failed before producing anything.
+      // Put it back in the composer and refetch so the transcript loses the row.
+      restoreDroppedPrompt({ serverId, agentId, clientMessageId, text });
+      const cursor = useSessionStore
+        .getState()
+        .sessions[serverId]?.agentTimelineCursor.get(agentId);
+      void getHostRuntimeStore()
+        .fetchAgentTimeline(serverId, agentId, {
+          direction: "tail",
+          projection: "projected",
+          ...(cursor ? { cursor: { epoch: cursor.epoch, seq: cursor.endSeq } } : {}),
+        })
+        .catch((error) =>
+          console.warn("[Session] Failed to refetch the timeline after a dropped prompt", error),
+        );
     });
 
     const unsubPermissionRequest = onFeed("agent_permission_request", (message) => {
@@ -777,6 +799,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         .catch((error) => console.warn("[Session] Failed to release plan updates", error));
       unsubPermissionRequest();
       unsubPermissionResolved();
+      unsubPromptDropped();
       unsubAudioOutput();
       unsubActivity();
       unsubTranscription();

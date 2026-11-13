@@ -93,6 +93,34 @@ export class InMemoryAgentTimelineStore {
     return this.requireState(agentId).epoch;
   }
 
+  /**
+   * Drops rows that never became history — a submitted prompt whose turn failed
+   * before producing anything. Rebuilds the projection and rotates the epoch so
+   * clients refetch the timeline instead of patching around a gap.
+   */
+  removeRows(
+    agentId: string,
+    shouldRemove: (row: ProjectedTimelineRow) => boolean,
+  ): AgentTimelineRow[] {
+    const state = this.requireState(agentId);
+    const rows = state.projection.getRows();
+    const kept: ProjectedTimelineRow[] = [];
+    const removed: ProjectedTimelineRow[] = [];
+    for (const row of rows) {
+      (shouldRemove(row) ? removed : kept).push(row);
+    }
+    if (removed.length === 0) return [];
+    const projection = new TimelineProjection();
+    for (const row of kept) projection.append(row);
+    this.states.set(agentId, {
+      epoch: randomUUID(),
+      projection,
+      minSeq: kept[0]?.seqStart ?? 0,
+      nextSeq: state.nextSeq,
+    });
+    return removed.map(cloneRow);
+  }
+
   fetch(agentId: string, options?: AgentTimelineFetchOptions): AgentTimelineFetchResult {
     const state = this.requireState(agentId);
     const direction = options?.direction ?? "tail";

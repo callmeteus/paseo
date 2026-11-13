@@ -119,7 +119,12 @@ import {
   type PendingForegroundRun,
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
-import { parseAgentMessage, projectAgentMessages } from "./agent-messages/index.js";
+import {
+  isSystemInjectedEnvelope,
+  parseAgentMessage,
+  parseAgentMessages,
+  projectAgentMessages,
+} from "./agent-messages/index.js";
 import { planSkillPrompt, type SkillTurnPlan } from "./agent-skill.js";
 import {
   isClosedProviderSessionError,
@@ -302,6 +307,13 @@ export type AgentManagerEvent =
   | { type: "agent_state"; agent: ManagedAgent }
   | { type: "provider_subagent"; event: ProviderSubagentStoreEvent }
   | { type: "timeline_replacement"; agentId: string; epoch: string }
+  | {
+      /** A submitted prompt was dropped because its turn failed before any output. */
+      type: "prompt_dropped";
+      agentId: string;
+      clientMessageId: string;
+      text: string;
+    }
   | {
       type: "agent_stream";
       agentId: string;
@@ -6445,6 +6457,9 @@ export class AgentManager {
       agent.lifecycle = "error";
     }
     agent.lastError = event.error;
+    if (!options?.fromHistory) {
+      this.dropPromptForFailedTurn(agent, eventTurnId);
+    }
     await this.appendSystemErrorTimelineMessage(
       agent,
       event.provider,
@@ -6703,6 +6718,50 @@ export class AgentManager {
       if (enriched) this.enqueueDurableTimelineUpdate(agent.id, enriched);
     }
     return existing;
+  }
+
+  /**
+   * A turn that dies before producing anything leaves the submitted prompt as
+   * dead history. Drop it and tell clients to put the text back in the composer.
+   */
+  private dropPromptForFailedTurn(agent: ActiveManagedAgent, turnId: string | undefined): void {
+    if (!this.timelineStore.has(agent.id)) return;
+    const rows = this.timelineStore.getRows(agent.id);
+    let promptIndex = -1;
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index]!;
+      if (row.item.type !== "user_message") continue;
+      if (row.turnId && turnId && row.turnId !== turnId) continue;
+      promptIndex = index;
+      break;
+    }
+    const prompt = rows[promptIndex];
+    if (!prompt || prompt.item.type !== "user_message") return;
+    const clientMessageId = prompt.item.clientMessageId;
+    if (!clientMessageId) return;
+    // Only human prompts come back to the composer. Agent messages and schedule
+    // fires carry an envelope and must never land in a chat draft.
+    if (parseAgentMessages(prompt.item.text) || isSystemInjectedEnvelope(prompt.item.text)) return;
+    const producedOutput = rows
+      .slice(promptIndex + 1)
+      .some(
+        (row) =>
+          row.item.type === "assistant_message" ||
+          row.item.type === "tool_call" ||
+          row.item.type === "reasoning",
+      );
+    if (producedOutput) return;
+    const removed = this.timelineStore.removeRows(
+      agent.id,
+      (row) => row.item.type === "user_message" && row.item.clientMessageId === clientMessageId,
+    );
+    if (removed.length === 0) return;
+    this.dispatch({
+      type: "prompt_dropped",
+      agentId: agent.id,
+      clientMessageId,
+      text: prompt.item.text,
+    });
   }
 
   private async appendSystemErrorTimelineMessage(

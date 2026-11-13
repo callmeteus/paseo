@@ -3690,6 +3690,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   "status.agent_commands_changed",
   "activity_log",
   "plan_update",
+  "agent_prompt_dropped",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
 ]);
@@ -4894,6 +4895,16 @@ export const WorkspaceUpdateMessageSchema = z.object({
       seq: z.number().int().positive().optional(),
     }),
   ]),
+});
+
+export const AgentPromptDroppedMessageSchema = z.object({
+  type: z.literal("agent_prompt_dropped"),
+  payload: z.object({
+    agentId: z.string(),
+    /** Client id the prompt was submitted with, so the app can match its send. */
+    clientMessageId: z.string(),
+    text: z.string(),
+  }),
 });
 
 export const PlanUpdateMessageSchema = z.object({
@@ -7671,6 +7682,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentUpdateMessageSchema,
   WorkspaceUpdateMessageSchema,
   PlanUpdateMessageSchema,
+  AgentPromptDroppedMessageSchema,
   WorkspaceLabelListResponseSchema,
   WorkspaceLabelUpdateSchema,
   WorkspaceLabelAssignmentSetResponseSchema,

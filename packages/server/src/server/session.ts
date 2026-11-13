@@ -2050,6 +2050,18 @@ export class Session {
           return;
         }
 
+        if (event.type === "prompt_dropped") {
+          this.emit({
+            type: "agent_prompt_dropped",
+            payload: {
+              agentId: event.agentId,
+              clientMessageId: event.clientMessageId,
+              text: event.text,
+            },
+          });
+          return;
+        }
+
         if (event.type === "agent_state") {
           this.sessionLogger.trace(
             {
@@ -9955,6 +9967,7 @@ const DIRECT_SESSION_EVENT_MESSAGE_TYPES: ReadonlySet<SessionOutboundMessage["ty
   "terminal_attention_required",
   "activity_log",
   "plan_update",
+  "agent_prompt_dropped",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
 ]);

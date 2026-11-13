@@ -9501,6 +9501,159 @@ test("turn_failed emits a system error assistant timeline message and keeps erro
   expect(systemErrors[0]?.text).toContain("invalid model id");
 });
 
+test("turn_failed drops a prompt that produced no output and asks for it back", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-prompt-dropped-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class RejectingSession extends TestAgentSession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = "turn-rejected-1";
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "turn_failed",
+          provider: this.provider,
+          error: "Free usage limit reached.",
+          turnId,
+        });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class RejectingClient implements AgentClient {
+    readonly provider = "codex" as const;
+    readonly capabilities = TEST_CAPABILITIES;
+
+    async isAvailable(): Promise<boolean> {
+      return true;
+    }
+
+    async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new RejectingSession(config);
+    }
+
+    async resumeSession(config?: Partial<AgentSessionConfig>): Promise<AgentSession> {
+      return new RejectingSession({ provider: "codex", cwd: config?.cwd ?? process.cwd() });
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new RejectingClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000132",
+  });
+  const dropped: Array<{ agentId: string; clientMessageId: string; text: string }> = [];
+  manager.subscribe((event) => {
+    if (event.type === "prompt_dropped") dropped.push(event);
+  });
+
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Prompt dropped test" },
+    undefined,
+    { workspaceId: undefined },
+  );
+
+  await expect(
+    manager.runAgent(agent.id, "faz deploy por favor", {
+      clientMessageId: "client-message-1",
+      submittedPromptText: "faz deploy por favor",
+    }),
+  ).rejects.toThrow("Free usage limit reached");
+
+  expect(dropped).toEqual([
+    {
+      type: "prompt_dropped",
+      agentId: agent.id,
+      clientMessageId: "client-message-1",
+      text: "faz deploy por favor",
+    },
+  ]);
+  const userMessages = manager.getTimeline(agent.id).filter((item) => item.type === "user_message");
+  expect(userMessages).toEqual([]);
+  // The error itself stays so the chat explains why the send came back.
+  expect(manager.getTimeline(agent.id).at(-1)).toMatchObject({
+    type: "assistant_message",
+    text: expect.stringContaining("Free usage limit reached"),
+  });
+});
+
+test("turn_failed keeps a prompt whose turn had already produced output", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-prompt-kept-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class PartialSession extends TestAgentSession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = "turn-partial-1";
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: "Vou começar o deploy." },
+        });
+        this.pushEvent({
+          type: "turn_failed",
+          provider: this.provider,
+          error: "Free usage limit reached.",
+          turnId,
+        });
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class PartialClient implements AgentClient {
+    readonly provider = "codex" as const;
+    readonly capabilities = TEST_CAPABILITIES;
+
+    async isAvailable(): Promise<boolean> {
+      return true;
+    }
+
+    async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new PartialSession(config);
+    }
+
+    async resumeSession(config?: Partial<AgentSessionConfig>): Promise<AgentSession> {
+      return new PartialSession({ provider: "codex", cwd: config?.cwd ?? process.cwd() });
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new PartialClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000133",
+  });
+  const dropped: string[] = [];
+  manager.subscribe((event) => {
+    if (event.type === "prompt_dropped") dropped.push(event.clientMessageId);
+  });
+
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Prompt kept test" },
+    undefined,
+    { workspaceId: undefined },
+  );
+
+  await expect(
+    manager.runAgent(agent.id, "faz deploy por favor", {
+      clientMessageId: "client-message-2",
+      submittedPromptText: "faz deploy por favor",
+    }),
+  ).rejects.toThrow("Free usage limit reached");
+
+  expect(dropped).toEqual([]);
+  expect(
+    manager
+      .getTimeline(agent.id)
+      .some((item) => item.type === "user_message" && item.text === "faz deploy por favor"),
+  ).toBe(true);
+});
+
 test("turn_failed surfaces provider code and diagnostic in system error message", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-turn-failed-detail-"));
   const storagePath = join(workdir, "agents");

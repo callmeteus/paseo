@@ -2,6 +2,63 @@ import { describe, expect, it } from "vitest";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 
 describe("InMemoryAgentTimelineStore", () => {
+  it("drops rows on request and rotates the epoch so clients refetch", () => {
+    const store = new InMemoryAgentTimelineStore();
+    store.initialize("agent-1", {
+      epoch: "epoch-1",
+      nextSeq: 4,
+      rows: [
+        {
+          seq: 1,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          item: { type: "user_message", text: "hello", clientMessageId: "client-1" },
+        },
+        {
+          seq: 2,
+          timestamp: "2026-01-01T00:00:01.000Z",
+          item: { type: "assistant_message", text: "hi" },
+        },
+        {
+          seq: 3,
+          timestamp: "2026-01-01T00:00:02.000Z",
+          item: { type: "user_message", text: "bye", clientMessageId: "client-2" },
+        },
+      ],
+    });
+
+    const removed = store.removeRows(
+      "agent-1",
+      (row) => row.item.type === "user_message" && row.item.clientMessageId === "client-2",
+    );
+
+    expect(removed.map((row) => row.item)).toEqual([
+      { type: "user_message", text: "bye", clientMessageId: "client-2" },
+    ]);
+    expect(store.getItems("agent-1")).toEqual([
+      { type: "user_message", text: "hello", clientMessageId: "client-1" },
+      { type: "assistant_message", text: "hi" },
+    ]);
+    expect(store.getEpoch("agent-1")).not.toBe("epoch-1");
+    expect(store.fetch("agent-1").window).toEqual({ minSeq: 1, maxSeq: 3, nextSeq: 4 });
+  });
+
+  it("leaves the store untouched when nothing matches", () => {
+    const store = new InMemoryAgentTimelineStore();
+    store.initialize("agent-1", {
+      epoch: "epoch-1",
+      rows: [
+        {
+          seq: 1,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          item: { type: "assistant_message", text: "hi" },
+        },
+      ],
+    });
+
+    expect(store.removeRows("agent-1", () => false)).toEqual([]);
+    expect(store.getEpoch("agent-1")).toBe("epoch-1");
+  });
+
   it("clamps an overshooting before cursor into the bounded tail window", () => {
     const store = new InMemoryAgentTimelineStore();
     store.initialize("agent-1", {

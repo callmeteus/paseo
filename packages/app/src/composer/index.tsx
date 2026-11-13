@@ -81,6 +81,7 @@ import { ICON_SIZE, FONT_SIZE, type Theme } from "@/styles/theme";
 import type { AgentGoalState } from "@/utils/agent-snapshots";
 import { useAgentCommandsQuery, type DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
+import { usePendingComposerSendStore } from "@/composer/pending-send";
 import { focusWithRetries } from "@/utils/web-focus";
 import {
   cancelComposerAgent,
@@ -1988,7 +1989,7 @@ function ComposerContentImpl({
           }
         }
 
-        await dispatchComposerAgentMessage({
+        const sentMessage = await dispatchComposerAgentMessage({
           client: applied.client,
           agentId: applied.agentId,
           text,
@@ -2006,6 +2007,15 @@ function ComposerContentImpl({
                   applied.agentId,
                 ).turnId ?? undefined)
               : undefined,
+        });
+        usePendingComposerSendStore.getState().remember({
+          serverId: applied.serverId,
+          agentId: applied.agentId,
+          send: {
+            clientMessageId: sentMessage.clientMessageId,
+            text,
+            attachments: sendAttachments,
+          },
         });
         onAttentionPromptSend?.();
         // Navigate only after the triggering message landed: the destination agent

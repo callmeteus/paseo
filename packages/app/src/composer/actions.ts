@@ -202,7 +202,7 @@ export interface DispatchComposerAgentMessageInput {
 
 export async function dispatchComposerAgentMessage(
   input: DispatchComposerAgentMessageInput,
-): Promise<void> {
+): Promise<{ clientMessageId: string }> {
   const wirePayload = splitComposerAttachmentsForSubmit(input.attachments, {
     format: input.attachmentSubmitFormat,
   });
@@ -228,6 +228,7 @@ export async function dispatchComposerAgentMessage(
       attachments: wirePayload.attachments,
     });
     input.submission.accept(input.agentId, clientMessageId);
+    return { clientMessageId };
   } catch (error) {
     input.submission.reject(input.agentId, clientMessageId);
     throw error;
