@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  breaksComposerLineOnEnter,
   composeComposerMirrorPieces,
   continueComposerList,
   findComposerInlineCode,
@@ -137,6 +138,18 @@ describe("continuing a composer list", () => {
       text: "```\ncode\n```\n- item\n- ",
       selection: { start: afterFence.length + 3, end: afterFence.length + 3 },
     });
+  });
+});
+
+describe("a composer Enter that breaks the line", () => {
+  it("breaks the line on Shift+Enter and wherever Enter does not submit", () => {
+    expect(breaksComposerLineOnEnter({ shiftKey: true, submitOnEnter: true })).toBe(true);
+    // Compact web has no Enter-to-send, so Enter breaks the line and continues the list.
+    expect(breaksComposerLineOnEnter({ shiftKey: false, submitOnEnter: false })).toBe(true);
+  });
+
+  it("lets a desktop web Enter submit the message", () => {
+    expect(breaksComposerLineOnEnter({ shiftKey: false, submitOnEnter: true })).toBe(false);
   });
 });
 

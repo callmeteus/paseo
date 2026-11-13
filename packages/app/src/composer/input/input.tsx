@@ -87,6 +87,7 @@ import { composerPasteAction, isPlainTextPasteShortcut } from "@/composer/input/
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
 import {
+  breaksComposerLineOnEnter,
   continueComposerList,
   hasComposerInlineCode,
   hasComposerListMarker,
@@ -493,11 +494,12 @@ function handleDesktopKeyPressImpl(
   }
 
   if (event.nativeEvent.key !== "Enter") return;
-  if (shiftKey) {
-    continueListOnShiftEnter(event, ctx, { metaKey, ctrlKey, altKey });
+  if (
+    breaksComposerLineOnEnter({ shiftKey: Boolean(shiftKey), submitOnEnter: ctx.submitOnEnter })
+  ) {
+    continueListOnEnter(event, ctx, { metaKey, ctrlKey, altKey });
     return;
   }
-  if (!ctx.submitOnEnter) return;
 
   if (ctx.isSubmitDisabled || ctx.isSubmitLoading || ctx.disabled) return;
   event.preventDefault();
@@ -516,7 +518,7 @@ function indentListOnTab(event: KeyboardEvent, snapshot: ComposerInputSnapshot) 
   return indentComposerList(snapshot.text, snapshot.selection, "in");
 }
 
-function continueListOnShiftEnter(
+function continueListOnEnter(
   event: WebTextInputKeyPressEvent,
   ctx: DesktopKeyPressContext,
   modifiers: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean },
