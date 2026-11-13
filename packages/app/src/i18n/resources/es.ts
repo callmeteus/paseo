@@ -2324,7 +2324,8 @@ export const es: TranslationResources = {
       plan: {
         build: "Construir",
         building: "Construyendo",
-        buildPrompt: "Ejecuta el plan en {{path}}. Lee el archivo primero y luego impleméntalo.",
+        buildPrompt:
+          'Ejecuta el plan en {{path}}. Lee el archivo primero y luego impleméntalo. Al terminar y verificar cada elemento del checklist, llama a plan_create_update con ese elemento marcado ("- [x]") y el resto sin cambios.',
       },
       editor: {
         preview: "Vista previa",

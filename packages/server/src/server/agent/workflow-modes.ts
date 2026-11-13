@@ -153,8 +153,15 @@ changes so the sidebar stays current.
 The plan must include:
 1. The goal and the relevant files.
 2. Ordered implementation steps naming the functions or components to change.
-3. Risks, edge cases, and anything that needs a decision from the user.
-4. How to verify the change.
+3. A "## Checklist" section with one markdown checkbox per implementation step
+   ("- [ ] ..."). It is mandatory: plan_create_update rejects a plan without it,
+   and the unchecked/checked state is what the task list shows.
+4. Risks, edge cases, and anything that needs a decision from the user.
+5. How to verify the change.
+
+Keep the checklist current. After finishing and verifying a checklist item, call
+plan_create_update again with the full plan and that item checked ("- [x]"), leaving
+everything else unchanged. Never check an item before its work is verified.
 
 Stop after presenting the plan. When the user asks to build, execute, or implement
 the plan, call plan_build with the plan path instead of asking them to switch modes.

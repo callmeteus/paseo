@@ -2269,7 +2269,8 @@ export const ar: TranslationResources = {
       plan: {
         build: "تنفيذ",
         building: "جارٍ التنفيذ",
-        buildPrompt: "نفّذ الخطة في {{path}}. اقرأ الملف أولاً ثم نفّذها.",
+        buildPrompt:
+          'نفّذ الخطة في {{path}}. اقرأ الملف أولاً ثم نفّذها. بعد إنهاء كل بند من قائمة التحقق والتحقق منه، استدعِ plan_create_update مع تعليم ذلك البند ("- [x]") وإبقاء الباقي كما هو.',
       },
       editor: {
         preview: "معاينة",

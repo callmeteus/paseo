@@ -1612,7 +1612,7 @@ export async function createPaseoDaemon(
         agentManager,
         agentStorage,
         agentId: entry.agentId,
-        prompt: `Execute the plan at ${entry.path}. Read the file first, then implement it.`,
+        prompt: `Execute the plan at ${entry.path}. Read the file first, then implement it. After each checklist item is finished and verified, call plan_create_update with that item checked ("- [x]") and the rest unchanged.`,
         activeTurnBehavior: "steer",
         logger,
       });

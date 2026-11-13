@@ -2326,7 +2326,8 @@ export const fr: TranslationResources = {
       plan: {
         build: "Construire",
         building: "Construction",
-        buildPrompt: "Exécute le plan dans {{path}}. Lis le fichier d'abord, puis implémente-le.",
+        buildPrompt:
+          'Exécute le plan dans {{path}}. Lis le fichier d\'abord, puis implémente-le. Après avoir terminé et vérifié chaque élément de la checklist, appelle plan_create_update avec cet élément coché ("- [x]") et le reste inchangé.',
       },
       editor: {
         preview: "Aperçu",

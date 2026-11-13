@@ -2311,7 +2311,8 @@ export const ptBR: TranslationResources = {
       plan: {
         build: "Construir",
         building: "Construindo",
-        buildPrompt: "Execute o plano em {{path}}. Leia o arquivo primeiro e depois implemente.",
+        buildPrompt:
+          'Execute o plano em {{path}}. Leia o arquivo primeiro e depois implemente. Ao concluir e verificar cada item do checklist, chame plan_create_update com o item marcado ("- [x]") e o restante inalterado.',
       },
       editor: {
         preview: "Prévia",

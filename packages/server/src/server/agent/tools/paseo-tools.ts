@@ -16,7 +16,7 @@ import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
-import { markdownToTodo } from "../plan-tasks.js";
+import { hasPlanChecklist, markdownToTodo } from "../plan-tasks.js";
 import type { AgentManager } from "../agent-manager.js";
 import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
 import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
@@ -2688,7 +2688,7 @@ function createToolCatalog(
     {
       title: "Create or update plan",
       description:
-        "Create or update a markdown plan and open it in the workspace sidebar. Pass a workspace-relative path such as plans/feature.md.",
+        'Create or update a markdown plan and open it in the workspace sidebar. Pass a workspace-relative path such as plans/feature.md. The content must include a "## Checklist" section of markdown checkboxes; check items off as they are completed so the task list tracks progress.',
       inputSchema: {
         path: z.string().min(1).describe("Markdown plan path, relative to the workspace."),
         title: z.string().optional().describe("Plan title shown in the sidebar."),
@@ -2706,6 +2706,11 @@ function createToolCatalog(
     async ({ path: requestedPath, title, content }) => {
       const plan = await resolveWorkspacePlan(requestedPath, "plan_create_update");
       const created = content !== undefined;
+      if (content !== undefined && !hasPlanChecklist(content)) {
+        throw new PaseoToolInputError(
+          'Plans must include a "## Checklist" section with one markdown checkbox per step, for example "- [ ] Run the migration". The checklist drives the task list and is updated as steps complete. Rewrite the plan with it and call plan_create_update again.',
+        );
+      }
       if (created) {
         await mkdir(dirname(plan.absolutePath), { recursive: true });
         await writeFile(plan.absolutePath, content, "utf8");
@@ -2738,7 +2743,7 @@ function createToolCatalog(
     {
       title: "Build plan",
       description:
-        "Start executing a plan the user asked to build, approve, or implement. Switches this agent to Agent workflow mode, queues the build to start as soon as this turn ends, and marks the plan as building in the sidebar. Call it instead of asking the user to switch modes.",
+        "Start executing a plan the user asked to build, approve, or implement. Switches this agent to Agent workflow mode, queues the build to start as soon as this turn ends, and marks the plan as building in the sidebar. Call it instead of asking the user to switch modes. While building, check items off in the plan with plan_create_update as they are verified.",
       inputSchema: {
         path: z
           .string()

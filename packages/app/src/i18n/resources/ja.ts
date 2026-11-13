@@ -2298,7 +2298,7 @@ export const ja: TranslationResources = {
         build: "ビルド",
         building: "ビルド中",
         buildPrompt:
-          "{{path}} の計画を実行してください。まずファイルを読み、その後実装してください。",
+          '{{path}} の計画を実行してください。まずファイルを読み、その後実装してください。チェックリストの各項目を完了して確認したら、その項目をチェック済み（"- [x]"）にして他は変えずに plan_create_update を呼び出してください。',
       },
       editor: {
         preview: "プレビュー",

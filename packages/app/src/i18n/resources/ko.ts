@@ -2283,7 +2283,8 @@ export const ko: TranslationResources = {
       plan: {
         build: "빌드",
         building: "빌드 중",
-        buildPrompt: "{{path}}의 계획을 실행하세요. 먼저 파일을 읽고 구현하세요.",
+        buildPrompt:
+          '{{path}}의 계획을 실행하세요. 먼저 파일을 읽고 구현하세요. 체크리스트 항목을 완료하고 확인할 때마다 해당 항목을 체크한 채("- [x]") 나머지는 그대로 두고 plan_create_update를 호출하세요.',
       },
       editor: {
         preview: "미리보기",

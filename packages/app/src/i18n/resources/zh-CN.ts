@@ -2246,7 +2246,8 @@ export const zhCN: TranslationResources = {
       plan: {
         build: "构建",
         building: "构建中",
-        buildPrompt: "执行 {{path}} 中的计划。先读取文件，然后实施。",
+        buildPrompt:
+          '执行 {{path}} 中的计划。先读取文件，然后实施。每完成并验证一个清单项后，调用 plan_create_update 将该勾选项设为已完成（"- [x]"），其余保持不变。',
       },
       editor: {
         preview: "预览",

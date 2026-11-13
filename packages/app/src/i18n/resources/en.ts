@@ -2298,7 +2298,8 @@ export const en = {
       plan: {
         build: "Build",
         building: "Building",
-        buildPrompt: "Execute the plan at {{path}}. Read the file first, then implement it.",
+        buildPrompt:
+          'Execute the plan at {{path}}. Read the file first, then implement it. After each checklist item is finished and verified, call plan_create_update with that item checked ("- [x]") and the rest unchanged.',
       },
       editor: {
         preview: "Preview",
