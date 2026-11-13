@@ -1493,6 +1493,7 @@ export const ar: TranslationResources = {
       startBody: "شغّل Hub على هذا الجهاز لاستخدام الأتمتة.",
       install: "تثبيت Hub",
       start: "تشغيل Hub",
+      unavailable: "مركز الأتمتة غير متاح.",
       offlineTitle: "لا يوجد خادم متصل",
       offlineBody: "صل الخادم ثم افتح الأتمتة مرة أخرى.",
       chooseTitle: "اختر Hub",

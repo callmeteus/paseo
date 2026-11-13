@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   automationsHubUrl,
+  hubOriginOnPageHost,
   resolveAutomationsView,
   type AutomationsHostSnapshot,
 } from "./automations-view";
@@ -115,5 +116,31 @@ describe("automationsHubUrl", () => {
   it("opens the triggers page", () => {
     expect(automationsHubUrl("https://hub.example.com")).toBe("https://hub.example.com/triggers");
     expect(automationsHubUrl("https://hub.example.com/")).toBe("https://hub.example.com/triggers");
+  });
+});
+
+describe("hubOriginOnPageHost", () => {
+  it("opens a loopback Hub on the host that served the page", () => {
+    expect(hubOriginOnPageHost("http://127.0.0.1:25000", "100.89.201.14")).toBe(
+      "http://100.89.201.14:25000",
+    );
+    expect(hubOriginOnPageHost("http://localhost:25000", "predator.tailnet.ts.net")).toBe(
+      "http://predator.tailnet.ts.net:25000",
+    );
+  });
+
+  it("keeps loopback when the page itself is local", () => {
+    expect(hubOriginOnPageHost("http://127.0.0.1:25000", "127.0.0.1")).toBe(
+      "http://127.0.0.1:25000",
+    );
+    expect(hubOriginOnPageHost("http://127.0.0.1:25000", "localhost")).toBe(
+      "http://127.0.0.1:25000",
+    );
+  });
+
+  it("leaves a Hub that is already on another host alone", () => {
+    expect(hubOriginOnPageHost("https://hub.example.com", "100.89.201.14")).toBe(
+      "https://hub.example.com",
+    );
   });
 });

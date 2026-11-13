@@ -1503,6 +1503,7 @@ export const en = {
       startBody: "Start Hub on this computer to use automations.",
       install: "Install Hub",
       start: "Start Hub",
+      unavailable: "The automations Hub is unavailable.",
       offlineTitle: "No daemon is online",
       offlineBody: "Connect a daemon, then open Automations again.",
       chooseTitle: "Choose a Hub",

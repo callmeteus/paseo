@@ -1532,6 +1532,7 @@ export const fr: TranslationResources = {
       startBody: "Démarrez Hub sur cet ordinateur pour utiliser les automatisations.",
       install: "Installer Hub",
       start: "Démarrer Hub",
+      unavailable: "Le Hub d’automatisations n’est pas disponible.",
       offlineTitle: "Aucun daemon en ligne",
       offlineBody: "Connectez un daemon, puis rouvrez Automatisations.",
       chooseTitle: "Choisir un Hub",

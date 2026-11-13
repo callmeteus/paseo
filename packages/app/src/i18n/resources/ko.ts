@@ -1504,6 +1504,7 @@ export const ko: TranslationResources = {
       startBody: "자동화를 쓰려면 이 컴퓨터에서 Hub를 시작하세요.",
       install: "Hub 설치",
       start: "Hub 시작",
+      unavailable: "자동화 Hub를 사용할 수 없습니다.",
       offlineTitle: "온라인 데몬 없음",
       offlineBody: "데몬을 연결한 뒤 자동화를 다시 여세요.",
       chooseTitle: "Hub 선택",

@@ -97,3 +97,35 @@ export function automationsHubUrl(origin: string): string {
   const base = origin.endsWith("/") ? origin.slice(0, -1) : origin;
   return `${base}/triggers`;
 }
+
+/**
+ * A loopback Hub origin is the daemon's own machine. A browser that opened Paseo
+ * through another host, such as Tailscale, has to load that same host or the
+ * frame asks the viewer's own loopback for the Hub.
+ *
+ * @param origin - Connected Hub origin
+ * @param pageHostname - Host that served this page, without a port
+ * @returns Origin the browser can open
+ */
+export function hubOriginOnPageHost(origin: string, pageHostname: string): string {
+  if (pageHostname === "" || isLoopbackHostname(pageHostname)) return origin;
+  let hub: URL;
+  try {
+    hub = new URL(origin);
+  } catch {
+    return origin;
+  }
+  if (
+    (hub.protocol !== "http:" && hub.protocol !== "https:") ||
+    !isLoopbackHostname(hub.hostname)
+  ) {
+    return origin;
+  }
+  hub.hostname = pageHostname;
+  return hub.origin;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}

@@ -1516,6 +1516,7 @@ export const ru: TranslationResources = {
       startBody: "Запустите Hub на этом компьютере, чтобы пользоваться автоматизациями.",
       install: "Установить Hub",
       start: "Запустить Hub",
+      unavailable: "Hub автоматизаций недоступен.",
       offlineTitle: "Нет демона онлайн",
       offlineBody: "Подключите демон и снова откройте автоматизации.",
       chooseTitle: "Выберите Hub",

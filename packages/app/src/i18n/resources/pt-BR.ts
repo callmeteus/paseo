@@ -1526,6 +1526,7 @@ export const ptBR: TranslationResources = {
       startBody: "Inicie o Hub neste computador para usar automações.",
       install: "Instalar Hub",
       start: "Iniciar Hub",
+      unavailable: "O Hub de automações está indisponível.",
       offlineTitle: "Nenhum daemon online",
       offlineBody: "Conecte um daemon e abra Automações de novo.",
       chooseTitle: "Escolha um Hub",

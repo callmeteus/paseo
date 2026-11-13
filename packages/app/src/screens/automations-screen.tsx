@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AutomationsHubFrame } from "@/automations/automations-hub-frame";
+import { isElectronRuntime } from "@/desktop/host";
 import { hubStartStatusId } from "@/automations/hub-start-status";
 import { HubDaemonLink } from "@/automations/hub-daemon-link";
 import {
@@ -435,6 +436,13 @@ function AutomationsBody({
     }
     onSetupStep("install");
   }, [onInstall, onSetupStep, view]);
+  if (!isElectronRuntime() && (view.kind === "setup" || view.kind === "install")) {
+    return (
+      <View style={styles.emptyState} testID="automations-unavailable">
+        <Text style={styles.emptyTitle}>{t("sidebar.automationsPage.unavailable")}</Text>
+      </View>
+    );
+  }
   if (view.kind === "setup" && setupStep === "install") {
     return (
       <InstallPanel

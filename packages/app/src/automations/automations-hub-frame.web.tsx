@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { isElectronRuntime } from "@/desktop/host";
 import { configureHubWebview } from "./automations-hub-guest";
-import { automationsHubUrl } from "./automations-view";
+import { automationsHubUrl, hubOriginOnPageHost } from "./automations-view";
 import { HubDaemonLink } from "./hub-daemon-link";
 
 const frameStyle = {
@@ -38,7 +38,9 @@ export function AutomationsHubFrame({
   origin: string;
   onEnrollmentToken?: (token: string) => Promise<void>;
 }) {
-  const src = automationsHubUrl(origin);
+  const src = automationsHubUrl(
+    isElectronRuntime() ? origin : hubOriginOnPageHost(origin, window.location.hostname),
+  );
   if (!isElectronRuntime()) {
     return (
       // oxlint-disable-next-line react/iframe-missing-sandbox -- Hub login needs its own cookies and scripts

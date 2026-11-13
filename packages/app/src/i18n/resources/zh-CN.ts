@@ -1484,6 +1484,7 @@ export const zhCN: TranslationResources = {
       startBody: "在这台电脑上启动 Hub 后才能使用自动化。",
       install: "安装 Hub",
       start: "启动 Hub",
+      unavailable: "自动化 Hub 不可用。",
       offlineTitle: "没有在线的守护进程",
       offlineBody: "连接守护进程后，重新打开自动化。",
       chooseTitle: "选择 Hub",

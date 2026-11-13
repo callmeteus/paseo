@@ -5,7 +5,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { client, hosts, statuses } = vi.hoisted(() => ({
+const { client, hosts, statuses, electron } = vi.hoisted(() => ({
   client: {
     current: {
       getHubStatus: async () => ({ status: { state: "disconnected", hubOrigin: null } }),
@@ -22,6 +22,7 @@ const { client, hosts, statuses } = vi.hoisted(() => ({
   },
   hosts: [{ serverId: "local", label: "This computer" }],
   statuses: new Map([["local", "online"]]),
+  electron: { current: true },
 }));
 
 vi.mock("react-native", () => {
@@ -101,6 +102,15 @@ vi.mock("@/automations/automations-hub-frame", () => ({
     }),
 }));
 
+vi.mock("@/components/settings", () => ({
+  SettingsCard: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
+    React.createElement("div", { "data-testid": testID }, children),
+}));
+
+vi.mock("@/desktop/host", () => ({
+  isElectronRuntime: () => electron.current,
+}));
+
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => hosts,
   useHostRuntimeConnectionStatuses: () => statuses,
@@ -117,6 +127,7 @@ let root: Root | null = null;
 
 describe("AutomationsScreen first connection", () => {
   beforeEach(async () => {
+    electron.current = true;
     await i18n.changeLanguage("en");
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     container = document.createElement("div");
@@ -144,6 +155,14 @@ describe("AutomationsScreen first connection", () => {
     container?.remove();
     container = null;
     vi.unstubAllGlobals();
+  });
+
+  it("says the automations Hub is unavailable in the browser", async () => {
+    electron.current = false;
+    await render();
+    expect(text()).toContain("The automations Hub is unavailable.");
+    expect(container?.querySelector("[data-testid='automations-install-choice']")).toBeNull();
+    expect(container?.querySelector("[data-testid='automations-connect-existing']")).toBeNull();
   });
 
   it("asks to connect an existing Hub before opening one that is already running", async () => {

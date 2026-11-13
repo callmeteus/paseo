@@ -1514,6 +1514,7 @@ export const ja: TranslationResources = {
       startBody: "自動化を使うには、このコンピュータで Hub を起動してください。",
       install: "Hub をインストール",
       start: "Hub を起動",
+      unavailable: "自動化 Hub は利用できません。",
       offlineTitle: "オンラインのデーモンがありません",
       offlineBody: "デーモンを接続してから、自動化を開き直してください。",
       chooseTitle: "Hub を選択",
