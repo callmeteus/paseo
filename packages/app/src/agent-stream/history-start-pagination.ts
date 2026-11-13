@@ -13,6 +13,26 @@ export interface HistoryStartPaginationInput {
   isLoadingOlderHistory: boolean;
   isReady: boolean;
   progressKey: string | null;
+  viewportUnderfilled: boolean;
+  followingOutput: boolean;
+}
+
+export function isTranscriptShorterThanViewport(input: {
+  contentExtent: number;
+  viewportHeight: number;
+}): boolean {
+  return (
+    input.viewportHeight > 0 &&
+    input.contentExtent > 0 &&
+    input.contentExtent < input.viewportHeight
+  );
+}
+
+function wantsOlderHistory(input: HistoryStartPaginationInput): boolean {
+  if (input.viewportUnderfilled) {
+    return true;
+  }
+  return !input.followingOutput && input.distanceFromHistoryStart <= HISTORY_START_THRESHOLD_PX;
 }
 
 export interface HistoryStartPaginationTransition {
@@ -48,54 +68,62 @@ export function abandonHistoryStartPaginationRequest(
   return { status: "latched" };
 }
 
+function evaluateLoadingHistoryStart(
+  state: Extract<HistoryStartPaginationState, { status: "loading" }>,
+  input: HistoryStartPaginationInput,
+): HistoryStartPaginationTransition {
+  if (input.progressKey !== null && input.progressKey !== state.requestedProgressKey) {
+    return {
+      state: { status: "settling", loadedProgressKey: input.progressKey },
+      shouldLoad: false,
+    };
+  }
+  if (input.isLoadingOlderHistory && !state.requestObserved) {
+    return { state: { ...state, requestObserved: true }, shouldLoad: false };
+  }
+  if (!input.isLoadingOlderHistory && !input.hasOlderHistory) {
+    return { state: { status: "latched" }, shouldLoad: false };
+  }
+  if (
+    state.requestObserved &&
+    !input.isLoadingOlderHistory &&
+    input.progressKey === state.requestedProgressKey
+  ) {
+    return { state: { status: "latched" }, shouldLoad: false };
+  }
+  return { state, shouldLoad: false };
+}
+
 export function evaluateHistoryStartPagination(
   state: HistoryStartPaginationState,
   input: HistoryStartPaginationInput,
 ): HistoryStartPaginationTransition {
-  if (state.status === "dormant") {
+  if (state.status === "dormant" && !input.viewportUnderfilled) {
     return { state, shouldLoad: false };
   }
-  if (state.status === "loading") {
-    if (input.progressKey !== null && input.progressKey !== state.requestedProgressKey) {
-      return {
-        state: { status: "settling", loadedProgressKey: input.progressKey },
-        shouldLoad: false,
-      };
-    }
-    if (input.isLoadingOlderHistory && !state.requestObserved) {
-      return { state: { ...state, requestObserved: true }, shouldLoad: false };
-    }
-    if (!input.isLoadingOlderHistory && !input.hasOlderHistory) {
-      return { state: { status: "latched" }, shouldLoad: false };
-    }
-    if (
-      state.requestObserved &&
-      !input.isLoadingOlderHistory &&
-      input.progressKey === state.requestedProgressKey
-    ) {
-      return { state: { status: "latched" }, shouldLoad: false };
-    }
-    return { state, shouldLoad: false };
+  const armed: HistoryStartPaginationState =
+    state.status === "dormant" ? { status: "ready" } : state;
+  if (armed.status === "loading") {
+    return evaluateLoadingHistoryStart(armed, input);
+  }
+  if (armed.status === "settling") {
+    return { state: armed, shouldLoad: false };
   }
 
-  if (state.status === "settling") {
-    return { state, shouldLoad: false };
-  }
-
-  const isAtHistoryStart = input.distanceFromHistoryStart <= HISTORY_START_THRESHOLD_PX;
-  if (!isAtHistoryStart) {
-    return state.status === "ready"
-      ? { state, shouldLoad: false }
+  const shouldLoadOlder = wantsOlderHistory(input);
+  if (!shouldLoadOlder) {
+    return armed.status === "ready"
+      ? { state: armed, shouldLoad: false }
       : { state: { status: "ready" }, shouldLoad: false };
   }
   if (
-    state.status === "latched" ||
+    armed.status === "latched" ||
     !input.isReady ||
     !input.hasOlderHistory ||
     input.isLoadingOlderHistory ||
     input.progressKey === null
   ) {
-    return { state, shouldLoad: false };
+    return { state: armed, shouldLoad: false };
   }
   return {
     state: {
@@ -114,16 +142,16 @@ export function settleHistoryStartPagination(
   if (state.status !== "settling") {
     return { state, shouldLoad: false };
   }
-  const isAtHistoryStart = input.distanceFromHistoryStart <= HISTORY_START_THRESHOLD_PX;
+  const shouldLoadOlder = wantsOlderHistory(input);
   if (
-    !isAtHistoryStart ||
+    !shouldLoadOlder ||
     !input.isReady ||
     !input.hasOlderHistory ||
     input.isLoadingOlderHistory ||
     input.progressKey === null
   ) {
     return {
-      state: isAtHistoryStart ? { status: "latched" } : { status: "ready" },
+      state: shouldLoadOlder ? { status: "latched" } : { status: "ready" },
       shouldLoad: false,
     };
   }

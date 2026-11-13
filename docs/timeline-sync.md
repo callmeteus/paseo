@@ -14,7 +14,8 @@ The invariants are:
 
 > A continuously subscribed client applies every committed row in order. Opening or resuming an
 > agent establishes the daemon's current tail in one bounded request, with older history reachable
-> through backward pagination.
+> through backward pagination. A tail shorter than the window keeps paging backward until the
+> transcript fills it.
 
 Tool output is bounded before it enters either delivery path. Canonical shell tool output is sliced
 to 64 KiB, and the same bounded item is used for runtime timeline rows and live stream events.
