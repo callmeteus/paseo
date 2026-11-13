@@ -523,6 +523,14 @@ function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedCon
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
 
+function resolveHubAllowHttp(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
+  return persisted.hub?.allowHttp === true;
+}
+
+function resolveIdleRuntimeCleanupAfter(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return persisted.agents?.idleRuntimeCleanupAfter ?? "1h";
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -636,6 +644,7 @@ export function resolveConfigFromPersisted(
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
+    hubAllowHttp: resolveHubAllowHttp(persisted),
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,
@@ -670,6 +679,7 @@ export function resolveConfigFromPersisted(
     voiceLlmModel: voiceLlm.model,
     agentProviderSettings: extractAgentProviderSettings(providerOverrides),
     idleRuntimeCleanup: persisted.agents?.idleRuntimeCleanup ?? true,
+    idleRuntimeCleanupAfter: resolveIdleRuntimeCleanupAfter(persisted),
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
     modelRouters: persisted.agents?.modelRouters,

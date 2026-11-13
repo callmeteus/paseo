@@ -4,6 +4,27 @@ import type { AgentPromptContentBlock, AgentPromptInput } from "./agent-sdk-type
 
 const REVIEW_LINE_MARKERS = { add: "+", remove: "-", context: " " } as const;
 
+/** Images and structured attachments to echo on the canonical user message. */
+export function submittedPromptMedia(prompt: AgentPromptInput): {
+  images?: Array<{ mimeType: string; data: string }>;
+  attachments?: AgentAttachment[];
+} {
+  if (typeof prompt === "string") return {};
+  const images: Array<{ mimeType: string; data: string }> = [];
+  const attachments: AgentAttachment[] = [];
+  for (const block of prompt) {
+    if (block.type === "image") {
+      images.push({ mimeType: block.mimeType, data: block.data });
+    } else if (block.type !== "text" || "mimeType" in block) {
+      attachments.push(block);
+    }
+  }
+  return {
+    ...(images.length > 0 ? { images } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
+  };
+}
+
 export function buildAgentPrompt(
   text: string,
   images?: Array<{ data: string; mimeType: string }>,

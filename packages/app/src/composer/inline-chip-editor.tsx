@@ -26,7 +26,7 @@ import {
   type InlineChip,
   type TextSelection,
 } from "@getpaseo/protocol/inline-chip";
-import { continueComposerList } from "@/composer/list-format";
+import { continueComposerList, findComposerInlineCode } from "@/composer/list-format";
 import { findSkillHighlightRanges } from "@/utils/agent-command-autocomplete";
 import { applyInlineChipDomStyle, getUnistylesAppTheme } from "./inline-chip-chrome";
 import { InlineChipDisclosure } from "./inline-context-chip";
@@ -428,11 +428,14 @@ function appendText(root: HTMLElement, text: string, skills: SkillPaint): void {
 }
 
 function appendPlainText(root: HTMLElement, text: string): void {
-  const lines = text.split("\n");
-  lines.forEach((line, index) => {
-    if (index > 0) root.appendChild(document.createElement("br"));
-    if (line.length > 0) root.appendChild(document.createTextNode(line));
-  });
+  const codes = findComposerInlineCode(text);
+  let cursor = 0;
+  for (const code of codes) {
+    appendPlainLines(root, text.slice(cursor, code.start));
+    appendCodeSpan(root, text.slice(code.start, code.end));
+    cursor = code.end;
+  }
+  appendPlainLines(root, text.slice(cursor));
   // A trailing break leaves the caret on a line with no line box, so the editor
   // looks like it never left the previous line. A zero-width placeholder gives
   // the empty last line height; reads and offsets treat it as absent.
@@ -442,6 +445,37 @@ function appendPlainText(root: HTMLElement, text: string): void {
     placeholder.textContent = "\u200B";
     root.appendChild(placeholder);
   }
+}
+
+function appendPlainLines(root: HTMLElement, text: string): void {
+  if (text.length === 0) return;
+  const lines = text.split("\n");
+  lines.forEach((line, index) => {
+    if (index > 0) root.appendChild(document.createElement("br"));
+    if (line.length > 0) root.appendChild(document.createTextNode(line));
+  });
+}
+
+function appendCodeSpan(root: HTMLElement, text: string): void {
+  const theme = getUnistylesAppTheme();
+  const open = /^`+/.exec(text)?.[0].length ?? 0;
+  const close = /`+$/.exec(text)?.[0].length ?? 0;
+  const span = document.createElement("span");
+  span.dataset.composerCode = "true";
+  span.style.backgroundColor = theme.colors.surface2;
+  span.style.borderRadius = `${theme.borderRadius.base}px`;
+  appendTransparent(span, text.slice(0, open));
+  span.appendChild(document.createTextNode(text.slice(open, text.length - close)));
+  appendTransparent(span, text.slice(text.length - close));
+  root.appendChild(span);
+}
+
+function appendTransparent(parent: HTMLElement, text: string): void {
+  if (text.length === 0) return;
+  const hidden = document.createElement("span");
+  hidden.style.color = "transparent";
+  hidden.textContent = text;
+  parent.appendChild(hidden);
 }
 
 function isTrailingLinePlaceholder(node: Node): boolean {

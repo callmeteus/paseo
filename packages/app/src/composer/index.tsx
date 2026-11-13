@@ -27,6 +27,7 @@ import {
   useImperativeHandle,
   memo,
   type ReactElement,
+  type Ref,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -92,6 +93,7 @@ import {
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
+  reorderQueuedComposerMessages,
   removeComposerAttachmentAtIndex,
   sendQueuedComposerMessageNow,
   toggleForgeAttachmentFromPicker,
@@ -155,6 +157,11 @@ import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { RenderProfile } from "@/utils/render-profiler";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
+import { DraggableList } from "@/components/draggable-list";
+import type {
+  DraggableListDragHandleProps,
+  DraggableRenderItemInfo,
+} from "@/components/draggable-list.types";
 import { isWeb, isNative } from "@/constants/platform";
 import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
@@ -511,29 +518,57 @@ interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
   handleEditQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
+  handleReorderQueuedMessages: (items: QueuedMessage[]) => void;
   editLabel: string;
   sendNowLabel: string;
+  reorderLabel: string;
 }
 
-function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
-  const { queuedMessages, handleEditQueuedMessage, handleSendQueuedNow, editLabel, sendNowLabel } =
-    args;
-  if (queuedMessages.length === 0) return null;
-  return (
-    <View style={styles.queueTrack}>
-      {queuedMessages.map((item) => (
-        <QueuedMessageRow
-          key={item.id}
-          item={item}
-          onEdit={handleEditQueuedMessage}
-          onSendNow={handleSendQueuedNow}
-          editLabel={editLabel}
-          sendNowLabel={sendNowLabel}
-        />
-      ))}
-    </View>
-  );
+function queuedMessageKey(item: QueuedMessage): string {
+  return item.id;
 }
+
+const webGrabCursor = isWeb ? RNStyleSheet.create({ handle: { cursor: "grab" } }).handle : null;
+
+const QueueTrack = memo(function QueueTrack({
+  queuedMessages,
+  handleEditQueuedMessage,
+  handleSendQueuedNow,
+  handleReorderQueuedMessages,
+  editLabel,
+  sendNowLabel,
+  reorderLabel,
+}: RenderQueueTrackArgs) {
+  const data = useMemo(() => [...queuedMessages], [queuedMessages]);
+  const renderItem = useCallback(
+    ({ item, drag, dragHandleProps }: DraggableRenderItemInfo<QueuedMessage>) => (
+      <QueuedMessageRow
+        item={item}
+        onEdit={handleEditQueuedMessage}
+        onSendNow={handleSendQueuedNow}
+        editLabel={editLabel}
+        sendNowLabel={sendNowLabel}
+        reorderLabel={reorderLabel}
+        drag={drag}
+        dragHandleProps={dragHandleProps}
+      />
+    ),
+    [editLabel, handleEditQueuedMessage, handleSendQueuedNow, reorderLabel, sendNowLabel],
+  );
+  if (data.length === 0) return null;
+  return (
+    <DraggableList
+      data={data}
+      keyExtractor={queuedMessageKey}
+      renderItem={renderItem}
+      onDragEnd={handleReorderQueuedMessages}
+      scrollEnabled={false}
+      useDragHandle
+      containerStyle={styles.queueTrack}
+      testID="composer-queue"
+    />
+  );
+});
 
 interface RenderComposerAttachmentPillArgs {
   serverId: string;
@@ -815,6 +850,9 @@ interface QueuedMessageRowProps {
   onSendNow: (id: string) => void;
   editLabel: string;
   sendNowLabel: string;
+  reorderLabel: string;
+  drag: () => void;
+  dragHandleProps: DraggableListDragHandleProps | undefined;
 }
 
 function QueuedMessageRow({
@@ -823,6 +861,9 @@ function QueuedMessageRow({
   onSendNow,
   editLabel,
   sendNowLabel,
+  reorderLabel,
+  drag,
+  dragHandleProps,
 }: QueuedMessageRowProps) {
   const handleEdit = useCallback(() => {
     onEdit(item.id);
@@ -830,11 +871,36 @@ function QueuedMessageRow({
   const handleSendNow = useCallback(() => {
     onSendNow(item.id);
   }, [onSendNow, item.id]);
+  const handleLongPress = useCallback(() => {
+    drag();
+  }, [drag]);
+  const message = (
+    <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
+      {inlineChipDisplayText(item.text)}
+    </Text>
+  );
   return (
     <View style={styles.queueItem}>
-      <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-        {inlineChipDisplayText(item.text)}
-      </Text>
+      {isNative ? (
+        <Pressable
+          style={styles.queueDragHandle}
+          onLongPress={handleLongPress}
+          delayLongPress={180}
+          accessibilityLabel={reorderLabel}
+        >
+          {message}
+        </Pressable>
+      ) : (
+        <View
+          style={[styles.queueDragHandle, webGrabCursor]}
+          accessibilityLabel={reorderLabel}
+          {...(dragHandleProps?.attributes as object | undefined)}
+          {...(dragHandleProps?.listeners as object | undefined)}
+          ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+        >
+          {message}
+        </View>
+      )}
       <View style={styles.queueActions}>
         <Pressable
           onPress={handleEdit}
@@ -2829,16 +2895,15 @@ function ComposerContentImpl({
     t,
   ]);
 
-  const queueList = useMemo(
-    () =>
-      renderQueueTrack({
-        queuedMessages,
-        handleEditQueuedMessage,
-        handleSendQueuedNow,
-        editLabel: t("composer.attachments.editQueuedMessage"),
-        sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
-      }),
-    [handleEditQueuedMessage, handleSendQueuedNow, queuedMessages, t],
+  const handleReorderQueuedMessages = useCallback(
+    (items: readonly QueuedMessage[]) => {
+      reorderQueuedComposerMessages({
+        agentId,
+        orderedIds: items.map((item) => item.id),
+        queue: queueWriter,
+      });
+    },
+    [agentId, queueWriter],
   );
 
   const handleGoalEdit = useCallback(
@@ -2991,7 +3056,17 @@ function ComposerContentImpl({
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={inputAreaContentStyle}>
-            {isFullscreen ? null : queueList}
+            {isFullscreen ? null : (
+              <QueueTrack
+                queuedMessages={queuedMessages}
+                handleEditQueuedMessage={handleEditQueuedMessage}
+                handleSendQueuedNow={handleSendQueuedNow}
+                handleReorderQueuedMessages={handleReorderQueuedMessages}
+                editLabel={t("composer.attachments.editQueuedMessage")}
+                sendNowLabel={t("composer.attachments.sendQueuedMessageNow")}
+                reorderLabel={t("composer.attachments.reorderQueuedMessage")}
+              />
+            )}
             {!isFullscreen && goalStrip}
             {!isFullscreen && sendErrorNode}
 
@@ -3332,8 +3407,11 @@ const styles = StyleSheet.create((theme: Theme) => ({
     borderColor: theme.colors.border,
     gap: theme.spacing[2],
   },
-  queueText: {
+  queueDragHandle: {
     flex: 1,
+    minWidth: 0,
+  },
+  queueText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
   },

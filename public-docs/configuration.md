@@ -87,11 +87,11 @@ The daemon validates the complete file before applying anything. It applies runt
 paseo daemon restart
 ```
 
-Runtime-safe settings include relay enablement, MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
+Runtime-safe settings include relay enablement, MCP settings, browser tools, hostnames, CORS origins, trusted proxies, Git process limits, agent and terminal profiles, provider definitions, metadata generation, the app base URL, provider catalog timeout, idle runtime cleanup, Hub HTTP (`hub.allowHttp`), and the global plugin switch. Removing one of these settings applies its omitted-field behavior; removing a provider removes it from future launches.
 
 New homes keep relay disabled when you remove `daemon.relay.enabled`. A daemon whose config already omitted this field when it started keeps the legacy relay-enabled behavior for compatibility. Set `daemon.relay.enabled` explicitly when editing an older config.
 
-Idle runtime cleanup, listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
+Listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
 
 Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, relay endpoints and TLS, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
 
@@ -103,17 +103,23 @@ See [Providers](/docs/providers) for the mental model and [Supported providers](
 
 ## Idle runtimes
 
-Paseo releases resumable idle agent processes after one hour when its daemon baseline allows
-cleanup and any implemented provider check agrees. Your next prompt resumes the same conversation. Disable this
-for the entire host by turning off **Release idle agents** in **Settings → your host → Agents**, or with:
+Paseo releases resumable idle agent processes after the idle time you choose, one hour by default,
+when its daemon baseline allows cleanup and any implemented provider check agrees. Your next prompt
+resumes the same conversation. Disable this for the entire host by turning off **Release idle agents**
+in **Settings → your host → Agents**, or with:
 
 ```json
 { "agents": { "idleRuntimeCleanup": false } }
 ```
 
-This setting defaults to `true`. Changes in Settings apply immediately; config-file edits apply
-on config reload. Re-enabling keeps existing idle timestamps. There is no per-agent setting. Providers without a runtime safety check use the same daemon baseline and one-hour idle
-period. Active work, descendants and pending finish notifications prevent cleanup. ACP adapters
+Choose the idle time in that same card, or set `agents.idleRuntimeCleanupAfter` to `15m`, `30m`,
+`1h`, `2h`, `4h`, `8h`, or `24h`. Omitted means one hour.
+
+Changes in Settings apply immediately; config-file edits apply
+on config reload. Re-enabling keeps existing idle timestamps, and so does changing the time: a
+shorter time makes agents that have already been idle that long eligible on the next check, once
+a minute. There is no per-agent setting. Providers without a runtime safety check use the same
+daemon baseline and idle time. Active work, descendants and pending finish notifications prevent cleanup. ACP adapters
 also retain runtimes with running ACP terminals, including silent ones; exited terminals do not
 prevent cleanup. This check does not inspect processes launched internally by the provider.
 

@@ -15,6 +15,7 @@ import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-co
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
 import { ModelRouterSettingsSchema } from "@getpaseo/protocol/model-router";
 import {
+  IdleRuntimeCleanupAfterSchema,
   McpBridgeSchema,
   McpServerConfigSchema,
   McpShareSchema,
@@ -342,6 +343,18 @@ export const PersistedConfigSchema = z
       .strict()
       .optional(),
 
+    hub: z
+      .object({
+        allowHttp: z
+          .boolean()
+          .optional()
+          .describe(
+            "Accept cleartext HTTP Hub origins that are not loopback. Off unless set. CLI credentials then travel without TLS.",
+          ),
+      })
+      .strict()
+      .optional(),
+
     providers: ProvidersSchema.optional(),
     pluginRegistries: PluginRegistriesSchema.optional(),
     pluginsEnabled: z.boolean().optional(),
@@ -351,6 +364,9 @@ export const PersistedConfigSchema = z
       .object({
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
         idleRuntimeCleanup: z.boolean().optional(),
+        idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional().describe(
+          "How long a resumable agent stays idle before its process is released. One of 15m, 30m, 1h, 2h, 4h, 8h, 24h. Defaults to 1h.",
+        ),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
         modelRouters: ModelRouterSettingsSchema.optional(),

@@ -38,6 +38,7 @@ import {
   createHistoryStartPaginationState,
   evaluateHistoryStartPagination,
   isHistoryStartLoadingOperation,
+  isTranscriptShorterThanViewport,
   rearmHistoryStartPagination,
   settleHistoryStartPagination,
   type HistoryStartPaginationInput,
@@ -113,6 +114,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
   const isNativeViewportSettlingRef = useRef(false);
   const nativeViewportSettlingFrameIdRef = useRef<number | null>(null);
   const historyStartReadyRef = useRef(false);
+  const followingOutputRef = useRef(true);
   const [historyStartPaginationState, setHistoryStartPaginationState] = useState(
     createHistoryStartPaginationState,
   );
@@ -137,6 +139,11 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
       isLoadingOlderHistory,
       isReady: historyStartReadyRef.current && hasMeasuredViewport,
       progressKey: olderHistoryProgressKey,
+      viewportUnderfilled: isTranscriptShorterThanViewport({
+        contentExtent: metrics.contentHeight,
+        viewportHeight: metrics.viewportHeight,
+      }),
+      followingOutput: followingOutputRef.current,
     };
   });
   const applyHistoryStartPaginationTransition = useStableEvent(
@@ -279,6 +286,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
   });
   // Android's maintainVisibleContentPosition ignores the list inversion transform and
   // fights the controller's offset-zero correction while the live header grows.
+  followingOutputRef.current = bottomAnchorController.mode === "sticky-bottom";
   const maintainVisibleContentPosition =
     Platform.OS === "android" && bottomAnchorController.mode === "sticky-bottom"
       ? undefined

@@ -34,6 +34,7 @@ import {
   createHistoryStartPaginationState,
   evaluateHistoryStartPagination,
   isHistoryStartLoadingOperation,
+  isTranscriptShorterThanViewport,
   rearmHistoryStartPagination,
   settleHistoryStartPagination,
   type HistoryStartPaginationInput,
@@ -109,6 +110,28 @@ function isScrollContainerMeasurable(
   scrollContainer: Pick<HTMLElement, "clientHeight" | "scrollHeight">,
 ): boolean {
   return scrollContainer.clientHeight > 0 && scrollContainer.scrollHeight > 0;
+}
+
+function measureTranscriptExtent(content: HTMLElement): number {
+  // minHeight stretches the content box to the viewport, so its scrollHeight
+  // cannot tell a short transcript from a filled one.
+  let extent = 0;
+  for (const child of content.children) {
+    if (child instanceof HTMLElement) {
+      extent += child.offsetHeight;
+    }
+  }
+  if (extent <= 0) {
+    return 0;
+  }
+  const style = window.getComputedStyle(content);
+  const paddingTop = Number.parseFloat(style.paddingTop);
+  const paddingBottom = Number.parseFloat(style.paddingBottom);
+  return (
+    extent +
+    (Number.isFinite(paddingTop) ? paddingTop : 0) +
+    (Number.isFinite(paddingBottom) ? paddingBottom : 0)
+  );
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -473,6 +496,7 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     }
     const bottomAnchorSettled =
       !followOutputRef.current || isScrollContainerNearBottom(scrollContainer);
+    const content = contentRef.current;
     return {
       distanceFromHistoryStart: scrollContainer.scrollTop,
       hasOlderHistory,
@@ -481,6 +505,13 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
       // page here changes the virtual index before the target has mounted.
       isReady: historyStartReadyRef.current && bottomAnchorSettled && !isJumpSettling(),
       progressKey: olderHistoryProgressKey,
+      viewportUnderfilled:
+        scrollContainer.scrollHeight <= scrollContainer.clientHeight &&
+        isTranscriptShorterThanViewport({
+          contentExtent: content ? measureTranscriptExtent(content) : 0,
+          viewportHeight: scrollContainer.clientHeight,
+        }),
+      followingOutput: followOutputRef.current,
     };
   });
   const applyHistoryStartPaginationTransition = useStableEvent(

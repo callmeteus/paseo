@@ -350,6 +350,10 @@ export const McpBridgeSchema = z
 export type McpShare = z.infer<typeof McpShareSchema>;
 export type McpBridge = z.infer<typeof McpBridgeSchema>;
 
+export const IDLE_RUNTIME_CLEANUP_AFTER = ["15m", "30m", "1h", "2h", "4h", "8h", "24h"] as const;
+export const IdleRuntimeCleanupAfterSchema = z.enum(IDLE_RUNTIME_CLEANUP_AFTER);
+export type IdleRuntimeCleanupAfter = (typeof IDLE_RUNTIME_CLEANUP_AFTER)[number];
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -385,6 +389,10 @@ export const MutableDaemonConfigSchema = z
     // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, keep optional while old daemons are supported.
     // Persisted host-wide value, applied live by the daemon.
     idleRuntimeCleanup: z.boolean().optional(),
+    // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, keep optional while old daemons are supported.
+    idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    // COMPAT(hubAllowHttpSetting): added in v0.13.1, keep optional while old daemons are supported.
+    hubAllowHttp: z.boolean().optional(),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -414,6 +422,8 @@ export const MutableDaemonConfigPatchSchema = z
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
     idleRuntimeCleanup: z.boolean().optional(),
+    idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    hubAllowHttp: z.boolean().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -831,6 +841,11 @@ const ToolCallTimelineItemPayloadSchema: z.ZodType<ToolCallTimelineItem, unknown
     ToolCallCanceledPayloadSchema,
   ]);
 
+const TimelineUserImageSchema = z.object({
+  mimeType: z.string(),
+  data: z.string(),
+});
+
 // zod-aot 0.20.4 miscompiles this as a nested discriminated union by omitting
 // the inner tool_call branch from the generated outer dispatch.
 export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknown> = z.union([
@@ -839,6 +854,9 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     clientMessageId: z.string().optional(),
+    images: z.array(TimelineUserImageSchema).optional(),
+    // Attachment schemas are declared further down. The getter runs at parse time.
+    attachments: z.array(z.lazy(() => timelineUserAttachmentSchema)).optional(),
   }),
   z.object({
     type: z.literal("assistant_message"),
@@ -1400,6 +1418,27 @@ export const UploadedFileAttachmentSchema = z.object({
   size: z.number().int().nonnegative(),
   path: z.string(),
 });
+
+// Pure copy of a text attachment. The send-path schema transforms contextKind;
+// a timeline item cannot, because inbound validators only compile pure schemas.
+const TimelineTextAttachmentSchema = z.object({
+  type: z.literal("text"),
+  mimeType: z.literal("text/plain"),
+  contextKind: z.literal("chat_history").optional(),
+  title: z.string().nullable().optional(),
+  text: z.string(),
+  externalResource: ExternalResourceAttachmentMetadataSchema.optional(),
+});
+
+const timelineUserAttachmentSchema: z.ZodType<AgentAttachment> = z.discriminatedUnion("type", [
+  ForgeChangeRequestAttachmentSchema,
+  ForgeIssueAttachmentSchema,
+  GitHubPrAttachmentSchema,
+  GitHubIssueAttachmentSchema,
+  TimelineTextAttachmentSchema,
+  ReviewAttachmentSchema,
+  UploadedFileAttachmentSchema,
+]);
 
 export const AgentAttachmentSchema = z.discriminatedUnion("type", [
   ForgeChangeRequestAttachmentSchema,
@@ -4289,6 +4328,10 @@ export const ServerInfoStatusPayloadSchema = z
         skillManagement: z.boolean().optional(),
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: z.boolean().optional(),
+        // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, remove gate after 2027-11-09.
+        idleRuntimeCleanupAfterSetting: z.boolean().optional(),
+        // COMPAT(hubAllowHttpSetting): added in v0.13.1, remove gate after 2027-05-12.
+        hubAllowHttpSetting: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.

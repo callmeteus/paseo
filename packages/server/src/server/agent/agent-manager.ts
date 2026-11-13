@@ -2,6 +2,7 @@ import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
+import { submittedPromptMedia } from "./prompt-attachments.js";
 import {
   CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL,
   isCursorImportedRecord,
@@ -6669,6 +6670,7 @@ export class AgentManager {
       text: options?.text ?? submittedPromptText(prompt),
       clientMessageId,
       ...(options?.messageId ? { messageId: options.messageId } : {}),
+      ...submittedPromptMedia(prompt),
     });
     for (const item of items) {
       // Human attempts stay in history on rejection; delivery notifications require acceptance.

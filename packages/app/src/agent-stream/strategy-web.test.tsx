@@ -698,6 +698,71 @@ describe("createWebStreamStrategy", () => {
     expect(onNearHistoryStart).not.toHaveBeenCalled();
   });
 
+  it("loads older history when the transcript is shorter than the window", async () => {
+    const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get: () => 40,
+    });
+    try {
+      const strategy = createWebStreamStrategy({ isMobileBreakpoint: true });
+      const viewportRef = React.createRef<StreamViewportHandle>();
+      const onNearHistoryStart = vi.fn().mockReturnValue(true);
+      const renderInput = {
+        agentId: "agent",
+        boundary: {
+          hasVirtualizedHistory: false,
+          hasMountedHistory: true,
+          hasLiveHead: false,
+        },
+        segments: {
+          historyVirtualized: [],
+          historyMounted: [userMessage(1)],
+          liveHead: [],
+        },
+        renderers: createRenderers(vi.fn()),
+        listEmptyComponent: null,
+        viewportRef,
+        routeBottomAnchorRequest: null,
+        isAuthoritativeHistoryReady: true,
+        onNearBottomChange: vi.fn(),
+        onNearHistoryStart,
+        isLoadingOlderHistory: false,
+        hasOlderHistory: true,
+        olderHistoryProgressKey: "epoch-1:20",
+        scrollEnabled: true,
+        listStyle: null,
+        baseListContentContainerStyle: null,
+        forwardListContentContainerStyle: null,
+        contentMaxWidth: DEFAULT_CONTENT_MAX_WIDTH,
+      };
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      act(() => {
+        root?.render(strategy.render(renderInput));
+      });
+      const scrollContainer = container.querySelector('[data-testid="agent-chat-scroll"]');
+      if (!(scrollContainer instanceof HTMLElement)) {
+        throw new Error("Expected agent chat scroll container");
+      }
+      Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 800 });
+      Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 800 });
+      scrollContainer.scrollTop = 0;
+
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+
+      expect(onNearHistoryStart).toHaveBeenCalledOnce();
+    } finally {
+      if (offsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
+      }
+    }
+  });
+
   it("keeps initial route entry anchored when delayed route readiness arrives before user scroll", async () => {
     const scrollTo = vi.fn(function (
       this: HTMLElement,

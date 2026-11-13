@@ -7,7 +7,12 @@ export interface ComposerListMarker {
 export interface ComposerMirrorPiece {
   start: number;
   text: string;
-  kind: "plain" | "skill" | "bullet" | "ordered";
+  kind: "plain" | "skill" | "bullet" | "ordered" | "code";
+}
+
+export interface ComposerInlineCodeSpan {
+  start: number;
+  end: number;
 }
 
 const LIST_MARKER = /^( *)([-*+]|\d{1,9}\.) /;
@@ -46,6 +51,30 @@ export function hasComposerListMarker(text: string): boolean {
   return false;
 }
 
+/**
+ * Closed inline code on a single line. An unclosed backtick stays plain text,
+ * and a fence line is not inline code.
+ */
+export function findComposerInlineCode(text: string): ComposerInlineCodeSpan[] {
+  const spans: ComposerInlineCodeSpan[] = [];
+  let open: OpenFence | null = null;
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const marker = fenceToken(line);
+    if (marker) {
+      open = nextFence(open, line);
+    } else if (!open) {
+      collectInlineCode(line, offset, spans);
+    }
+    offset += line.length + 1;
+  }
+  return spans;
+}
+
+export function hasComposerInlineCode(text: string): boolean {
+  return findComposerInlineCode(text).length > 0;
+}
+
 interface ComposerCaret {
   start: number;
   end: number;
@@ -54,18 +83,6 @@ interface ComposerCaret {
 export interface ComposerListContinuation {
   text: string;
   selection: ComposerCaret;
-}
-
-/**
- * Enter submits only where the composer offers Enter-to-send (desktop web).
- * Everywhere else it breaks the line, and a break inside a list opens the next
- * item, so compact web must not be treated as a submit.
- */
-export function breaksComposerLineOnEnter(input: {
-  shiftKey: boolean;
-  submitOnEnter: boolean;
-}): boolean {
-  return input.shiftKey || !input.submitOnEnter;
 }
 
 /**
@@ -99,6 +116,30 @@ export function continueComposerList(
 }
 
 /**
+ * Indents or outdents the list lines the caret is on.
+ * Returns null when any touched line is not a list item, so Tab keeps its
+ * other job. A list item already at the margin still returns the same text:
+ * the key belongs to the list and must not leave the field.
+ */
+export function indentComposerList(
+  text: string,
+  selection: ComposerCaret,
+  direction: "in" | "out",
+): ComposerListContinuation | null {
+  const lines = textLines(text);
+  const touched = touchedLineIndexes(lines, text.length, selection);
+  const edits: ListIndentEdit[] = [];
+  for (let index = touched.first; index <= touched.last; index += 1) {
+    const line = lines[index];
+    if (!line || isInsideFence(text, line.start)) return null;
+    const edit = listIndentEdit(line, direction);
+    if (!edit) return null;
+    edits.push(edit);
+  }
+  return applyListIndent(text, selection, edits);
+}
+
+/**
  * Splits composer text into the pieces the mirror paints.
  * A list marker wins over a skill token that starts in the same place, so the
  * marker width stays equal to the characters in the textarea.
@@ -112,6 +153,11 @@ export function composeComposerMirrorPieces(
       start: marker.start,
       text: text.slice(marker.start, marker.end),
       kind: marker.kind,
+    })),
+    ...findComposerInlineCode(text).map((span) => ({
+      start: span.start,
+      text: text.slice(span.start, span.end),
+      kind: "code" as const,
     })),
     ...skillRanges.map((range) => ({
       start: range.start,
@@ -261,6 +307,95 @@ function fenceToken(line: string): { char: "`" | "~"; length: number; closes: bo
   const char = token.startsWith("`") ? "`" : "~";
   const rest = match[3] ?? "";
   return { char, length: token.length, closes: rest.trim().length === 0 };
+}
+
+const INLINE_CODE = /(`+)([^\n]*?)\1/g;
+
+function collectInlineCode(line: string, offset: number, spans: ComposerInlineCodeSpan[]): void {
+  INLINE_CODE.lastIndex = 0;
+  let match = INLINE_CODE.exec(line);
+  while (match) {
+    const body = match[2] ?? "";
+    if (body.length > 0) {
+      spans.push({ start: offset + match.index, end: offset + match.index + match[0].length });
+    }
+    match = INLINE_CODE.exec(line);
+  }
+}
+
+interface ListIndentEdit {
+  start: number;
+  added: number;
+  removed: number;
+  text: string;
+}
+
+function textLines(text: string): TextLine[] {
+  const lines: TextLine[] = [];
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    lines.push({ start: offset, end: offset + line.length, text: line });
+    offset += line.length + 1;
+  }
+  return lines;
+}
+
+function touchedLineIndexes(
+  lines: readonly TextLine[],
+  textLength: number,
+  selection: ComposerCaret,
+): { first: number; last: number } {
+  const from = clamp(Math.min(selection.start, selection.end), 0, textLength);
+  const to = clamp(Math.max(selection.start, selection.end), 0, textLength);
+  const anchor = to > from ? to - 1 : to;
+  const raw = lines.map((line) => line.text);
+  return { first: lineIndexAt(raw, from), last: lineIndexAt(raw, anchor) };
+}
+
+function listIndentEdit(line: TextLine, direction: "in" | "out"): ListIndentEdit | null {
+  const marker = matchListMarker(line.text);
+  if (!marker) return null;
+  const step = marker.prefixLength - marker.indent.length;
+  const removed = direction === "out" ? Math.min(marker.indent.length, step) : 0;
+  const added = direction === "in" ? step : 0;
+  return {
+    start: line.start,
+    added,
+    removed,
+    text: `${" ".repeat(added)}${line.text.slice(removed)}`,
+  };
+}
+
+function applyListIndent(
+  text: string,
+  selection: ComposerCaret,
+  edits: readonly ListIndentEdit[],
+): ComposerListContinuation {
+  let next = "";
+  let cursor = 0;
+  for (const edit of edits) {
+    next += text.slice(cursor, edit.start);
+    next += edit.text;
+    cursor = edit.start + edit.removed + (edit.text.length - edit.added);
+  }
+  next += text.slice(cursor);
+  return {
+    text: next,
+    selection: {
+      start: mapIndentIndex(selection.start, edits),
+      end: mapIndentIndex(selection.end, edits),
+    },
+  };
+}
+
+function mapIndentIndex(index: number, edits: readonly ListIndentEdit[]): number {
+  let shift = 0;
+  for (const edit of edits) {
+    if (index < edit.start) break;
+    if (index < edit.start + edit.removed) return edit.start + shift;
+    shift += edit.added - edit.removed;
+  }
+  return index + shift;
 }
 
 function clamp(value: number, min: number, max: number): number {

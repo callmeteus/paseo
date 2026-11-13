@@ -14,7 +14,8 @@ The invariants are:
 
 > A continuously subscribed client applies every committed row in order. Opening or resuming an
 > agent establishes the daemon's current tail in one bounded request, with older history reachable
-> through backward pagination.
+> through backward pagination. A tail shorter than the window keeps paging backward until the
+> transcript fills it.
 
 Tool output is bounded before it enters either delivery path. Canonical shell tool output is sliced
 to 64 KiB, and the same bounded item is used for runtime timeline rows and live stream events.
@@ -231,7 +232,8 @@ Every path that sends a message to an agent — composer send, dictation accept-
 send-now, and the host runtime's automatic queue drain — goes through
 `dispatchComposerAgentMessage` with a submission writer. There is no second transport for the same
 product action: calling `client.sendAgentMessage` directly skips the submitted row and the pending
-footer, and permanently drops attachments because the daemon does not echo them back.
+footer. The daemon echoes images and structured attachments on the canonical user message, so
+another instance can render them. The sending client keeps the local copies it already has.
 
 A submitted prompt is one `UserMessageItem` row. That row is the authoritative local presentation:
 its stable identity, text, timestamp, images, and attachments do not change when the provider

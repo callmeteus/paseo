@@ -4,6 +4,7 @@ import {
   createHistoryStartPaginationState,
   evaluateHistoryStartPagination,
   isHistoryStartLoadingOperation,
+  isTranscriptShorterThanViewport,
   rearmHistoryStartPagination,
   settleHistoryStartPagination,
   type HistoryStartPaginationInput,
@@ -19,6 +20,8 @@ const visibleHistoryStart: HistoryStartPaginationInput = {
   isLoadingOlderHistory: false,
   isReady: true,
   progressKey: "epoch-1:20",
+  viewportUnderfilled: false,
+  followingOutput: false,
 };
 
 describe("history start pagination", () => {
@@ -38,11 +41,81 @@ describe("history start pagination", () => {
       loadedProgressKey: "epoch-1:20:local-60",
     });
   });
-  it("waits for user scroll intent before loading", () => {
+  it("waits for user scroll intent before loading a filled window", () => {
     const dormant = createHistoryStartPaginationState();
-    const evaluated = evaluateHistoryStartPagination(dormant, visibleHistoryStart);
+    const evaluated = evaluateHistoryStartPagination(dormant, {
+      ...visibleHistoryStart,
+      followingOutput: true,
+    });
 
     expect(evaluated).toEqual({ state: { status: "dormant" }, shouldLoad: false });
+  });
+
+  it("loads older history when the open transcript does not fill the window", () => {
+    const evaluated = evaluateHistoryStartPagination(createHistoryStartPaginationState(), {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+    });
+
+    expect(evaluated.shouldLoad).toBe(true);
+    expect(evaluated.state).toEqual({
+      status: "loading",
+      requestedProgressKey: "epoch-1:20",
+      requestObserved: false,
+    });
+  });
+
+  it("stops filling once the followed transcript covers the window", () => {
+    const started = evaluateHistoryStartPagination(createHistoryStartPaginationState(), {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+    });
+    const pageApplied = evaluateHistoryStartPagination(started.state, {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+      progressKey: "epoch-1:0",
+    });
+    const filled = settleHistoryStartPagination(pageApplied.state, {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      distanceFromHistoryStart: 0,
+      progressKey: "epoch-1:0",
+    });
+
+    expect(filled).toEqual({ state: { status: "ready" }, shouldLoad: false });
+  });
+
+  it("keeps paging while the followed transcript is still shorter than the window", () => {
+    const started = evaluateHistoryStartPagination(createHistoryStartPaginationState(), {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+    });
+    const pageApplied = evaluateHistoryStartPagination(started.state, {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+      progressKey: "epoch-1:0",
+    });
+    const stillShort = settleHistoryStartPagination(pageApplied.state, {
+      ...visibleHistoryStart,
+      followingOutput: true,
+      viewportUnderfilled: true,
+      progressKey: "epoch-1:0",
+    });
+
+    expect(stillShort.shouldLoad).toBe(true);
+  });
+
+  it("treats a stretched scroll box as empty only when the rows are shorter than the window", () => {
+    expect(isTranscriptShorterThanViewport({ contentExtent: 240, viewportHeight: 800 })).toBe(true);
+    expect(isTranscriptShorterThanViewport({ contentExtent: 800, viewportHeight: 800 })).toBe(
+      false,
+    );
+    expect(isTranscriptShorterThanViewport({ contentExtent: 0, viewportHeight: 800 })).toBe(false);
   });
 
   it("waits for anchored page geometry before authorizing another page", () => {

@@ -132,6 +132,7 @@ export function formatResetLabel(
   retained = false,
   now = Date.now(),
   t: TFunction = i18n.t,
+  short = false,
 ): string | null {
   if (!iso) return null;
   const rel = relativeDuration(iso, now);
@@ -139,7 +140,8 @@ export function formatResetLabel(
   if (rel.unit === "now" && retained) return t("providerUsage.timing.resetTimePassed");
   if (rel.unit === "now") return t("providerUsage.timing.resettingNow");
   const duration = formatRelativeDuration(rel, t);
-  return duration ? t("providerUsage.timing.resetsIn", { duration }) : null;
+  const key = short ? "providerUsage.timing.resetsInShort" : "providerUsage.timing.resetsIn";
+  return duration ? t(key, { duration }) : null;
 }
 
 export function formatRunsOutLabel(

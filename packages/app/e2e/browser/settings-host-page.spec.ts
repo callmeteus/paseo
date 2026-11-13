@@ -31,6 +31,7 @@ import {
   expectHostOnlineWithoutError,
   expectIdleAgentRelease,
   setIdleAgentRelease,
+  setIdleAgentReleaseAfter,
 } from "../support/helpers/settings";
 
 test.describe("Settings host page", () => {
@@ -195,6 +196,17 @@ test.describe("Settings host page", () => {
         await setIdleAgentRelease(page, true);
         await expectLiveSavedSetting(true);
         await setIdleAgentRelease(page, false);
+      });
+
+      await test.step("idle time can be chosen and applies without a restart", async () => {
+        await setIdleAgentReleaseAfter(page, "30 minutes");
+        const saved = JSON.parse(
+          await readFile(path.join(daemon.paseoHome, "config.json"), "utf8"),
+        );
+        expect(saved.agents.idleRuntimeCleanupAfter).toBe("30m");
+        expect((await client.getDaemonConfig()).config.idleRuntimeCleanupAfter).toBe("30m");
+        expect((await client.reloadDaemonConfig()).restartRequiredPaths).toEqual([]);
+        expect((await client.getDaemonStatus()).pid).toBe(originalPid);
       });
 
       await test.step("other hosts keep their own setting", async () => {

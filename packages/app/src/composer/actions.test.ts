@@ -22,6 +22,7 @@ import {
   cancelComposerAgent,
   dispatchComposerAgentMessage,
   editQueuedComposerMessage,
+  reorderQueuedComposerMessages,
   findForgeItemByOption,
   isAttachmentSelectedForForgeItem,
   openComposerAttachment,
@@ -750,6 +751,54 @@ describe("queueComposerMessage", () => {
       { kind: "image", metadata: image },
       review,
     ]);
+  });
+});
+
+describe("reorderQueuedComposerMessages", () => {
+  const queued = (id: string): QueuedComposerMessage => ({ id, text: id, attachments: [] });
+
+  it("reorders one agent's queue and leaves the others in place", () => {
+    const queue = createFakeQueue(
+      new Map([
+        ["agent", [queued("a"), queued("b"), queued("c")]],
+        ["other", [queued("z")]],
+      ]),
+    );
+
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      orderedIds: ["c", "a", "b"],
+      queue,
+    });
+
+    expect(queue.state.get("agent")?.map((item) => item.id)).toEqual(["c", "a", "b"]);
+    expect(queue.state.get("other")?.map((item) => item.id)).toEqual(["z"]);
+  });
+
+  it("keeps a message that arrived while the row was moving and drops one already sent", () => {
+    const queue = createFakeQueue(new Map([["agent", [queued("a"), queued("b"), queued("c")]]]));
+
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      orderedIds: ["gone", "b", "a"],
+      queue,
+    });
+
+    expect(queue.state.get("agent")?.map((item) => item.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("leaves the queue object in place when the order did not change", () => {
+    const items = [queued("a"), queued("b")];
+    const queue = createFakeQueue(new Map([["agent", items]]));
+    const before = queue.state;
+
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      orderedIds: ["a", "b"],
+      queue,
+    });
+
+    expect(queue.state).toBe(before);
   });
 });
 
