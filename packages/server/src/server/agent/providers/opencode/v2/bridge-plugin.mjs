@@ -48,6 +48,79 @@ export function scopeCompactionMessages(sessionID, messages, canonical) {
   return kept.length > 0 ? kept : asModelMessages(canonicalMessages);
 }
 
+// OpenCode's own tools carry no server prefix and must survive every budget.
+const PROTECTED_TOOLS = new Set([
+  "bash",
+  "edit",
+  "glob",
+  "grep",
+  "list",
+  "multiedit",
+  "patch",
+  "read",
+  "task",
+  "todo",
+  "todoread",
+  "todowrite",
+  "webfetch",
+  "write",
+]);
+
+const PASEO_SERVER = "paseo";
+
+/**
+ * OpenCode names an MCP tool `<server>_<tool>`, the same convention the bridge
+ * uses for permission actions. Groups therefore come from the name, and the
+ * Paseo catalog is recognised separately so it can be dropped last.
+ */
+function groupOfTool(name) {
+  if (name === STRUCTURED_OUTPUT_TOOL) return null;
+  if (name.startsWith(`${PASEO_SERVER}_`)) return { server: PASEO_SERVER, priority: 2 };
+  if (PROTECTED_TOOLS.has(name)) return null;
+  const separator = name.indexOf("_");
+  return { server: separator > 0 ? name.slice(0, separator) : name, priority: 1 };
+}
+
+/**
+ * A model that rejects more than N tools fails the whole turn, so the request
+ * has to fit before it is sent. Drop MCP surfaces whole — never half a server —
+ * largest first, then the Paseo catalog, and never touch OpenCode builtins.
+ */
+export function budgetToolSurface({ tools, maxTools }) {
+  const names = Object.keys(tools ?? {});
+  if (!Number.isFinite(maxTools) || maxTools <= 0 || names.length <= maxTools) {
+    return { removed: [], hiddenServers: [], kept: names.length };
+  }
+  const groups = new Map();
+  for (const name of names) {
+    const group = groupOfTool(name);
+    if (!group) continue;
+    const key = `${group.priority}:${group.server}`;
+    const entry = groups.get(key);
+    if (entry) entry.names.push(name);
+    else groups.set(key, { ...group, names: [name] });
+  }
+  const ordered = [...groups.values()].sort(
+    (left, right) =>
+      left.priority - right.priority ||
+      right.names.length - left.names.length ||
+      left.server.localeCompare(right.server),
+  );
+  let remaining = names.length;
+  const removed = [];
+  const hiddenServers = [];
+  for (const group of ordered) {
+    if (remaining <= maxTools) break;
+    for (const name of group.names) {
+      delete tools[name];
+      removed.push(name);
+    }
+    remaining -= group.names.length;
+    hiddenServers.push(group.server);
+  }
+  return { removed, hiddenServers, kept: remaining };
+}
+
 export default {
   id: "paseo",
   async setup(context) {
@@ -137,6 +210,12 @@ export default {
       for (const name of Object.keys(input.tools)) {
         if (name !== STRUCTURED_OUTPUT_TOOL && name.startsWith("paseo_") && !allowed.has(name))
           delete input.tools[name];
+      }
+      const budget = budgetToolSurface({ tools: input.tools, maxTools: binding.maxTools });
+      if (budget.hiddenServers.length > 0) {
+        console.warn(
+          `[paseo] model accepts ${binding.maxTools} tools; hid ${budget.removed.length} from ${budget.hiddenServers.join(", ")}`,
+        );
       }
     });
     return async () => {

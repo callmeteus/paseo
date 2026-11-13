@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import plugin, { scopeCompactionMessages } from "./bridge-plugin.mjs";
+import plugin, { budgetToolSurface, scopeCompactionMessages } from "./bridge-plugin.mjs";
 
 const phraseA = "frase só do chat A";
 const phraseB = "acesso Tailscale obrigatório";
@@ -70,5 +70,95 @@ describe("OpenCode compaction scope", () => {
     expect(again.messages).toEqual(chatA.messages);
 
     await dispose();
+  });
+});
+
+describe("OpenCode tool budget", () => {
+  function surface(names: string[]): Record<string, unknown> {
+    return Object.fromEntries(names.map((name) => [name, { description: name }]));
+  }
+
+  test("leaves a request that already fits untouched", () => {
+    const tools = surface(["read", "bash", "kabum_search", "kabum_details", "paseo_list_agents"]);
+
+    const result = budgetToolSurface({ tools, maxTools: 128 });
+
+    expect(result.removed).toEqual([]);
+    expect(result.hiddenServers).toEqual([]);
+    expect(Object.keys(tools)).toHaveLength(5);
+  });
+
+  test("does nothing when the model has no known ceiling", () => {
+    const tools = surface(["read", "kabum_search", "paseo_list_agents"]);
+
+    const result = budgetToolSurface({ tools, maxTools: undefined });
+
+    expect(result.removed).toEqual([]);
+    expect(Object.keys(tools)).toHaveLength(3);
+  });
+
+  test("drops the largest MCP surface first and keeps OpenCode builtins", () => {
+    const tools = surface([
+      "read",
+      "bash",
+      "kabum_a",
+      "kabum_b",
+      "kabum_c",
+      "hutch_a",
+      "hutch_b",
+      "shopee_a",
+      "paseo_list_agents",
+    ]);
+
+    const result = budgetToolSurface({ tools, maxTools: 4 });
+
+    expect(result.hiddenServers).toEqual(["kabum", "hutch"]);
+    expect(Object.keys(tools).sort()).toEqual(["bash", "paseo_list_agents", "read", "shopee_a"]);
+  });
+
+  test("never drops a server halfway and spares the Paseo catalog until last", () => {
+    const tools = surface([
+      "read",
+      "kabum_search",
+      "kabum_details",
+      "paseo_list_agents",
+      "paseo_create_agent",
+      "paseo_list_hosts",
+    ]);
+
+    const result = budgetToolSurface({ tools, maxTools: 4 });
+
+    expect(result.hiddenServers).toEqual(["kabum"]);
+    expect(result.kept).toBe(4);
+    expect(Object.keys(tools).sort()).toEqual([
+      "paseo_create_agent",
+      "paseo_list_agents",
+      "paseo_list_hosts",
+      "read",
+    ]);
+  });
+
+  test("drops the Paseo catalog only when the MCP surfaces are not enough", () => {
+    const tools = surface([
+      "read",
+      "kabum_search",
+      "paseo_list_agents",
+      "paseo_create_agent",
+      "paseo_list_hosts",
+    ]);
+
+    const result = budgetToolSurface({ tools, maxTools: 2 });
+
+    expect(result.hiddenServers).toEqual(["kabum", "paseo"]);
+    expect(Object.keys(tools)).toEqual(["read"]);
+  });
+
+  test("keeps the structured-output tool under any ceiling", () => {
+    const tools = surface(["paseo_structured_output", "kabum_search", "hutch_query"]);
+
+    const result = budgetToolSurface({ tools, maxTools: 1 });
+
+    expect(result.removed).toEqual(["hutch_query", "kabum_search"]);
+    expect(Object.keys(tools)).toEqual(["paseo_structured_output"]);
   });
 });
