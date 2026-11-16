@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
+import { isBackgroundProviderNotice, isSystemErrorText } from "@getpaseo/protocol/provider-error";
 import type {
   AgentProvider,
   AgentTimelineItem,
@@ -934,6 +935,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function streamHasVisibleAnswer(state: StreamItem[]): boolean {
+  return state.some(
+    (item) =>
+      item.kind === "thought" ||
+      item.kind === "tool_call" ||
+      (item.kind === "assistant_message" && !isSystemErrorText(item.text)),
+  );
+}
+
 function normalizeChunk(text: string): { chunk: string; hasContent: boolean } {
   if (!text) {
     return { chunk: "", hasContent: false };
@@ -1042,10 +1052,24 @@ function appendAssistantMessage(
     return state;
   }
 
+  // The daemon records a turn failure as an assistant row with no message id.
+  // Id-less rows are also how streaming deltas accumulate, so a failure was
+  // glued onto the reply and no longer matched the error card.
+  if (
+    isSystemErrorText(chunk) &&
+    isBackgroundProviderNotice(chunk) &&
+    streamHasVisibleAnswer(state)
+  ) {
+    return state;
+  }
+
   const last = state[state.length - 1];
+  const lastIsSystemError = last?.kind === "assistant_message" && isSystemErrorText(last.text);
   const shouldAppendToLast =
     last &&
     last.kind === "assistant_message" &&
+    !lastIsSystemError &&
+    !isSystemErrorText(chunk) &&
     (messageId === undefined || last.messageId === messageId);
   if (shouldAppendToLast) {
     const updated: AssistantMessageItem = {

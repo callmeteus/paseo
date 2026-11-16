@@ -795,6 +795,44 @@ describe("stream reducer canonical tool calls", () => {
     assert.deepStrictEqual([first.messageId, second.messageId], ["msg-first", "msg-second"]);
   });
 
+  it("keeps a provider failure off the reply and drops a background generate notice", () => {
+    const notice = [
+      "[System Error] POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+      "",
+      "code: -32603",
+      "",
+      'POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service. | code=-32603 | data={"status":400}',
+    ].join("\n");
+    const dropped = hydrateStreamState([
+      {
+        event: assistantTimeline("Feito.", "opencode", "msg-1"),
+        timestamp: new Date("2025-01-01T10:03:00Z"),
+      },
+      {
+        event: assistantTimeline(notice, "opencode"),
+        timestamp: new Date("2025-01-01T10:03:01Z"),
+      },
+    ]);
+    expect(dropped.filter((item) => item.kind === "assistant_message")).toEqual([
+      expect.objectContaining({ kind: "assistant_message", text: "Feito.", messageId: "msg-1" }),
+    ]);
+
+    const kept = hydrateStreamState([
+      {
+        event: assistantTimeline("Feito.", "opencode", "msg-1"),
+        timestamp: new Date("2025-01-01T10:03:00Z"),
+      },
+      {
+        event: assistantTimeline("[System Error] Provider failed", "opencode"),
+        timestamp: new Date("2025-01-01T10:03:01Z"),
+      },
+    ]);
+    expect(kept.flatMap((item) => (item.kind === "assistant_message" ? [item.text] : []))).toEqual([
+      "Feito.",
+      "[System Error] Provider failed",
+    ]);
+  });
+
   it("merges adjacent assistant deltas when message ids match", () => {
     const state = hydrateStreamState([
       {

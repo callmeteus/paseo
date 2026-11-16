@@ -1,4 +1,5 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
+import { isSystemErrorText } from "@getpaseo/protocol/provider-error";
 import type { AgentStreamEventPayload } from "@getpaseo/protocol/messages";
 import { selectAgentTimelineState, useSessionStore } from "@/stores/session-store";
 import type { AssistantMessageItem, StreamItem, TodoEntry } from "@/types/stream";
@@ -692,7 +693,12 @@ function mergePrependedCanonicalTail(olderTail: StreamItem[], currentTail: Strea
   const identityMerge = mergeTimelineIdentityBoundary(olderTail, currentTail);
   if (identityMerge) return identityMerge;
 
-  if (olderLast?.kind !== "assistant_message" || currentFirst?.kind !== "assistant_message") {
+  if (
+    olderLast?.kind !== "assistant_message" ||
+    currentFirst?.kind !== "assistant_message" ||
+    isSystemErrorText(olderLast.text) ||
+    isSystemErrorText(currentFirst.text)
+  ) {
     return [...olderTail, ...currentTail];
   }
 
