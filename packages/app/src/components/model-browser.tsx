@@ -408,6 +408,7 @@ export function useModelBrowser({
         resetKey: `${view.providerId}:${searchResetKey}`,
         placeholder: t("modelSelector.searchPlaceholder"),
         autoFocus: autoFocusSearch,
+        focusOnResetKey: true,
         testID: "model-search-input",
       },
     };
@@ -1480,8 +1481,11 @@ function ProviderModelBrowserContent({
   );
   const profileHeader = useMemo(
     () =>
-      normalizedQuery.length === 0 && showProfilesSection && profiles ? (
-        <AgentProfilesPickerContent
+      normalizedQuery.length === 0 &&
+      showProfilesSection &&
+      profiles &&
+      providerProfileRows.length > 0 ? (
+        <AgentProfilesPickerSection
           rows={providerProfileRows}
           onApplyProfile={onApplyProfile}
           onEditProfiles={onEditProfiles}

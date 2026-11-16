@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Keyboard, Pressable, Text, View } from "react-native";
@@ -49,6 +49,8 @@ export interface SheetHeaderSearch {
   resetKey?: string | number;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Focus the field whenever `resetKey` changes (for example after drilling into a provider). */
+  focusOnResetKey?: boolean;
   testID?: string;
 }
 
@@ -84,6 +86,22 @@ function useSheetSearchFocus() {
     holdSearchFocus.current = false;
   }, []);
   return { searchRef, handleSearchKeyPress, handleBackFocus, handleBackPressIn };
+}
+
+function useSearchFocusOnResetKey(
+  search: SheetHeaderSearch | undefined,
+  searchRef: RefObject<EditingTextInputHandle | null>,
+) {
+  useEffect(() => {
+    if (!search?.focusOnResetKey || search.resetKey === undefined) return;
+    const timer = setTimeout(
+      () => {
+        searchRef.current?.focus();
+      },
+      isWeb ? 50 : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [search?.focusOnResetKey, search?.resetKey, searchRef]);
 }
 
 const SCROLL_CONTENT_GROW = { flexGrow: 1 };
@@ -360,6 +378,7 @@ export function SheetHeaderView({
   const back = header.back;
   const handleBackPress = back?.onPress;
   const search = header.search;
+  useSearchFocusOnResetKey(search, searchFocus.searchRef);
   const handleSearchChange = useCallback(
     (value: string) => {
       search?.onChange(value);
@@ -434,6 +453,7 @@ export function InlineHeaderView({ header }: { header: SheetHeader }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const searchFocus = useSheetSearchFocus();
+  useSearchFocusOnResetKey(header.search, searchFocus.searchRef);
   const back = header.back;
   const handleBackPress = back?.onPress;
   const hasInlineRow = Boolean(handleBackPress || header.leading || header.actions);
