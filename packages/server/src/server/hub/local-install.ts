@@ -24,6 +24,8 @@ export interface HubLocalInstallState {
   installed: boolean;
   running: boolean;
   origin: string | null;
+  /** Origin other machines can open. Undefined when only loopback reaches this Hub. */
+  publicOrigin?: string | null;
 }
 
 export interface HubLocalInstallProgress {
@@ -50,6 +52,11 @@ export interface HubLocalInstaller {
 
 export interface HubLocalInstallerDependencies {
   paseoHome: string;
+  /**
+   * Origin other machines reach this Hub on, from `hub.publicOrigin`. The process
+   * still binds its own port; this is only what the app and clients open.
+   */
+  publicOrigin?: string | undefined;
   run(command: HubInstallCommand, onLine: (line: string) => void): Promise<void>;
   probeHealth(origin: string): Promise<boolean>;
   start(checkout: string, dataDirectory: string, nodePath: string): Promise<void>;
@@ -196,15 +203,48 @@ export function startInstalledLocalHub(paseoHome: string): Promise<InstalledHubS
  * @param paseoHome - Daemon home directory
  * @returns Live installer
  */
-export function daemonHubLocalInstaller(paseoHome: string): HubLocalInstaller {
+export function daemonHubLocalInstaller(
+  paseoHome: string,
+  publicOrigin?: string | undefined,
+): HubLocalInstaller {
   return createHubLocalInstaller({
     paseoHome,
+    ...(publicOrigin === undefined ? {} : { publicOrigin }),
     run: runHubInstallCommand,
     probeHealth,
     start: (checkout, dataDirectory, nodePath) =>
-      startLocalHubProcess(checkout, dataDirectory, nodePath),
+      startLocalHubProcess(checkout, dataDirectory, nodePath, publicOrigin),
     fileExists,
   });
+}
+
+/**
+ * Origin clients should open for the local Hub: the configured public origin
+ * when there is one, otherwise loopback.
+ *
+ * @param dependencies - Installer hooks and configuration
+ * @returns Origin the app and other daemons use
+ */
+function announcedHubOrigin(dependencies: HubLocalInstallerDependencies): string {
+  return dependencies.publicOrigin ?? LOCAL_HUB_ORIGIN;
+}
+
+/**
+ * State reported to clients, including where another machine can reach this Hub.
+ *
+ * @param dependencies - Installer hooks and configuration
+ * @param base - Installed and running flags
+ * @returns Full state
+ */
+function withPublicOrigin(
+  dependencies: HubLocalInstallerDependencies,
+  base: { installed: boolean; running: boolean },
+): HubLocalInstallState {
+  return {
+    ...base,
+    origin: base.running ? LOCAL_HUB_ORIGIN : null,
+    publicOrigin: base.running ? announcedHubOrigin(dependencies) : null,
+  };
 }
 
 async function startInstalledHub(
@@ -221,7 +261,7 @@ async function startInstalledHub(
   const built = await dependencies.fileExists(path.join(checkout, "dist", "index.js"));
   if (!built) return { outcome: "not_installed", origin: null };
   if (await dependencies.probeHealth(LOCAL_HUB_ORIGIN)) {
-    return { outcome: "already_running", origin: LOCAL_HUB_ORIGIN };
+    return { outcome: "already_running", origin: announcedHubOrigin(dependencies) };
   }
   await startBuiltHub(
     dependencies,
@@ -229,7 +269,7 @@ async function startInstalledHub(
     localHubDataDirectory(dependencies.paseoHome),
     () => undefined,
   );
-  return { outcome: "started", origin: LOCAL_HUB_ORIGIN };
+  return { outcome: "started", origin: announcedHubOrigin(dependencies) };
 }
 
 async function readInstallState(
@@ -238,11 +278,7 @@ async function readInstallState(
   const checkout = localHubCheckoutDirectory(dependencies.paseoHome);
   const installed = await dependencies.fileExists(path.join(checkout, "dist", "index.js"));
   const running = await dependencies.probeHealth(LOCAL_HUB_ORIGIN);
-  return {
-    installed,
-    running,
-    origin: running ? LOCAL_HUB_ORIGIN : null,
-  };
+  return withPublicOrigin(dependencies, { installed, running });
 }
 
 async function runInstall(
@@ -260,7 +296,7 @@ async function runInstall(
   const built = await dependencies.fileExists(path.join(checkout, "dist", "index.js"));
   if (alreadyRunning && built) {
     report("ready");
-    return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
+    return withPublicOrigin(dependencies, { installed: true, running: true });
   }
   if (built) {
     return startBuiltHub(dependencies, checkout, dataDirectory, onProgress);
@@ -309,7 +345,7 @@ async function runInstall(
   }
 
   report("ready");
-  return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
+  return withPublicOrigin(dependencies, { installed: true, running: true });
 }
 
 /**
@@ -339,7 +375,7 @@ async function startBuiltHub(
   });
   if (!healthy) throw hubNotReadyError();
   onProgress({ phase: "ready", percent: hubInstallPercent("ready", 0) });
-  return { installed: true, running: true, origin: LOCAL_HUB_ORIGIN };
+  return withPublicOrigin(dependencies, { installed: true, running: true });
 }
 
 /**
@@ -498,12 +534,14 @@ export function runHubInstallCommand(
  * port. The child gets the variables it needs to run and talk to the network,
  * plus the embedded data directory.
  *
- * @param input - Daemon environment and the Hub data directory
+ * @param input - Daemon environment, the Hub data directory, and the origin clients open
  * @returns Environment for the Hub process
  */
 export function hubProcessEnvironment(input: {
   baseEnv: NodeJS.ProcessEnv;
   dataDirectory: string;
+  /** Origin other machines reach this Hub on. Loopback when undefined. */
+  publicOrigin?: string | undefined;
 }): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const key of HUB_PROCESS_ENV_KEYS) {
@@ -511,7 +549,9 @@ export function hubProcessEnvironment(input: {
     if (value !== undefined) env[key] = value;
   }
   env.PORT = LOCAL_HUB_PORT;
-  env.PASEO_HUB_APP_URL = LOCAL_HUB_ORIGIN;
+  // Hub derives its canonical URL and cookie origin from this, so it has to be
+  // the address clients actually open rather than loopback.
+  env.PASEO_HUB_APP_URL = input.publicOrigin ?? LOCAL_HUB_ORIGIN;
   env.PASEO_HUB_DATA_DIR = input.dataDirectory;
   env.NODE_ENV = "production";
   return env;
@@ -563,6 +603,7 @@ async function startLocalHubProcess(
   checkout: string,
   dataDirectory: string,
   nodePath: string,
+  publicOrigin?: string | undefined,
 ): Promise<void> {
   const generation = ++hubGeneration;
   stopTrackedHubProcess();
@@ -578,7 +619,11 @@ async function startLocalHubProcess(
   try {
     child = spawn(nodePath, [path.join(checkout, "bin", "paseo-hub.js")], {
       cwd: checkout,
-      env: hubProcessEnvironment({ baseEnv: process.env, dataDirectory }),
+      env: hubProcessEnvironment({
+        baseEnv: process.env,
+        dataDirectory,
+        ...(publicOrigin === undefined ? {} : { publicOrigin }),
+      }),
       detached: true,
       stdio: ["ignore", fd, fd],
     });

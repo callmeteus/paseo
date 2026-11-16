@@ -353,6 +353,12 @@ export const PersistedConfigSchema = z
           .describe(
             "Accept cleartext HTTP Hub origins that are not loopback. Off unless set. CLI credentials then travel without TLS.",
           ),
+        publicOrigin: z
+          .string()
+          .optional()
+          .describe(
+            "Origin this computer's local Hub is reachable on from other machines, for example http://100.66.222.98:25000. The Hub process still listens on its own port; this is the address the app and other daemons open.",
+          ),
       })
       .strict()
       .optional(),

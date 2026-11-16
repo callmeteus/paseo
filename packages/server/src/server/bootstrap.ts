@@ -453,6 +453,8 @@ export interface PaseoDaemonConfig {
   enableTerminalAgentHooks?: boolean;
   remoteAccess?: RemoteAccessConfig;
   hubAllowHttp?: boolean;
+  /** Origin other machines reach this computer's local Hub on. */
+  hubPublicOrigin?: string;
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
@@ -632,6 +634,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     remoteAccess: config.remoteAccess,
     hubAllowHttp: config.hubAllowHttp === true,
+    hubPublicOrigin: config.hubPublicOrigin,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
     idleRuntimeCleanupAfter: initialIdleRuntimeCleanupAfter(config),
     appendSystemPrompt: config.appendSystemPrompt ?? "",

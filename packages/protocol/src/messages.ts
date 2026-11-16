@@ -414,6 +414,8 @@ export const MutableDaemonConfigSchema = z
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
     // COMPAT(hubAllowHttpSetting): added in v0.13.1, keep optional while old daemons are supported.
     hubAllowHttp: z.boolean().optional(),
+    // COMPAT(hubPublicOriginSetting): added in v0.13.3, keep optional while old daemons are supported.
+    hubPublicOrigin: z.string().optional(),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -446,6 +448,8 @@ export const MutableDaemonConfigPatchSchema = z
     idleRuntimeCleanup: z.boolean().optional(),
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
     hubAllowHttp: z.boolean().optional(),
+    // COMPAT(hubPublicOriginSetting): added in v0.13.3, optional for older daemons.
+    hubPublicOrigin: z.string().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -5957,6 +5961,8 @@ export const HubLocalInstallStateSchema = z.object({
   installed: z.boolean(),
   running: z.boolean(),
   origin: z.string().nullable(),
+  // COMPAT(hubLocalPublicOrigin): added in v0.13.3, keep optional while old daemons are supported.
+  publicOrigin: z.string().nullable().optional(),
 });
 
 export const HubLocalStatusResponseSchema = z.object({

@@ -527,6 +527,29 @@ function resolveHubAllowHttp(persisted: ReturnType<typeof loadPersistedConfig>):
   return persisted.hub?.allowHttp === true;
 }
 
+/**
+ * Origin other machines use to open this computer's local Hub.
+ *
+ * @param persisted - Daemon configuration
+ * @returns Normalized origin, or undefined when the local Hub stays loopback-only
+ */
+function resolveHubPublicOrigin(
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): string | undefined {
+  const raw = persisted.hub?.publicOrigin?.trim();
+  if (!raw) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`Invalid hub.publicOrigin: ${raw}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Invalid hub.publicOrigin: ${raw}`);
+  }
+  return parsed.origin;
+}
+
 function resolveIdleRuntimeCleanupAfter(persisted: ReturnType<typeof loadPersistedConfig>) {
   return persisted.agents?.idleRuntimeCleanupAfter ?? "1h";
 }
@@ -648,6 +671,7 @@ export function resolveConfigFromPersisted(
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     remoteAccess,
     hubAllowHttp: resolveHubAllowHttp(persisted),
+    hubPublicOrigin: resolveHubPublicOrigin(persisted),
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,

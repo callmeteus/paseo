@@ -74,6 +74,7 @@ test("install clones callmeteus/paseo-hub, builds it, and starts it", async () =
     installed: true,
     running: true,
     origin: LOCAL_HUB_ORIGIN,
+    publicOrigin: LOCAL_HUB_ORIGIN,
   });
 });
 
@@ -108,6 +109,26 @@ test("a built checkout starts without cloning or installing again", async () => 
     installed: true,
     running: true,
     origin: LOCAL_HUB_ORIGIN,
+    publicOrigin: LOCAL_HUB_ORIGIN,
+  });
+});
+
+test("a configured public origin is reported alongside loopback", async () => {
+  const result = await createHubLocalInstaller({
+    paseoHome: "/tmp/paseo-home",
+    publicOrigin: "http://100.66.222.98:25000",
+    fileExists: async () => true,
+    probeHealth: async () => true,
+    run: async () => undefined,
+    start: async () => undefined,
+    resolveTools: async () => ({ npm: "/usr/bin/npm", node: "/usr/bin/node" }),
+  }).status();
+
+  expect(result).toEqual({
+    installed: true,
+    running: true,
+    origin: LOCAL_HUB_ORIGIN,
+    publicOrigin: "http://100.66.222.98:25000",
   });
 });
 
@@ -154,6 +175,15 @@ test("local Hub process drops the daemon's database and node options", () => {
     PASEO_HUB_DATA_DIR: "/home/gio/.paseo/hub-data",
     NODE_ENV: "production",
   });
+});
+
+test("a configured public origin becomes the URL Hub announces", () => {
+  const env = hubProcessEnvironment({
+    baseEnv: { HOME: "/home/gio" },
+    dataDirectory: "/home/gio/.paseo/hub-data",
+    publicOrigin: "http://100.66.222.98:25000",
+  });
+  expect(env.PASEO_HUB_APP_URL).toBe("http://100.66.222.98:25000");
 });
 
 test("a Hub that exits reports that exit and the log tail", () => {
@@ -248,5 +278,10 @@ test("status reports a checkout that has not been built", async () => {
     start: async () => undefined,
   }).status();
 
-  expect(status).toEqual({ installed: false, running: false, origin: null });
+  expect(status).toEqual({
+    installed: false,
+    running: false,
+    origin: null,
+    publicOrigin: null,
+  });
 });

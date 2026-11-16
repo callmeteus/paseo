@@ -33,6 +33,7 @@ interface SupportedMutableConfigPatch {
   idleRuntimeCleanup?: boolean;
   idleRuntimeCleanupAfter?: MutableDaemonConfig["idleRuntimeCleanupAfter"];
   hubAllowHttp?: boolean;
+  hubPublicOrigin?: string;
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
@@ -206,6 +207,7 @@ const RELOADABLE_PATHS = [
   "agents.idleRuntimeCleanup",
   "agents.idleRuntimeCleanupAfter",
   "hub.allowHttp",
+  "hub.publicOrigin",
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
   "agents.metadataGeneration",
@@ -238,6 +240,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
   ["agents.idleRuntimeCleanupAfter", "idleRuntimeCleanupAfter"],
   ["hub.allowHttp", "hubAllowHttp"],
+  ["hub.publicOrigin", "hubPublicOrigin"],
   ["agents.providers", "providers"],
   ["agents.catalogRefreshTimeoutMs", "catalogRefreshTimeoutMs"],
   ["agents.metadataGeneration", "metadataGeneration"],
@@ -313,8 +316,11 @@ function pickIdleRuntimeCleanupAfterPatch(
 
 function pickHubAllowHttpPatch(
   patch: MutableDaemonConfigPatch,
-): Pick<SupportedMutableConfigPatch, "hubAllowHttp"> {
-  return patch.hubAllowHttp !== undefined ? { hubAllowHttp: patch.hubAllowHttp } : {};
+): Pick<SupportedMutableConfigPatch, "hubAllowHttp" | "hubPublicOrigin"> {
+  return {
+    ...(patch.hubAllowHttp !== undefined ? { hubAllowHttp: patch.hubAllowHttp } : {}),
+    ...(patch.hubPublicOrigin !== undefined ? { hubPublicOrigin: patch.hubPublicOrigin } : {}),
+  };
 }
 
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {

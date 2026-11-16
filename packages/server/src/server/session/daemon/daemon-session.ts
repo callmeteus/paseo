@@ -19,6 +19,8 @@ export interface DaemonRuntimeConfig {
   worktreesRoot?: string;
   appBaseUrl?: string;
   desktopManaged?: boolean;
+  /** Origin other machines reach this computer's local Hub on, from `hub.publicOrigin`. */
+  hubPublicOrigin?: string;
   getRelayConfig(): {
     enabled: boolean;
     endpoint: string;
@@ -100,7 +102,8 @@ export class DaemonSession {
     this.logger = options.logger;
     this.hubRelationships = options.hubRelationships ?? null;
     this.hubLocalInstaller =
-      options.hubLocalInstaller ?? daemonHubLocalInstaller(options.paseoHome);
+      options.hubLocalInstaller ??
+      daemonHubLocalInstaller(options.paseoHome, this.daemonRuntimeConfig?.hubPublicOrigin);
     this.reloadConfig = options.reloadConfig;
     this.selfUpdate = new DaemonSelfUpdateSessionController({
       clientId: this.clientId,

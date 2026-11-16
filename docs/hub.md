@@ -6,6 +6,16 @@ not register it with a Hub. The relationship begins only when a user runs
 
 The human CLI login and daemon relationship are separate identities. `paseo hub login [url]` stores a durable organization-scoped CLI credential keyed by normalized Hub origin under `PASEO_HOME`. Interactive login optionally connects the local daemon, then points to the Hub UI for trigger configuration; it does not scaffold or deploy configuration. `paseo hub init` remains the explicit triggers-as-code scaffold: it writes one self-contained organization trigger under `.paseo/triggers/`, validates it through the trigger API, and optionally installs it. `paseo hub deploy` validates and installs every trigger in that directory; passing `--project` keeps deploying the legacy project bundle instead. `paseo hub export [directory]` writes the active organization's current triggers in the same layout, using the active login unless another Hub or API key is selected. Origin resolution uses explicit command input, `PASEO_HUB_URL`, active login, then `https://hub.paseo.sh`. HTTP is accepted for `localhost`, `127.0.0.1`, and `[::1]`. Allow HTTP in the host settings (`hub.allowHttp`) also accepts HTTP for other hosts. That switch stays off until you enable it, and CLI credentials then travel in cleartext. The web Automations page embeds the connected origin. When that origin is loopback and the page was opened on another host, such as a Tailscale address, the frame uses that host and the Hub's port. The desktop app stays on loopback, which is the same machine. A browser does not offer to install or start Hub. Until a daemon is already connected, that page says the automations Hub is unavailable. Connect uses exact-origin authority to request a one-time enrollment token, then passes only that token to the daemon. The daemon generates and persists its own relationship credential.
 
+## Reaching a local Hub from another machine
+
+An in-app Hub listens on `http://127.0.0.1:25000`, so only the machine running it can open it. Set `hub.publicOrigin` in that daemon's `config.json` to the origin other machines reach it on:
+
+```json
+{ "hub": { "publicOrigin": "http://100.66.222.98:25000" } }
+```
+
+The port stays the same, and the Hub process gets this origin as its canonical URL so its cookies and redirects match. The app then reports and opens that origin instead of loopback, and the loopback origin still works on the machine itself. The Hub process already listens on every interface (`PASEO_HUB_BIND`, default `0.0.0.0`), so no separate bind setting is needed. Cleartext HTTP on a non-loopback host also needs `hub.allowHttp` when something other than the app connects to it.
+
 ## Connection and authority
 
 The daemon enrolls over HTTP(S), then opens and maintains a direct outbound WebSocket to the Hub.
