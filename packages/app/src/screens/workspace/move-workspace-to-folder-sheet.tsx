@@ -1,24 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ArrowRight, Check, FolderInput, FolderOpen } from "lucide-react-native";
+import { ArrowRight, Check, FolderInput, FolderOpen, Search } from "lucide-react-native";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useToast } from "@/contexts/toast-context";
-import {
-  requestSidebarReveal,
-  workspaceKeyForSidebarRow,
-} from "@/components/sidebar/sidebar-reveal";
-import { getDesktopHost } from "@/desktop/host";
-import { pickDirectory } from "@/desktop/pick-directory";
-import { useSessionStore } from "@/stores/session-store";
-import {
-  closeMoveWorkspaceToFolder,
-  useMoveWorkspaceToFolderRequest,
-} from "@/screens/workspace/move-workspace-to-folder-store";
+import { closeMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
+import { useMoveWorkspaceToFolder } from "@/screens/workspace/use-move-workspace-to-folder";
+import type { WorkspaceFolderRowModel } from "@/screens/workspace/move-workspace-to-folder-options";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const ThemedFolderInput = withUnistyles(FolderInput);
@@ -26,27 +17,9 @@ const ThemedFolderOpen = withUnistyles(FolderOpen);
 const ThemedCheck = withUnistyles(Check);
 const ThemedArrowRight = withUnistyles(ArrowRight);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
+const ThemedSearch = withUnistyles(Search);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const accentMapping = (theme: Theme) => ({ color: theme.colors.accentBright });
-
-interface WorkspaceFolderRowModel {
-  directory: string;
-  name: string;
-  project: string;
-  isCurrent: boolean;
-}
-
-function normalizeSearchValue(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase();
-}
-
-function folderName(directory: string): string {
-  const segments = directory.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? directory;
-}
 
 function WorkspaceFolderRow({
   row,
@@ -90,7 +63,7 @@ function WorkspaceFolderRow({
           {row.name}
         </Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
-          {row.project} · {row.directory}
+          {row.project ? `${row.project} · ${row.directory}` : row.directory}
         </Text>
       </View>
       {trailing}
@@ -132,161 +105,104 @@ function ChooseAnotherFolderRow({
   );
 }
 
-/**
- * Re-points a workspace at another folder. The list is the set of folders that
- * are already open as workspaces on this host; the native picker stays as a
- * secondary escape hatch for a folder that is not open yet.
- */
-export function MoveWorkspaceToFolderSheet() {
+function MoveWorkspaceToFolderList({
+  filteredRows,
+  suggestionRows,
+  showListEmpty,
+  normalizedQuery,
+  searchPending,
+  movingTo,
+  canPickDirectory,
+  onSelect,
+  onPickAnother,
+}: {
+  filteredRows: WorkspaceFolderRowModel[];
+  suggestionRows: WorkspaceFolderRowModel[];
+  showListEmpty: boolean;
+  normalizedQuery: string;
+  searchPending: boolean;
+  movingTo: string | null;
+  canPickDirectory: boolean;
+  onSelect: (directory: string) => void;
+  onPickAnother: () => void;
+}) {
   const { t } = useTranslation();
-  const toast = useToast();
-  const request = useMoveWorkspaceToFolderRequest();
-  const client = useSessionStore((state) =>
-    request ? (state.sessions[request.serverId]?.client ?? null) : null,
-  );
-  const workspaces = useSessionStore((state) =>
-    request ? state.sessions[request.serverId]?.workspaces : undefined,
-  );
-  const [movingTo, setMovingTo] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const current = request && workspaces ? workspaces.get(request.workspaceId) : undefined;
-  const canPickDirectory = Boolean(getDesktopHost()?.dialog);
-  const visible = Boolean(request && client && current);
-
-  useEffect(() => {
-    if (!visible) setSearchInput("");
-  }, [visible]);
-
-  const rows = useMemo<WorkspaceFolderRowModel[]>(() => {
-    const currentDirectory = current?.workspaceDirectory;
-    const byDirectory = new Map<string, WorkspaceFolderRowModel>();
-    for (const workspace of workspaces?.values() ?? []) {
-      if (workspace.archivingAt || byDirectory.has(workspace.workspaceDirectory)) continue;
-      byDirectory.set(workspace.workspaceDirectory, {
-        directory: workspace.workspaceDirectory,
-        name: folderName(workspace.workspaceDirectory),
-        project: workspace.projectDisplayName,
-        isCurrent: workspace.workspaceDirectory === currentDirectory,
-      });
-    }
-    return [...byDirectory.values()].sort((left, right) => {
-      if (left.isCurrent) return -1;
-      if (right.isCurrent) return 1;
-      return left.name.localeCompare(right.name);
-    });
-  }, [current?.workspaceDirectory, workspaces]);
-
-  const query = normalizeSearchValue(searchInput.trim());
-  const filteredRows = useMemo(() => {
-    if (!query) return rows;
-    return rows.filter((row) =>
-      [row.name, row.project, row.directory].some((value) =>
-        normalizeSearchValue(value).includes(query),
-      ),
-    );
-  }, [query, rows]);
-  const canSearch = rows.length > 1;
-  const header = useMemo(
-    () => ({
-      title: t("workspace.tabs.menu.moveWorkspace.title"),
-      ...(visible && canSearch
-        ? {
-            search: {
-              onChange: setSearchInput,
-              placeholder: t("workspace.tabs.menu.moveWorkspace.searchPlaceholder"),
-              // The compact sheet keeps its content mounted while hidden, so
-              // the field has to be told to drop the text the state already dropped.
-              resetKey: visible ? "open" : "closed",
-              testID: "move-workspace-to-folder-search",
-            },
-          }
-        : {}),
-    }),
-    [canSearch, t, visible],
-  );
-
-  const relocate = useCallback(
-    async (targetPath: string, rowId: string) => {
-      if (!client || !current || !request || movingTo) return;
-      setMovingTo(rowId);
-      try {
-        await client.relocateWorkspace(current.id, targetPath);
-        requestSidebarReveal(
-          workspaceKeyForSidebarRow({ serverId: request.serverId, workspaceId: current.id }),
-        );
-        toast.show(t("workspace.tabs.menu.moveWorkspace.moved", { path: targetPath }), {
-          variant: "info",
-        });
-        closeMoveWorkspaceToFolder();
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("workspace.tabs.menu.moveWorkspace.failed"),
-        );
-      } finally {
-        setMovingTo(null);
-      }
-    },
-    [client, current, movingTo, request, t, toast],
-  );
-
-  const selectWorkspace = useCallback(
-    (directory: string) => {
-      const target = rows.find((row) => row.directory === directory);
-      if (!target || target.isCurrent) return;
-      void relocate(target.directory, target.directory);
-    },
-    [relocate, rows],
-  );
-
-  const pickAnotherFolder = useCallback(async () => {
-    if (movingTo) return;
-    try {
-      const path = await pickDirectory();
-      if (!path) return;
-      await relocate(path, "__picked__");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("workspace.tabs.menu.moveWorkspace.failed"),
-      );
-    }
-  }, [movingTo, relocate, t, toast]);
-  const handlePickAnother = useCallback(() => {
-    void pickAnotherFolder();
-  }, [pickAnotherFolder]);
 
   return (
-    <AdaptiveModalSheet
-      header={header}
-      visible={visible}
-      onClose={closeMoveWorkspaceToFolder}
-      testID="move-workspace-to-folder-sheet"
-    >
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        {filteredRows.length === 0 || (!query && rows.length <= 1) ? (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      {showListEmpty ? (
+        <View style={styles.emptyState}>
+          <ThemedSearch size={ICON_SIZE.md} uniProps={mutedMapping} />
           <Text style={styles.empty}>
-            {query
-              ? t("workspace.tabs.menu.moveWorkspace.noResults")
+            {normalizedQuery
+              ? t("workspace.tabs.menu.moveWorkspace.noMatches")
               : t("workspace.tabs.menu.moveWorkspace.empty")}
           </Text>
-        ) : (
-          filteredRows.map((row) => (
+        </View>
+      ) : (
+        <>
+          {filteredRows.map((row) => (
             <WorkspaceFolderRow
               key={row.directory}
               row={row}
               disabled={row.isCurrent || movingTo !== null}
               moving={movingTo === row.directory}
-              onSelect={selectWorkspace}
+              onSelect={onSelect}
             />
-          ))
-        )}
-        {canPickDirectory ? (
-          <ChooseAnotherFolderRow
-            disabled={movingTo !== null}
-            moving={movingTo === "__picked__"}
-            onSelect={handlePickAnother}
-          />
-        ) : null}
-      </ScrollView>
+          ))}
+          {suggestionRows.map((row) => (
+            <WorkspaceFolderRow
+              key={`suggestion:${row.directory}`}
+              row={row}
+              disabled={movingTo !== null}
+              moving={movingTo === row.directory}
+              onSelect={onSelect}
+            />
+          ))}
+        </>
+      )}
+      {searchPending ? (
+        <View style={styles.loadingRow}>
+          <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />
+        </View>
+      ) : null}
+      {canPickDirectory ? (
+        <ChooseAnotherFolderRow
+          disabled={movingTo !== null}
+          moving={movingTo === "__picked__"}
+          onSelect={onPickAnother}
+        />
+      ) : null}
+    </ScrollView>
+  );
+}
+
+/**
+ * Re-points a workspace at another folder. Open workspaces on the host are listed
+ * first; search asks the daemon for directories on that host. The native picker is
+ * only for the local daemon — remote hosts never open folders on the client machine.
+ */
+export function MoveWorkspaceToFolderSheet() {
+  const view = useMoveWorkspaceToFolder();
+
+  return (
+    <AdaptiveModalSheet
+      header={view.header}
+      visible={view.visible}
+      onClose={closeMoveWorkspaceToFolder}
+      testID="move-workspace-to-folder-sheet"
+    >
+      <MoveWorkspaceToFolderList
+        filteredRows={view.filteredRows}
+        suggestionRows={view.suggestionRows}
+        showListEmpty={view.showListEmpty}
+        normalizedQuery={view.normalizedQuery}
+        searchPending={view.searchPending}
+        movingTo={view.movingTo}
+        canPickDirectory={view.canPickDirectory}
+        onSelect={view.selectWorkspace}
+        onPickAnother={view.pickAnotherFolder}
+      />
     </AdaptiveModalSheet>
   );
 }
@@ -301,11 +217,19 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[6],
     gap: theme.spacing[1],
   },
+  emptyState: {
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[4],
+  },
   empty: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    paddingVertical: theme.spacing[4],
     textAlign: "center",
+  },
+  loadingRow: {
+    alignItems: "center",
+    paddingVertical: theme.spacing[2],
   },
   row: {
     flexDirection: "row",
