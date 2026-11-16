@@ -27,6 +27,8 @@ export interface SearchFieldProps {
   clearAccessibilityLabel: string;
   testID?: string;
   clearTestID?: string;
+  /** Focuses the field on mount, for screens whose only purpose is searching. */
+  autoFocus?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function SearchField({
   clearAccessibilityLabel,
   testID,
   clearTestID,
+  autoFocus = false,
 }: SearchFieldProps): ReactElement {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<EditingTextInputHandle>(null);
@@ -68,6 +71,7 @@ export function SearchField({
         accessibilityLabel={accessibilityLabel ?? placeholder}
         autoCapitalize="none"
         autoCorrect={false}
+        autoFocus={autoFocus}
         returnKeyType="search"
         style={styles.input}
       />

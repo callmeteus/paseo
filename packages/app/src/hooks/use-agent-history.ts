@@ -46,9 +46,12 @@ export interface AgentHistoryPage {
 export type AgentHistoryClient = Pick<DaemonClient, "fetchAgentHistory">;
 
 /**
- * A host that could not be reached while at least one other could. Its sessions
- * are missing from the list, which under a query means "no matches" would be a
- * claim the app cannot make.
+ * A host that answered with an error while at least one other answered. Its
+ * sessions are missing from the list, which under a query means "no matches"
+ * would be a claim the app cannot make.
+ *
+ * A host that is simply disconnected is not reported: it has no sessions to
+ * offer and the user already sees it offline in the host filter.
  */
 export interface AgentHistoryHostError {
   serverId: string;
@@ -130,12 +133,8 @@ function sortByLatestActivity(agents: AggregatedAgent[]): AggregatedAgent[] {
  */
 export function collectAgentHistoryHostErrors(input: {
   pages: readonly Pick<AgentHistoryBatchPage, "hostErrors">[];
-  unreachableHosts: readonly AgentHistoryHostError[];
 }): AgentHistoryHostError[] {
   const byServerId = new Map<string, AgentHistoryHostError>();
-  for (const error of input.unreachableHosts) {
-    byServerId.set(error.serverId, error);
-  }
   for (const page of input.pages) {
     for (const error of page.hostErrors) {
       byServerId.set(error.serverId, error);
@@ -233,28 +232,25 @@ export function useAgentHistory(options: {
   }, [options.serverId]);
   const enabled = options.enabled ?? true;
   // A host the user asked about splits two ways: one this fetch can reach, and
-  // one whose sessions will be missing from the answer. Both come out of here,
-  // because dropping the unreachable ones silently is what lets the list — and
-  // worse, "No sessions match" — overstate what was actually searched.
-  const { targetHosts, unreachableHosts } = useMemo(() => {
+  // one that stays out of the fetch. Only the reachable ones are candidates —
+  // a disconnected host has nothing to load and no error worth reporting.
+  const targetHosts = useMemo(() => {
     void runtimeVersion;
     const serverLabelById = new Map(daemons.map((daemon) => [daemon.serverId, daemon.label]));
     const serverIds = serverId ? [serverId] : daemons.map((daemon) => daemon.serverId);
     const hosts: AgentHistoryHost[] = [];
-    const unreachable: AgentHistoryHostError[] = [];
 
     for (const targetServerId of serverIds) {
       const snapshot = runtime.getSnapshot(targetServerId);
       const client = runtime.getClient(targetServerId);
-      const serverName = serverLabelById.get(targetServerId) ?? targetServerId;
       if (!client || !isHostRuntimeConnected(snapshot)) {
-        unreachable.push({ serverId: targetServerId, serverName });
         continue;
       }
+      const serverName = serverLabelById.get(targetServerId) ?? targetServerId;
       hosts.push({ serverId: targetServerId, serverLabel: serverName, client });
     }
 
-    return { targetHosts: hosts, unreachableHosts: unreachable };
+    return hosts;
   }, [daemons, runtime, runtimeVersion, serverId]);
   const targetServerIds = useMemo(() => targetHosts.map((host) => host.serverId), [targetHosts]);
   // One gate, checked before the field is offered: a fleet where any host
@@ -348,8 +344,8 @@ export function useAgentHistory(options: {
   const isRevalidating = isFetching && !isFetchingNextPage && agents.length > 0;
   const isSearchTruncated = Boolean(search && data?.pages.some((page) => page.isSearchTruncated));
   const hostErrors = useMemo(
-    () => collectAgentHistoryHostErrors({ pages: data?.pages ?? [], unreachableHosts }),
-    [data?.pages, unreachableHosts],
+    () => collectAgentHistoryHostErrors({ pages: data?.pages ?? [] }),
+    [data?.pages],
   );
 
   return {

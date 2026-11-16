@@ -163,6 +163,7 @@ function SessionsScreenContent() {
               clearAccessibilityLabel={t("sessions.actions.clearSearch")}
               testID="sessions-search-input"
               clearTestID="sessions-search-clear"
+              autoFocus
             />
           ) : null}
           {showHostFilter ? (

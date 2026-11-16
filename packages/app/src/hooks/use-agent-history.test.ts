@@ -485,28 +485,16 @@ describe("fetchAgentHistoryPage", () => {
     expect(
       collectAgentHistoryHostErrors({
         pages: [firstPage, secondPage],
-        unreachableHosts: [],
       }),
     ).toEqual([{ serverId: "server-b", serverName: "Linux box" }]);
   });
 
-  it("reports a host that is not connected alongside one whose request failed", () => {
+  it("only reports hosts that answered with an error", () => {
+    // A disconnected host is left out on purpose: the user already sees it
+    // offline in the host filter, and it never joined the fetch.
     expect(
       collectAgentHistoryHostErrors({
         pages: [{ hostErrors: [{ serverId: "server-b", serverName: "Linux box" }] }],
-        unreachableHosts: [{ serverId: "server-c", serverName: "Offline box" }],
-      }),
-    ).toEqual([
-      { serverId: "server-c", serverName: "Offline box" },
-      { serverId: "server-b", serverName: "Linux box" },
-    ]);
-  });
-
-  it("names a host once when it is both unreachable and failed", () => {
-    expect(
-      collectAgentHistoryHostErrors({
-        pages: [{ hostErrors: [{ serverId: "server-b", serverName: "Linux box" }] }],
-        unreachableHosts: [{ serverId: "server-b", serverName: "Linux box" }],
       }),
     ).toEqual([{ serverId: "server-b", serverName: "Linux box" }]);
   });
