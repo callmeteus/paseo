@@ -30,6 +30,7 @@ export interface WorkingDiffMode {
   revealTargetName?: string;
   onDownload?: (path: string) => void;
   onDuplicate?: (path: string) => void;
+  onDelete?: (path: string, kind: "file" | "directory") => void;
   onRevert?: (path: string, oldPath?: string) => void;
 }
 

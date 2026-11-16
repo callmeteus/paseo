@@ -49,6 +49,7 @@ export const DocumentFileHeader = memo(function DocumentFileHeader({
       revealTargetName={working?.revealTargetName}
       onDownload={working?.onDownload}
       onDuplicate={working?.onDuplicate}
+      onDelete={working?.onDelete}
       onRevert={working?.onRevert}
       testID={`diff-file-${file.fileIndex}`}
       canvasRendered={canvasRendered}
@@ -75,6 +76,7 @@ function documentFileHeaderPropsEqual(
     previous.mode.revealTargetName === next.mode.revealTargetName &&
     previous.mode.onDownload === next.mode.onDownload &&
     previous.mode.onDuplicate === next.mode.onDuplicate &&
+    previous.mode.onDelete === next.mode.onDelete &&
     previous.mode.onRevert === next.mode.onRevert
   );
 }

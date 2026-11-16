@@ -33,6 +33,7 @@ interface DiffFolderRowProps {
   onReveal?: (path: string) => void;
   revealTargetName?: string;
   onDuplicate?: (path: string) => void;
+  onDelete?: (path: string, kind: "file" | "directory") => void;
   onRevert?: (path: string) => void;
   testID?: string;
 }
@@ -64,6 +65,7 @@ export function DiffFolderRow({
   onReveal,
   revealTargetName,
   onDuplicate,
+  onDelete,
   onRevert,
   testID,
 }: DiffFolderRowProps) {
@@ -115,6 +117,10 @@ export function DiffFolderRow({
   const handleDuplicate = useCallback(() => {
     onDuplicate?.(dirPath);
   }, [dirPath, onDuplicate]);
+
+  const handleDelete = useCallback(() => {
+    onDelete?.(dirPath, "directory");
+  }, [dirPath, onDelete]);
 
   const handleRevert = useCallback(() => {
     onRevert?.(dirPath);
@@ -182,6 +188,7 @@ export function DiffFolderRow({
           onReveal={onReveal ? handleReveal : undefined}
           revealTargetName={revealTargetName}
           onDuplicate={onDuplicate ? handleDuplicate : undefined}
+          onDelete={onDelete ? handleDelete : undefined}
           onRevert={onRevert ? handleRevert : undefined}
           testIDPrefix={testID}
         />

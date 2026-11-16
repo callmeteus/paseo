@@ -90,6 +90,7 @@ export function ChangedFilesTree({
             onReveal={mode.onReveal}
             revealTargetName={mode.revealTargetName}
             onDuplicate={mode.onDuplicate}
+            onDelete={mode.onDelete}
             onRevert={mode.onRevert}
             testID={`diff-folder-${item.dirPath}`}
           />
@@ -115,6 +116,7 @@ export function ChangedFilesTree({
           revealTargetName={mode.revealTargetName}
           onDownload={mode.onDownload}
           onDuplicate={mode.onDuplicate}
+          onDelete={mode.onDelete}
           onRevert={mode.onRevert}
           testID={`diff-tree-file-${item.fileIndex}`}
         />

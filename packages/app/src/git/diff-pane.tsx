@@ -56,6 +56,7 @@ import * as Clipboard from "expo-clipboard";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { buildAbsoluteExplorerPath } from "@/utils/explorer-paths";
+import { pathBasename } from "@/utils/path";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { GitActionsSplitButton } from "@/git/actions-split-button";
 import type { GitActions } from "@/git/policy";
@@ -175,6 +176,59 @@ function useDiscardChangesAction({
     [discardPath],
   );
   return discardSupported && diffMode === "uncommitted" ? handleDiscardPath : undefined;
+}
+
+function useDeletePathAction({
+  serverId,
+  cwd,
+}: {
+  serverId: string;
+  cwd: string;
+}): ((path: string, kind: "file" | "directory") => void) | undefined {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const client = useSessionStore((state) => state.sessions[serverId]?.client);
+  // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.
+  const deleteSupported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.fsEntryOps === true,
+  );
+  const deletePath = useCallback(
+    async (path: string, kind: "file" | "directory") => {
+      if (!client) {
+        return;
+      }
+      const name = pathBasename(path);
+      const confirmed = await confirmDialog({
+        title:
+          kind === "directory"
+            ? t("workspace.fileActions.confirmDelete.folderTitle")
+            : t("workspace.fileActions.confirmDelete.fileTitle"),
+        message: t("workspace.fileActions.confirmDelete.message", { name }),
+        confirmLabel: t("workspace.fileActions.confirmDelete.confirm"),
+        cancelLabel: t("workspace.fileActions.confirmDelete.cancel"),
+        destructive: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+      try {
+        const payload = await client.deleteFileEntry({ cwd, path });
+        if (!payload.success) {
+          toast.error(payload.error ?? t("workspace.fileExplorer.errors.deleteFailed"));
+        }
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : String(cause));
+      }
+    },
+    [client, cwd, t, toast],
+  );
+  const handleDeletePath = useCallback(
+    (path: string, kind: "file" | "directory") => {
+      void deletePath(path, kind);
+    },
+    [deletePath],
+  );
+  return deleteSupported ? handleDeletePath : undefined;
 }
 
 interface ChangesSurfaceProps {
@@ -1685,6 +1739,7 @@ export function ChangesSurface({
     [client, cwd, t, toast],
   );
   const onRevertPath = useDiscardChangesAction({ serverId, cwd, diffMode });
+  const onDeletePath = useDeletePathAction({ serverId, cwd });
   const [localFocusRequest, setLocalFocusRequest] = useState<{
     path: string;
     revision: number;
@@ -1727,6 +1782,7 @@ export function ChangesSurface({
       revealTargetName: fileManagerTarget?.label,
       onDownload: handleDownloadPath,
       onDuplicate: fsEntryDuplicateEnabled ? handleDuplicatePath : undefined,
+      onDelete: onDeletePath,
       onRevert: onRevertPath,
     }),
     [
@@ -1745,6 +1801,7 @@ export function ChangesSurface({
       handleRevealPath,
       fileManagerTarget,
       fsEntryDuplicateEnabled,
+      onDeletePath,
       onRevertPath,
     ],
   );

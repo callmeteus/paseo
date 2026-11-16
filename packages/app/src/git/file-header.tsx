@@ -51,6 +51,7 @@ export interface FileHeaderProps {
   revealTargetName?: string;
   onDownload?: (path: string) => void;
   onDuplicate?: (path: string) => void;
+  onDelete?: (path: string, kind: "file" | "directory") => void;
   onRevert?: (path: string, oldPath?: string) => void;
   onHeaderHeightChange?: (path: string, height: number) => void;
   testID?: string;
@@ -145,6 +146,7 @@ function FileHeaderMenu({
   revealTargetName,
   onDownload,
   onDuplicate,
+  onDelete,
   onRevert,
   testID,
 }: FileHeaderProps) {
@@ -159,6 +161,7 @@ function FileHeaderMenu({
   const reveal = useCallback(() => onReveal?.(file.path), [file.path, onReveal]);
   const download = useCallback(() => onDownload?.(file.path), [file.path, onDownload]);
   const duplicate = useCallback(() => onDuplicate?.(file.path), [file.path, onDuplicate]);
+  const remove = useCallback(() => onDelete?.(file.path, "file"), [file.path, onDelete]);
   const revert = useCallback(
     () => onRevert?.(file.path, file.oldPath),
     [file.oldPath, file.path, onRevert],
@@ -176,6 +179,7 @@ function FileHeaderMenu({
       onDownload={onDownload ? download : undefined}
       onAddToChat={onAddToChat ? addToChat : undefined}
       onDuplicate={!file.isDeleted && onDuplicate ? duplicate : undefined}
+      onDelete={!file.isDeleted && onDelete ? remove : undefined}
       onRevert={onRevert ? revert : undefined}
       testIDPrefix={testID}
     />
