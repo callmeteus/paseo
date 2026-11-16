@@ -10,6 +10,7 @@ import {
 } from "@/attachments/service";
 import { collectRetainedAttachmentIds } from "@/attachments/gc-retention";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useDraftMessageQueueStore } from "@/composer/draft/message-queue-store";
 import { useSessionStore, type SessionState } from "@/stores/session-store";
 import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachments-store";
 import {
@@ -168,6 +169,17 @@ async function runAttachmentGc(): Promise<void> {
     collectQueuedMessageAttachmentIds(session, referencedIds);
     collectStreamUserImageIds(session.agentStreamTail, referencedIds);
     collectStreamUserImageIds(session.agentStreamHead, referencedIds);
+  }
+
+  // A creating draft queues into its own store, which no session owns yet.
+  for (const items of useDraftMessageQueueStore.getState().byKey.values()) {
+    for (const queuedMessage of items) {
+      for (const attachment of queuedMessage.attachments) {
+        if (attachment.kind === "image") {
+          referencedIds.add(attachment.metadata.id);
+        }
+      }
+    }
   }
 
   // Browser-element screenshots live in the workspace attachment store, not in

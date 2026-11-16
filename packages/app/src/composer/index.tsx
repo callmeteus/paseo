@@ -102,6 +102,11 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
+import {
+  createDraftQueueWriter,
+  restoreDraftQueueToComposer,
+  useDraftQueue,
+} from "@/composer/draft/message-queue";
 import { persistAgentMessageQueue } from "@/composer/queue-persistence";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
@@ -1362,6 +1367,12 @@ interface ComposerProps {
   submitIcon?: "arrow" | "return";
   /** Externally controlled loading state. When true, disables the submit button. */
   isSubmitLoading?: boolean;
+  /**
+   * Set by drafts that are still creating their agent. Sends made while
+   * `isSubmitLoading` is true are queued here instead of being dropped, and the
+   * input stays editable. The draft moves the queue onto the agent on creation.
+   */
+  draftQueueKey?: string;
   /** When true, waits for pasted forge links to resolve before enabling submit. */
   waitForForgeAutoAttachOnSubmit?: boolean;
   submitBehavior?: "clear" | "preserve-and-lock";
@@ -1671,6 +1682,7 @@ function ComposerContentImpl({
   submitButtonTestID,
   submitIcon = "arrow",
   isSubmitLoading = false,
+  draftQueueKey,
   waitForForgeAutoAttachOnSubmit = false,
   submitBehavior = "clear",
   blurOnSubmit = false,
@@ -1725,10 +1737,14 @@ function ComposerContentImpl({
 
   const agentState = useSessionStore(useShallow(buildAgentStateSelector(serverId, agentId)));
 
+  // A draft has no agent to queue behind yet, so it keeps its own queue until
+  // creation hands it the real one.
+  const isDraftCreating = Boolean(draftQueueKey) && isSubmitLoading;
+  const draftQueuedMessages = useDraftQueue(draftQueueKey ?? "");
   const queuedMessagesRaw = useSessionStore((state) =>
     state.sessions[serverId]?.queuedMessages?.get(agentId),
   );
-  const queuedMessages = queuedMessagesRaw ?? EMPTY_ARRAY;
+  const queuedMessages = isDraftCreating ? draftQueuedMessages : (queuedMessagesRaw ?? EMPTY_ARRAY);
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
   const supportsAgentMessageQueue = useSessionStore(
@@ -1849,7 +1865,10 @@ function ComposerContentImpl({
     names.sort();
     return names;
   }, [skillCommandsQuery.commands]);
-  const isComposerLocked = resolveIsComposerLocked(submitBehavior, isSubmitLoading);
+  const isComposerLocked = resolveIsComposerLocked(
+    submitBehavior,
+    isSubmitLoading && !isDraftCreating,
+  );
   const keyboardHandlerIdRef = useRef(
     `message-input:${serverId}:${agentId}:${Math.random().toString(36).slice(2)}`,
   );
@@ -2158,16 +2177,18 @@ function ComposerContentImpl({
     });
   }, [agentId, client, serverId, supportsAgentMessageQueue]);
 
-  const queueWriter = useMemo<QueueWriter>(
-    () => ({
+  const queueWriter = useMemo<QueueWriter>(() => {
+    if (draftQueueKey) {
+      return createDraftQueueWriter({ key: draftQueueKey, agentId });
+    }
+    return {
       read: (id) => useSessionStore.getState().sessions[serverId]?.queuedMessages?.get(id) ?? [],
       write: (updater) => {
         setQueuedMessages(serverId, updater);
         persistQueue();
       },
-    }),
-    [persistQueue, serverId, setQueuedMessages],
-  );
+    };
+  }, [agentId, draftQueueKey, persistQueue, serverId, setQueuedMessages]);
 
   const queueMessage = useCallback(
     (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
@@ -2206,8 +2227,12 @@ function ComposerContentImpl({
         hasExternalContent,
         allowEmptySubmit,
         forceSend,
-        submitBehavior,
-        isAgentRunning,
+        // Queueing during creation must clear the composer: the text now lives in
+        // the draft queue, so preserving it would keep two copies of one message.
+        submitBehavior: isDraftCreating ? "clear" : submitBehavior,
+        // While a draft creates its agent there is no turn to steer, so its sends
+        // take the queue path and wait for the agent to go idle.
+        isAgentRunning: isAgentRunning || isDraftCreating,
         // Parent-managed submits are still valid submit paths even when the
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
@@ -2232,6 +2257,21 @@ function ComposerContentImpl({
         },
         failedToSendMessage: t("composer.errors.failedToSend"),
       });
+      if (result === "failed" && draftQueueKey) {
+        // Creation failed, so the messages queued for it have no destination.
+        // Hand them back after `submitAgentInput` restored the failed message.
+        const restored = restoreDraftQueueToComposer({
+          key: draftQueueKey,
+          currentText: outgoingMessage,
+          currentAttachments: outgoingAttachments,
+        });
+        if (restored) {
+          replaceUserInput(restored.text);
+          setSelectedAttachments(
+            composerWorkspaceAttachment.userAttachmentsOnly(restored.attachments),
+          );
+        }
+      }
       completeSubmit({
         result,
         outgoingAttachments,
@@ -2242,8 +2282,10 @@ function ComposerContentImpl({
       beginSubmit,
       clearDraft,
       completeSubmit,
+      draftQueueKey,
       hasExternalContent,
       isAgentRunning,
+      isDraftCreating,
       queueMessage,
       setSelectedAttachments,
       replaceUserInput,
@@ -2270,7 +2312,7 @@ function ComposerContentImpl({
       });
       if (pluginSlashCommand && runPluginClientSlashCommand(pluginSlashCommand)) return;
 
-      if (blurOnSubmit) {
+      if (blurOnSubmit && !isDraftCreating) {
         messageInputRef.current?.blur();
       }
       void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
@@ -2279,6 +2321,7 @@ function ComposerContentImpl({
       attachments,
       blurOnSubmit,
       buildOutgoingAttachments,
+      isDraftCreating,
       runClientSlashCommand,
       pluginClientSlashCommands,
       runPluginClientSlashCommand,
@@ -2489,6 +2532,8 @@ function ComposerContentImpl({
 
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
+      // A creating draft has nothing to deliver to yet; the queue drains on handoff.
+      if (isDraftCreating) return;
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
       // Reuse the regular send path; server-side send atomically interrupts any active run.
       const result = await sendQueuedComposerMessageNow({
@@ -2503,7 +2548,7 @@ function ComposerContentImpl({
         setSendError(result.errorMessage);
       }
     },
-    [agentId, queueWriter, submitMessage, t],
+    [agentId, isDraftCreating, queueWriter, submitMessage, t],
   );
 
   const handleQueue = useCallback(
@@ -3004,8 +3049,11 @@ function ComposerContentImpl({
 
   const isSubmitLoadingVisible =
     isProcessing || isSubmitLoading || isUploadingFile || pendingNativeImagePastes > 0;
+  // A creating draft queues instead of blocking, so nothing about it disables the
+  // composer: the send button keeps working and the input stays editable.
+  const submitLoadingBlocksComposer = isSubmitLoadingVisible && !isDraftCreating;
   const isSubmitDisabled =
-    isSubmitLoadingVisible || (waitForForgeAutoAttachOnSubmit && isForgeResolving);
+    submitLoadingBlocksComposer || (waitForForgeAutoAttachOnSubmit && isForgeResolving);
 
   // Disable drops while submitting/uploading: the submit path clears and restores attachments,
   // so a drop in that window would be lost or land on a locked draft. `disabled` hides the
@@ -3016,7 +3064,7 @@ function ComposerContentImpl({
       onGenericFiles: handleGenericFilesDropped,
       onWorkspaceFile: handleWorkspaceFileDropped,
     },
-    { disabled: isSubmitLoadingVisible },
+    { disabled: submitLoadingBlocksComposer },
   );
 
   // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
@@ -3103,7 +3151,7 @@ function ComposerContentImpl({
                   submitButtonTestID={submitButtonTestID}
                   submitIcon={submitIcon}
                   isSubmitDisabled={isSubmitDisabled}
-                  isSubmitLoading={isSubmitLoadingVisible}
+                  isSubmitLoading={isSubmitLoadingVisible && !isDraftCreating}
                   preserveHeightOnSubmit={submitBehavior === "preserve-and-lock"}
                   attachments={selectedAttachments}
                   cwd={cwd}
@@ -3116,7 +3164,7 @@ function ComposerContentImpl({
                   placeholder={messagePlaceholder}
                   autoFocus={messageInputAutoFocus}
                   autoFocusKey={`${serverId}:${agentId}:${autoFocusKey ?? ""}`}
-                  disabled={isSubmitLoading}
+                  disabled={submitLoadingBlocksComposer}
                   leftContent={leftContent}
                   beforeVoiceContent={beforeVoiceContent}
                   rightContent={rightContent}

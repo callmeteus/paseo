@@ -59,6 +59,7 @@ import {
 import { normalizeWorkspaceDescriptor, type WorkspaceDescriptor } from "@/stores/session-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { buildNewWorkspaceDraftKey, generateDraftId } from "@/stores/draft-keys";
+import { buildDraftQueueKey, moveDraftQueueToAgent } from "@/composer/draft/message-queue";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { isActiveCreateFlowForDraft, useCreateFlowStore } from "@/stores/create-flow-store";
 import {
@@ -609,6 +610,13 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
       },
     });
     if (!agent) throw new Error("Workspace creation returned no agent");
+    // Move what the user sent while the workspace was being created. The draft tab
+    // may also mount later and find the queue already handed over.
+    moveDraftQueueToAgent({
+      key: buildDraftQueueKey({ serverId, draftId: input.draftId ?? "" }),
+      serverId,
+      agentId: agent.id,
+    });
     return agent;
   };
   const agentCreation = {
@@ -1492,7 +1500,7 @@ export function NewWorkspaceScreen({
       composerState,
       draftContextScopeKey,
       creationIdentity,
-      chatDraft.clear,
+      chatDraft,
       draftKey,
       ensureWorkspace,
       forkDraftSetup,
@@ -1716,6 +1724,10 @@ export function NewWorkspaceScreen({
       submitButtonTestID="workspace-create-submit"
       submitIcon="return"
       isSubmitLoading={isPending}
+      draftQueueKey={buildDraftQueueKey({
+        serverId: selectedServerId,
+        draftId: creationIdentity.draftId,
+      })}
       waitForForgeAutoAttachOnSubmit
       submitBehavior="preserve-and-lock"
       blurOnSubmit={true}

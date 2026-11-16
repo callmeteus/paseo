@@ -193,7 +193,8 @@ test.describe("New Workspace dictation submit", () => {
 
       const composer = page.getByRole("textbox", { name: "Message agent..." });
       await expect(composer).toHaveValue(TRANSCRIPT);
-      await expect(composer).not.toBeEditable();
+      // Creation queues additional sends rather than freezing the composer.
+      await expect(composer).toBeEditable();
 
       harness.failWorkspaceCreation();
 

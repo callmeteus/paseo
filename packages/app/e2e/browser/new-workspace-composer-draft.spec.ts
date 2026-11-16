@@ -142,7 +142,7 @@ test.describe("New workspace composer draft", () => {
   });
 });
 
-test("fullscreen creation returns inline and keeps submission locked when reopened", async ({
+test("fullscreen creation returns inline and keeps the draft writable when reopened", async ({
   page,
 }) => {
   const project = await seedWorkspace({ repoPrefix: "fullscreen-submit-pending-" });
@@ -157,20 +157,19 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await delay.waitForCreateRequest();
 
-    await test.step("submission returns inline with the original draft and spinner", async () => {
+    await test.step("submission returns inline with the original draft and stays writable", async () => {
       await expect(page.getByTestId("composer-fullscreen")).toHaveCount(0);
       await expect(composerLocator(page)).toHaveValue(DRAFT);
-      await expect(composerLocator(page)).not.toBeEditable();
-      await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
-      await expect(page.getByRole("progressbar")).toBeVisible();
+      // Creation queues sends instead of freezing the composer, so the user can
+      // keep typing while the agent is created.
+      await expect(composerLocator(page)).toBeEditable();
+      await expect(page.getByRole("progressbar")).toHaveCount(0);
     });
-    await test.step("fullscreen can reopen while pending without unlocking or duplicating submission", async () => {
+    await test.step("fullscreen can reopen while pending without duplicating submission", async () => {
       await enterComposerFullscreen(page);
       await expect(page.getByTestId("composer-fullscreen")).toBeVisible();
       await expect(composerLocator(page)).toHaveValue(DRAFT);
-      await expect(composerLocator(page)).not.toBeEditable();
-      await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
-      await expect(page.getByRole("progressbar")).toBeVisible();
+      await expect(composerLocator(page)).toBeEditable();
       await exitComposerFullscreen(page);
     });
     delay.release();

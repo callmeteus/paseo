@@ -15,6 +15,7 @@ import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
+import { buildDraftQueueKey, moveDraftQueueToAgent } from "@/composer/draft/message-queue";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { AgentSessionConfig } from "@getpaseo/protocol/agent-types";
@@ -681,6 +682,12 @@ export function WorkspaceDraftAgentTab({
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });
       useWorkspaceDraftSubmissionStore.getState().clearDraftSetup({ draftId });
+      // Anything the user sent while the agent was being created drains from here.
+      moveDraftQueueToAgent({
+        key: buildDraftQueueKey({ serverId, draftId }),
+        serverId,
+        agentId: result.id,
+      });
       onCreated(result);
     },
   });
@@ -849,6 +856,7 @@ export function WorkspaceDraftAgentTab({
             isPaneFocused={isPaneFocused}
             onSubmitMessage={handleCreateFromInput}
             isSubmitLoading={isSubmitting}
+            draftQueueKey={buildDraftQueueKey({ serverId, draftId })}
             blurOnSubmit={true}
             textSource={draftInput.textSource}
             onChangeText={draftInput.editText}
