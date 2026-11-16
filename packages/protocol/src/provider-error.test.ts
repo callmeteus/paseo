@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyProviderError,
+  isBackgroundProviderNotice,
   isSystemErrorText,
   looksLikeProviderFailureText,
   readProviderErrorText,
+  stripBackgroundProviderNotice,
   systemErrorMessage,
 } from "./provider-error";
+
+const GENERATE_CREDITS_ERROR =
+  "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.";
 
 describe("provider error classification", () => {
   it("detects usage limits across providers", () => {
@@ -83,6 +88,42 @@ describe("unprefixed provider failures", () => {
   it("prefers the system error prefix when both apply", () => {
     expect(readProviderErrorText("[System Error] Failed to authenticate")).toBe(
       "Failed to authenticate",
+    );
+  });
+});
+
+describe("background provider notices", () => {
+  it("recognizes a taste-learning line and a generate credits failure", () => {
+    expect(
+      isBackgroundProviderNotice(
+        "taste learning failed: POST /alpha/generate → 400 error: You have insufficient credits to make this request.",
+      ),
+    ).toBe(true);
+    expect(isBackgroundProviderNotice("taste learning failed: network error")).toBe(true);
+    expect(isBackgroundProviderNotice(GENERATE_CREDITS_ERROR)).toBe(true);
+    expect(
+      isBackgroundProviderNotice(
+        `[System Error] ${GENERATE_CREDITS_ERROR}\n\ncode: -32603\n\n${GENERATE_CREDITS_ERROR} | code=-32603 | data={"status":400}`,
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves an ordinary credits discussion alone", () => {
+    expect(isBackgroundProviderNotice("Out of credits")).toBe(false);
+    expect(
+      isBackgroundProviderNotice(
+        "The POST /alpha/generate call is unrelated to the user's credit balance.",
+      ),
+    ).toBe(false);
+  });
+
+  it("strips a notice from the end of an answer and drops a notice-only chunk", () => {
+    expect(
+      stripBackgroundProviderNotice(`Feito.\n\n${GENERATE_CREDITS_ERROR}\n\ncode: -32603`),
+    ).toBe("Feito.");
+    expect(stripBackgroundProviderNotice(`\n${GENERATE_CREDITS_ERROR}\n`)).toBeNull();
+    expect(stripBackgroundProviderNotice("Implemented the retry loop.")).toBe(
+      "Implemented the retry loop.",
     );
   });
 });

@@ -65,6 +65,59 @@ export function systemErrorMessage(text: string): string {
   return isSystemErrorText(text) ? text.slice(SYSTEM_ERROR_PREFIX.length).trim() : text.trim();
 }
 
+const TASTE_LEARNING_LINE = /^taste learning failed\b/i;
+const GENERATE_CREDITS_LINE = /^POST \/alpha\/generate\b/i;
+const GENERATE_CREDITS_NOTICE = /POST \/alpha\/generate\b[^\n]*insufficient credits/i;
+const NOTICE_TRAILER_LINE = /^code:\s*-?\d+$/i;
+
+/**
+ * A harness side request, not the turn's answer. Taste learning and a failed
+ * `/alpha/generate` credits call are reported after the reply is already on screen.
+ */
+export function isBackgroundProviderNotice(message: string): boolean {
+  const text = systemErrorMessage(message).trim();
+  if (!text) return false;
+  if (TASTE_LEARNING_LINE.test(text)) return true;
+  return GENERATE_CREDITS_NOTICE.test(text);
+}
+
+function isBackgroundNoticeLine(line: string): boolean {
+  const text = line.trim();
+  if (TASTE_LEARNING_LINE.test(text)) return true;
+  if (isSystemErrorText(text) && isBackgroundProviderNotice(text)) return true;
+  return GENERATE_CREDITS_LINE.test(text) && CREDITS_PATTERN.test(text);
+}
+
+function isBackgroundNoticeTrailer(line: string): boolean {
+  const text = line.trim();
+  if (!text) return true;
+  if (NOTICE_TRAILER_LINE.test(text)) return true;
+  return GENERATE_CREDITS_LINE.test(text);
+}
+
+/**
+ * Removes a background notice from one assistant chunk. Null means the chunk
+ * was only the notice. Unchanged text is returned as-is, including its whitespace.
+ */
+export function stripBackgroundProviderNotice(text: string): string | null {
+  const lines = text.split("\n");
+  const kept: string[] = [];
+  let skipping = false;
+  let removed = false;
+  for (const line of lines) {
+    if (isBackgroundNoticeLine(line) || (skipping && isBackgroundNoticeTrailer(line))) {
+      skipping = true;
+      removed = true;
+      continue;
+    }
+    skipping = false;
+    kept.push(line);
+  }
+  if (!removed) return text;
+  const next = kept.join("\n").trimEnd();
+  return next.length > 0 ? next : null;
+}
+
 /**
  * An unprefixed failure is believed only when it reads like one: a single short paragraph
  * that opens with a failure verb and carries a cause we can name. A model discussing
