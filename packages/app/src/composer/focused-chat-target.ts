@@ -3,6 +3,7 @@ import {
   collectAllPanes,
   collectAllTabs,
   findPaneById,
+  type SplitPane,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
 
@@ -34,6 +35,23 @@ function resolveChatTab(
   return null;
 }
 
+function findFirstChatInPane(
+  serverId: string,
+  pane: SplitPane,
+  tabs: ReturnType<typeof collectAllTabs>,
+): FocusedChatTarget | null {
+  for (const tabId of pane.tabIds) {
+    const chat = resolveChatTab(
+      serverId,
+      tabs.find((candidate) => candidate.tabId === tabId),
+    );
+    if (chat) {
+      return chat;
+    }
+  }
+  return null;
+}
+
 /**
  * The chat a file should attach to. The focused pane answers first, then the tab it
  * came from — a file opened beside a chat belongs to that chat. Failing both, any
@@ -48,7 +66,8 @@ export function resolveFocusedChatTarget(input: {
     return null;
   }
   const tabs = collectAllTabs(input.layout.root);
-  const focusedTabId = findPaneById(input.layout.root, input.layout.focusedPaneId)?.focusedTabId;
+  const focusedPane = findPaneById(input.layout.root, input.layout.focusedPaneId);
+  const focusedTabId = focusedPane?.focusedTabId;
   if (focusedTabId) {
     const focusedChat = resolveChatTab(
       input.serverId,
@@ -64,6 +83,12 @@ export function resolveFocusedChatTarget(input: {
     );
     if (parentChat) {
       return parentChat;
+    }
+  }
+  if (focusedPane) {
+    const focusedPaneChat = findFirstChatInPane(input.serverId, focusedPane, tabs);
+    if (focusedPaneChat) {
+      return focusedPaneChat;
     }
   }
 

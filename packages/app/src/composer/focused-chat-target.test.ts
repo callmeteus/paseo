@@ -74,6 +74,37 @@ describe("focused chat target", () => {
       draftKey: "agent:server-1:agent-1",
     });
   });
+  it("targets a chat tab in the same pane when a file preview is focused", () => {
+    const layout = {
+      root: {
+        kind: "pane",
+        pane: {
+          id: "pane-1",
+          tabIds: ["agent-tab", "file-tab"],
+          focusedTabId: "file-tab",
+          tabs: [
+            {
+              tabId: "agent-tab",
+              target: { kind: "agent", agentId: "agent-1" },
+              createdAt: 1,
+            },
+            {
+              tabId: "file-tab",
+              target: { kind: "file", path: "STATUS.md" },
+              createdAt: 2,
+            },
+          ],
+        },
+      },
+      focusedPaneId: "pane-1",
+    } as WorkspaceLayout;
+
+    expect(resolveFocusedChatTarget({ serverId: "server-1", layout })).toEqual({
+      tabId: "agent-tab",
+      draftKey: "agent:server-1:agent-1",
+    });
+  });
+
   it("targets a chat in a neighbouring pane when the focused pane holds none", () => {
     const layout = {
       root: {
