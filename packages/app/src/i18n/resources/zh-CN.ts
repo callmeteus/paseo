@@ -326,6 +326,7 @@ export const zhCN: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "显示详情",
       hideDetails: "隐藏详情",
+      switchModel: "切换模型",
       kinds: {
         creditsExhausted: {
           title: "额度不足",
@@ -359,8 +360,13 @@ export const zhCN: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "已达到 OpenCode 上限",
+            description:
+              "此 OpenCode 模型已达到套餐上限。请切换模型、连接其他 provider，或等待配额刷新。",
+          },
+          goUsageLimit: {
             title: "已达到 OpenCode Go 上限",
-            description: "请订阅 OpenCode Go、连接其他 provider，或切换模型。",
+            description: "你的 OpenCode Go 套餐已达到上限。请切换模型或等待配额刷新。",
           },
         },
         cline: {
@@ -811,6 +817,8 @@ export const zhCN: TranslationResources = {
           empty: "没有其他已打开的文件夹。",
           current: "当前",
           fallback: "选择其他文件夹…",
+          searchPlaceholder: "搜索文件夹…",
+          noMatches: "没有与搜索匹配的文件夹。",
           moved: "工作区已移动到 {{path}}",
           failed: "无法移动工作区",
           searchPlaceholder: "搜索文件夹",

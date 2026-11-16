@@ -332,6 +332,7 @@ export const fr: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "Afficher les détails",
       hideDetails: "Masquer les détails",
+      switchModel: "Changer de modèle",
       kinds: {
         creditsExhausted: {
           title: "Plus de crédits",
@@ -367,9 +368,14 @@ export const fr: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "Limite OpenCode atteinte",
+            description:
+              "Ce modèle OpenCode a atteint la limite du plan. Changez de modèle, connectez un autre provider ou attendez le renouvellement du quota.",
+          },
+          goUsageLimit: {
             title: "Limite OpenCode Go atteinte",
             description:
-              "Abonnez-vous à OpenCode Go, connectez un autre provider ou changez de modèle.",
+              "Votre offre OpenCode Go a atteint sa limite. Changez de modèle ou attendez le renouvellement du quota.",
           },
         },
         cline: {
@@ -824,6 +830,8 @@ export const fr: TranslationResources = {
           empty: "Aucun autre dossier ouvert.",
           current: "Actuel",
           fallback: "Choisir un autre dossier…",
+          searchPlaceholder: "Rechercher des dossiers…",
+          noMatches: "Aucun dossier ne correspond à la recherche.",
           moved: "Espace de travail déplacé vers {{path}}",
           failed: "Impossible de déplacer l'espace de travail",
           searchPlaceholder: "Rechercher des dossiers",

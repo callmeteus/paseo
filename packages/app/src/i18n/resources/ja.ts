@@ -329,6 +329,7 @@ export const ja: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "詳細を表示",
       hideDetails: "詳細を隠す",
+      switchModel: "モデルを切り替え",
       kinds: {
         creditsExhausted: {
           title: "クレジット切れ",
@@ -365,9 +366,14 @@ export const ja: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "OpenCode の上限に達しました",
+            description:
+              "この OpenCode モデルはプランの上限に達しました。モデルを切り替えるか、別の provider を接続するか、クォータの更新を待ってください。",
+          },
+          goUsageLimit: {
             title: "OpenCode Go の上限に達しました",
             description:
-              "OpenCode Go を購読するか、別の provider を接続するか、モデルを切り替えてください。",
+              "OpenCode Go プランの上限に達しました。モデルを切り替えるか、クォータの更新を待ってください。",
           },
         },
         cline: {
@@ -823,6 +829,8 @@ export const ja: TranslationResources = {
           empty: "他に開いているフォルダーはありません。",
           current: "現在",
           fallback: "別のフォルダーを選択…",
+          searchPlaceholder: "フォルダーを検索…",
+          noMatches: "検索に一致するフォルダーはありません。",
           moved: "ワークスペースを {{path}} へ移動しました",
           failed: "ワークスペースを移動できませんでした",
           searchPlaceholder: "フォルダーを検索",

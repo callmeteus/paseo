@@ -83,6 +83,8 @@ interface CombinedModelSelectorProps {
   tooltip?: string;
   /** Router bound to the chat (or staged); undefined uses the default router. */
   activeRouterId?: string | null;
+  /** Bumps when something outside the toolbar should open the browser (e.g. stream error card). */
+  openRequestNonce?: number;
 }
 
 /**
@@ -208,6 +210,7 @@ export function CombinedModelSelector({
   activeRouterId,
   accessibilityLabel: accessibilityLabelProp,
   tooltip,
+  openRequestNonce = 0,
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -264,6 +267,11 @@ export function CombinedModelSelector({
   const handleTriggerPress = useCallback(() => {
     handleOpenChange(!isOpen);
   }, [handleOpenChange, isOpen]);
+
+  useEffect(() => {
+    if (openRequestNonce < 1) return;
+    handleOpenChange(true);
+  }, [handleOpenChange, openRequestNonce]);
 
   const triggerStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => {

@@ -5,63 +5,16 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, TriangleAlert } from "lucide-react-native";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { PressHighlight } from "@/components/ui/press-highlight";
-import { classifyProviderError, type ProviderErrorKind } from "@/agent-stream/provider-error";
+import { classifyProviderError } from "@/agent-stream/provider-error";
+import {
+  providerErrorOffersModelSwitch,
+  resolveProviderErrorCopy,
+} from "@/agent-stream/provider-error-copy";
+import { ProviderErrorSwitchModel } from "@/agent-stream/provider-error-switch-model";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { providerDisplayName } from "@/utils/provider-display-name";
 
 type TranslateKey = Parameters<ReturnType<typeof useTranslation>["t"]>[0];
-interface ProviderErrorCopy {
-  title: TranslateKey;
-  description: TranslateKey;
-}
-
-const KIND_KEYS = {
-  usage_limit: {
-    title: "agentStream.providerError.kinds.usageLimit.title",
-    description: "agentStream.providerError.kinds.usageLimit.description",
-  },
-  credits_exhausted: {
-    title: "agentStream.providerError.kinds.creditsExhausted.title",
-    description: "agentStream.providerError.kinds.creditsExhausted.description",
-  },
-  auth: {
-    title: "agentStream.providerError.kinds.auth.title",
-    description: "agentStream.providerError.kinds.auth.description",
-  },
-  rate_limit: {
-    title: "agentStream.providerError.kinds.rateLimit.title",
-    description: "agentStream.providerError.kinds.rateLimit.description",
-  },
-  model_unavailable: {
-    title: "agentStream.providerError.kinds.modelUnavailable.title",
-    description: "agentStream.providerError.kinds.modelUnavailable.description",
-  },
-  crash: {
-    title: "agentStream.providerError.kinds.crash.title",
-    description: "agentStream.providerError.kinds.crash.description",
-  },
-  unknown: {
-    title: "agentStream.providerError.kinds.unknown.title",
-    description: "agentStream.providerError.kinds.unknown.description",
-  },
-} as const satisfies Record<ProviderErrorKind, ProviderErrorCopy>;
-
-const PROVIDER_OVERRIDES: Partial<
-  Record<AgentProvider, Partial<Record<ProviderErrorKind, ProviderErrorCopy>>>
-> = {
-  opencode: {
-    usage_limit: {
-      title: "agentStream.providerError.providers.opencode.usageLimit.title",
-      description: "agentStream.providerError.providers.opencode.usageLimit.description",
-    },
-  },
-  cline: {
-    usage_limit: {
-      title: "agentStream.providerError.providers.cline.usageLimit.title",
-      description: "agentStream.providerError.providers.cline.usageLimit.description",
-    },
-  },
-};
 
 const ACP_PROVIDER_TITLES = new Map(ACP_PROVIDER_CATALOG.map((entry) => [entry.id, entry.title]));
 
@@ -75,18 +28,27 @@ function providerLabel(provider: AgentProvider | undefined, fallback: string): s
 export function ProviderErrorCard({
   message,
   provider,
+  modelId,
+  agentId,
+  readOnly = false,
   children,
 }: {
   message: string;
   provider?: AgentProvider;
+  modelId?: string | null;
+  agentId?: string;
+  readOnly?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const kind = classifyProviderError(message);
-  const override = provider ? PROVIDER_OVERRIDES[provider]?.[kind] : undefined;
-  const keys = override ?? KIND_KEYS[kind];
+  const keys = resolveProviderErrorCopy({ provider, kind, message, modelId }) as {
+    title: TranslateKey;
+    description: TranslateKey;
+  };
   const providerName = providerLabel(provider, t("agentStream.providerError.unknownProvider"));
+  const showSwitchModel = !readOnly && Boolean(agentId) && providerErrorOffersModelSwitch(kind);
   const toggleDetails = useCallback(() => setExpanded((previous) => !previous), []);
 
   return (
@@ -100,6 +62,7 @@ export function ProviderErrorCard({
       </View>
       <Text style={styles.title}>{t(keys.title)}</Text>
       <Text style={styles.description}>{t(keys.description, { provider: providerName })}</Text>
+      {showSwitchModel && agentId ? <ProviderErrorSwitchModel agentId={agentId} /> : null}
       {children}
       <PressHighlight
         onPress={toggleDetails}

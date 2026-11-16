@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Keyboard, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -50,6 +50,7 @@ interface CompactModelSheetProps {
   onRouterPicked?: (routerId: string | null) => void;
   /** Router bound to the chat (or staged); undefined uses the default router. */
   activeRouterId?: string | null;
+  openRequestNonce?: number;
   children: ReactNode;
 }
 
@@ -82,6 +83,7 @@ function resolveModelSheetProfileActions(
   };
 }
 
+// oxlint-disable-next-line complexity
 export function CompactModelSheet({
   providers,
   selectedProvider,
@@ -104,6 +106,7 @@ export function CompactModelSheet({
   canSwitchProvider,
   onRouterPicked,
   activeRouterId,
+  openRequestNonce = 0,
   children,
 }: CompactModelSheetProps) {
   const { t } = useTranslation();
@@ -252,6 +255,18 @@ export function CompactModelSheet({
     }
     open();
   }, [close, isOpen, open]);
+
+  useEffect(() => {
+    if (openRequestNonce < 1) return;
+    if (usesBottomSheet) {
+      openModelBrowser();
+      if (!isOpen) {
+        open();
+      }
+      return;
+    }
+    openModelBrowser();
+  }, [isOpen, open, openModelBrowser, openRequestNonce, usesBottomSheet]);
 
   const triggerStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType) => [

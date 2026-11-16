@@ -331,6 +331,7 @@ export const es: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "Ver detalles",
       hideDetails: "Ocultar detalles",
+      switchModel: "Cambiar modelo",
       kinds: {
         creditsExhausted: {
           title: "Sin créditos",
@@ -364,8 +365,14 @@ export const es: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "Límite de OpenCode alcanzado",
+            description:
+              "Este modelo de OpenCode alcanzó el límite del plan. Cambia de modelo, conecta otro provider o espera a que se renueve la cuota.",
+          },
+          goUsageLimit: {
             title: "Límite de OpenCode Go alcanzado",
-            description: "Suscríbete a OpenCode Go, conecta otro provider o cambia de modelo.",
+            description:
+              "Tu plan de OpenCode Go alcanzó el límite. Cambia de modelo o espera a que se renueve la cuota.",
           },
         },
         cline: {
@@ -820,6 +827,8 @@ export const es: TranslationResources = {
           empty: "No hay otras carpetas abiertas.",
           current: "Actual",
           fallback: "Elegir otra carpeta…",
+          searchPlaceholder: "Buscar carpetas…",
+          noMatches: "Ninguna carpeta coincide con la búsqueda.",
           moved: "Espacio de trabajo movido a {{path}}",
           failed: "No se pudo mover el espacio de trabajo",
           searchPlaceholder: "Buscar carpetas",

@@ -326,6 +326,7 @@ export const ar: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "إظهار التفاصيل",
       hideDetails: "إخفاء التفاصيل",
+      switchModel: "تبديل النموذج",
       kinds: {
         creditsExhausted: {
           title: "نفدت الأرصدة",
@@ -359,8 +360,13 @@ export const ar: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "تم الوصول إلى حد OpenCode",
+            description:
+              "وصل هذا النموذج من OpenCode إلى حد الخطة. بدّل النموذج، أو صِل providerًا آخر، أو انتظر تجديد الحصة.",
+          },
+          goUsageLimit: {
             title: "تم الوصول إلى حد OpenCode Go",
-            description: "اشترك في OpenCode Go، أو صِل provider آخر، أو بدّل النموذج.",
+            description: "وصلت خطة OpenCode Go إلى حدها. بدّل النموذج أو انتظر تجديد الحصة.",
           },
         },
         cline: {
@@ -811,6 +817,8 @@ export const ar: TranslationResources = {
           empty: "لا توجد مجلدات أخرى مفتوحة.",
           current: "الحالي",
           fallback: "اختيار مجلد آخر…",
+          searchPlaceholder: "البحث في المجلدات…",
+          noMatches: "لا توجد مجلدات تطابق البحث.",
           moved: "تم نقل مساحة العمل إلى {{path}}",
           failed: "تعذر نقل مساحة العمل",
           searchPlaceholder: "البحث عن مجلدات",

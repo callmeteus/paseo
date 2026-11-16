@@ -331,6 +331,7 @@ export const ptBR: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "Ver detalhes",
       hideDetails: "Ocultar detalhes",
+      switchModel: "Trocar modelo",
       kinds: {
         creditsExhausted: {
           title: "Sem créditos",
@@ -365,8 +366,14 @@ export const ptBR: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "Limite do OpenCode atingido",
+            description:
+              "Este modelo do OpenCode atingiu o limite do plano. Troque de modelo, conecte outro provider ou aguarde a cota renovar.",
+          },
+          goUsageLimit: {
             title: "Limite do OpenCode Go atingido",
-            description: "Assine o OpenCode Go, conecte outro provider ou troque de modelo.",
+            description:
+              "Seu plano do OpenCode Go atingiu o limite. Troque de modelo ou aguarde a cota renovar.",
           },
         },
         cline: {
@@ -822,6 +829,8 @@ export const ptBR: TranslationResources = {
           empty: "Nenhuma outra pasta aberta.",
           current: "Atual",
           fallback: "Escolher outra pasta…",
+          searchPlaceholder: "Buscar pastas…",
+          noMatches: "Nenhuma pasta corresponde à busca.",
           moved: "Workspace movido para {{path}}",
           failed: "Não foi possível mover o workspace",
           searchPlaceholder: "Buscar pasta",

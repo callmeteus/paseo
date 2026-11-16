@@ -126,6 +126,7 @@ import {
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useStagedRouterTarget } from "@/model-routers/use-staged-router-target";
 import { routerPickAsModel } from "@/model-routers/entry-target";
+import { useModelPickerRequestStore } from "@/composer/model-picker-request-store";
 
 interface AgentControlOption {
   id: string;
@@ -171,6 +172,7 @@ interface ControlledAgentControlsProps {
   activeRouterId?: string | null;
   /** Called after the user picks (or clears) a router in the model selector. */
   onRouterPicked?: (routerId: string | null) => void;
+  modelPickerOpenNonce?: number;
 }
 
 export interface DraftAgentControlsProps {
@@ -616,6 +618,7 @@ function buildOpenChangeHandler(
   };
 }
 
+// oxlint-disable-next-line complexity
 function ControlledAgentControls({
   provider,
   providerOptions,
@@ -649,6 +652,7 @@ function ControlledAgentControls({
   isCompactLayout,
   activeRouterId,
   onRouterPicked,
+  modelPickerOpenNonce,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -883,6 +887,8 @@ function ControlledAgentControls({
     return null;
   }
 
+  const modelPickerNonce = modelPickerOpenNonce ?? 0;
+
   return (
     <ComposerControlLayoutProvider value={layoutContextValue}>
       <View style={styles.container} onLayout={handleLayout}>
@@ -942,6 +948,7 @@ function ControlledAgentControls({
             modelSelectorServerId={modelSelectorServerId}
             onRouterPicked={onRouterPicked}
             activeRouterId={activeRouterId}
+            modelPickerOpenNonce={modelPickerNonce}
           />
         ) : (
           <SheetAgentControlsContent
@@ -983,6 +990,7 @@ function ControlledAgentControls({
             canSwitchProvider={Boolean(onSelectProviderAndModel)}
             onRouterPicked={onRouterPicked}
             activeRouterId={activeRouterId}
+            modelPickerOpenNonce={modelPickerNonce}
           />
         )}
       </View>
@@ -1050,6 +1058,7 @@ interface DesktopAgentControlsContentProps {
   modelSelectorServerId: string | null;
   activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
+  modelPickerOpenNonce?: number;
 }
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
@@ -1111,6 +1120,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     modelSelectorServerId,
     onRouterPicked,
     activeRouterId,
+    modelPickerOpenNonce = 0,
   } = props;
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
@@ -1175,6 +1185,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             onRouterPicked={onRouterPicked}
             activeRouterId={activeRouterId}
             tooltip={t(getAgentControlHintKey("model"))}
+            openRequestNonce={modelPickerOpenNonce}
           />
         </View>
       ) : null}
@@ -1320,6 +1331,7 @@ interface SheetAgentControlsContentProps {
   canSwitchProvider: boolean;
   activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
+  modelPickerOpenNonce?: number;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
@@ -1363,6 +1375,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     canSwitchProvider,
     onRouterPicked,
     activeRouterId,
+    modelPickerOpenNonce = 0,
   } = props;
 
   const thinkingAnchorRef = useRef<View | null>(null);
@@ -1458,6 +1471,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       canSwitchProvider={canSwitchProvider}
       activeRouterId={activeRouterId}
       onRouterPicked={onRouterPicked}
+      openRequestNonce={modelPickerOpenNonce}
     >
       {sheetControls}
     </CompactModelSheet>
@@ -1820,6 +1834,9 @@ export const AgentControls = memo(function AgentControls({
   const toast = useToast();
   const { t } = useTranslation();
   const pendingProviderSwitch = usePendingProviderSwitch(serverId, agentId);
+  const modelPickerOpenNonce = useModelPickerRequestStore((state) =>
+    state.agentId === agentId ? state.nonce : 0,
+  );
   const stagedRouterTarget = useStagedRouterTarget(serverId, pendingProviderSwitch);
   const supportsProviderSwap = useHostFeature(serverId, "agentProviderSwap");
   const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
@@ -2239,6 +2256,7 @@ export const AgentControls = memo(function AgentControls({
         modelSelectorServerId={serverId}
         isCompactLayout={isCompactLayout}
         onRouterPicked={handleRouterPicked}
+        modelPickerOpenNonce={modelPickerOpenNonce}
       />
     </>
   );

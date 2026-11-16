@@ -329,6 +329,7 @@ export const ru: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "Показать детали",
       hideDetails: "Скрыть детали",
+      switchModel: "Сменить модель",
       kinds: {
         creditsExhausted: {
           title: "Закончились кредиты",
@@ -364,9 +365,14 @@ export const ru: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "Достигнут лимит OpenCode",
+            description:
+              "Эта модель OpenCode исчерпала лимит тарифа. Смените модель, подключите другой provider или дождитесь обновления квоты.",
+          },
+          goUsageLimit: {
             title: "Достигнут лимит OpenCode Go",
             description:
-              "Оформите подписку OpenCode Go, подключите другой provider или смените модель.",
+              "Ваш тариф OpenCode Go исчерпан. Смените модель или дождитесь обновления квоты.",
           },
         },
         cline: {
@@ -822,6 +828,8 @@ export const ru: TranslationResources = {
           empty: "Других открытых папок нет.",
           current: "Текущее",
           fallback: "Выбрать другую папку…",
+          searchPlaceholder: "Поиск папок…",
+          noMatches: "Нет папок, соответствующих запросу.",
           moved: "Рабочее пространство перемещено в {{path}}",
           failed: "Не удалось переместить рабочее пространство",
           searchPlaceholder: "Поиск папок",

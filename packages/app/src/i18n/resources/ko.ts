@@ -327,6 +327,7 @@ export const ko: TranslationResources = {
       unknownProvider: "Provider",
       showDetails: "세부 정보 보기",
       hideDetails: "세부 정보 숨기기",
+      switchModel: "모델 전환",
       kinds: {
         creditsExhausted: {
           title: "크레딧 소진",
@@ -362,8 +363,14 @@ export const ko: TranslationResources = {
       providers: {
         opencode: {
           usageLimit: {
+            title: "OpenCode 한도에 도달했습니다",
+            description:
+              "이 OpenCode 모델이 요금제 한도에 도달했습니다. 모델을 전환하거나 다른 provider를 연결하거나 할당량이 초기화되기를 기다리세요.",
+          },
+          goUsageLimit: {
             title: "OpenCode Go 한도에 도달했습니다",
-            description: "OpenCode Go를 구독하거나 다른 provider를 연결하거나 모델을 전환하세요.",
+            description:
+              "OpenCode Go 요금제 한도에 도달했습니다. 모델을 전환하거나 할당량이 초기화되기를 기다리세요.",
           },
         },
         cline: {
@@ -816,6 +823,8 @@ export const ko: TranslationResources = {
           empty: "열려 있는 다른 폴더가 없습니다.",
           current: "현재",
           fallback: "다른 폴더 선택…",
+          searchPlaceholder: "폴더 검색…",
+          noMatches: "검색과 일치하는 폴더가 없습니다.",
           moved: "워크스페이스를 {{path}}(으)로 이동했습니다",
           failed: "워크스페이스를 이동하지 못했습니다",
           searchPlaceholder: "폴더 검색",

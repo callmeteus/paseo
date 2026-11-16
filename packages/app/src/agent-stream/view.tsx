@@ -400,6 +400,7 @@ function limitResumeItemText(item: StreamItem): string | null {
 }
 
 const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamViewProps>(
+  // oxlint-disable-next-line complexity
   function AgentStreamView(
     {
       agentId,
@@ -934,7 +935,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         const errorText = readProviderErrorText(item.text);
         if (errorText !== null) {
           return (
-            <ProviderErrorCard provider={context.provider} message={errorText}>
+            <ProviderErrorCard
+              provider={context.provider}
+              message={errorText}
+              modelId={context.model ?? context.runtimeInfo?.model}
+              agentId={agentId}
+              readOnly={readOnly}
+            >
               {item.id === limitResumeItemId ? (
                 <LimitResumeOffer
                   agentId={agentId}
@@ -976,9 +983,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       [
         agentId,
         client,
+        context.model,
         context.provider,
+        context.runtimeInfo?.model,
         handleInlinePathPress,
         limitResumeItemId,
+        readOnly,
         resolvedServerId,
         toast,
         workspaceRoot,

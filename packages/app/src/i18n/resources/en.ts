@@ -323,6 +323,7 @@ export const en = {
       unknownProvider: "Provider",
       showDetails: "Show details",
       hideDetails: "Hide details",
+      switchModel: "Switch model",
       kinds: {
         creditsExhausted: {
           title: "Out of credits",
@@ -356,8 +357,14 @@ export const en = {
       providers: {
         opencode: {
           usageLimit: {
-            title: "OpenCode Go limit reached",
-            description: "Subscribe to OpenCode Go, connect another provider, or switch models.",
+            title: "OpenCode usage limit reached",
+            description:
+              "This OpenCode model hit its plan limit. Switch models, connect another provider, or wait for the quota to reset.",
+          },
+          goUsageLimit: {
+            title: "OpenCode Go usage limit reached",
+            description:
+              "Your OpenCode Go plan reached its limit. Switch models or wait for the quota to reset.",
           },
         },
         cline: {
@@ -809,6 +816,8 @@ export const en = {
           empty: "No other folders are open.",
           current: "Current",
           fallback: "Choose another folder…",
+          searchPlaceholder: "Search folders…",
+          noMatches: "No folders match your search.",
           moved: "Workspace moved to {{path}}",
           failed: "Couldn't move the workspace",
           searchPlaceholder: "Search folders",
