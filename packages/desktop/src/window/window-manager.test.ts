@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyMacWindowControlsUpdate,
+  contextMenuLinkAction,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
   getMainWindowChromeOptions,
@@ -171,6 +172,29 @@ describe("window-manager", () => {
 
       expect(listener).toBeTypeOf("function");
       expect(preventDefault).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("contextMenuLinkAction", () => {
+    it("copies a file or folder address without opening the browser", () => {
+      expect(contextMenuLinkAction("file:///mnt/ssd2/software/paseo/.paseo/automations/")).toEqual({
+        openInBrowser: false,
+        copyAddress: "file:///mnt/ssd2/software/paseo/.paseo/automations/",
+      });
+    });
+
+    it("keeps web links openable", () => {
+      expect(contextMenuLinkAction("https://paseo.sh/docs")).toEqual({
+        openInBrowser: true,
+        copyAddress: "https://paseo.sh/docs",
+      });
+    });
+
+    it("ignores a right click that is not on a link", () => {
+      expect(contextMenuLinkAction("")).toEqual({
+        openInBrowser: false,
+        copyAddress: null,
+      });
     });
   });
 });

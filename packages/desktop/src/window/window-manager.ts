@@ -321,6 +321,25 @@ export function setupWindowStatePersistence(win: BrowserWindow, store: WindowSta
   });
 }
 
+export interface ContextMenuLinkAction {
+  openInBrowser: boolean;
+  copyAddress: string | null;
+}
+
+/**
+ * Web links open in the browser. A folder or file path is a `file:` address:
+ * copy it, and leave the browser out of it.
+ */
+export function contextMenuLinkAction(linkURL: string): ContextMenuLinkAction {
+  if (/^https?:/i.test(linkURL)) {
+    return { openInBrowser: true, copyAddress: linkURL };
+  }
+  if (/^file:/i.test(linkURL)) {
+    return { openInBrowser: false, copyAddress: linkURL };
+  }
+  return { openInBrowser: false, copyAddress: null };
+}
+
 export function buildStandardContextMenuItems(
   contents: WebContents,
   params: Electron.ContextMenuParams,
@@ -346,16 +365,20 @@ export function buildStandardContextMenuItems(
     items.push({ type: "separator" });
   }
 
-  if (params.linkURL && /^https?:/i.test(params.linkURL)) {
-    items.push({
-      label: "Open Link in Browser",
-      click: () => {
-        void shell.openExternal(params.linkURL);
-      },
-    });
+  const linkAction = contextMenuLinkAction(params.linkURL);
+  const copyAddress = linkAction.copyAddress;
+  if (copyAddress) {
+    if (linkAction.openInBrowser) {
+      items.push({
+        label: "Open Link in Browser",
+        click: () => {
+          void shell.openExternal(copyAddress);
+        },
+      });
+    }
     items.push({
       label: "Copy Link Address",
-      click: () => clipboard.writeText(params.linkURL),
+      click: () => clipboard.writeText(copyAddress),
     });
     items.push({ type: "separator" });
   }
