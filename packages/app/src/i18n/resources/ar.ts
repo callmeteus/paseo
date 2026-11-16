@@ -1505,6 +1505,8 @@ export const ar: TranslationResources = {
       setupBody: "صِل Hub موجودًا مسبقًا، على هذا الجهاز أو في مكان آخر، أو ثبّته هنا.",
       connectExisting: "توصيل Hub موجود",
       installChoice: "تثبيت Hub",
+      installLocal: "تثبيت Hub محلي",
+      startLocal: "بدء Hub محلي",
       originLabel: "عنوان Hub",
       originHelp: "استخدم عنوان Hub يعمل بالفعل، محليًا أو عن بُعد.",
       originPlaceholder: "https://hub.example.com",

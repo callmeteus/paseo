@@ -1516,6 +1516,8 @@ export const en = {
         "Connect a Hub you already have, on this computer or somewhere else, or install one here.",
       connectExisting: "Connect an existing Hub",
       installChoice: "Install Hub",
+      installLocal: "Install local Hub",
+      startLocal: "Start local Hub",
       originLabel: "Hub address",
       originHelp: "Use the address of a Hub that is already running, local or remote.",
       originPlaceholder: "https://hub.example.com",

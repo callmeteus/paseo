@@ -11,6 +11,7 @@ import { PressHighlight } from "@/components/ui/press-highlight";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AutomationsHubFrame } from "@/automations/automations-hub-frame";
 import { isElectronRuntime } from "@/desktop/host";
+import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { hubStartStatusId } from "@/automations/hub-start-status";
 import { HubDaemonLink } from "@/automations/hub-daemon-link";
 import {
@@ -38,6 +39,7 @@ type InstallState =
 export function AutomationsScreen(): ReactElement {
   const { t } = useTranslation();
   const hosts = useHosts();
+  const localServerId = useLocalDaemonServerId();
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
   const connectionKey = serverIds
@@ -59,6 +61,7 @@ export function AutomationsScreen(): ReactElement {
           online,
           relationship: online ? "pending" : "unavailable",
           hubOrigin: null,
+          isLocalHost: localServerId === host.serverId,
           localInstalled: null,
           localRunning: false,
           localOrigin: null,
@@ -85,12 +88,14 @@ export function AutomationsScreen(): ReactElement {
           hubOrigin: relationship?.hubOrigin ?? null,
           localInstalled: local === null ? null : local.installed,
           localRunning: local?.running === true,
-          localOrigin: local?.origin ?? null,
+          // A configured public origin is where other machines reach this Hub,
+          // so the app opens that instead of its own loopback.
+          localOrigin: local?.publicOrigin ?? local?.origin ?? null,
         };
       }),
     );
     setSnapshots(next);
-  }, [connectionStatuses, hosts]);
+  }, [connectionStatuses, hosts, localServerId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +115,11 @@ export function AutomationsScreen(): ReactElement {
     if (snapshots === null) {
       return { kind: "loading" as const };
     }
-    return resolveAutomationsView(snapshots);
+    return resolveAutomationsView(snapshots, {
+      // A browser rewrites a loopback Hub to the host that served the page; the
+      // desktop app cannot reach another machine's loopback at all.
+      loopbackOriginOnRemoteHostIsReachable: !isElectronRuntime(),
+    });
   }, [chosenOrigin, snapshots]);
 
   const connectDaemon = useCallback(
@@ -154,9 +163,35 @@ export function AutomationsScreen(): ReactElement {
     [reload, t],
   );
 
+  const localSnapshot = snapshots?.find((host) => host.isLocalHost) ?? null;
+  const openLocalSetup = useCallback(() => {
+    // A Hub already running here has nothing left to ask: open it.
+    if (localSnapshot?.localRunning === true && localSnapshot.localOrigin !== null) {
+      setChosenOrigin(localSnapshot.localOrigin);
+      return;
+    }
+    setChosenOrigin(null);
+    setSetupStep("ask");
+  }, [localSnapshot]);
+  const headerAction = useMemo(() => {
+    // While a Hub is open, the local Hub is still reachable from the header: the
+    // frame fills the page, so the setup choice cannot live in the body.
+    if (view.kind !== "webview" && view.kind !== "choose") return undefined;
+    if (localSnapshot?.online !== true) return undefined;
+    const label =
+      localSnapshot.localInstalled === true
+        ? t("sidebar.automationsPage.startLocal")
+        : t("sidebar.automationsPage.installLocal");
+    return (
+      <Button variant="ghost" size="sm" onPress={openLocalSetup} testID="automations-open-local">
+        {label}
+      </Button>
+    );
+  }, [localSnapshot, openLocalSetup, t, view.kind]);
+
   return (
     <View style={styles.container}>
-      <MenuHeader title={t("sidebar.sections.automations")} />
+      <MenuHeader title={t("sidebar.sections.automations")} rightContent={headerAction} />
       <AutomationsBody
         view={view}
         install={install}

@@ -1527,6 +1527,8 @@ export const ja: TranslationResources = {
         "すでにある Hub（このコンピュータまたは別の場所）に接続するか、ここでインストールします。",
       connectExisting: "既存の Hub に接続",
       installChoice: "Hub をインストール",
+      installLocal: "ローカル Hub をインストール",
+      startLocal: "ローカル Hub を起動",
       originLabel: "Hub のアドレス",
       originHelp:
         "すでに動いている Hub のアドレスを入力します。ローカルでもリモートでも構いません。",

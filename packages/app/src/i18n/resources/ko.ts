@@ -1516,6 +1516,8 @@ export const ko: TranslationResources = {
       setupBody: "이미 있는 Hub(이 컴퓨터 또는 다른 곳)에 연결하거나 여기에서 설치합니다.",
       connectExisting: "기존 Hub 연결",
       installChoice: "Hub 설치",
+      installLocal: "로컬 Hub 설치",
+      startLocal: "로컬 Hub 시작",
       originLabel: "Hub 주소",
       originHelp: "이미 실행 중인 Hub의 주소를 입력합니다. 로컬이거나 원격일 수 있습니다.",
       originPlaceholder: "https://hub.example.com",

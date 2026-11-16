@@ -1547,6 +1547,8 @@ export const es: TranslationResources = {
         "Conecta un Hub que ya tengas, en este equipo o en otro lugar, o instala uno aquí.",
       connectExisting: "Conectar un Hub existente",
       installChoice: "Instalar Hub",
+      installLocal: "Instalar Hub local",
+      startLocal: "Iniciar Hub local",
       originLabel: "Dirección del Hub",
       originHelp: "Usa la dirección de un Hub que ya esté en ejecución, local o remoto.",
       originPlaceholder: "https://hub.example.com",

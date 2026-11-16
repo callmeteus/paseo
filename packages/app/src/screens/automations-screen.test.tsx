@@ -111,6 +111,10 @@ vi.mock("@/desktop/host", () => ({
   isElectronRuntime: () => electron.current,
 }));
 
+vi.mock("@/hooks/use-is-local-daemon", () => ({
+  useLocalDaemonServerId: () => "local",
+}));
+
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => hosts,
   useHostRuntimeConnectionStatuses: () => statuses,

@@ -1496,6 +1496,8 @@ export const zhCN: TranslationResources = {
       setupBody: "连接已有的 Hub（本机或其他位置），或在这里安装一个。",
       connectExisting: "连接已有的 Hub",
       installChoice: "安装 Hub",
+      installLocal: "安装本地 Hub",
+      startLocal: "启动本地 Hub",
       originLabel: "Hub 地址",
       originHelp: "填写已经在运行的 Hub 地址，可以是本机，也可以是远程。",
       originPlaceholder: "https://hub.example.com",

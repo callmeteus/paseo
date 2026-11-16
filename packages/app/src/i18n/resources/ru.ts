@@ -1529,6 +1529,8 @@ export const ru: TranslationResources = {
         "Подключите уже существующий Hub, на этом компьютере или в другом месте, или установите его здесь.",
       connectExisting: "Подключить существующий Hub",
       installChoice: "Установить Hub",
+      installLocal: "Установить локальный Hub",
+      startLocal: "Запустить локальный Hub",
       originLabel: "Адрес Hub",
       originHelp: "Укажите адрес Hub, который уже запущен, локально или удалённо.",
       originPlaceholder: "https://hub.example.com",

@@ -13,6 +13,7 @@ function host(overrides: Partial<AutomationsHostSnapshot> = {}): AutomationsHost
     online: true,
     relationship: "not_connected",
     hubOrigin: null,
+    isLocalHost: true,
     localInstalled: true,
     localRunning: true,
     localOrigin: "http://127.0.0.1:3000",
@@ -108,6 +109,83 @@ describe("resolveAutomationsView", () => {
   it("says the daemon is offline when nothing is online", () => {
     expect(resolveAutomationsView([host({ online: false, relationship: "unavailable" })])).toEqual({
       kind: "offline",
+    });
+  });
+
+  // A remote Hub on the other machine's loopback is not reachable from the
+  // desktop app, and opening it produced a blank frame.
+  it("falls through to the local Hub when a remote Hub is only on its loopback", () => {
+    const view = resolveAutomationsView([
+      host({
+        serverId: "remote",
+        label: "Remote box",
+        isLocalHost: false,
+        relationship: "connected",
+        hubOrigin: "http://127.0.0.1:25000",
+        localInstalled: null,
+        localRunning: false,
+        localOrigin: null,
+      }),
+      host({ serverId: "local", localInstalled: false, localRunning: false, localOrigin: null }),
+    ]);
+    expect(view).toEqual({
+      kind: "setup",
+      serverId: "local",
+      label: "This computer",
+      canInstall: true,
+      installed: false,
+      localOrigin: null,
+    });
+  });
+
+  it("opens a reachable remote Hub", () => {
+    expect(
+      resolveAutomationsView([
+        host({
+          serverId: "remote",
+          isLocalHost: false,
+          relationship: "connected",
+          hubOrigin: "https://hub.example.com",
+        }),
+      ]),
+    ).toEqual({ kind: "webview", origin: "https://hub.example.com" });
+  });
+
+  it("opens a remote loopback Hub from a browser served by that host", () => {
+    expect(
+      resolveAutomationsView(
+        [
+          host({
+            serverId: "remote",
+            isLocalHost: false,
+            relationship: "connected",
+            hubOrigin: "http://127.0.0.1:25000",
+          }),
+        ],
+        { loopbackOriginOnRemoteHostIsReachable: true },
+      ),
+    ).toEqual({ kind: "webview", origin: "http://127.0.0.1:25000" });
+  });
+
+  it("prefers the local daemon for the install and start choice", () => {
+    const view = resolveAutomationsView([
+      host({
+        serverId: "remote",
+        label: "Remote box",
+        isLocalHost: false,
+        localInstalled: false,
+        localRunning: false,
+        localOrigin: null,
+      }),
+      host({ serverId: "local", localInstalled: null, localRunning: false, localOrigin: null }),
+    ]);
+    expect(view).toEqual({
+      kind: "setup",
+      serverId: "local",
+      label: "This computer",
+      canInstall: false,
+      installed: false,
+      localOrigin: null,
     });
   });
 });

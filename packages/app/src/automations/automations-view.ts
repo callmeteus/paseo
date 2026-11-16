@@ -4,10 +4,21 @@ export interface AutomationsHostSnapshot {
   online: boolean;
   relationship: "connected" | "not_connected" | "pending" | "unavailable";
   hubOrigin: string | null;
+  /** True for the daemon on this computer, whose loopback a Hub here is reachable on. */
+  isLocalHost: boolean;
   /** Null when this daemon cannot report a local Hub install. */
   localInstalled: boolean | null;
   localRunning: boolean;
   localOrigin: string | null;
+}
+
+export interface ResolveAutomationsViewOptions {
+  /**
+   * Whether a loopback Hub origin on another host resolves from here. A browser
+   * served by that host rewrites it to the page hostname; the desktop app stays
+   * on its own loopback, where another machine's Hub does not exist.
+   */
+  loopbackOriginOnRemoteHostIsReachable?: boolean;
 }
 
 export type AutomationsView =
@@ -32,16 +43,27 @@ export type AutomationsView =
  * Decides what the Automations page shows from each daemon's Hub relationship.
  *
  * A connected origin opens inside the app. Several origins ask which one.
+ * A connected Hub this computer cannot reach — a loopback origin on another
+ * machine — is not opened: that frame would load this computer's own loopback
+ * and stay blank, so the page falls through to the local Hub choice instead.
  * The first time, with no connection yet, the page asks whether to connect a Hub
  * that already exists or to install one. A stopped local install is reached from
  * that choice. Otherwise the page says that no daemon is online.
  *
  * @param hosts - One snapshot per known daemon
+ * @param options - Whether a remote loopback origin is reachable from here
  * @returns The page state
  */
-export function resolveAutomationsView(hosts: readonly AutomationsHostSnapshot[]): AutomationsView {
+export function resolveAutomationsView(
+  hosts: readonly AutomationsHostSnapshot[],
+  options: ResolveAutomationsViewOptions = {},
+): AutomationsView {
+  const loopbackOnRemoteHostIsReachable = options.loopbackOriginOnRemoteHostIsReachable ?? false;
   const connected = hosts.filter(
-    (host) => host.relationship === "connected" && host.hubOrigin !== null,
+    (host) =>
+      host.relationship === "connected" &&
+      host.hubOrigin !== null &&
+      isReachableHubOrigin(host, loopbackOnRemoteHostIsReachable),
   );
   const origins = uniqueOrigins(connected);
   if (origins.length === 1) {
@@ -62,20 +84,48 @@ export function resolveAutomationsView(hosts: readonly AutomationsHostSnapshot[]
     return { kind: "loading" };
   }
 
-  const online = hosts.find((host) => host.online);
-  if (online === undefined) {
+  // The local daemon is the one whose Hub this computer can install and start,
+  // so it drives the setup step even while remote hosts are online.
+  const setupHost =
+    hosts.find((host) => host.online && host.isLocalHost) ?? hosts.find((host) => host.online);
+  if (setupHost === undefined) {
     return { kind: "offline" };
   }
 
-  // No relationship yet: ask before installing or opening a Hub that happens to be running.
+  // No reachable relationship yet: ask before installing or opening a Hub that happens to be running.
   return {
     kind: "setup",
-    serverId: online.serverId,
-    label: online.label,
-    canInstall: online.localInstalled !== null,
-    installed: online.localInstalled === true,
-    localOrigin: online.localRunning ? online.localOrigin : null,
+    serverId: setupHost.serverId,
+    label: setupHost.label,
+    canInstall: setupHost.localInstalled !== null,
+    installed: setupHost.localInstalled === true,
+    localOrigin: setupHost.localRunning ? setupHost.localOrigin : null,
   };
+}
+
+/**
+ * A loopback Hub belongs to the machine that runs it. Only the local daemon can
+ * reach it from the desktop app; a browser served by the other machine can too.
+ *
+ * @param host - Daemon with a connected Hub
+ * @param loopbackOnRemoteHostIsReachable - Whether a browser rewrites the origin
+ * @returns Whether this page can open that origin
+ */
+function isReachableHubOrigin(
+  host: AutomationsHostSnapshot,
+  loopbackOnRemoteHostIsReachable: boolean,
+): boolean {
+  if (host.hubOrigin === null) return false;
+  if (host.isLocalHost || loopbackOnRemoteHostIsReachable) return true;
+  return !isLoopbackOrigin(host.hubOrigin);
+}
+
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    return isLoopbackHostname(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
 }
 
 function uniqueOrigins(hosts: readonly AutomationsHostSnapshot[]): string[] {

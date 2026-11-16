@@ -1539,6 +1539,8 @@ export const ptBR: TranslationResources = {
         "Conecte um Hub que já existe, neste computador ou em outro lugar, ou instale um aqui.",
       connectExisting: "Conectar um Hub existente",
       installChoice: "Instalar Hub",
+      installLocal: "Instalar Hub local",
+      startLocal: "Iniciar Hub local",
       originLabel: "Endereço do Hub",
       originHelp: "Use o endereço de um Hub que já está em execução, local ou remoto.",
       originPlaceholder: "https://hub.example.com",
