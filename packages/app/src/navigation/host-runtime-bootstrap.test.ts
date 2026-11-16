@@ -469,7 +469,7 @@ describe("host runtime web visibility", () => {
     expect(listeners.size).toBe(0);
   });
 
-  it("ignores visibility changes while the document is hidden", () => {
+  it("reports the hide so foreground recovery can measure the time away", () => {
     const visibility: boolean[] = [];
     const { listeners, targets } = createTargets("hidden");
     const dispose = bindHostRuntimeWebVisibility(
@@ -477,9 +477,10 @@ describe("host runtime web visibility", () => {
       targets,
     );
 
-    expect(visibility).toEqual([]);
+    expect(visibility).toEqual([false]);
+    targets.document.visibilityState = "visible";
     listeners.get("visibilitychange")?.();
-    expect(visibility).toEqual([]);
+    expect(visibility).toEqual([false, true]);
     dispose();
   });
 });

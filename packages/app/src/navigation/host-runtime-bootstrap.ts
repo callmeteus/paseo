@@ -299,8 +299,15 @@ export function bindHostRuntimeWebVisibility(
 
   const { document: doc, window: win } = targets;
   const notifyVisible = () => store.setAppVisible(true);
+  // Record the hide too. React Native's AppState is unreliable for
+  // `visibilitychange` on web, and foreground recovery needs the time away to
+  // decide whether a socket that still claims to be open is worth verifying.
+  const notifyHidden = () => store.setAppVisible(false);
   const handleVisibilityChange = () => {
-    if (doc.visibilityState === "hidden") return;
+    if (doc.visibilityState === "hidden") {
+      notifyHidden();
+      return;
+    }
     notifyVisible();
   };
 
@@ -308,7 +315,8 @@ export function bindHostRuntimeWebVisibility(
   win.addEventListener("focus", notifyVisible);
   win.addEventListener("pageshow", notifyVisible);
   win.addEventListener("online", notifyVisible);
-  if (doc.visibilityState !== "hidden") notifyVisible();
+  if (doc.visibilityState === "hidden") notifyHidden();
+  else notifyVisible();
 
   return () => {
     doc.removeEventListener("visibilitychange", handleVisibilityChange);
