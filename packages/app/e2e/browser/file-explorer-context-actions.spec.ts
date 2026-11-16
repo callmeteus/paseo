@@ -442,6 +442,7 @@ test("hides unsupported file operations and revert actions", async ({ page }) =>
   await expect(page.getByTestId("diff-file-0")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("diff-file-0-toggle").click({ button: "right" });
   await expect(page.getByTestId("diff-file-0-duplicate")).toHaveCount(0);
+  await expect(page.getByTestId("diff-file-0-delete")).toHaveCount(0);
   await expect(page.getByTestId("diff-file-0-revert")).toHaveCount(0);
 });
 

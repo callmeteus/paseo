@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { type Locator, type Page } from "@playwright/test";
 import { buildHostWorkspaceRoute, buildSettingsSectionRoute } from "../../src/utils/host-routes";
@@ -52,6 +52,18 @@ async function readFileIfPresent(filePath: string): Promise<string | null> {
   }
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function failNextDiscardRequest(page: Page): Promise<void> {
   await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
     const serverSocket = browserSocket.connectToServer();
@@ -70,6 +82,39 @@ async function failNextDiscardRequest(page: Page): Promise<void> {
                   cwd: envelope.message.cwd,
                   success: false,
                   error: { code: "UNKNOWN", message: "Injected revert failure" },
+                  requestId: envelope.message.requestId,
+                },
+              },
+            }),
+          );
+          return;
+        }
+      }
+      serverSocket.send(message);
+    });
+    serverSocket.onMessage((message) => browserSocket.send(message));
+  });
+}
+
+async function failNextDeleteRequest(page: Page): Promise<void> {
+  await page.routeWebSocket(daemonWsRoutePattern(), (browserSocket) => {
+    const serverSocket = browserSocket.connectToServer();
+    browserSocket.onMessage((message) => {
+      if (typeof message === "string") {
+        const envelope = JSON.parse(message) as {
+          message?: { type?: string; cwd?: string; path?: string; requestId?: string };
+        };
+        if (envelope.message?.type === "fs.entry.delete.request") {
+          browserSocket.send(
+            JSON.stringify({
+              type: "session",
+              message: {
+                type: "fs.entry.delete.response",
+                payload: {
+                  cwd: envelope.message.cwd,
+                  path: envelope.message.path,
+                  success: false,
+                  error: "Injected delete failure",
                   requestId: envelope.message.requestId,
                 },
               },
@@ -591,6 +636,118 @@ test("changes context menus duplicate files and folders", async ({ page }) => {
   await expect
     .poll(() => readFileIfPresent(path.join(workspace.repoPath, "src copy/use-mounted-tab-set.ts")))
     .toBe(AFTER);
+});
+
+test("changes context menus delete files and folders on the host", async ({ page }) => {
+  test.setTimeout(120_000);
+  const workspace = await createWorkspaceWithMountedTabDiff({
+    includeDeletedFile: true,
+    includeUntrackedFile: true,
+  });
+  await useUnwrappedDiffLines(page);
+  await openWorkspaceChanges(page, workspace);
+
+  const tree = changesTree(page);
+  const panel = page.getByTestId("working-diff-panel").filter({ visible: true });
+  await expect(tree.getByTestId("diff-tree-file-1-name")).toHaveText("zz-deleted.ts");
+  await expect(tree.getByTestId("diff-tree-file-2-name")).toHaveText("zz-untracked.txt");
+
+  await tree.getByTestId("diff-tree-file-1-toggle").click({ button: "right" });
+  await expect(page.getByTestId("diff-tree-file-1-delete")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const untrackedHeader = diffHeaderForPath(panel, "zz-untracked.txt");
+  const untrackedToggle = untrackedHeader.getByTestId(/^diff-file-\d+-toggle$/);
+  const toggleTestId = await untrackedToggle.getAttribute("data-testid");
+  expect(toggleTestId).not.toBeNull();
+  const rowTestId = toggleTestId!.slice(0, -"-toggle".length);
+  await untrackedToggle.click({ button: "right" });
+  const cancelledConfirmation = new Promise<string>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      const message = dialog.message();
+      await dialog.dismiss();
+      resolve(message);
+    });
+  });
+  await page.getByTestId(`${rowTestId}-delete`).click();
+  expect(await cancelledConfirmation).toBe(
+    'Delete file?\n\n"zz-untracked.txt" will be permanently deleted.',
+  );
+  await expect
+    .poll(() => readFileIfPresent(path.join(workspace.repoPath, "zz-untracked.txt")))
+    .toBe("remove me\n");
+
+  await untrackedToggle.click({ button: "right" });
+  const confirmation = new Promise<string>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      resolve(message);
+    });
+  });
+  await page.getByTestId(`${rowTestId}-delete`).click();
+  expect(await confirmation).toBe(
+    'Delete file?\n\n"zz-untracked.txt" will be permanently deleted.',
+  );
+  await expect(tree.getByText("zz-untracked.txt", { exact: true })).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await expect
+    .poll(() => readFileIfPresent(path.join(workspace.repoPath, "zz-untracked.txt")))
+    .toBeNull();
+
+  await tree.getByTestId("diff-folder-src-toggle").click({ button: "right" });
+  const folderDelete = page.getByTestId("diff-folder-src-delete");
+  await expect(folderDelete).toBeVisible();
+  const deleteLabelColor = await folderDelete
+    .getByText("Delete", { exact: true })
+    .evaluate((element) => getComputedStyle(element).color);
+  await expect(folderDelete.locator("svg")).toHaveCSS("stroke", deleteLabelColor);
+  const folderConfirmation = new Promise<string>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      resolve(message);
+    });
+  });
+  await folderDelete.click();
+  expect(await folderConfirmation).toBe('Delete folder?\n\n"src" will be permanently deleted.');
+  await expect
+    .poll(() => readFileIfPresent(path.join(workspace.repoPath, "src/use-mounted-tab-set.ts")))
+    .toBeNull();
+  await expect.poll(() => pathExists(path.join(workspace.repoPath, "src"))).toBe(false);
+  await expect(
+    tree.getByTestId("diff-tree-file-0").getByRole("img", { name: "Deleted" }),
+  ).toBeVisible({ timeout: 30_000 });
+  await tree.getByTestId("diff-tree-file-0-toggle").click({ button: "right" });
+  await expect(page.getByTestId("diff-tree-file-0-delete")).toHaveCount(0);
+});
+
+test("shows a delete error returned by the daemon", async ({ page }) => {
+  const workspace = await createWorkspaceWithMountedTabDiff({ includeUntrackedFile: true });
+  await failNextDeleteRequest(page);
+  await useUnwrappedDiffLines(page);
+  await openWorkspaceChanges(page, workspace);
+
+  const tree = changesTree(page);
+  await expect(tree.getByTestId("diff-tree-file-1-name")).toHaveText("zz-untracked.txt");
+  await tree.getByTestId("diff-tree-file-1-toggle").click({ button: "right" });
+  const confirmation = new Promise<void>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      await dialog.accept();
+      resolve();
+    });
+  });
+  await page.getByTestId("diff-tree-file-1-delete").click();
+  await confirmation;
+
+  await expect(page.getByText("Injected delete failure", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(tree.getByText("zz-untracked.txt", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => readFileIfPresent(path.join(workspace.repoPath, "zz-untracked.txt")))
+    .toBe("remove me\n");
 });
 
 test("changes tree aligns every file status after its diff stat", async ({ page }) => {
