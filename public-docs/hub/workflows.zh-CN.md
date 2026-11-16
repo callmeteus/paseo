@@ -242,6 +242,6 @@ allow_outputs:
 
 ## 时限 {#deadlines}
 
-workflow 的 `max_runtime` 限制整次运行。每个 step 都有自己的 `max_runtime` 和 `idle_timeout`；workflow 的剩余时间同时为两者封顶。超时会让运行失败，并停止之后的 step。
+workflow 的 `max_runtime` 限制整次运行。每个 step 都有自己的 `max_runtime` 和 `idle_timeout`；workflow 的剩余时间同时为两者封顶。硬超时会让运行失败，并停止之后的 step。空闲超时也一样，除非 agent 已经给出回答并且回合已经结束；这时该 step 记为完成。
 
 [配置参考](/docs/hub/configuration/hub-yml)列出了所有字段。Provider 过滤器和调用文本见[触发器](/docs/hub/triggers)。

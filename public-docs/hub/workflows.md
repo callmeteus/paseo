@@ -244,6 +244,6 @@ allow_outputs:
 
 ## Deadlines
 
-The workflow `max_runtime` limits the complete run. Every step has its own `max_runtime` and `idle_timeout`; remaining workflow time caps both. A timeout fails the run and stops later steps.
+The workflow `max_runtime` limits the complete run. Every step has its own `max_runtime` and `idle_timeout`; remaining workflow time caps both. A hard timeout fails the run and stops later steps. An idle timeout does too, unless the agent already answered and the turn finished; that step completes.
 
 The [configuration reference](/docs/hub/configuration/hub-yml) lists every field. Provider filters and invocation text are in [Triggers](/docs/hub/triggers).
