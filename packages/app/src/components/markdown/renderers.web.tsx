@@ -11,6 +11,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import type { Theme } from "@/styles/theme";
 import { MermaidFence } from "./fence/mermaid";
+import { localFileLinkHref } from "./file-link-href";
 import { markdownLinkSource } from "./source";
 
 const ThemedCodeBlock = withUnistyles(HighlightedCodeBlock);
@@ -35,6 +36,9 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
   const [hovered, setHovered] = useState(false);
   const handleMouseEnter = useCallback(() => setHovered(true), []);
   const handleMouseLeave = useCallback(() => setHovered(false), []);
+  const preventFileLinkNavigation = useCallback((event: { preventDefault: () => void }) => {
+    event.preventDefault();
+  }, []);
   const anchorStyle = useMemo(
     () => ({
       ...anchorProps.style,
@@ -43,12 +47,18 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
     }),
     [anchorProps.style, hovered],
   );
+  const href = typeof anchorProps.href === "string" ? anchorProps.href : "";
+  const fileHref = localFileLinkHref(href);
   const anchor = (
     <a
       {...anchorProps}
+      href={fileHref ?? anchorProps.href}
+      // A file address must not open a blank window. Click still goes through onLinkPress.
+      target={fileHref ? undefined : anchorProps.target}
       style={anchorStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onAuxClick={fileHref ? preventFileLinkNavigation : undefined}
     >
       {children}
     </a>
