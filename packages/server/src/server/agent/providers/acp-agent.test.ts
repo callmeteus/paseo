@@ -3830,6 +3830,89 @@ describe("ACPAgentSession", () => {
     expect(asInternals<ACPSessionInternals>(session).activeForegroundTurnId).toBeNull();
   });
 
+  test("completes a turn when a generate credits notice arrives after the reply", async () => {
+    const session = createSession();
+    const events: AgentStreamEvent[] = [];
+    let rejectPrompt!: (error: unknown) => void;
+    const prompt = vi.fn(
+      () =>
+        new Promise((_, reject) => {
+          rejectPrompt = reject;
+        }),
+    );
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    asInternals<ACPSessionInternals>(session).connection = { prompt };
+    session.subscribe((event) => events.push(event));
+
+    const { turnId } = await session.startTurn("hello");
+    await session.sessionUpdate({
+      sessionId: "session-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "assistant-1",
+        content: { type: "text", text: "Feito." },
+      } as SessionUpdate,
+    });
+    rejectPrompt(
+      new RequestError(
+        -32603,
+        "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+        { status: 400 },
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events.find((event) => event.type === "turn_failed")).toBeUndefined();
+    expect(events.find((event) => event.type === "turn_completed")).toMatchObject({
+      type: "turn_completed",
+      turnId,
+    });
+    expect(
+      events.flatMap((event) =>
+        event.type === "timeline" && event.item.type === "assistant_message"
+          ? [event.item.text]
+          : [],
+      ),
+    ).toEqual(["Feito."]);
+  });
+
+  test("still fails a turn when the generate credits notice is the only result", async () => {
+    const session = createSession();
+    const events: AgentStreamEvent[] = [];
+    let rejectPrompt!: (error: unknown) => void;
+    const prompt = vi.fn(
+      () =>
+        new Promise((_, reject) => {
+          rejectPrompt = reject;
+        }),
+    );
+
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    asInternals<ACPSessionInternals>(session).connection = { prompt };
+    session.subscribe((event) => events.push(event));
+
+    const { turnId } = await session.startTurn("hello");
+    rejectPrompt(
+      new RequestError(
+        -32603,
+        "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+        { status: 400 },
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events.find((event) => event.type === "turn_completed")).toBeUndefined();
+    expect(events.find((event) => event.type === "turn_failed")).toMatchObject({
+      type: "turn_failed",
+      turnId,
+      error:
+        "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+    });
+  });
+
   test("retries a Cursor prompt rejected for temporary provider load", async () => {
     vi.useFakeTimers();
     try {

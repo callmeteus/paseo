@@ -7,6 +7,11 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
+import {
+  isBackgroundProviderNotice,
+  stripBackgroundProviderNotice,
+} from "@getpaseo/protocol/provider-error";
+
 import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
 import type { ProcessTerminator } from "../../../utils/tree-kill.js";
 import type {
@@ -2016,6 +2021,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private currentTurnUsage: AgentUsage | undefined;
   private readonly providerId: string;
   private activeForegroundTurnId: string | null = null;
+  private turnHasVisibleOutput = false;
   private turnCancelRequested = false;
   private retriableAssistantFailure: string | null = null;
   private wakePromptRetryWait: (() => void) | null = null;
@@ -2275,6 +2281,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const turnId = randomUUID();
     const messageId = options?.clientMessageId ?? randomUUID();
     this.activeForegroundTurnId = turnId;
+    this.turnHasVisibleOutput = false;
     this.turnCancelRequested = false;
     this.turnIdleLimitMs = resolveTurnIdleLimitMs(this.providerId, options);
     this.fallbackAssistantMessageId = null;
@@ -2413,6 +2420,22 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       } catch (error) {
         if (this.activeForegroundTurnId !== input.turnId) return;
         const summary = summarizeACPRequestError(error);
+        // The reply already streamed. A later rejection that is only the harness
+        // reporting a side request (taste learning, POST /alpha/generate credits)
+        // must not be written into that reply as a turn failure.
+        if (this.turnHasVisibleOutput && isBackgroundProviderNotice(summary.message)) {
+          this.logger.debug(
+            { message: summary.message, code: summary.code },
+            "Ignored background provider notice after the turn answered",
+          );
+          this.finishTurn({
+            type: "turn_completed",
+            provider: this.provider,
+            usage: this.currentTurnUsage,
+            turnId: input.turnId,
+          });
+          return;
+        }
         if (this.tryStripImagesForUnsupportedError(summary.message, input)) {
           continue;
         }
@@ -3777,7 +3800,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       return null;
     }
     if (type === "assistant_message") {
-      const text = this.assistantTextTransform ? this.assistantTextTransform(chunkText) : chunkText;
+      const transformed = this.assistantTextTransform
+        ? this.assistantTextTransform(chunkText)
+        : chunkText;
+      const text = transformed === null ? null : stripBackgroundProviderNotice(transformed);
       if (text === null || text.length === 0) {
         return null;
       }
@@ -3941,6 +3967,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private pushEvent(event: AgentStreamEvent): void {
+    this.noteVisibleTurnOutput(event);
     this.logger.trace(
       {
         agentId: this.agentId,
@@ -3978,6 +4005,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         ...(clientMessageId ? { clientMessageId } : {}),
       },
     });
+  }
+
+  private noteVisibleTurnOutput(event: AgentStreamEvent): void {
+    if (this.replayingHistory || this.activeForegroundTurnId === null) return;
+    if (event.type !== "timeline") return;
+    const { item } = event;
+    if (
+      item.type === "assistant_message" ||
+      item.type === "reasoning" ||
+      item.type === "tool_call"
+    ) {
+      this.turnHasVisibleOutput = true;
+    }
   }
 
   private runtimeInfo(): AgentRuntimeInfo {

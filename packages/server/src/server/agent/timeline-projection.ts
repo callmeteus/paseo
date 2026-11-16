@@ -1,4 +1,5 @@
 import type { AgentTimelineItem, ToolCallDetail } from "./agent-sdk-types.js";
+import { isBackgroundProviderNotice, isSystemErrorText } from "@getpaseo/protocol/provider-error";
 import { timelineItemIdentity } from "@getpaseo/protocol/timeline-identity";
 
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
@@ -262,8 +263,10 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
     >;
     const entryAssistant = entry.item as Extract<AgentTimelineItem, { type: "assistant_message" }>;
     if (
-      entryAssistant.messageId !== undefined &&
-      previousAssistant.messageId !== entryAssistant.messageId
+      isSystemErrorText(previousAssistant.text) ||
+      isSystemErrorText(entryAssistant.text) ||
+      (entryAssistant.messageId !== undefined &&
+        previousAssistant.messageId !== entryAssistant.messageId)
     ) {
       output.push(entry);
       continue;
@@ -311,9 +314,9 @@ export class TimelineProjection {
       return;
     }
     const previous = this.rows.at(-1);
-    const adjacent = previous
-      ? mergeReasoningChunks(mergeAssistantChunks([previous, entry]))
-      : [entry];
+    const adjacent = omitAnsweredBackgroundNotices(
+      previous ? mergeReasoningChunks(mergeAssistantChunks([previous, entry])) : [entry],
+    );
     if (previous && adjacent.length === 1) {
       const mergedText = adjacent[0];
       this.rows[this.rows.length - 1] = { ...mergedText, seq: mergedText.seqEnd };
@@ -349,9 +352,40 @@ export function projectTimelineRows(input: {
     return canonical;
   }
 
-  const toolCollapsed = collapseByIdentity(canonical);
-  const assistantMerged = mergeAssistantChunks(toolCollapsed);
-  return mergeReasoningChunks(assistantMerged);
+  return projectCanonicalEntries(canonical);
+}
+
+function projectCanonicalEntries(canonical: WorkingEntry[]): WorkingEntry[] {
+  return omitAnsweredBackgroundNotices(
+    mergeReasoningChunks(mergeAssistantChunks(collapseByIdentity(canonical))),
+  );
+}
+
+function isVisibleProjectedAnswer(entry: WorkingEntry): boolean {
+  const { item } = entry;
+  if (item.type === "reasoning" || item.type === "tool_call") return true;
+  return item.type === "assistant_message" && !isSystemErrorText(item.text);
+}
+
+function isDroppableBackgroundNotice(entry: WorkingEntry): boolean {
+  return (
+    entry.item.type === "assistant_message" &&
+    isSystemErrorText(entry.item.text) &&
+    isBackgroundProviderNotice(entry.item.text)
+  );
+}
+
+/** A side-request failure recorded after the reply is not part of that reply. */
+function omitAnsweredBackgroundNotices(entries: readonly WorkingEntry[]): WorkingEntry[] {
+  let answered = false;
+  const output: WorkingEntry[] = [];
+  for (const entry of entries) {
+    if (entry.item.type === "user_message") answered = false;
+    if (isDroppableBackgroundNotice(entry) && answered) continue;
+    if (isVisibleProjectedAnswer(entry)) answered = true;
+    output.push(entry);
+  }
+  return output;
 }
 
 /**
@@ -367,7 +401,7 @@ export function selectTimelineWindowByProjectedLimit(input: {
   const { rows, direction } = input;
   const limit = Math.max(0, Math.floor(input.limit));
   const canonical = makeCanonicalEntries(rows);
-  const projectedAll = mergeReasoningChunks(mergeAssistantChunks(collapseByIdentity(canonical)));
+  const projectedAll = projectCanonicalEntries(canonical);
 
   if (projectedAll.length === 0) {
     return {

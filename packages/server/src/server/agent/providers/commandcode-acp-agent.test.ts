@@ -24,4 +24,17 @@ describe("Command Code ACP notices", () => {
       suppressCommandCodeBackgroundNotice("  taste learning failed: network error  "),
     ).toBeNull();
   });
+
+  it("drops an unprefixed generate credits failure and keeps the answer ahead of it", () => {
+    expect(
+      suppressCommandCodeBackgroundNotice(
+        "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+      ),
+    ).toBeNull();
+    expect(
+      suppressCommandCodeBackgroundNotice(
+        "O .commandcode/ continua fora do commit.\n\nPOST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.\n\ncode: -32603",
+      ),
+    ).toBe("O .commandcode/ continua fora do commit.");
+  });
 });

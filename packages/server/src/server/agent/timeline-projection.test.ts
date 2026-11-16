@@ -64,6 +64,47 @@ describe("projectTimelineRows", () => {
     });
   });
 
+  test("drops a background generate notice that follows an answer and keeps a real failure", () => {
+    const notice = [
+      "[System Error] POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+      "",
+      "code: -32603",
+    ].join("\n");
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-02-13T00:00:00.000Z",
+        turnId: "turn-1",
+        item: { type: "assistant_message", text: "Feito.", messageId: "msg-1" },
+      },
+      {
+        seq: 2,
+        timestamp: "2026-02-13T00:00:00.100Z",
+        item: { type: "assistant_message", text: notice },
+      },
+      {
+        seq: 3,
+        timestamp: "2026-02-13T00:00:00.200Z",
+        turnId: "turn-2",
+        item: { type: "assistant_message", text: "Feito.", messageId: "msg-2" },
+      },
+      {
+        seq: 4,
+        timestamp: "2026-02-13T00:00:00.300Z",
+        turnId: "turn-2",
+        item: { type: "assistant_message", text: "[System Error] Provider failed" },
+      },
+    ];
+
+    const projected = projectTimelineRows({ rows, mode: "projected" });
+
+    expect(projected.map((entry) => entry.item)).toEqual([
+      { type: "assistant_message", text: "Feito.", messageId: "msg-1" },
+      { type: "assistant_message", text: "Feito.", messageId: "msg-2" },
+      { type: "assistant_message", text: "[System Error] Provider failed" },
+    ]);
+  });
+
   test("keeps adjacent assistant chunks with different message ids separate in projected mode", () => {
     const rows: AgentTimelineRow[] = [
       {

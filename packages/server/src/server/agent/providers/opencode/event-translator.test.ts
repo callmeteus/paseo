@@ -1557,6 +1557,59 @@ describe("translateOpenCodeEvent", () => {
       },
     ]);
   });
+
+  it("completes a turn when a generate credits notice arrives after assistant text", () => {
+    const state = createState();
+    state.materializedParts.set("part-1", {
+      messageId: "message-1",
+      emittedText: "Feito.",
+      closed: true,
+    });
+
+    const events = translateOpenCodeEvent(
+      {
+        type: "session.error",
+        properties: {
+          sessionID: "session-1",
+          error: {
+            name: "APIError",
+            data: {
+              message:
+                "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+            },
+          },
+        },
+      },
+      state,
+    );
+
+    expect(events).toEqual([{ type: "turn_completed", provider: "opencode", usage: undefined }]);
+  });
+
+  it("still fails a turn when the generate credits notice is the only result", () => {
+    const state = createState();
+    const message =
+      "POST /alpha/generate → 400 error: You have insufficient credits to make this request. Please purchase more credits to continue using the service.";
+
+    const events = translateOpenCodeEvent(
+      {
+        type: "session.error",
+        properties: {
+          sessionID: "session-1",
+          error: { name: "APIError", data: { message } },
+        },
+      },
+      state,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "turn_failed",
+        provider: "opencode",
+        error: JSON.stringify({ name: "APIError", data: { message } }),
+      },
+    ]);
+  });
 });
 
 describe("OpenCode v2 history reconciliation", () => {

@@ -1,3 +1,8 @@
+import {
+  isBackgroundProviderNotice,
+  stripBackgroundProviderNotice,
+} from "@getpaseo/protocol/provider-error";
+
 import { validateProviderOptions } from "../provider-options.js";
 import {
   createOpencodeClient,
@@ -2915,11 +2920,12 @@ function appendOpenCodeTextPart(
     emittedText: part.text,
     closed: true,
   });
-  if (suffix) {
+  const visible = stripBackgroundProviderNotice(suffix);
+  if (visible) {
     events.push({
       type: "timeline",
       provider: "opencode",
-      item: { type: "assistant_message", text: suffix, messageId: part.messageID },
+      item: { type: "assistant_message", text: visible, messageId: part.messageID },
     });
   }
 }
@@ -3005,12 +3011,14 @@ function appendOpenCodeMessagePartDelta(
     return;
   }
   if (!appendOpenCodeMaterializedDelta(state, partID, assistantMessageId, delta)) return;
+  const visible = stripBackgroundProviderNotice(delta);
+  if (!visible) return;
   events.push({
     type: "timeline",
     provider: "opencode",
     item: {
       type: "assistant_message",
-      text: delta,
+      text: visible,
       messageId: assistantMessageId,
     },
   });
@@ -3133,8 +3141,12 @@ function appendOpenCodeSessionError(
   if (event.properties.sessionID !== state.sessionId) {
     return;
   }
-  resetOpenCodeTurnTrackingState(state);
   const error = event.properties.error;
+  const message = toDiagnosticErrorMessage(error);
+  // Checked before reset: reset drops the part map that says the turn already answered.
+  const backgroundAfterAnswer =
+    isBackgroundProviderNotice(message) && openCodeTurnHasVisibleOutput(state);
+  resetOpenCodeTurnTrackingState(state);
   if (
     typeof error === "object" &&
     error !== null &&
@@ -3146,13 +3158,27 @@ function appendOpenCodeSessionError(
       provider: "opencode",
       reason: "interrupted",
     });
+  } else if (backgroundAfterAnswer) {
+    events.push({ type: "turn_completed", provider: "opencode", usage: undefined });
   } else {
     events.push({
       type: "turn_failed",
       provider: "opencode",
-      error: toDiagnosticErrorMessage(error),
+      error: message,
     });
   }
+}
+
+function openCodeTurnHasVisibleOutput(state: OpenCodeEventTranslationState): boolean {
+  for (const part of state.materializedParts.values()) {
+    const visible = stripBackgroundProviderNotice(part.emittedText);
+    if (visible && visible.trim().length > 0) return true;
+  }
+  if (state.emittedStructuredMessageIds.size > 0) return true;
+  for (const partType of state.partTypes.values()) {
+    if (partType === "tool") return true;
+  }
+  return false;
 }
 
 function appendOpenCodeSessionStatus(

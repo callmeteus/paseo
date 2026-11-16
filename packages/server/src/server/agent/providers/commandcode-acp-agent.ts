@@ -1,17 +1,17 @@
+import { stripBackgroundProviderNotice } from "@getpaseo/protocol/provider-error";
 import type { Logger } from "pino";
 
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 // Command Code forwards background harness warnings to ACP clients as assistant text.
-// Taste learning is a background feature, so its failure is not the model's answer: it
-// lands as a second, raw error line right after the turn's own provider error.
-const COMMANDCODE_TASTE_NOTICE = /^taste learning failed:/i;
-
+// Taste learning calls POST /alpha/generate on its own. A credits failure there is not
+// the model's answer: it arrives as a trailing chunk, or as the prompt RPC rejecting
+// after the turn already streamed its reply.
 export function suppressCommandCodeBackgroundNotice(text: string, logger?: Logger): string | null {
-  const trimmed = text.trim();
-  if (!COMMANDCODE_TASTE_NOTICE.test(trimmed)) return text;
-  logger?.debug({ notice: trimmed }, "Suppressed Command Code background notice");
-  return null;
+  const stripped = stripBackgroundProviderNotice(text);
+  if (stripped === text) return text;
+  logger?.debug({ notice: text.trim() }, "Suppressed Command Code background notice");
+  return stripped;
 }
 
 interface CommandCodeACPAgentClientOptions {
