@@ -67,6 +67,11 @@ describe("built-in file panels", () => {
     expect(candidateIds({ path: "archive.zip", kind: "binary" })).toEqual([]);
   });
 
+  it("opens PDF files with the PDF panel", () => {
+    expect(panelId({ path: "Roteiro_Malmo.pdf", kind: "binary" })).toBe("builtin:pdf");
+    expect(panelId({ path: "docs/ROTEIRO.PDF", kind: "binary" })).toBe("builtin:pdf");
+  });
+
   it("opens delimited text and workbooks with their own panel", () => {
     expect(candidateIds(textFile("report.csv"))).toEqual(["builtin:table"]);
     expect(panelId(textFile("report.tsv"))).toBe("builtin:table");

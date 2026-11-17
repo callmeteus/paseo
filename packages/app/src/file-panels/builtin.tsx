@@ -10,6 +10,7 @@ import { FileHtmlPreview } from "./html-preview";
 import { FilePanelLoading } from "./loading";
 import { FileMarkdownPreview } from "./markdown-preview";
 import { TextFilePanel, type TextFilePreviewProps } from "./source/panel";
+import { DocumentFrame } from "./document-frame";
 import { DelimitedTextPreview } from "./table/delimited-preview";
 import { WorkbookPreviewPanel } from "./table/workbook-panel";
 import type { RenderingFilePanel, SourceFilePanel } from "./catalog";
@@ -37,6 +38,14 @@ function TablePanel(props: PluginFilePanelProps) {
 /** XLSX/XLS: the workbook's sheets as a grid. Binary, so there is no Source beside it. */
 function SpreadsheetPanel({ file }: PluginFilePanelProps) {
   return <WorkbookPreviewPanel file={file} />;
+}
+
+/** PDF: the file's local URL rendered by the platform's document viewer. */
+function PdfPanel({ file }: PluginFilePanelProps) {
+  const url = useFileUrl(file);
+  if (url.status === "loading") return <FilePanelLoading />;
+  if (url.status === "error") return <FilePanelError message={url.error.message} />;
+  return <DocumentFrame url={url.url} testID="pdf-file-preview" />;
 }
 
 /** Shows Loading until the rendered Markdown has laid out once; later edits keep the content. */
@@ -101,6 +110,7 @@ const components = {
   "builtin:image": ImagePanel,
   "builtin:table": TablePanel,
   "builtin:spreadsheet": SpreadsheetPanel,
+  "builtin:pdf": PdfPanel,
   "builtin:source": SourcePanel,
 };
 

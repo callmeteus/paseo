@@ -9,6 +9,7 @@ const BUILTIN_PRESENTATION = {
   "builtin:image": { title: "image", icon: "Image" },
   "builtin:table": { title: "table", icon: "Table2" },
   "builtin:spreadsheet": { title: "spreadsheet", icon: "FileSpreadsheet" },
+  "builtin:pdf": { title: "pdf", icon: "FileText" },
   "builtin:source": { title: "source", icon: "Code" },
 } as const;
 

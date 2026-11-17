@@ -31,6 +31,12 @@ const renderingPanels = [
     files: { extensions: ["xlsx", "xlsm", "xls", "ods"] },
     fileKind: "binary",
   },
+  {
+    id: "builtin:pdf",
+    builtin: true,
+    files: { extensions: ["pdf"] },
+    fileKind: "binary",
+  },
 ] as const satisfies readonly FilePanelCandidate[];
 
 /**
