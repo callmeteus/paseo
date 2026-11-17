@@ -256,6 +256,7 @@ export class CheckoutSession {
           repoRoot: null,
           currentBranch: null,
           isDirty: null,
+          changedFileCount: null,
           baseRef: null,
           aheadBehind: null,
           aheadOfOrigin: null,

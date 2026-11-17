@@ -6165,6 +6165,7 @@ const CheckoutStatusNotGitSchema = CheckoutStatusCommonSchema.extend({
   behindOfOrigin: z.null(),
   hasRemote: z.boolean(),
   remoteUrl: z.null(),
+  changedFileCount: z.null().optional().default(null),
 });
 
 const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
@@ -6174,6 +6175,9 @@ const CheckoutStatusGitNonPaseoSchema = CheckoutStatusCommonSchema.extend({
   mainRepoRoot: z.string().nullable().optional().default(null),
   currentBranch: z.string().nullable(),
   isDirty: z.boolean(),
+  // Number of uncommitted files, for the Commit button's count badge. Optional so an
+  // older daemon that only sends isDirty stays parseable; it simply has no badge.
+  changedFileCount: z.number().nullable().optional().default(null),
   baseRef: z.string().nullable(),
   aheadBehind: AheadBehindSchema.nullable(),
   aheadOfOrigin: z.number().nullable(),
@@ -6189,6 +6193,7 @@ const CheckoutStatusGitPaseoSchema = CheckoutStatusCommonSchema.extend({
   mainRepoRoot: z.string(),
   currentBranch: z.string().nullable(),
   isDirty: z.boolean(),
+  changedFileCount: z.number().nullable().optional().default(null),
   baseRef: z.string(),
   aheadBehind: AheadBehindSchema.nullable(),
   aheadOfOrigin: z.number().nullable(),

@@ -873,6 +873,7 @@ export interface CheckoutStatusGitNonPaseo {
   mainRepoRoot: string | null;
   currentBranch: string | null;
   isDirty: boolean;
+  changedFileCount: number;
   baseRef: string | null;
   aheadBehind: AheadBehind | null;
   // Remote-tracking ref for currentBranch, e.g. "refs/remotes/origin/main". Null when the
@@ -892,6 +893,7 @@ export interface CheckoutStatusGitPaseo {
   mainRepoRoot: string;
   currentBranch: string | null;
   isDirty: boolean;
+  changedFileCount: number;
   baseRef: string;
   aheadBehind: AheadBehind | null;
   upstreamRef: string | null;
@@ -1357,13 +1359,25 @@ function resolveOperationBaseRef(input: {
   return input.storedBaseRef ?? input.requestedBaseRef ?? input.resolvedBaseRef;
 }
 
-async function isWorkingTreeDirty(cwd: string, context?: CheckoutContext): Promise<boolean> {
+interface WorkingTreeChangeState {
+  isDirty: boolean;
+  changedFileCount: number;
+}
+
+async function getWorkingTreeChangeState(
+  cwd: string,
+  context?: CheckoutContext,
+): Promise<WorkingTreeChangeState> {
   const { stdout } = await getRunGitCommand(context)(["status", "--porcelain"], {
     cwd,
     envOverlay: READ_ONLY_GIT_ENV,
     logger: context?.logger,
   });
-  return stdout.trim().length > 0;
+  // `git status --porcelain` emits one line per changed path. Each line has the
+  // two-character XY status at the start; counting the lines gives the number of
+  // pending files without parsing paths (which may contain spaces or newlines).
+  const changedFileCount = stdout.split("\n").filter((line) => line.length > 0).length;
+  return { isDirty: changedFileCount > 0, changedFileCount };
 }
 
 export async function getOriginRemoteUrl(
@@ -2310,7 +2324,7 @@ export async function getCheckoutStatus(
   const currentBranch = facts.currentBranch;
   const remoteUrl = facts.remoteUrl;
   const paseoWorktree = facts.paseoWorktree;
-  const isDirty = await isWorkingTreeDirty(cwd, context);
+  const { isDirty, changedFileCount } = await getWorkingTreeChangeState(cwd, context);
   const hasRemote = remoteUrl !== null;
   const baseRef = facts.resolvedBaseRef;
   const mainRepoRoot = facts.mainRepoRoot;
@@ -2335,6 +2349,7 @@ export async function getCheckoutStatus(
       mainRepoRoot: mainRepoRoot ?? worktreeRoot,
       currentBranch,
       isDirty,
+      changedFileCount,
       baseRef: displayBaseRef ?? baseRef,
       aheadBehind,
       upstreamRef,
@@ -2353,6 +2368,7 @@ export async function getCheckoutStatus(
       mainRepoRoot && resolve(mainRepoRoot) !== resolve(worktreeRoot) ? mainRepoRoot : null,
     currentBranch,
     isDirty,
+    changedFileCount,
     baseRef: displayBaseRef,
     aheadBehind,
     upstreamRef,
@@ -3093,6 +3109,7 @@ export async function getCheckoutRefDerivedState(
 
 export interface CheckoutWorktreeState {
   isDirty: boolean;
+  changedFileCount: number;
   diffStat: CheckoutShortstat | null;
 }
 
@@ -3100,11 +3117,11 @@ export async function getCheckoutWorktreeState(
   cwd: string,
   context: CheckoutContext,
 ): Promise<CheckoutWorktreeState> {
-  const [isDirty, diffStat] = await Promise.all([
-    isWorkingTreeDirty(cwd, context),
+  const [dirtyState, diffStat] = await Promise.all([
+    getWorkingTreeChangeState(cwd, context),
     getCheckoutShortstat(cwd, context, { force: true }),
   ]);
-  return { isDirty, diffStat };
+  return { isDirty: dirtyState.isDirty, changedFileCount: dirtyState.changedFileCount, diffStat };
 }
 
 export function getCachedCheckoutShortstat(cwd: string): CheckoutShortstat | null | undefined {

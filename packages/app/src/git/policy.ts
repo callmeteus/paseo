@@ -32,6 +32,8 @@ export interface GitAction {
   status: ActionStatus;
   unavailableMessage?: string;
   icon?: ReactElement;
+  /** Count shown in a badge on the button (pending files for Commit, commits behind for Pull). */
+  badge?: number;
   /** When true, a menu separator should be rendered before this item. */
   startsGroup: boolean;
   handler: () => void;
@@ -69,6 +71,8 @@ export interface BuildGitActionsInput {
   isPaseoOwnedWorktree: boolean;
   isOnBaseBranch: boolean;
   hasUncommittedChanges: boolean;
+  /** Number of uncommitted files, shown as a badge on the Commit button. */
+  changedFileCount: number;
   baseRefAvailable: boolean;
   baseRefLabel: string;
   aheadCount: number;
@@ -203,6 +207,7 @@ export function buildGitActions(input: BuildGitActionsInput): GitActions {
     disabled: input.runtime.commit.disabled,
     status: input.runtime.commit.status,
     icon: input.runtime.commit.icon,
+    badge: input.changedFileCount > 0 ? input.changedFileCount : undefined,
     startsGroup: false,
     handler: input.runtime.commit.handler,
   });
@@ -216,6 +221,10 @@ export function buildGitActions(input: BuildGitActionsInput): GitActions {
     status: input.runtime.pull.status,
     unavailableMessage: input.runtime.pull.disabled ? undefined : getPullUnavailableMessage(input),
     icon: input.runtime.pull.icon,
+    badge:
+      input.runtime.pull.disabled || (input.behindOfOrigin ?? 0) <= 0
+        ? undefined
+        : input.behindOfOrigin!,
     startsGroup: false,
     handler: input.runtime.pull.handler,
   });

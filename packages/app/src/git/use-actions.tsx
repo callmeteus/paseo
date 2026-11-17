@@ -121,6 +121,7 @@ interface DeriveGitActionsStateArgs {
 
 interface DerivedGitActionsState {
   actionsDisabled: boolean;
+  changedFileCount: number;
   aheadCount: number;
   behindBaseCount: number;
   aheadOfOrigin: number | null;
@@ -174,6 +175,7 @@ function deriveGitActionsState(args: DeriveGitActionsStateArgs): DerivedGitActio
   const isMergedPullRequest = Boolean(prStatus?.isMerged);
   return {
     actionsDisabled,
+    changedFileCount: gitStatus?.changedFileCount ?? 0,
     ...extractGitCommitCounts(gitStatus),
     hasPullRequest: Boolean(prStatus?.url),
     hasRemote: gitStatus?.hasRemote ?? false,
@@ -657,6 +659,7 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
   });
   const {
     actionsDisabled,
+    changedFileCount,
     aheadCount,
     behindBaseCount,
     aheadOfOrigin,
@@ -696,6 +699,7 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
       isPaseoOwnedWorktree,
       isOnBaseBranch,
       hasUncommittedChanges,
+      changedFileCount,
       baseRefAvailable: Boolean(baseRef),
       baseRefLabel,
       aheadCount,
@@ -816,6 +820,7 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
     forge,
     githubAutoMergeActionsEnabled,
     hasUncommittedChanges,
+    changedFileCount,
     aheadOfOrigin,
     behindOfOrigin,
     shipDefault,

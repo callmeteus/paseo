@@ -163,6 +163,7 @@ export interface WorkspaceGitRuntimeSnapshot {
     remoteUrl: string | null;
     isPaseoOwnedWorktree: boolean;
     isDirty: boolean | null;
+    changedFileCount: number | null;
     baseRef: string | null;
     aheadBehind: { ahead: number; behind: number } | null;
     upstreamRef: string | null;
@@ -3322,6 +3323,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     target.latestGit = {
       ...latestGit,
       isDirty: worktree.isDirty,
+      changedFileCount: worktree.changedFileCount,
       diffStat: worktree.diffStat,
     };
     const loadedAtMs = this.deps.now().getTime();
@@ -3375,6 +3377,9 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       isDirty: refreshWorktree
         ? checkoutStatus.isDirty
         : (target.latestGit?.isDirty ?? checkoutStatus.isDirty),
+      changedFileCount: refreshWorktree
+        ? checkoutStatus.changedFileCount
+        : (target.latestGit?.changedFileCount ?? checkoutStatus.changedFileCount),
       baseRef: checkoutStatus.baseRef,
       aheadBehind: checkoutStatus.aheadBehind,
       upstreamRef: checkoutStatus.upstreamRef,
@@ -3888,6 +3893,7 @@ function buildNotGitSnapshot(cwd: string): WorkspaceGitRuntimeSnapshot {
       remoteUrl: null,
       isPaseoOwnedWorktree: false,
       isDirty: null,
+      changedFileCount: null,
       baseRef: null,
       aheadBehind: null,
       upstreamRef: null,

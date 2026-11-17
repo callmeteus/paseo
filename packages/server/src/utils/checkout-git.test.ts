@@ -505,6 +505,9 @@ describe("checkout git utilities", () => {
     expect(status.isGit).toBe(true);
     expect(status.currentBranch).toBe("main");
     expect(status.isDirty).toBe(true);
+    if (status.isGit) {
+      expect(status.changedFileCount).toBe(1);
+    }
     expect(status.hasRemote).toBe(false);
 
     const diff = await getCheckoutDiff(repoDir, { mode: "uncommitted" });
@@ -515,6 +518,9 @@ describe("checkout git utilities", () => {
 
     const cleanStatus = await getCheckoutStatus(repoDir);
     expect(cleanStatus.isDirty).toBe(false);
+    if (cleanStatus.isGit) {
+      expect(cleanStatus.changedFileCount).toBe(0);
+    }
     const message = execFileSync("git", ["log", "-1", "--pretty=%B"], { cwd: repoDir })
       .toString()
       .trim();

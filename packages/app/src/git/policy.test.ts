@@ -73,6 +73,7 @@ function createInput(
     isPaseoOwnedWorktree: false,
     isOnBaseBranch: true,
     hasUncommittedChanges: false,
+    changedFileCount: 0,
     baseRefAvailable: true,
     baseRefLabel: "main",
     aheadCount: 0,
@@ -188,6 +189,27 @@ describe("git-actions-policy", () => {
     );
 
     expect(actions.primary).toMatchObject({ id: "pull", label: "Pull" });
+  });
+
+  it("badges Commit with the number of uncommitted files", () => {
+    const actions = buildGitActions(
+      createInput({ hasUncommittedChanges: true, changedFileCount: 4 }),
+    );
+
+    expect(actions.primary).toMatchObject({ id: "commit", badge: 4 });
+  });
+
+  it("badges Pull with the number of commits behind origin", () => {
+    const actions = buildGitActions(createInput({ hasRemote: true, behindOfOrigin: 3 }));
+
+    expect(actions.primary).toMatchObject({ id: "pull", badge: 3 });
+  });
+
+  it("leaves Push without a count badge", () => {
+    const actions = buildGitActions(createInput({ hasRemote: true, aheadOfOrigin: 2 }));
+
+    expect(actions.primary?.id).toBe("push");
+    expect(actions.primary?.badge).toBeUndefined();
   });
 
   it("drops a promoted remote action from the remaining menu actions", () => {

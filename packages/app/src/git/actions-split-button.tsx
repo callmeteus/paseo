@@ -34,6 +34,23 @@ interface GitActionMenuItemProps {
   closeOnSelect?: boolean;
 }
 
+function GitActionBadge({ count }: { count: number }) {
+  const { theme } = useUnistyles();
+  return (
+    <View
+      style={[
+        styles.actionBadge,
+        {
+          backgroundColor: theme.colors.surface3,
+          borderRadius: theme.borderRadius.sm,
+        },
+      ]}
+    >
+      <Text style={[styles.actionBadgeText, { color: theme.colors.foreground }]}>{count}</Text>
+    </View>
+  );
+}
+
 function GitActionMenuItem({
   action,
   onSelect,
@@ -202,6 +219,9 @@ export function GitActionsSplitButton({
                     {getActionDisplayLabel(gitActions.primary)}
                   </Text>
                 )}
+                {gitActions.primary.badge !== undefined && (
+                  <GitActionBadge count={gitActions.primary.badge} />
+                )}
               </View>
             )}
           </Pressable>
@@ -328,6 +348,18 @@ const styles = StyleSheet.create((theme) => ({
   },
   splitButtonSpinnerOnly: {
     transform: [{ scale: 0.8 }],
+  },
+  actionBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBadgeText: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
   },
   splitButtonCaret: {
     width: {
