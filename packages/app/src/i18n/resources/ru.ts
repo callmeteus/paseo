@@ -2006,6 +2006,9 @@ export const ru: TranslationResources = {
     searchAllPlaceholder: "Поиск по всем моделям...",
     searchPlaceholder: "Поиск моделей...",
     openProviderSettings: "Открыть настройки {{provider}}",
+    tooltipProvider: "Провайдер",
+    tooltipModelId: "ID модели",
+    tooltipPrice: "Цена",
   },
   providerCatalog: {
     title: "Добавить провайдера",

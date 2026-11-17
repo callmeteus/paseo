@@ -612,6 +612,82 @@ describe("createWebStreamStrategy", () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it("scrolls the transcript on End without native browser scroll side effects", () => {
+    const scrollTo = vi.fn(function (
+      this: HTMLElement,
+      options?: ScrollToOptions | number,
+      y?: number,
+    ) {
+      const top = typeof options === "object" ? (options.top ?? 0) : (y ?? 0);
+      this.scrollTop = top;
+    });
+    HTMLElement.prototype.scrollTo = scrollTo;
+    const strategy = createWebStreamStrategy({ isMobileBreakpoint: false });
+    const viewportRef = React.createRef<StreamViewportHandle>();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(
+        strategy.render({
+          agentId: "agent",
+          segments: {
+            historyVirtualized: [],
+            historyMounted: [userMessage(1)],
+            liveHead: [],
+          },
+          boundary: {
+            hasVirtualizedHistory: false,
+            hasMountedHistory: true,
+            hasLiveHead: false,
+          },
+          renderers: createRenderers(vi.fn()),
+          listEmptyComponent: null,
+          viewportRef,
+          routeBottomAnchorRequest: null,
+          isAuthoritativeHistoryReady: true,
+          onNearBottomChange: vi.fn(),
+          onNearHistoryStart: vi.fn().mockReturnValue(true),
+          isLoadingOlderHistory: false,
+          hasOlderHistory: false,
+          olderHistoryProgressKey: null,
+          scrollEnabled: true,
+          listStyle: null,
+          baseListContentContainerStyle: null,
+          forwardListContentContainerStyle: null,
+          contentMaxWidth: DEFAULT_CONTENT_MAX_WIDTH,
+        }),
+      );
+    });
+
+    const scrollContainer = container.querySelector('[data-testid="agent-chat-scroll"]');
+    if (!(scrollContainer instanceof HTMLElement)) {
+      throw new Error("Expected agent chat scroll container");
+    }
+    Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 2000 });
+    scrollContainer.scrollTop = 100;
+    scrollContainer.scrollLeft = 48;
+    scrollTo.mockClear();
+    scrollContainer.focus();
+
+    let defaultPrevented = false;
+    act(() => {
+      const event = new KeyboardEvent("keydown", {
+        key: "End",
+        bubbles: true,
+        cancelable: true,
+      });
+      scrollContainer.dispatchEvent(event);
+      defaultPrevented = event.defaultPrevented;
+    });
+
+    expect(defaultPrevented).toBe(true);
+    expect(scrollContainer.scrollLeft).toBe(0);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" });
+  });
+
   it("waits for bottom anchoring before evaluating a delayed initial tail", async () => {
     HTMLElement.prototype.scrollTo = vi.fn(function (
       this: HTMLElement,

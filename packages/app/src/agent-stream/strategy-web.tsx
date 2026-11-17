@@ -179,6 +179,94 @@ function canNestedScrollerConsumeUpwardInput(
   return false;
 }
 
+function canNestedScrollerConsumeDownwardInput(
+  target: EventTarget | null,
+  scrollContainer: HTMLElement,
+): boolean {
+  let element = target instanceof Element ? target : null;
+  while (element && element !== scrollContainer) {
+    if (element instanceof HTMLElement) {
+      const overflowY = window.getComputedStyle(element).overflowY;
+      const canScroll = overflowY === "auto" || overflowY === "scroll";
+      const maxScrollTop = element.scrollHeight - element.clientHeight;
+      if (canScroll && maxScrollTop > 0 && element.scrollTop < maxScrollTop - 1) {
+        return true;
+      }
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
+
+function isViewportScrollJumpKey(event: KeyboardEvent): boolean {
+  return (
+    event.key === "End" ||
+    event.key === "Home" ||
+    event.key === "PageDown" ||
+    event.key === "PageUp"
+  );
+}
+
+function applyViewportScrollJumpKey(input: {
+  event: KeyboardEvent;
+  scrollContainer: HTMLElement;
+  shouldUseVirtualizer: boolean;
+  rowVirtualizer: Virtualizer<HTMLElement, Element> | null;
+  markUpwardInputEvidence: () => void;
+  rearmHistoryStartFromUserIntent: () => void;
+  setFollowOutput: (value: boolean) => boolean;
+  forceStickToBottom: () => void;
+  stopFollowingOutputFromUserIntent: () => void;
+  updateScrollMetrics: () => void;
+  lastKnownScrollTopRef: React.MutableRefObject<number>;
+}): void {
+  const { event, scrollContainer } = input;
+  const isDownward = event.key === "End" || event.key === "PageDown";
+  if (
+    (event.key === "Home" || event.key === "PageUp") &&
+    canNestedScrollerConsumeUpwardInput(event.target, scrollContainer)
+  ) {
+    return;
+  }
+  if (isDownward && canNestedScrollerConsumeDownwardInput(event.target, scrollContainer)) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  if (scrollContainer.scrollLeft !== 0) {
+    scrollContainer.scrollLeft = 0;
+  }
+  if (event.key === "End") {
+    input.setFollowOutput(true);
+    input.forceStickToBottom();
+    return;
+  }
+  if (event.key === "Home") {
+    input.stopFollowingOutputFromUserIntent();
+    if (input.shouldUseVirtualizer && input.rowVirtualizer) {
+      input.rowVirtualizer.scrollToOffset(0);
+    } else {
+      scrollContainer.scrollTop = 0;
+    }
+    input.lastKnownScrollTopRef.current = scrollContainer.scrollTop;
+    input.updateScrollMetrics();
+    return;
+  }
+  const direction = event.key === "PageDown" ? 1 : -1;
+  if (direction < 0) {
+    input.markUpwardInputEvidence();
+    if (scrollContainer.scrollTop <= USER_SCROLL_DELTA_EPSILON) {
+      input.rearmHistoryStartFromUserIntent();
+    }
+  }
+  const delta = direction * scrollContainer.clientHeight;
+  if (input.shouldUseVirtualizer && input.rowVirtualizer) {
+    input.rowVirtualizer.scrollBy(delta);
+  } else {
+    scrollContainer.scrollBy({ top: delta, behavior: "auto" });
+  }
+}
+
 function isVerticalScrollbarGutterPress(
   event: PointerEvent,
   scrollContainer: HTMLElement,
@@ -811,6 +899,42 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     rearmHistoryStartFromUserIntent();
   });
 
+  const handleViewportNavigationKeyDown = useStableEvent((event: KeyboardEvent) => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || !isActiveRef.current || event.defaultPrevented) {
+      return;
+    }
+    if (isEditableEventTarget(event.target)) {
+      return;
+    }
+    if (isUpwardViewportScrollKey(event)) {
+      if (canNestedScrollerConsumeUpwardInput(event.target, scrollContainer)) {
+        return;
+      }
+      markUpwardInputEvidence();
+      if (scrollContainer.scrollTop <= USER_SCROLL_DELTA_EPSILON) {
+        rearmHistoryStartFromUserIntent();
+      }
+      return;
+    }
+    if (!isViewportScrollJumpKey(event)) {
+      return;
+    }
+    applyViewportScrollJumpKey({
+      event,
+      scrollContainer,
+      shouldUseVirtualizer,
+      rowVirtualizer: rowVirtualizerRef.current,
+      markUpwardInputEvidence,
+      rearmHistoryStartFromUserIntent,
+      setFollowOutput,
+      forceStickToBottom,
+      stopFollowingOutputFromUserIntent,
+      updateScrollMetrics,
+      lastKnownScrollTopRef,
+    });
+  });
+
   const handleDomScroll = useCallback(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!isActiveRef.current || !scrollContainer || !isScrollContainerMeasurable(scrollContainer)) {
@@ -1063,15 +1187,6 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
         markUpwardViewportInput();
       }
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isUpwardViewportScrollKey(event)) {
-        return;
-      }
-      if (canNestedScrollerConsumeUpwardInput(event.target, scrollContainer)) {
-        return;
-      }
-      markUpwardViewportInput();
-    };
     const handlePointerDown = (event: PointerEvent) => {
       clearMouseScrollGesture();
       if (
@@ -1155,7 +1270,9 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     // layout correction. Scroll events reuse the last committed row geometry.
     scrollContainer.addEventListener("scroll", handleDomScroll, { passive: true, capture: true });
     scrollContainer.addEventListener("wheel", handleWheel, { passive: true });
-    scrollContainer.addEventListener("keydown", handleKeyDown, { passive: true });
+    scrollContainer.addEventListener("keydown", handleViewportNavigationKeyDown, {
+      passive: false,
+    });
     scrollContainer.addEventListener("pointerdown", handlePointerDown, { passive: true });
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerup", handlePointerEnd, { passive: true });
@@ -1169,7 +1286,7 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     return () => {
       scrollContainer.removeEventListener("scroll", handleDomScroll, true);
       scrollContainer.removeEventListener("wheel", handleWheel);
-      scrollContainer.removeEventListener("keydown", handleKeyDown);
+      scrollContainer.removeEventListener("keydown", handleViewportNavigationKeyDown);
       scrollContainer.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerEnd);
@@ -1185,6 +1302,7 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     clearMouseScrollGesture,
     clearUpwardInputEvidence,
     handleDomScroll,
+    handleViewportNavigationKeyDown,
     isActive,
     markUpwardInputEvidence,
     rearmHistoryStartFromUserIntent,

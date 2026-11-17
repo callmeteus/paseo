@@ -1971,6 +1971,9 @@ export const ar: TranslationResources = {
     searchAllPlaceholder: "ابحث في كل النماذج...",
     searchPlaceholder: "نماذج البحث...",
     openProviderSettings: "افتح إعدادات{{provider}}",
+    tooltipProvider: "المزوّد",
+    tooltipModelId: "معرّف النموذج",
+    tooltipPrice: "السعر",
   },
   providerCatalog: {
     title: "إضافة مزود",

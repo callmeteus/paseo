@@ -2001,6 +2001,9 @@ export const en = {
     searchAllPlaceholder: "Search all models...",
     searchPlaceholder: "Search models...",
     openProviderSettings: "Open {{provider}} settings",
+    tooltipProvider: "Provider",
+    tooltipModelId: "Model ID",
+    tooltipPrice: "Price",
   },
   providerCatalog: {
     title: "Add provider",

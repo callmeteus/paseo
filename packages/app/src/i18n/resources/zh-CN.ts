@@ -1953,6 +1953,9 @@ export const zhCN: TranslationResources = {
     searchAllPlaceholder: "搜索所有模型...",
     searchPlaceholder: "搜索模型...",
     openProviderSettings: "打开 {{provider}} 设置",
+    tooltipProvider: "提供商",
+    tooltipModelId: "模型 ID",
+    tooltipPrice: "价格",
   },
   providerCatalog: {
     title: "添加 provider",

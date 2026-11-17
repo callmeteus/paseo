@@ -1986,6 +1986,9 @@ export const ko: TranslationResources = {
     searchAllPlaceholder: "모든 모델 검색...",
     searchPlaceholder: "모델 검색...",
     openProviderSettings: "{{provider}} 설정 열기",
+    tooltipProvider: "제공자",
+    tooltipModelId: "모델 ID",
+    tooltipPrice: "가격",
   },
   providerCatalog: {
     title: "프로바이더 추가",

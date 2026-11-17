@@ -44,7 +44,7 @@ import { useProviderIcon } from "@/components/provider-icons";
 import { ModelIconGlyph } from "@/model-icons/glyph";
 import { resolveModelIconId } from "@/model-icons/resolve";
 import { PriceMarks } from "@/model-pricing/marks";
-import { summarizePriceTiers } from "@/model-pricing/tier";
+import { formatPriceMarks, summarizePriceTiers } from "@/model-pricing/tier";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import {
@@ -648,6 +648,68 @@ function ModelBrowserRow({
   );
 }
 
+function ModelRowTooltipField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <View style={styles.modelRowTooltipRow}>
+      <Text style={styles.modelRowTooltipLabel}>{label}</Text>
+      <Text
+        style={[styles.modelRowTooltipValue, mono && styles.modelRowTooltipValueMono]}
+        selectable={isWeb}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function ModelRowTooltipContent({
+  row,
+  showProviderLabel,
+}: {
+  row: ProviderSelectionModelRow;
+  showProviderLabel: boolean;
+}) {
+  const { t } = useTranslation();
+  const description =
+    row.description && row.description !== row.modelId && row.description !== row.modelLabel
+      ? row.description
+      : undefined;
+  const priceLabel =
+    row.priceTier !== null
+      ? formatPriceMarks({ min: row.priceTier, max: row.priceTier }, t("modelSelector.priceFree"))
+      : null;
+
+  return (
+    <View style={styles.modelRowTooltipContent}>
+      <Text style={styles.modelRowTooltipTitle}>{row.modelLabel}</Text>
+      {showProviderLabel ? (
+        <ModelRowTooltipField
+          label={t("modelSelector.tooltipProvider")}
+          value={row.providerLabel}
+        />
+      ) : null}
+      {row.modelId.length > 0 ? (
+        <ModelRowTooltipField label={t("modelSelector.tooltipModelId")} value={row.modelId} mono />
+      ) : null}
+      {description ? <Text style={styles.modelRowTooltipDescription}>{description}</Text> : null}
+      {priceLabel ? (
+        <ModelRowTooltipField label={t("modelSelector.tooltipPrice")} value={priceLabel} />
+      ) : null}
+      {row.isDefault ? (
+        <Text style={styles.modelRowTooltipMeta}>{t("modelSelector.defaultModel")}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 function ModelRowProfileAction({
   hovered,
   onPress,
@@ -691,6 +753,99 @@ function ModelRowProfileAction({
         <Text style={styles.tooltipText}>{label}</Text>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function ModelRowInteractiveSurface({
+  row,
+  isSelected,
+  description,
+  leadingSlot,
+  profileAction,
+  onPress,
+  onPointerEnter,
+  onPointerLeave,
+  pressableStyle,
+}: {
+  row: ProviderSelectionModelRow;
+  isSelected: boolean;
+  description?: string;
+  leadingSlot: React.ReactNode;
+  profileAction: React.ReactNode;
+  onPress: () => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  pressableStyle: (
+    state: PressableStateCallbackType & { hovered?: boolean },
+  ) => StyleProp<ViewStyle>;
+}) {
+  return (
+    <View
+      style={[styles.modelRowHoverBoundary, styles.browserModelRow]}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <ModelBrowserPressable
+        onPress={onPress}
+        style={pressableStyle}
+        accessibilitySelected={isSelected}
+        testID={`model-row-${row.provider}-${row.modelId}`}
+      >
+        <ModelRowMain
+          row={row}
+          description={description}
+          isSelected={isSelected}
+          leadingSlot={leadingSlot}
+          hasProfileAction={Boolean(profileAction)}
+        />
+      </ModelBrowserPressable>
+      {profileAction ? (
+        <View style={styles.modelRowProfileActionSlot} pointerEvents="box-none">
+          {profileAction}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ModelRowMain({
+  row,
+  description,
+  isSelected,
+  leadingSlot,
+  hasProfileAction,
+}: {
+  row: ProviderSelectionModelRow;
+  description?: string;
+  isSelected: boolean;
+  leadingSlot: React.ReactNode;
+  hasProfileAction: boolean;
+}) {
+  return (
+    <View style={styles.browserRowContent}>
+      <View style={styles.browserRowLeading}>{leadingSlot}</View>
+      <View style={[styles.browserRowText, description && styles.browserRowTextInline]}>
+        <Text numberOfLines={1} style={styles.browserRowLabel}>
+          {row.modelLabel}
+        </Text>
+        {description ? (
+          <Text numberOfLines={1} style={styles.browserRowDescription}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.browserRowTrailing}>
+        {row.priceTier !== null ? (
+          <PriceMarks minTier={row.priceTier} maxTier={row.priceTier} />
+        ) : null}
+        <View style={styles.browserRowSelection}>
+          {isSelected ? (
+            <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
+          ) : null}
+        </View>
+        {hasProfileAction ? <View style={styles.rowIconButton} /> : null}
+      </View>
+    </View>
   );
 }
 
@@ -831,50 +986,30 @@ function ModelRow({
   );
 
   return (
-    <View
-      style={[styles.modelRowHoverBoundary, styles.browserModelRow]}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-    >
-      <ModelBrowserPressable
-        onPress={onPress}
-        style={pressableStyle}
-        accessibilitySelected={isSelected}
-        testID={`model-row-${row.provider}-${row.modelId}`}
+    <Tooltip delayDuration={350} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild triggerRefProp="ref">
+        <ModelRowInteractiveSurface
+          row={row}
+          isSelected={isSelected}
+          description={description}
+          leadingSlot={leadingSlot}
+          profileAction={profileAction}
+          onPress={onPress}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
+          pressableStyle={pressableStyle}
+        />
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="start"
+        offset={10}
+        maxWidth={340}
+        testID={`model-row-tooltip-${row.provider}-${row.modelId}`}
       >
-        <View style={styles.browserRowContent}>
-          <View style={styles.browserRowLeading}>{leadingSlot}</View>
-          <View style={[styles.browserRowText, description && styles.browserRowTextInline]}>
-            <Text numberOfLines={1} style={styles.browserRowLabel}>
-              {row.modelLabel}
-            </Text>
-            {description ? (
-              <Text numberOfLines={1} style={styles.browserRowDescription}>
-                {description}
-              </Text>
-            ) : null}
-          </View>
-          <View style={styles.browserRowTrailing}>
-            {row.priceTier !== null ? (
-              <PriceMarks minTier={row.priceTier} maxTier={row.priceTier} />
-            ) : null}
-            <View style={styles.browserRowSelection}>
-              {isSelected ? (
-                <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
-              ) : null}
-            </View>
-            {profileAction ? <View style={styles.rowIconButton} /> : null}
-          </View>
-        </View>
-      </ModelBrowserPressable>
-      {/* The row renders a <button> on web, so its profile action sits beside it,
-          over the slot reserved above, rather than inside it. */}
-      {profileAction ? (
-        <View style={styles.modelRowProfileActionSlot} pointerEvents="box-none">
-          {profileAction}
-        </View>
-      ) : null}
-    </View>
+        <ModelRowTooltipContent row={row} showProviderLabel={showProviderLabel} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1939,6 +2074,44 @@ const styles = StyleSheet.create((theme) => ({
   tooltipText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foreground,
+  },
+  modelRowTooltipContent: {
+    gap: theme.spacing[1.5],
+    paddingVertical: theme.spacing[0.5],
+  },
+  modelRowTooltipTitle: {
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+  },
+  modelRowTooltipRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
+  },
+  modelRowTooltipLabel: {
+    flexShrink: 0,
+    width: 84,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  modelRowTooltipValue: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+  },
+  modelRowTooltipValueMono: {
+    fontFamily: theme.fontFamily.mono,
+  },
+  modelRowTooltipDescription: {
+    fontSize: theme.fontSize.sm,
+    lineHeight: 20,
+    color: theme.colors.foregroundMuted,
+  },
+  modelRowTooltipMeta: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
   virtualizedModelList: {
     flex: 1,

@@ -1997,6 +1997,9 @@ export const ja: TranslationResources = {
     searchAllPlaceholder: "すべてのモデルを検索...",
     searchPlaceholder: "モデルを検索...",
     openProviderSettings: "{{provider}}の設定を開く",
+    tooltipProvider: "プロバイダー",
+    tooltipModelId: "モデル ID",
+    tooltipPrice: "価格",
   },
   providerCatalog: {
     title: "プロバイダーを追加",

@@ -2026,6 +2026,9 @@ export const fr: TranslationResources = {
     searchAllPlaceholder: "Rechercher dans tous les modèles…",
     searchPlaceholder: "Rechercher des modèles…",
     openProviderSettings: "Ouvrir les paramètres de {{provider}}",
+    tooltipProvider: "Fournisseur",
+    tooltipModelId: "ID du modèle",
+    tooltipPrice: "Prix",
   },
   providerCatalog: {
     title: "Ajouter un fournisseur",

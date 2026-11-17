@@ -2025,6 +2025,9 @@ export const es: TranslationResources = {
     searchAllPlaceholder: "Buscar en todos los modelos...",
     searchPlaceholder: "Buscar modelos...",
     openProviderSettings: "Abrir configuración de{{provider}}",
+    tooltipProvider: "Proveedor",
+    tooltipModelId: "ID del modelo",
+    tooltipPrice: "Precio",
   },
   providerCatalog: {
     title: "Agregar proveedor",

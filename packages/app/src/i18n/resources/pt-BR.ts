@@ -2012,6 +2012,9 @@ export const ptBR: TranslationResources = {
     searchAllPlaceholder: "Buscar em todos os modelos...",
     searchPlaceholder: "Buscar modelos...",
     openProviderSettings: "Abrir configurações de {{provider}}",
+    tooltipProvider: "Provedor",
+    tooltipModelId: "ID do modelo",
+    tooltipPrice: "Preço",
   },
   providerCatalog: {
     title: "Adicionar provedor",
