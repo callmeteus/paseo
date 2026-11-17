@@ -173,6 +173,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
   "tabs-panes": [
     "workspace-tab-new",
     "workspace-tab-target-agent",
+    "workspace-tab-target-chat",
     "workspace-terminal-new",
     "workspace-tab-target-browser",
     "workspace-tab-target-changes",
@@ -211,6 +212,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
   "workspace-tab-target-agent": "workspace.tabs.actions.newAgent",
+  "workspace-tab-target-chat": "workspace.tabs.fallback.chat",
   "workspace-tab-target-browser": "workspace.tabs.actions.newBrowser",
   "workspace-tab-target-changes": "workspace.tabs.actions.changes",
   "workspace-tab-target-files": "workspace.tabs.actions.files",
@@ -428,6 +430,28 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "workspace-tab-target-agent",
       section: "tabs-panes",
       label: "New agent",
+    },
+  },
+  {
+    id: "workspace-tab-target-chat-cmd-shift-c-mac",
+    action: "workspace.tab.target.chat",
+    combo: "Cmd+Shift+C",
+    when: { mac: true, commandCenter: false },
+    help: {
+      id: "workspace-tab-target-chat",
+      section: "tabs-panes",
+      label: "New chat",
+    },
+  },
+  {
+    id: "workspace-tab-target-chat-ctrl-shift-c-non-mac",
+    action: "workspace.tab.target.chat",
+    combo: "Ctrl+Shift+C",
+    when: { mac: false, commandCenter: false, terminal: false },
+    help: {
+      id: "workspace-tab-target-chat",
+      section: "tabs-panes",
+      label: "New chat",
     },
   },
   {

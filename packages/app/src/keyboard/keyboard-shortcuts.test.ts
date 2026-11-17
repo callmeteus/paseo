@@ -1296,6 +1296,7 @@ describe("direct new-tab target shortcuts", () => {
   const desktopNonMac = { isMac: false, isDesktop: true };
   const targetCases = [
     ["a", "KeyA", "workspace.tab.target.agent"],
+    ["c", "KeyC", "workspace.tab.target.chat"],
     ["b", "KeyB", "workspace.tab.target.browser"],
     ["g", "KeyG", "workspace.tab.target.changes"],
     ["e", "KeyE", "workspace.tab.target.files"],

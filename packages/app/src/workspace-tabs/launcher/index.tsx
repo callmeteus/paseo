@@ -141,6 +141,7 @@ export function useWorkspaceTabLaunchCatalog(input: {
         id: "chat",
         label: t("workspace.tabs.fallback.chat"),
         Icon: MessagesSquare,
+        shortcutActionId: "workspace-tab-target-chat",
         disabled: false,
         panelKind: "draft",
         launch: launchSelection(BUILT_IN_SELECTIONS.chat),

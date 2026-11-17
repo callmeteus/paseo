@@ -16,6 +16,7 @@ export type KeyboardActionId =
   | "workspace.agent.new"
   | "workspace.tab.menu.open"
   | "workspace.tab.target.agent"
+  | "workspace.tab.target.chat"
   | "workspace.tab.target.browser"
   | "workspace.tab.target.changes"
   | "workspace.tab.target.files"
@@ -69,6 +70,7 @@ export type KeyboardActionDefinition =
   | { id: "workspace.agent.new"; scope: KeyboardActionScope }
   | { id: "workspace.tab.menu.open"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.agent"; scope: KeyboardActionScope }
+  | { id: "workspace.tab.target.chat"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.browser"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.changes"; scope: KeyboardActionScope }
   | { id: "workspace.tab.target.files"; scope: KeyboardActionScope }

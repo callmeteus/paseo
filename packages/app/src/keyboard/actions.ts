@@ -21,6 +21,7 @@ export type KeyboardActionId =
   | "agent.new"
   | "workspace.tab.menu.open"
   | "workspace.tab.target.agent"
+  | "workspace.tab.target.chat"
   | "workspace.tab.target.browser"
   | "workspace.tab.target.changes"
   | "workspace.tab.target.files"

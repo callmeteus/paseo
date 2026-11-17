@@ -2738,6 +2738,9 @@ function WorkspaceScreenContent({
         case "workspace.tab.target.agent":
           handleCreateDraftTab({ paneId });
           return true;
+        case "workspace.tab.target.chat":
+          launchWorkspaceTab({ kind: "chat" }, { kind: "open", paneId });
+          return true;
         case "workspace.tab.target.browser":
           handleCreateBrowserTab({ paneId });
           return true;
@@ -2769,6 +2772,7 @@ function WorkspaceScreenContent({
       handleCreateDraftTab,
       isGitCheckout,
       isMobile,
+      launchWorkspaceTab,
       persistenceKey,
     ],
   );
@@ -2913,6 +2917,7 @@ function WorkspaceScreenContent({
     }),
     actions: [
       "workspace.tab.target.agent",
+      "workspace.tab.target.chat",
       "workspace.tab.target.browser",
       "workspace.tab.target.changes",
       "workspace.tab.target.files",
