@@ -28,6 +28,21 @@ interface ApplyFileMentionReplacementInput {
 // closes it after a quoted path is inserted.
 const INVALID_MENTION_QUERY_CHARS = /[\n\r\t"'<>]/;
 
+// A mention trigger only counts at a word boundary. An `@` inside a link (a social
+// handle like https://x.com/@user, for example) is plain text: opening the picker
+// while someone types or pastes a URL is wrong.
+function isAtPartOfUrl(text: string, atIndex: number): boolean {
+  let tokenStart = atIndex;
+  while (tokenStart > 0 && !/\s/.test(text[tokenStart - 1]!)) {
+    tokenStart -= 1;
+  }
+  const prefix = text.slice(tokenStart, atIndex);
+  // Explicit scheme: https://..., git+ssh://..., etc.
+  if (prefix.includes("://")) return true;
+  // Scheme-less host with a path: www.x.com/@user, x.com/@user.
+  return /(?:^|\/)(?:[\w-]+\.)+[a-z]{2,}\//i.test(prefix);
+}
+
 function countWords(query: string): number {
   const trimmed = query.trim();
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
@@ -44,6 +59,10 @@ export function findActiveFileMention(input: FindActiveFileMentionInput): FileMe
   ) {
     // Skip @ that looks like part of an email address (local-part char immediately before @).
     if (atIndex > 0 && /[\w+]/.test(beforeCursor[atIndex - 1]!)) {
+      continue;
+    }
+    // Skip @ inside a URL so a pasted link does not open the picker.
+    if (isAtPartOfUrl(beforeCursor, atIndex)) {
       continue;
     }
 

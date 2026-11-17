@@ -142,6 +142,37 @@ describe("findActiveFileMention", () => {
     expect(mention).toBeNull();
   });
 
+  it("returns null for an @ handle inside a URL", () => {
+    const text = "https://www.tiktok.com/@eventofurzuê bota oTiktok por favor";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+    });
+    expect(mention).toBeNull();
+  });
+
+  it("returns null for a scheme-less URL handle", () => {
+    const text = "veja tiktok.com/@evento agora";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+    });
+    expect(mention).toBeNull();
+  });
+
+  it("still detects a file mention after a URL in the same input", () => {
+    const text = "https://x.com/@handle e também @file";
+    const mention = findActiveFileMention({
+      text,
+      cursorIndex: text.length,
+    });
+    expect(mention).toEqual({
+      start: text.lastIndexOf("@"),
+      end: text.length,
+      query: "file",
+    });
+  });
+
   it("still detects a file mention after an email in the same input", () => {
     const text = "user <12345+user@noreply.example.com> and also @file";
     const mention = findActiveFileMention({
