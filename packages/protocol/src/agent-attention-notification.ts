@@ -58,6 +58,37 @@ const truncateNotificationText = (text: string, limit: number): string => {
   return trimmed.length > 0 ? `${trimmed}...` : text.slice(0, limit);
 };
 
+// OpenUI chats answer in openui-lang. The raw program is unreadable in an OS
+// notification, so lift the human-facing string literals out of it.
+const OPENUI_ROOT = /(?:^|\n)\s*root\s*=\s*[A-Za-z_$][\w$]*\s*\(/;
+// Variants, sizes, directions, colors, icon names and URLs are arguments too,
+// but they are not copy worth showing in a notification.
+const OPENUI_NON_TEXT_VALUE = /^[a-z0-9_.:/+-]+$/;
+
+function decodeOpenUIString(raw: string): string {
+  return raw.replace(/\\(["\\nrt])/g, (_match, char: string) => {
+    if (char === "n") return "\n";
+    if (char === "r") return "\r";
+    if (char === "t") return "\t";
+    return char;
+  });
+}
+
+function extractOpenUILangText(program: string): string | null {
+  if (!OPENUI_ROOT.test(program)) {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const match of program.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+    const value = decodeOpenUIString(match[1]!).trim();
+    if (!value || OPENUI_NON_TEXT_VALUE.test(value)) {
+      continue;
+    }
+    parts.push(value);
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
 const stripMarkdownToText = (markdown: string): string => {
   let text = markdown.replace(/\r\n/g, "\n");
 
@@ -94,7 +125,11 @@ const buildNotificationPreview = (text: string | null | undefined): string | nul
     return null;
   }
 
-  const normalized = normalizeNotificationText(stripMarkdownToText(text));
+  const source = OPENUI_ROOT.test(text) ? extractOpenUILangText(text) : stripMarkdownToText(text);
+  if (!source) {
+    return null;
+  }
+  const normalized = normalizeNotificationText(source);
   if (!normalized) {
     return null;
   }

@@ -43,6 +43,37 @@ describe("buildAgentAttentionNotificationPayload", () => {
     });
   });
 
+  it("lifts readable copy out of an OpenUI program", () => {
+    const payload = buildAgentAttentionNotificationPayload({
+      reason: "finished",
+      serverId: "srv-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      assistantMessage: [
+        'root = Stack([title, subtitle, okCallout], "column", "l")',
+        'title = TextContent("Confirmado: evento 24–28/02", "large-heavy")',
+        'subtitle = TextContent("Tudo certo com a agenda", "small")',
+        'okCallout = Callout("success", "Pronto", "Nada mais a fazer")',
+      ].join("\n"),
+    });
+
+    expect(payload.body).toBe(
+      "Confirmado: evento 24–28/02 Tudo certo com a agenda Pronto Nada mais a fazer",
+    );
+  });
+
+  it("falls back to the default body when an OpenUI program has no copy", () => {
+    const payload = buildAgentAttentionNotificationPayload({
+      reason: "finished",
+      serverId: "srv-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      assistantMessage: 'root = Stack([], "column", "l")',
+    });
+
+    expect(payload.body).toBe("Finished working.");
+  });
+
   it("builds permission notifications from request details", () => {
     const payload = buildAgentAttentionNotificationPayload({
       reason: "permission",

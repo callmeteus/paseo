@@ -53,10 +53,7 @@ import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import { resyncProviderSubagents, useProviderSubagentStore } from "@/subagents/provider-store";
-import {
-  getLastWorkspaceSelection,
-  navigateToWorkspace,
-} from "@/stores/navigation-active-workspace-store";
+import { getLastWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
@@ -587,7 +584,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           );
           return;
         }
-        const target = { kind: "file" as const, path: message.payload.path };
         const workspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
         const resolvedWorkspaceId =
           resolveWorkspaceMapKeyByIdentity({
@@ -598,28 +594,22 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           serverId,
           workspaceId: resolvedWorkspaceId,
         });
-        // Open beside the explorer tree, not as a main workspace tab: the plan is a
-        // supporting view, so it belongs in the Explorer sidebar (Ctrl+E).
-        const canOpenInSidebar =
-          workspaceKey !== null && useWorkspaceLayoutStore.persist.hasHydrated();
-        if (canOpenInSidebar) {
-          openPlanInExplorerSidebar({
-            serverId,
-            workspaceId: resolvedWorkspaceId,
-            path: message.payload.path,
-            isCompact: isCompactFormFactor,
-          });
-        }
         const active = getLastWorkspaceSelection();
         const isActiveWorkspace =
           active?.serverId === serverId &&
           (active.workspaceId === message.payload.workspaceId ||
             active.workspaceId === resolvedWorkspaceId);
-        if (isActiveWorkspace && canOpenInSidebar) return;
-        navigateToWorkspace({
+        // Only reveal the plan when the user is already looking at its workspace.
+        // A plan created or edited elsewhere must never pull focus to another tab.
+        if (!isActiveWorkspace || workspaceKey === null) return;
+        if (!useWorkspaceLayoutStore.persist.hasHydrated()) return;
+        // Open beside the explorer tree, not as a main workspace tab: the plan is a
+        // supporting view, so it belongs in the Explorer sidebar (Ctrl+E).
+        openPlanInExplorerSidebar({
           serverId,
-          workspaceId: message.payload.workspaceId,
-          ...(canOpenInSidebar ? {} : { target }),
+          workspaceId: resolvedWorkspaceId,
+          path: message.payload.path,
+          isCompact: isCompactFormFactor,
         });
       },
     });
