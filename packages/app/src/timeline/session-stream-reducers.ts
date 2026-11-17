@@ -9,6 +9,7 @@ import {
   flushHeadToTail,
   hydrateStreamState,
   isAgentToolCallItem,
+  isLocalCopyOfPositionedUserMessage,
   mergeAgentToolCallItem,
   replaceWithCanonicalStream,
   reduceStreamUpdate,
@@ -277,7 +278,14 @@ function reconcilePromptWindowItems(input: {
       head = [...head.slice(0, location.index), ...head.slice(location.index + 1)];
     }
   }
-  return { page, tail, head, acknowledgedClientMessageIds };
+  // A canonical copy can already sit in the head when a cached chat rejoins a live stream.
+  // It wins the match above, leaving the cursorless local presentation there as a second
+  // copy of a prompt that is now positioned in the canonical page.
+  const positioned = [...tail, ...page];
+  const reconciledHead = head.filter(
+    (item) => !isLocalCopyOfPositionedUserMessage(item, positioned),
+  );
+  return { page, tail, head: reconciledHead, acknowledgedClientMessageIds };
 }
 
 function classifySessionTimelineSeq({

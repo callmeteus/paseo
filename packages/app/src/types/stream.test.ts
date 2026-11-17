@@ -9,6 +9,7 @@ import {
   hydrateStreamState,
   mergeToolCallDetail,
   reduceStreamUpdate,
+  replaceWithCanonicalStream,
   settleInterruptedStreamItems,
   streamTimelineItemIdentity,
   type AgentToolCallItem,
@@ -2359,6 +2360,41 @@ describe("turn lifecycle events", () => {
         timestamp: submittedPrompt.timestamp,
       },
     ]);
+  });
+
+  it("does not duplicate a local prompt when its canonical copy is also in the live head", () => {
+    const timestamp = new Date("2025-01-01T15:04:00Z");
+    // The canonical row carries only the provider id, while the local optimistic row carries
+    // only the client id. Their ids differ, so id-based dedup cannot see they are one prompt.
+    const canonical = createUserMessage({
+      messageId: "provider-owned",
+      timelineCursor: { epoch: "epoch-1", seq: 4 },
+      text: "Quero que você faça uma página",
+      timestamp,
+    });
+    const local = createUserMessage({
+      clientMessageId: "msg_client",
+      text: "Quero que você faça uma página",
+      timestamp,
+    });
+
+    // Opening a chat can paint the canonical row into the tail before the live head is merged.
+    // When that canonical copy prefixes the local row in the head, it wins the match and the
+    // local row is preserved in the head as if it were a prompt the provider never echoed.
+    const replacement = replaceWithCanonicalStream({
+      canonical: [canonical],
+      previousTail: [],
+      previousHead: [canonical, local],
+      sendingClientMessageIds: [],
+      preserveContinuity: true,
+      canonicalCoverage: { epoch: "epoch-1", endSeq: 5 },
+    });
+
+    assert.strictEqual(
+      [...replacement.tail, ...replacement.head].filter((item) => item.kind === "user_message")
+        .length,
+      1,
+    );
   });
 
   it("appends a live server user message when no submitted user message is pending", () => {

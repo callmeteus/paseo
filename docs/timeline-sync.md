@@ -319,6 +319,11 @@ Canonical replacement owns both timeline lanes. A matching local row keeps its p
 payload while taking the canonical row's ordered position. If a live assistant head is the
 canonical assistant prefix, it stays in the head lane. No row may be returned in both lanes.
 
+A cursorless local prompt with a positioned canonical twin of the same text is dropped from the head
+even when their ids differ: the canonical copy can reach the tail before the live presentation is
+reconciled, and the two would otherwise render as one prompt at the bottom and one in place. A
+canonical row carrying a different client id is another client's prompt and is never matched by text.
+
 ## Relevant code
 
 - Server live stream forwarding: `packages/server/src/server/session.ts`

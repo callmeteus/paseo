@@ -521,6 +521,28 @@ function replaceTimelineIdentityItem(
   return next;
 }
 
+// App and daemon clocks can differ by the time a prompt crosses the socket. A local
+// presentation and its canonical echo still describe one prompt inside this window.
+const LOCAL_PROMPT_ECHO_CLOCK_SKEW_MS = 5_000;
+
+export function isLocalCopyOfPositionedUserMessage(
+  local: StreamItem,
+  canonical: readonly StreamItem[],
+): boolean {
+  if (local.kind !== "user_message" || local.timelineCursor !== undefined) return false;
+  return canonical.some(
+    (item) =>
+      item.kind === "user_message" &&
+      item.timelineCursor !== undefined &&
+      item.text === local.text &&
+      // A canonical row carrying a different client id is another client's prompt that
+      // happens to share the text, not the echo of this local presentation.
+      (item.clientMessageId === undefined || item.clientMessageId === local.clientMessageId) &&
+      Math.abs(item.timestamp.getTime() - local.timestamp.getTime()) <=
+        LOCAL_PROMPT_ECHO_CLOCK_SKEW_MS,
+  );
+}
+
 function reconcileReplacementHeadAgainstTail(
   tail: StreamItem[],
   retainedHead: StreamItem[],
@@ -542,7 +564,8 @@ function reconcileReplacementHeadAgainstTail(
     head: retainedHead.filter(
       (item, index) =>
         !reconciledHeadIndexes.has(index) &&
-        (item.kind === "assistant_message" || !tailIds.has(item.id)),
+        (item.kind === "assistant_message" ||
+          (!tailIds.has(item.id) && !isLocalCopyOfPositionedUserMessage(item, reconciledTail))),
     ),
   };
 }
@@ -2156,7 +2179,11 @@ export function applyStreamEvent(params: {
   timelineCursor?: TimelinePosition;
   unmatchedUserMessageInsert?: "tail" | "head";
 }): ApplyStreamEventResult {
-  const { tail, head, event, timestamp } = params;
+  const { tail, event, timestamp } = params;
+  // A cached canonical copy of a local prompt can reach the tail before its live
+  // presentation is reconciled. Dropping the stale local row here keeps every path
+  // (stream, catch-up, replacement) from rendering one prompt twice.
+  const head = params.head.filter((item) => !isLocalCopyOfPositionedUserMessage(item, tail));
   const canonicalUserResult = applyCanonicalUserMessageEvent({
     tail,
     head,

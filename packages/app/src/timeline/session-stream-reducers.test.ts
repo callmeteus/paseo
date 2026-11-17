@@ -2343,6 +2343,33 @@ describe("processTimelineResponse", () => {
     ).toEqual(["Local prompt", "Remote prompt"]);
   });
 
+  it("does not duplicate a local prompt when its canonical copy is already positioned", () => {
+    const prompt = makeSubmittedUserMessage("Quero que você faça uma página", "msg_client");
+    const canonical = createUserMessage({
+      messageId: "provider-owned",
+      timelineCursor: { epoch: "epoch-1", seq: 1 },
+      text: prompt.text,
+      timestamp: prompt.timestamp,
+    });
+
+    const result = processTimelineResponse({
+      ...baseTimelineInput,
+      currentTail: [canonical],
+      currentHead: [prompt],
+      currentCursor: { epoch: "epoch-1", startSeq: 1, endSeq: 1 },
+      payload: {
+        ...baseTimelineInput.payload,
+        epoch: "epoch-1",
+        startCursor: { seq: 2 },
+        endCursor: { seq: 2 },
+        entries: [makeTimelineEntry(2, "an answer")],
+      },
+    });
+
+    expect(result.tail.filter((item) => item.kind === "user_message")).toHaveLength(1);
+    expect(result.head.filter((item) => item.kind === "user_message")).toHaveLength(0);
+  });
+
   it("does not match equal prompt text when canonical client message ids differ", () => {
     const prompt = makeSubmittedUserMessage("continue", "local-prompt");
 
