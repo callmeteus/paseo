@@ -82,6 +82,11 @@ import { withTimeout } from "../../../utils/promise-timeout.js";
 import { execCommand } from "../../../utils/spawn.js";
 import { mapOpencodeToolCall } from "./opencode/tool-call-mapper.js";
 import {
+  isOpencodeTodoWriteToolName,
+  mapOpencodeTodosToTimelineItem,
+  readOpencodeTodoItems,
+} from "./opencode/todo.js";
+import {
   OPENCODE_EVENT_STREAM_READY_TIMEOUT_MS,
   OpenCodeServerManager,
   OPENCODE_SERVER_STARTUP_TIMEOUT_MS,
@@ -1184,7 +1189,7 @@ function buildOpenCodeReplayPartTimelineEvent(params: {
       return null;
     }
     return buildOpenCodeReplayTimelineEvent({
-      item: mapOpenCodeTodosToTimelineItems(todos),
+      item: mapOpencodeTodosToTimelineItem(todos),
       message,
       part,
     });
@@ -2093,81 +2098,16 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 function isOpenCodeTodoWriteToolPart(part: OpenCodeToolPartEventPart | OpenCodePart): boolean {
-  return part.type === "tool" && part.tool.trim().toLowerCase() === "todowrite";
+  return part.type === "tool" && isOpencodeTodoWriteToolName(part.tool);
 }
 
-function readOpenCodeTodoItems(
-  value: unknown,
-): Array<{ content?: string | null; status?: string | null }> | null {
-  if (typeof value === "string") {
-    try {
-      return readOpenCodeTodoItems(JSON.parse(value));
-    } catch {
-      return null;
-    }
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => {
-      const record = readOpenCodeRecord(entry);
-      if (!record) {
-        return [];
-      }
-      const content = readNonEmptyString(record.content);
-      if (!content) {
-        return [];
-      }
-      return [
-        {
-          content,
-          status: readNonEmptyString(record.status),
-        },
-      ];
-    });
-  }
-  const record = readOpenCodeRecord(value);
-  if (!record) {
-    return null;
-  }
-  return readOpenCodeTodoItems(record.todos);
-}
-
-function readOpenCodeTodoItemsFromToolPart(
-  part: Extract<OpenCodePart, { type: "tool" }>,
-): Array<{ content?: string | null; status?: string | null }> | null {
+function readOpenCodeTodoItemsFromToolPart(part: Extract<OpenCodePart, { type: "tool" }>) {
   const state = readOpenCodeRecord(part.state);
   return (
-    readOpenCodeTodoItems(state?.input) ??
-    readOpenCodeTodoItems(state?.output) ??
-    readOpenCodeTodoItems(state?.metadata)
+    readOpencodeTodoItems(state?.input) ??
+    readOpencodeTodoItems(state?.output) ??
+    readOpencodeTodoItems(state?.metadata)
   );
-}
-
-function mapOpenCodeTodosToTimelineItems(
-  todos: Array<{ content?: string | null; status?: string | null }>,
-): Extract<AgentTimelineItem, { type: "todo" }> {
-  return {
-    type: "todo",
-    items: todos.flatMap((todo) => {
-      const text = readNonEmptyString(todo.content);
-      if (!text) {
-        return [];
-      }
-
-      return [
-        {
-          text,
-          status: normalizeOpenCodeTodoStatus(todo.status),
-          completed: todo.status === "completed",
-        },
-      ];
-    }),
-  };
-}
-
-function normalizeOpenCodeTodoStatus(status?: string | null) {
-  if (status === "completed") return "completed" as const;
-  if (status === "in_progress" || status === "inProgress") return "in_progress" as const;
-  return "pending" as const;
 }
 
 function createCompactionTimelineItem(
@@ -2327,7 +2267,7 @@ export function translateOpenCodeEvent(
         events.push({
           type: "timeline",
           provider: "opencode",
-          item: mapOpenCodeTodosToTimelineItems(event.properties.todos),
+          item: mapOpencodeTodosToTimelineItem(event.properties.todos),
         });
       }
       break;

@@ -1,5 +1,10 @@
 import { mapOpencodeToolCall } from "../tool-call-mapper.js";
 import {
+  isOpencodeTodoWriteToolName,
+  mapOpencodeTodosToTimelineItem,
+  readOpencodeTodoItems,
+} from "../todo.js";
+import {
   materializeProviderImage,
   renderProviderImageOutputAsAssistantMarkdown,
 } from "../../provider-image-output.js";
@@ -170,6 +175,16 @@ export class V2Timeline {
     if (serialized === this.content.get(key)) return;
     this.content.set(key, serialized);
     const { output, images } = splitToolContent(part.state);
+    // A live todo.updated event carries the checklist, but that event is not part of
+    // provider history. On restart it is the only source left, so replay todowrite
+    // parts as todo items instead of a raw tool call. The legacy path already does this.
+    if (isOpencodeTodoWriteToolName(part.name)) {
+      const todos = readOpencodeTodoItems(part.state.input) ?? readOpencodeTodoItems(output);
+      if (todos && todos.length > 0) {
+        push(mapOpencodeTodosToTimelineItem(todos));
+        return;
+      }
+    }
     const item = toolFromV2(part, output);
     if (item) push(item);
     // Images follow their tool call as markdown, as Claude and Codex emit them,

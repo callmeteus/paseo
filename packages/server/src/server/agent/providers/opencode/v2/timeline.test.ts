@@ -57,6 +57,43 @@ test("a completed edit carries the replaced and replacement text", () => {
   ]);
 });
 
+test("a todowrite part replays as a todo item so the checklist survives a daemon restart", () => {
+  const todowrite = assistant([
+    {
+      type: "tool",
+      id: "call-todos",
+      name: "todowrite",
+      executed: false,
+      state: {
+        status: "completed",
+        input: {
+          todos: [
+            { content: "Instalar adminjs", status: "completed" },
+            { content: "Criar modelos de fonte de verdade", status: "in_progress" },
+            { content: "Commitar e pushar correcoes", status: "pending" },
+          ],
+        },
+        content: [{ type: "text", text: "Updated todos" }],
+        metadata: {},
+      },
+      time: { created: 2, ran: 2, completed: 2 },
+    },
+  ]);
+
+  const events = new V2Timeline().messages([todowrite]);
+
+  expect(events.map((event) => (event.type === "timeline" ? event.item : null))).toEqual([
+    {
+      type: "todo",
+      items: [
+        { text: "Instalar adminjs", status: "completed", completed: true },
+        { text: "Criar modelos de fonte de verdade", status: "in_progress", completed: false },
+        { text: "Commitar e pushar correcoes", status: "pending", completed: false },
+      ],
+    },
+  ]);
+});
+
 test("a tool's image output is shown as an image, not as base64 in the tool output", () => {
   const png =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
