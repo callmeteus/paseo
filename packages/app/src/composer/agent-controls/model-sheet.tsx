@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Keyboard, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -256,8 +256,14 @@ export function CompactModelSheet({
     open();
   }, [close, isOpen, open]);
 
+  // React only when the request nonce actually changes. These callbacks can
+  // change on every render (e.g. after selecting a model), which would reopen
+  // the sheet and leave it stuck open.
+  const lastOpenRequestNonceRef = useRef(openRequestNonce);
   useEffect(() => {
     if (openRequestNonce < 1) return;
+    if (lastOpenRequestNonceRef.current === openRequestNonce) return;
+    lastOpenRequestNonceRef.current = openRequestNonce;
     if (usesBottomSheet) {
       openModelBrowser();
       if (!isOpen) {

@@ -12972,6 +12972,59 @@ test("daemon-level /goal pause, resume, and clear answer without a provider turn
   }
 });
 
+test("resuming a paused goal restarts the auto-continuation watcher", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-resume-watcher-"));
+  let session: GoalPromptSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalPromptSession(config);
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const started = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    await startAgentRun(manager, agent.id, "/goal ship the release", logger);
+    await started;
+
+    const pausedAnswer = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "timeline" && event.item.type === "notification",
+    );
+    await startAgentRun(manager, agent.id, "/goal pause", logger);
+    await pausedAnswer;
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("paused");
+
+    const resumed = waitForAgentStream(
+      manager,
+      agent.id,
+      (event) => event.type === "turn_completed",
+    );
+    expect(await startAgentRun(manager, agent.id, "/goal resume", logger)).toEqual({
+      disposition: "out_of_band",
+    });
+    await resumed;
+
+    expect(manager.getAgent(agent.id)?.goal?.status).toBe("active");
+    expect(session!.prompts).toHaveLength(2);
+    expect(String(session!.prompts.at(-1))).toContain(
+      "No new user message is pending. Continue working toward this goal now.",
+    );
+  } finally {
+    await manager.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("daemon-level /goal persists on the agent record and in the wire snapshot", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-persist-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);

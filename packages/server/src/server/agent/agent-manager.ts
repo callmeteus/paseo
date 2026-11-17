@@ -3727,11 +3727,19 @@ export class AgentManager {
           }
           case "resume": {
             const goal = agent.goal;
-            text = goal
-              ? formatGoalResumed(
-                  this.writeAgentGoal(agent, { objective: goal.objective, status: "active" }),
-                )
-              : formatGoalStatus(undefined);
+            if (goal) {
+              const resumed = this.writeAgentGoal(agent, {
+                objective: goal.objective,
+                status: "active",
+              });
+              text = formatGoalResumed(resumed);
+              // Resuming a stopped chat must restart the watcher. Without a turn
+              // completing there is nothing to trigger auto-continuation, so
+              // schedule one immediately once this out-of-band command settles.
+              this.scheduleGoalContinuation(agent);
+            } else {
+              text = formatGoalStatus(undefined);
+            }
             break;
           }
           case "clear":

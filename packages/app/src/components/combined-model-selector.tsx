@@ -268,8 +268,15 @@ export function CombinedModelSelector({
     handleOpenChange(!isOpen);
   }, [handleOpenChange, isOpen]);
 
+  // Only an actual nonce change should open the picker. `handleOpenChange`
+  // changes whenever the selected model/provider changes (it closes over
+  // `prepareToOpen`), so depending on it here reopens the picker on every
+  // selection and leaves it stuck open.
+  const lastOpenRequestNonceRef = useRef(openRequestNonce);
   useEffect(() => {
     if (openRequestNonce < 1) return;
+    if (lastOpenRequestNonceRef.current === openRequestNonce) return;
+    lastOpenRequestNonceRef.current = openRequestNonce;
     handleOpenChange(true);
   }, [handleOpenChange, openRequestNonce]);
 
