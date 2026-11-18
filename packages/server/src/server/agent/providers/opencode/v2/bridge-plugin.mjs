@@ -1,3 +1,4 @@
+import { applyCursorRules } from "./cursor-rules.mjs";
 import { registerStructuredOutput, STRUCTURED_OUTPUT_TOOL } from "./structured-output-plugin.mjs";
 
 function ownsMessage(sessionID, message) {
@@ -136,11 +137,32 @@ export default {
       input.messages = scopeCompactionMessages(input.sessionID, input.messages, canonical);
     });
     const disposeCompaction = () => compaction.dispose();
+    // OpenCode inlines root rules once, when it builds the prompt. Glob rules
+    // and a nested .cursor/rules stay out until a tool path falls in that
+    // directory, so this hook attaches them on the request itself.
+    const cursorRules = await context.session.hook("context", async (input) => {
+      if (!input?.sessionID || !Array.isArray(input.messages)) return;
+      let directory;
+      try {
+        const session = await context.session.get({ sessionID: input.sessionID });
+        directory = session?.location?.directory;
+      } catch {
+        return;
+      }
+      if (typeof directory !== "string" || directory.length === 0) return;
+      try {
+        applyCursorRules(input.messages, directory);
+      } catch (error) {
+        console.warn("[paseo] cursor rules skipped", error);
+      }
+    });
+    const disposeCursorRules = () => cursorRules.dispose();
     const { baseUrl, token } = context.options;
     if (!baseUrl || !token) {
       return async () => {
         await disposeStructuredOutput();
         await disposeCompaction();
+        await disposeCursorRules();
       };
     }
     async function request(pathname, body, allowMissing = false) {
@@ -221,6 +243,7 @@ export default {
     return async () => {
       await disposeStructuredOutput();
       await disposeCompaction();
+      await disposeCursorRules();
       await filtering.dispose();
       await registration.dispose();
     };

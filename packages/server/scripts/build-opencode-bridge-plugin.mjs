@@ -25,6 +25,7 @@ for (const directory of ["", "v2/"]) {
     platform: "neutral",
     mainFields: ["module", "main"],
     target: "es2022",
+    external: ["node:fs", "node:path"],
     outfile: outputPath,
   });
 }

@@ -1,4 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
 
 import plugin, { budgetToolSurface, scopeCompactionMessages } from "./bridge-plugin.mjs";
 
@@ -70,6 +73,62 @@ describe("OpenCode compaction scope", () => {
     expect(again.messages).toEqual(chatA.messages);
 
     await dispose();
+  });
+});
+
+describe("OpenCode cursor rules hook", () => {
+  const roots = new Set<string>();
+
+  afterAll(async () => {
+    await Promise.all([...roots].map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  test("attaches a nested rule when the request already read a file in that directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-cursor-rules-hook-"));
+    roots.add(root);
+    await writeFile(join(root, ".git"), "gitdir: /unused\n");
+    const ruleDirectory = join(root, "packages", "server", ".cursor", "rules");
+    await mkdir(ruleDirectory, { recursive: true });
+    await writeFile(
+      join(ruleDirectory, "server.mdc"),
+      "---\nalwaysApply: true\n---\nSERVER_FROM_HOOK\n",
+    );
+    const hooks: Array<
+      (input: {
+        sessionID: string;
+        messages: unknown[];
+        tools: Record<string, unknown>;
+      }) => Promise<void>
+    > = [];
+    await plugin.setup({
+      options: {},
+      tool: { transform: async () => ({ dispose: async () => undefined }) },
+      session: {
+        hook: async (
+          name: string,
+          fn: (input: {
+            sessionID: string;
+            messages: unknown[];
+            tools: Record<string, unknown>;
+          }) => Promise<void>,
+        ) => {
+          if (name === "context") hooks.push(fn);
+          return { dispose: async () => undefined };
+        },
+        context: async () => [],
+        get: async () => ({ location: { directory: root } }),
+      },
+    });
+    const messages = [
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool", name: "read", state: { input: { path: "packages/server/src/a.ts" } } },
+        ],
+      },
+    ];
+    for (const hook of hooks) await hook({ sessionID: "ses", messages, tools: {} });
+    expect(JSON.stringify(messages)).toContain("SERVER_FROM_HOOK");
   });
 });
 

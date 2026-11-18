@@ -370,6 +370,7 @@ async function compileOpenCodeBridgePlugin(sourcePath: string): Promise<Uint8Arr
     platform: "neutral",
     mainFields: ["module", "main"],
     target: "es2022",
+    external: ["node:fs", "node:path"],
     write: false,
   });
   const artifact = bundled.outputFiles[0]?.contents;

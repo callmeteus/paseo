@@ -6,7 +6,7 @@ import {
 } from "./agent-messages/index.js";
 import { expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -13462,4 +13462,66 @@ test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch
   await expect(manager.setAgentWorkflowMode(snapshot.id, "unknown")).rejects.toThrow(
     "Unknown workflow mode",
   );
+});
+
+test("Cursor ACP receives project rules once, and the timeline keeps the user text", async () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-manager-cursor-rules-"));
+  writeFileSync(join(root, ".git"), "gitdir: /unused\n");
+  const ruleDirectory = join(root, ".cursor", "rules");
+  mkdirSync(ruleDirectory, { recursive: true });
+  writeFileSync(join(ruleDirectory, "root.mdc"), "---\nalwaysApply: true\n---\nROOT_ALWAYS\n");
+  const nestedRule = join(root, "packages", "server", ".cursor", "rules", "server.mdc");
+  mkdirSync(join(nestedRule, ".."), { recursive: true });
+  writeFileSync(nestedRule, "---\nalwaysApply: true\n---\nSERVER_ALWAYS\n");
+  const session = new (class extends TestAgentSession {
+    readonly prompts: string[] = [];
+    override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+      this.prompts.push(typeof prompt === "string" ? prompt : JSON.stringify(prompt));
+      return super.startTurn();
+    }
+  })({ provider: "cursor", cwd: root });
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })("cursor");
+  const manager = new AgentManager({ clients: { cursor: client }, logger });
+  let agentId: string | null = null;
+
+  try {
+    const agent = await manager.createAgent({ provider: "cursor", cwd: root }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    expect(manager.planCursorRulesTurn(agent.id, "/compact")).toBeNull();
+
+    await startAgentRun(manager, agent.id, "fix the bug", logger);
+    await vi.waitFor(() => expect(session.prompts).toHaveLength(1));
+    expect(session.prompts[0]).toContain("ROOT_ALWAYS");
+    expect(session.prompts[0]).toContain("fix the bug");
+    expect(session.prompts[0]).not.toContain("SERVER_ALWAYS");
+    await vi.waitFor(() =>
+      expect(manager.getTimeline(agent.id)).toContainEqual(
+        expect.objectContaining({ type: "user_message", text: "fix the bug" }),
+      ),
+    );
+    expect(JSON.stringify(manager.getTimeline(agent.id))).not.toContain("ROOT_ALWAYS");
+    expect(manager.planCursorRulesTurn(agent.id, "again")).toBeNull();
+
+    await manager.appendTimelineItem(agent.id, {
+      type: "tool_call",
+      callId: "read-server",
+      name: "read",
+      status: "completed",
+      error: null,
+      detail: { type: "read", filePath: join(root, "packages", "server", "src", "a.ts") },
+    });
+    const nested = manager.planCursorRulesTurn(agent.id, "now the package");
+    expect(nested).toContain("SERVER_ALWAYS");
+    expect(nested).not.toContain("ROOT_ALWAYS");
+    expect(nested).toContain("now the package");
+  } finally {
+    if (agentId) await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

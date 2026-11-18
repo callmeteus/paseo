@@ -3,6 +3,7 @@ import { ensureAgentLoaded } from "./agent-loading.js";
 import { deleteSideChat } from "./side-chat-store.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
+import { cursorRulesAddition } from "./providers/opencode/v2/cursor-rules.mjs";
 import { resolveCrashRecovery } from "./agent-crash-recovery.js";
 import { submittedPromptMedia } from "./prompt-attachments.js";
 import {
@@ -178,6 +179,29 @@ function prependWorkflowInstruction(prompt: AgentPromptInput, fragment: string):
     return `${block}\n\n${prompt}`;
   }
   return [{ type: "text", text: block }, ...prompt];
+}
+
+function prependCursorRules(prompt: AgentPromptInput, block: string): AgentPromptInput {
+  if (typeof prompt === "string") {
+    return `${block}\n\n${prompt}`;
+  }
+  return [{ type: "text", text: block }, ...prompt];
+}
+
+function cursorRuleVisitedPaths(items: readonly AgentTimelineItem[]): string[] {
+  const paths: string[] = [];
+  for (const item of items) {
+    if (item.type !== "tool_call") continue;
+    const detail = item.detail;
+    if (detail.type === "read" || detail.type === "edit" || detail.type === "write") {
+      paths.push(detail.filePath);
+    } else if (detail.type === "shell" && detail.cwd) {
+      paths.push(detail.cwd);
+    } else if (detail.type === "search" && detail.filePaths) {
+      paths.push(...detail.filePaths);
+    }
+  }
+  return paths;
 }
 
 function submittedPromptText(prompt: AgentPromptInput): string {
@@ -1227,6 +1251,12 @@ export class AgentManager {
   private acceptingAgentRegistrations = true;
   /** One notice for the next user message after a workflow change. */
   private readonly pendingWorkflowHandoff = new Map<string, string>();
+  /**
+   * Rule files already placed on a Cursor ACP prompt. Cursor stores each
+   * session/prompt as a user message and replays it, so a later turn only
+   * adds rules that were not sent yet.
+   */
+  private readonly cursorRulesDelivered = new Map<string, Set<string>>();
   /**
    * Chat/agent mode flipped while a turn was running. The provider session still holds the
    * previous system prompt, so the reload waits until the next prompt is dispatched.
@@ -3474,6 +3504,29 @@ export class AgentManager {
     return prependWorkflowInstruction(prompt, notice);
   }
 
+  /**
+   * Prepends Cursor project rules for one Cursor ACP turn.
+   * Returns null when this turn has nothing new to send.
+   */
+  planCursorRulesTurn(agentId: string, prompt: AgentPromptInput): AgentPromptInput | null {
+    const agent = this.agents.get(agentId);
+    if (!agent || agent.internal || agent.provider !== "cursor") return null;
+    if (typeof prompt === "string") {
+      if (parseAgentMessage(prompt)) return null;
+      if (prompt.trimStart().startsWith("/")) return null;
+    }
+    const visited = this.timelineStore.has(agentId)
+      ? cursorRuleVisitedPaths(this.timelineStore.getItems(agentId))
+      : [];
+    const delivered = this.cursorRulesDelivered.get(agentId) ?? new Set<string>();
+    const addition = cursorRulesAddition(agent.cwd, visited, delivered);
+    if (!addition.block) return null;
+    const next = new Set(delivered);
+    for (const path of addition.paths) next.add(path);
+    this.cursorRulesDelivered.set(agentId, next);
+    return prependCursorRules(prompt, addition.block);
+  }
+
   async planGoalTurn(agentId: string, prompt: AgentPromptInput): Promise<GoalTurnPlan | null> {
     if (typeof prompt !== "string") return null;
     const command = parseGoalCommand(prompt);
@@ -5428,6 +5481,7 @@ export class AgentManager {
 
   private discardRetainedAgentState(agentId: string): void {
     this.timelineStore.delete(agentId);
+    this.cursorRulesDelivered.delete(agentId);
     this.paseoToolPolicies.delete(agentId);
     for (const event of this.providerSubagents.deleteParent(agentId)) {
       this.dispatch({ type: "provider_subagent", event });

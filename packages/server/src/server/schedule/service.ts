@@ -228,6 +228,7 @@ type ScheduleAgentManager = Pick<
   | "planGoalTurn"
   | "planSkillTurn"
   | "planWorkflowTurn"
+  | "planCursorRulesTurn"
   | "reloadAgentSession"
   | "tryRunOutOfBand"
   | "hasInFlightRun"

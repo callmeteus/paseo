@@ -17,6 +17,7 @@ export type AgentRunController = Pick<
   | "planGoalTurn"
   | "planSkillTurn"
   | "planWorkflowTurn"
+  | "planCursorRulesTurn"
   | "tryRunOutOfBand"
   | "hasInFlightRun"
   | "replaceAgentRun"
@@ -184,6 +185,28 @@ function applyWorkflowDispatch(
   };
 }
 
+function applyCursorRulesDispatch(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+  fallbackSubmittedText: string,
+): { prompt: AgentPromptInput; options: StartAgentRunOptions | undefined } {
+  const rulesPrompt = agentManager.planCursorRulesTurn(agentId, prompt);
+  if (!rulesPrompt) return { prompt, options };
+  return {
+    prompt: rulesPrompt,
+    options: {
+      ...options,
+      runOptions: {
+        ...options?.runOptions,
+        clientMessageId: options?.runOptions?.clientMessageId ?? randomUUID(),
+        submittedPromptText: options?.runOptions?.submittedPromptText ?? fallbackSubmittedText,
+      },
+    },
+  };
+}
+
 export async function startAgentRun(
   agentManager: AgentRunController,
   agentId: string,
@@ -227,6 +250,13 @@ export async function startAgentRun(
   // is the enforcement; this instruction keeps the role explicit mid-session
   // and applies immediately when the user changes the workflow.
   ({ prompt, options } = applyWorkflowDispatch(
+    agentManager,
+    agentId,
+    prompt,
+    options,
+    originalSubmittedText,
+  ));
+  ({ prompt, options } = applyCursorRulesDispatch(
     agentManager,
     agentId,
     prompt,
