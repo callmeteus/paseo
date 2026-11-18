@@ -48,6 +48,7 @@ import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
 import { readSessionLimitNotice } from "@/agent-stream/session-limit";
 import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
+import { ProviderErrorRetry } from "@/agent-stream/provider-error-retry";
 import {
   getStreamItemMessageId,
   type StreamItem,
@@ -942,6 +943,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               agentId={agentId}
               readOnly={readOnly}
             >
+              {!readOnly ? (
+                <ProviderErrorRetry serverId={resolvedServerId} agentId={agentId} />
+              ) : null}
               {item.id === limitResumeItemId ? (
                 <LimitResumeOffer
                   agentId={agentId}
