@@ -30,6 +30,14 @@ describe("provider error classification", () => {
     ).toBe("credits_exhausted");
     expect(classifyProviderError("Out of credits")).toBe("credits_exhausted");
     expect(classifyProviderError("You've reached your 5-hour usage limit")).toBe("usage_limit");
+    expect(classifyProviderError("quota exhausted")).toBe("usage_limit");
+  });
+
+  it("treats Cursor's resource_exhausted status as capacity, not a plan limit", () => {
+    expect(classifyProviderError("Error: RetriableError: [resource_exhausted] Error")).toBe(
+      "capacity",
+    );
+    expect(classifyProviderError("RetriableError: [resource exhausted] Error")).toBe("capacity");
   });
 
   it("detects authentication and model failures", () => {

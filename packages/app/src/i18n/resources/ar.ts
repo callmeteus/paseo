@@ -347,6 +347,10 @@ export const ar: TranslationResources = {
           title: "تم الوصول إلى حد الاستخدام",
           description: "وصل {{provider}} إلى حد الاستخدام. بدّل النموذج أو عدّل خطتك.",
         },
+        capacity: {
+          title: "لا توجد سعة حاليًا",
+          description: "{{provider}} بلا سعة الآن. حاول مرة أخرى بعد لحظة.",
+        },
         auth: {
           title: "تسجيل الدخول مطلوب",
           description: "أعد توصيل {{provider}} للمتابعة.",

@@ -352,6 +352,10 @@ export const es: TranslationResources = {
           title: "Límite de uso alcanzado",
           description: "{{provider}} alcanzó su límite de uso. Cambia de modelo o ajusta tu plan.",
         },
+        capacity: {
+          title: "Sin capacidad por ahora",
+          description: "{{provider}} no tiene capacidad ahora. Inténtalo de nuevo en un momento.",
+        },
         auth: {
           title: "Inicio de sesión necesario",
           description: "Vuelve a conectar {{provider}} para continuar.",

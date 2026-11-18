@@ -352,6 +352,10 @@ export const ja: TranslationResources = {
           description:
             "{{provider}} が利用上限に達しました。モデルを切り替えるか、プランを調整してください。",
         },
+        capacity: {
+          title: "一時的に容量がありません",
+          description: "{{provider}} は現在容量がありません。少し待ってから再試行してください。",
+        },
         auth: {
           title: "サインインが必要です",
           description: "続行するには {{provider}} を再接続してください。",

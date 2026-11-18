@@ -9,6 +9,7 @@ export const SYSTEM_ERROR_PREFIX = "[System Error]";
 export type ProviderErrorKind =
   | "usage_limit"
   | "credits_exhausted"
+  | "capacity"
   | "auth"
   | "rate_limit"
   | "model_unavailable"
@@ -17,6 +18,12 @@ export type ProviderErrorKind =
 
 const CREDITS_PATTERN =
   /(insufficient credits?|purchase more credits|buy (?:more )?credits|add (?:more )?credits|out of credits|no credits? (?:left|remaining)|credit balance)/i;
+/**
+ * Cursor's gRPC status for a short upstream capacity spike:
+ * `RetriableError: [resource_exhausted]`. The word "exhausted" is the status
+ * name, not a plan quota, so it must be named before the usage-limit pattern.
+ */
+const CAPACITY_PATTERN = /resource[_\s]exhausted/i;
 const USAGE_LIMIT_PATTERN =
   /(quota|credit|insufficient|exhausted|billing|payment|rate.?limit|too many requests|usage limit|limit (?:reached|exceeded)|daily limit|hourly limit|free tier|out of (?:tokens|credits)|(?:^|[^\d])(?:402|429)(?:[^\d]|$))/i;
 // Covers auth, authenticate, authentication and authorization without also matching
@@ -53,6 +60,7 @@ export function classifyProviderError(message: string): ProviderErrorKind {
   if (MODEL_PATTERN.test(message)) return "model_unavailable";
   // An empty balance is not a rolling usage window: it needs credits, not a model switch.
   if (CREDITS_PATTERN.test(message)) return "credits_exhausted";
+  if (CAPACITY_PATTERN.test(message)) return "capacity";
   if (USAGE_LIMIT_PATTERN.test(message)) return "usage_limit";
   return "unknown";
 }

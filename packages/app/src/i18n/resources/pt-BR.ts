@@ -353,6 +353,10 @@ export const ptBR: TranslationResources = {
           description:
             "{{provider}} atingiu o limite de uso. Troque de modelo ou ajuste seu plano.",
         },
+        capacity: {
+          title: "Sem capacidade no momento",
+          description: "{{provider}} está sem capacidade agora. Tente de novo em instantes.",
+        },
         auth: {
           title: "Login necessário",
           description: "Reconecte o {{provider}} para continuar.",

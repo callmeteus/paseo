@@ -344,6 +344,10 @@ export const en = {
           title: "Usage limit reached",
           description: "{{provider}} reached its usage limit. Switch models or adjust your plan.",
         },
+        capacity: {
+          title: "Temporarily out of capacity",
+          description: "{{provider}} is out of capacity right now. Try again in a moment.",
+        },
         auth: {
           title: "Sign-in required",
           description: "Reconnect {{provider}} to continue.",

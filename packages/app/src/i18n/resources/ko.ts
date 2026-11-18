@@ -350,6 +350,10 @@ export const ko: TranslationResources = {
           description:
             "{{provider}}의 사용 한도에 도달했습니다. 모델을 전환하거나 요금제를 조정하세요.",
         },
+        capacity: {
+          title: "일시적으로 용량이 없습니다",
+          description: "{{provider}}의 용량이 지금 없습니다. 잠시 후 다시 시도하세요.",
+        },
         auth: {
           title: "로그인이 필요합니다",
           description: "계속하려면 {{provider}}를 다시 연결하세요.",

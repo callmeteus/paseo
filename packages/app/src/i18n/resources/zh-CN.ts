@@ -347,6 +347,10 @@ export const zhCN: TranslationResources = {
           title: "已达到使用上限",
           description: "{{provider}} 已达到使用上限。请切换模型或调整套餐。",
         },
+        capacity: {
+          title: "暂时没有容量",
+          description: "{{provider}} 当前没有容量。请稍后再试。",
+        },
         auth: {
           title: "需要登录",
           description: "请重新连接 {{provider}} 以继续。",

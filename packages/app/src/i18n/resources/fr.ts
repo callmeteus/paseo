@@ -355,6 +355,11 @@ export const fr: TranslationResources = {
           description:
             "{{provider}} a atteint sa limite d’utilisation. Changez de modèle ou ajustez votre offre.",
         },
+        capacity: {
+          title: "Plus de capacité pour le moment",
+          description:
+            "{{provider}} n’a plus de capacité pour le moment. Réessayez dans un instant.",
+        },
         auth: {
           title: "Connexion requise",
           description: "Reconnectez {{provider}} pour continuer.",

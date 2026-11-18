@@ -17,6 +17,10 @@ const KIND_KEYS: Record<ProviderErrorKind, ProviderErrorCopy> = {
     title: "agentStream.providerError.kinds.creditsExhausted.title",
     description: "agentStream.providerError.kinds.creditsExhausted.description",
   },
+  capacity: {
+    title: "agentStream.providerError.kinds.capacity.title",
+    description: "agentStream.providerError.kinds.capacity.description",
+  },
   auth: {
     title: "agentStream.providerError.kinds.auth.title",
     description: "agentStream.providerError.kinds.auth.description",

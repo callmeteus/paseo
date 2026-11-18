@@ -352,6 +352,11 @@ export const ru: TranslationResources = {
           description:
             "{{provider}} достиг лимита использования. Смените модель или настройте тариф.",
         },
+        capacity: {
+          title: "Сейчас нет свободной мощности",
+          description:
+            "{{provider}} сейчас без свободной мощности. Повторите попытку через мгновение.",
+        },
         auth: {
           title: "Требуется вход",
           description: "Переподключите {{provider}}, чтобы продолжить.",
