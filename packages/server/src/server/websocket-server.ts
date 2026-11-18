@@ -2180,6 +2180,8 @@ export class VoiceAssistantWebSocketServer {
         explicitEventSubscriptions: true,
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: true,
+        // COMPAT(daemonCrashRecovery): added in v0.13.1, remove gate after 2027-11-20.
+        daemonCrashRecovery: true,
         agentMessageProvenance: true,
         agentMessageBatching: true,
         // COMPAT(stableProjectIdentity): added in v0.1.109, remove gate after 2027-01-15.

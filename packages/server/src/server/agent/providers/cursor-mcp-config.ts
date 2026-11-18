@@ -15,9 +15,16 @@ import type { Logger } from "pino";
  * removed or its definition changes.
  */
 
-const PLUGIN_MANIFEST = join(".cursor-plugin", "plugin.json");
+// Marketplace plugins ship either a Cursor manifest or the Claude-compatible one.
+// Figma, for example, has both; an ask/dialog plugin may only have the latter.
+const PLUGIN_MANIFESTS = [
+  join(".cursor-plugin", "plugin.json"),
+  join(".claude-plugin", "plugin.json"),
+];
 const MANAGED_STATE_FILE = ".paseo-mcp-bridge-state.json";
-const MAX_PLUGIN_DEPTH = 4;
+// Marketplace caches add a version/hash directory below the plugin id, so a
+// plugin manifest can sit five levels below the plugins root.
+const MAX_PLUGIN_DEPTH = 6;
 const SKIPPED_DIRECTORIES = new Set(["node_modules", ".git", "resources", "tools"]);
 
 interface ManagedState {
@@ -181,9 +188,11 @@ async function findPluginManifests(root: string, depth = 0): Promise<string[]> {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
     const directory = join(root, entry.name);
-    const manifestPath = join(directory, PLUGIN_MANIFEST);
-    if (await isFile(manifestPath)) {
-      manifests.push(manifestPath);
+    for (const manifest of PLUGIN_MANIFESTS) {
+      const manifestPath = join(directory, manifest);
+      if (await isFile(manifestPath)) {
+        manifests.push(manifestPath);
+      }
     }
     manifests.push(...(await findPluginManifests(directory, depth + 1)));
   }

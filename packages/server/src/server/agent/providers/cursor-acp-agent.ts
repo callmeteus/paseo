@@ -158,6 +158,10 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
   }
 
   async listCommands(config: AgentSessionConfig): Promise<AgentSlashCommand[]> {
+    // A cached command-listing session does not respawn, so refresh the plugin
+    // mirror here too. A plugin installed after the chat opened can add an
+    // ask/dialog MCP server that the model must see before its next prompt.
+    await this.cursorMcpConfigBridge.acquire();
     const root = cursorProjectRoot(config.cwd, existsSync);
     const inFlight = this.commandListingInFlight.get(root);
     if (inFlight) {

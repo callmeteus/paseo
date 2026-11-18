@@ -126,7 +126,11 @@ import {
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useStagedRouterTarget } from "@/model-routers/use-staged-router-target";
 import { routerPickAsModel } from "@/model-routers/entry-target";
-import { useModelPickerRequestStore } from "@/composer/model-picker-request-store";
+import {
+  useModelPickerRequest,
+  useModelPickerRequestStore,
+} from "@/composer/model-picker-request-store";
+import { switchModelAndRetry } from "@/agent-stream/switch-model-and-retry";
 
 interface AgentControlOption {
   id: string;
@@ -1834,9 +1838,8 @@ export const AgentControls = memo(function AgentControls({
   const toast = useToast();
   const { t } = useTranslation();
   const pendingProviderSwitch = usePendingProviderSwitch(serverId, agentId);
-  const modelPickerOpenNonce = useModelPickerRequestStore((state) =>
-    state.agentId === agentId ? state.nonce : 0,
-  );
+  const { openNonce: modelPickerOpenNonce, retry: retryAfterModelPick } =
+    useModelPickerRequest(agentId);
   const stagedRouterTarget = useStagedRouterTarget(serverId, pendingProviderSwitch);
   const supportsProviderSwap = useHostFeature(serverId, "agentProviderSwap");
   const supportsSnapshotTransfer = useHostFeature(serverId, "agentSnapshotTransfer");
@@ -1962,6 +1965,22 @@ export const AgentControls = memo(function AgentControls({
    */
   const handleSelectModelFromPicker = useCallback(
     (modelId: string) => {
+      if (retryAfterModelPick) {
+        const retryClient = getHostRuntimeStore().getClient(serverId);
+        useModelPickerRequestStore.getState().clearIntent();
+        if (retryClient) {
+          void switchModelAndRetry({
+            client: retryClient,
+            serverId,
+            agentId,
+            modelId,
+            clearRouter: Boolean(agent?.modelRouterId),
+          }).catch((error: unknown) => {
+            console.warn("[AgentControls] switch model and retry failed", error);
+          });
+        }
+        return;
+      }
       if (updateStagedProviderModel(serverId, agentId, modelId)) {
         return;
       }
@@ -1977,7 +1996,7 @@ export const AgentControls = memo(function AgentControls({
       });
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent?.modelRouterId, agentId, agentProvider, serverId, t, toast],
+    [agent?.modelRouterId, agentId, agentProvider, retryAfterModelPick, serverId, t, toast],
   );
 
   useEffect(() => {

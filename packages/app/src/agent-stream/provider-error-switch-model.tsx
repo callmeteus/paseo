@@ -1,10 +1,12 @@
 import { useCallback } from "react";
-import { Text } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { PressHighlight } from "@/components/ui/press-highlight";
+import { Button } from "@/components/ui/button";
 import { useModelPickerRequestStore } from "@/composer/model-picker-request-store";
 
+/**
+ * Opens the model picker from a provider error card. The pick commits the model
+ * and re-sends the rejected prompt instead of staging it for the next message.
+ */
 export function ProviderErrorSwitchModel({
   agentId,
   disabled = false,
@@ -15,31 +17,18 @@ export function ProviderErrorSwitchModel({
   const { t } = useTranslation();
   const request = useModelPickerRequestStore((state) => state.request);
   const onPress = useCallback(() => {
-    request(agentId);
+    request(agentId, { retryAfterPick: true });
   }, [agentId, request]);
 
   return (
-    <PressHighlight
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={t("agentStream.providerError.switchModel")}
+    <Button
+      variant="outline"
+      size="sm"
       testID="provider-error-switch-model"
-      style={styles.button}
+      disabled={disabled}
+      onPress={onPress}
     >
-      <Text style={styles.label}>{t("agentStream.providerError.switchModel")}</Text>
-    </PressHighlight>
+      {t("agentStream.providerError.switchModel")}
+    </Button>
   );
 }
-
-const styles = StyleSheet.create((theme) => ({
-  button: {
-    alignSelf: "flex-start",
-    marginTop: theme.spacing[1],
-  },
-  label: {
-    color: "#f59e0b",
-    fontSize: theme.fontSize.sm,
-    fontWeight: "600",
-  },
-}));

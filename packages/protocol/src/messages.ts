@@ -4517,6 +4517,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceSortTimes: z.boolean().optional(),
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: z.boolean().optional(),
+        // COMPAT(daemonCrashRecovery): added in v0.13.1, remove gate after 2027-11-20.
+        daemonCrashRecovery: z.boolean().optional(),
         agentMessageProvenance: z.boolean().optional(),
         agentMessageBatching: z.boolean().optional(),
         // COMPAT(agentTurnIdentity): accept peers that observed pre-release v0.2.6 through 2027-01-31.

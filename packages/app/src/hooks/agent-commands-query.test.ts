@@ -5,7 +5,47 @@ import {
   draftAgentCommandsQueryKey,
   normalizeAgentCommandsCwd,
   sessionAgentCommandsQueryKey,
+  shouldListCommandsForComposer,
 } from "./agent-commands-query";
+
+describe("shouldListCommandsForComposer", () => {
+  it("lists skills for a live agent even with an unresolved remote draft", () => {
+    expect(
+      shouldListCommandsForComposer({
+        serverId: "remote-host",
+        agentId: "agent-1",
+        hasReadyDraftConfig: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("still needs a ready draft for a draft-only composer", () => {
+    expect(
+      shouldListCommandsForComposer({
+        serverId: "remote-host",
+        agentId: "",
+        hasReadyDraftConfig: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldListCommandsForComposer({
+        serverId: "remote-host",
+        agentId: "",
+        hasReadyDraftConfig: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("never lists commands without a host", () => {
+    expect(
+      shouldListCommandsForComposer({
+        serverId: "",
+        agentId: "agent-1",
+        hasReadyDraftConfig: true,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("agent command query keys", () => {
   it("shares draft commands across draft tabs with the same provider setup", () => {

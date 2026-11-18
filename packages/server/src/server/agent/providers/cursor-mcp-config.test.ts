@@ -100,6 +100,20 @@ describe("Cursor plugin MCP bridge", () => {
     });
   });
 
+  test("mirrors a Claude-compatible manifest nested in a versioned marketplace cache", async () => {
+    const root = await createRoot();
+    const pluginRoot = join(root, "plugins", "cache", "cursor-public", "dialogs", "a1b2c3d4e5f6");
+    await writeJson(join(pluginRoot, ".claude-plugin", "plugin.json"), {
+      mcpServers: { ask: { command: "ask-mcp", args: ["--stdio"] } },
+    });
+
+    await bridge(root).acquire();
+
+    expect(await readJson(join(root, "mcp.json"))).toEqual({
+      mcpServers: { ask: { command: "ask-mcp", args: ["--stdio"] } },
+    });
+  });
+
   test("keeps a user definition when a plugin uses the same server name", async () => {
     const root = await createRoot();
     const userServer = { type: "http", url: "https://user-slack.test/mcp" };

@@ -64,6 +64,19 @@ export function resetDraftAgentCommandsForCheckout(
   return queryClient.resetQueries({ queryKey: draftAgentCommandsCheckoutScope(input) });
 }
 
+/**
+ * A live agent can list its own commands even while the draft's provider
+ * selection is unresolved. The remote host commonly has no ready draft config,
+ * and gating the highlighter's query on the draft left every skill uncolored.
+ */
+export function shouldListCommandsForComposer(input: {
+  serverId: string;
+  agentId: string;
+  hasReadyDraftConfig: boolean;
+}): boolean {
+  return Boolean(input.serverId) && (Boolean(input.agentId) || input.hasReadyDraftConfig);
+}
+
 export function agentCommandsQueryKey(input: {
   serverId: string;
   agentId: string;

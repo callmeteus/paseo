@@ -9664,6 +9664,83 @@ test("turn_failed keeps a prompt whose turn had already produced output", async 
   ).toBe(true);
 });
 
+test("a provider crash is re-driven by the daemon without asking for the prompt back", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-crash-recovery-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let turns = 0;
+
+  class CrashingThenRecoveringSession extends TestAgentSession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      turns += 1;
+      const turnId = `turn-crash-${turns}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent(
+          turns === 1
+            ? {
+                type: "turn_failed",
+                provider: this.provider,
+                error: "OpenCode helper server exited (1)",
+                turnId,
+              }
+            : { type: "turn_completed", provider: this.provider, turnId },
+        );
+      }, 0);
+      return { turnId };
+    }
+  }
+
+  class CrashingClient implements AgentClient {
+    readonly provider = "codex" as const;
+    readonly capabilities = TEST_CAPABILITIES;
+
+    async isAvailable(): Promise<boolean> {
+      return true;
+    }
+
+    async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new CrashingThenRecoveringSession(config);
+    }
+
+    async resumeSession(config?: Partial<AgentSessionConfig>): Promise<AgentSession> {
+      return new CrashingThenRecoveringSession({
+        provider: "codex",
+        cwd: config?.cwd ?? process.cwd(),
+      });
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new CrashingClient() },
+    registry: storage,
+    logger,
+  });
+  const dropped: string[] = [];
+  manager.subscribe((event) => {
+    if (event.type === "prompt_dropped") dropped.push(event.clientMessageId);
+  });
+
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Crash recovery test" },
+    undefined,
+    { workspaceId: undefined },
+  );
+
+  await expect(
+    manager.runAgent(agent.id, "faz deploy por favor", {
+      clientMessageId: "client-message-crash-1",
+      submittedPromptText: "faz deploy por favor",
+    }),
+  ).rejects.toThrow("OpenCode helper server exited (1)");
+
+  // Wait for the daemon's crash retry timer and the follow-up turn.
+  await new Promise((resolve) => setTimeout(resolve, 1_600));
+
+  expect(dropped).toEqual([]);
+  expect(turns).toBe(2);
+  expect(manager.getAgent(agent.id)?.lifecycle).toBe("idle");
+});
+
 test("turn_failed surfaces provider code and diagnostic in system error message", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-turn-failed-detail-"));
   const storagePath = join(workdir, "agents");
