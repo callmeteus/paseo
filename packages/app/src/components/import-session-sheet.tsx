@@ -718,6 +718,8 @@ export function ImportSessionSheet({
               // The compact sheet keeps its content mounted while hidden, so the
               // field has to be told to drop the text the state already dropped.
               resetKey: visible ? "open" : "closed",
+              autoFocus: true,
+              focusOnResetKey: true,
               testID: "import-session-search",
             },
           }
