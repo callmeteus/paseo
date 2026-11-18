@@ -8,6 +8,7 @@ import { daemonWsRoutePattern } from "../support/helpers/daemon-port";
 import { getServerId } from "../support/helpers/server-id";
 import { connectSeedClient } from "../support/helpers/seed-client";
 import { createTempGitRepo } from "../support/helpers/workspace";
+import { chooseSettingsFontFamily } from "../support/helpers/settings";
 import { openChangesPanel, waitForWorkspaceTabsVisible } from "../support/helpers/workspace-tabs";
 
 interface DirtyWorkspace {
@@ -2140,12 +2141,13 @@ async function changeCodeTypographyFromSettings(
   // from the stored size. Edit the size only in the remounted form, or the remount drops it.
   const sizeField = page.getByLabel("Code font size");
   await sizeField.evaluate((field) => field.setAttribute("data-e2e-before-font-family", ""));
-  await page.getByLabel("Code font family").fill(typography.fontFamily);
-  await page.getByLabel("Code font family").press("Enter");
+  await chooseSettingsFontFamily(page, "Code font family", typography.fontFamily);
   await expect(page.locator("[data-e2e-before-font-family]")).toHaveCount(0);
   await sizeField.fill(String(typography.fontSize));
   await page.getByLabel("Code font size").press("Enter");
-  await expect(page.getByLabel("Code font family")).toHaveValue(typography.fontFamily);
+  await expect(page.getByRole("button", { name: "Code font family" })).toContainText(
+    typography.fontFamily,
+  );
   await expect(page.getByLabel("Code font size")).toHaveValue(String(typography.fontSize));
   await expectStoredCodeFontSize(page, typography.fontSize);
 }

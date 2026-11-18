@@ -3026,8 +3026,9 @@ export const ptBR: TranslationResources = {
       fonts: {
         title: "Fontes",
         systemDefault: "Sistema padrão",
+        searchPlaceholder: "Buscar fontes",
         interfaceFont: "Fonte da interface",
-        interfaceFontHint: "Usada em todo o app. Deixe vazio para usar o padrão do sistema",
+        interfaceFontHint: "Usada em todo o app.",
         interfaceFontAccessibility: "Família da fonte da interface",
         interfaceSize: "Tamanho da interface",
         interfaceSizeHint: "Usado na navegação, nos controles e nos rótulos",
@@ -3036,8 +3037,7 @@ export const ptBR: TranslationResources = {
         contentSizeHint: "Usado no texto do chat e no Markdown renderizado",
         contentSizeAccessibility: "Tamanho da fonte do conteúdo",
         codeFont: "Fonte de código",
-        codeFontHint:
-          "Usada em código, diffs e saída do terminal. Deixe vazio para usar o padrão do sistema",
+        codeFontHint: "Usada em código, diffs e na saída do terminal.",
         codeFontAccessibility: "Família da fonte de código",
         codeSize: "Tamanho do código",
         codeSizeHint: "Usado em código, diffs e saída do terminal",

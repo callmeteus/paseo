@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryKeyValueStorage } from "./fakes";
 import { APP_SETTINGS_KEY, SETTINGS_MIGRATIONS_KEY } from "./keys";
 import { migrateAppSettings } from "./migrations";
+import { DEFAULT_UI_FONT_FAMILY } from "@/appearance/font-families";
 import { DEFAULT_CLIENT_SETTINGS, type AppSettings, type SendBehavior } from "./storage";
 
 function settingsWith(sendBehavior: SendBehavior): AppSettings {
@@ -45,7 +46,7 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("steer");
     expect(storedSendBehavior(storage)).toBe("steer");
-    expect(appliedIds(storage)).toEqual(["steer-default"]);
+    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font"]);
   });
 
   it("leaves interrupt alone once the migration has run", async () => {
@@ -64,7 +65,7 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("queue");
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default"]);
+    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font"]);
   });
 
   it("marks itself applied on a fresh install without rewriting settings", async () => {
@@ -73,7 +74,7 @@ describe("migrateAppSettings", () => {
     await migrateAppSettings(settingsWith("steer"), storage);
 
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default"]);
+    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font"]);
   });
 
   it("keeps unknown migration ids written by a newer client", async () => {
@@ -83,7 +84,7 @@ describe("migrateAppSettings", () => {
 
     await migrateAppSettings(settingsWith("interrupt"), storage);
 
-    expect(appliedIds(storage)).toEqual(["some-later-migration", "steer-default"]);
+    expect(appliedIds(storage)).toEqual(["some-later-migration", "steer-default", "allo-ui-font"]);
   });
 
   it("migrates every mobile 15px content preference to 16px", async () => {
@@ -94,7 +95,7 @@ describe("migrateAppSettings", () => {
 
     expect(result.contentFontSize).toBe(16);
     expect(storedContentFontSize(storage)).toBe(16);
-    expect(appliedIds(storage)).toEqual(["steer-default", "mobile-content-16"]);
+    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font", "mobile-content-16"]);
   });
 
   it("leaves a 15px web content preference unchanged", async () => {
@@ -105,7 +106,7 @@ describe("migrateAppSettings", () => {
 
     expect(result.contentFontSize).toBe(15);
     expect(storedContentFontSize(storage)).toBeUndefined();
-    expect(appliedIds(storage)).toEqual(["steer-default"]);
+    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font"]);
   });
 
   it("lets a mobile user choose 15px after the default migration ran", async () => {
@@ -144,6 +145,27 @@ describe("migrateAppSettings", () => {
     const result = await migrateAppSettings(settingsWith("steer"), recovered);
 
     expect(result.sendBehavior).toBe("steer");
-    expect(appliedIds(recovered)).toEqual(["steer-default"]);
+    expect(appliedIds(recovered)).toEqual(["steer-default", "allo-ui-font"]);
+  });
+
+  it("moves an unset interface font to Allo once, then keeps a later system choice", async () => {
+    const storage = createInMemoryKeyValueStorage();
+
+    const migrated = await migrateAppSettings(
+      { ...DEFAULT_CLIENT_SETTINGS, uiFontFamily: "" },
+      storage,
+    );
+
+    expect(migrated.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
+    expect(JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "{}").uiFontFamily).toBe(
+      DEFAULT_UI_FONT_FAMILY,
+    );
+
+    const chosen = await migrateAppSettings(
+      { ...DEFAULT_CLIENT_SETTINGS, uiFontFamily: "" },
+      storage,
+    );
+
+    expect(chosen.uiFontFamily).toBe("");
   });
 });

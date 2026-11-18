@@ -2993,9 +2993,9 @@ export const ja: TranslationResources = {
       fonts: {
         title: "フォント",
         systemDefault: "システムデフォルト",
+        searchPlaceholder: "フォントを検索",
         interfaceFont: "インターフェースフォント",
-        interfaceFontHint:
-          "アプリ全体で使用されます。システムデフォルトにするには空のままにしてください",
+        interfaceFontHint: "アプリ全体で使用されます。",
         interfaceFontAccessibility: "インターフェースフォントファミリー",
         interfaceSize: "インターフェースサイズ",
         interfaceSizeHint: "ナビゲーション、コントロール、ラベルに使用されます",
@@ -3004,8 +3004,7 @@ export const ja: TranslationResources = {
         contentSizeHint: "チャットテキストとレンダリングされた Markdown に使用されます",
         contentSizeAccessibility: "コンテンツのフォントサイズ",
         codeFont: "コードフォント",
-        codeFontHint:
-          "コード、差分、ターミナル出力で使用されます。システムデフォルトにするには空のままにしてください",
+        codeFontHint: "コード、差分、ターミナル出力で使用されます。",
         codeFontAccessibility: "コードフォントファミリー",
         codeSize: "コードサイズ",
         codeSizeHint: "コード、差分、ターミナル出力に使用されます",

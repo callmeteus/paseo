@@ -58,6 +58,20 @@ export async function openSettingsSection(page: Page, section: SettingsSection):
   await expectAppRoute(page, buildSettingsSectionRoute(section));
 }
 
+export async function chooseSettingsFontFamily(
+  page: Page,
+  name: "Code font family" | "Interface font family",
+  family: string,
+): Promise<void> {
+  await page.getByRole("button", { name }).click();
+  if (family.length === 0) {
+    await page.getByRole("button", { name: "System default", exact: true }).click();
+    return;
+  }
+  await page.getByPlaceholder("Search fonts").fill(family);
+  await page.getByRole("button", { name: family, exact: true }).click();
+}
+
 export async function revealSettingsSidebarSection(
   page: Page,
   section: SettingsSection,

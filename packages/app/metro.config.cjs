@@ -24,6 +24,7 @@ const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 // crawler behavior depends on the host Watchman build/capabilities, while the
 // node crawler is the path used when Watchman is absent.
 config.resolver.useWatchman = false;
+config.resolver.assetExts = [...config.resolver.assetExts, "woff2"];
 
 const escapedAppSrcRoot = appSrcRoot
   .split(path.sep)

@@ -2978,8 +2978,9 @@ export const ko: TranslationResources = {
       fonts: {
         title: "글꼴",
         systemDefault: "시스템 기본값",
+        searchPlaceholder: "글꼴 검색",
         interfaceFont: "인터페이스 글꼴",
-        interfaceFontHint: "앱 전체에 사용됩니다. 시스템 기본값을 사용하려면 비워 두세요",
+        interfaceFontHint: "앱 전체에 사용됩니다.",
         interfaceFontAccessibility: "인터페이스 글꼴 패밀리",
         interfaceSize: "인터페이스 크기",
         interfaceSizeHint: "탐색, 컨트롤 및 레이블에 사용됩니다",
@@ -2988,8 +2989,7 @@ export const ko: TranslationResources = {
         contentSizeHint: "채팅 텍스트와 렌더링된 Markdown에 사용됩니다",
         contentSizeAccessibility: "콘텐츠 글꼴 크기",
         codeFont: "코드 글꼴",
-        codeFontHint:
-          "코드, diff, 터미널 출력에 사용됩니다. 시스템 기본값을 사용하려면 비워 두세요",
+        codeFontHint: "코드, diff, 터미널 출력에 사용됩니다.",
         codeFontAccessibility: "코드 글꼴 패밀리",
         codeSize: "코드 크기",
         codeSizeHint: "코드, diff 및 터미널 출력에 사용됩니다",

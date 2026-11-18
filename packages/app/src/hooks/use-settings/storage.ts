@@ -18,6 +18,7 @@ import {
   isChecksHiddenByLegacyRowItem,
   type SidebarRowItems,
 } from "@/components/sidebar/display-preferences/row-items";
+import { DEFAULT_UI_FONT_FAMILY } from "@/appearance/font-families";
 import { isNative } from "@/constants/platform";
 import {
   DEFAULT_CONTENT_MAX_WIDTH,
@@ -82,7 +83,7 @@ export interface AppSettings {
   sendBehavior: SendBehavior;
   serviceUrlBehavior: ServiceUrlBehavior;
   terminalScrollbackLines: number;
-  uiFontFamily: string; // "" = platform default UI stack
+  uiFontFamily: string; // "" = platform stack; "Allo" is the product default
   monoFontFamily: string; // "" = platform default mono stack
   uiBaseFontSize: number; // clamped px, platform default 14 or 15
   contentFontSize: number; // clamped px, platform default 15 or 16
@@ -166,7 +167,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   sendBehavior: "steer",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
-  uiFontFamily: "",
+  uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   monoFontFamily: "",
   uiBaseFontSize: DEFAULT_UI_BASE_FONT_SIZE,
   contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
@@ -250,7 +251,7 @@ const StoredAppSettingsSchema = z
       MIN_TERMINAL_SCROLLBACK_LINES,
       MAX_TERMINAL_SCROLLBACK_LINES,
     ).catch(DEFAULT_TERMINAL_SCROLLBACK_LINES),
-    uiFontFamily: sanitizedFontFamily().catch(""),
+    uiFontFamily: sanitizedFontFamily().catch(DEFAULT_UI_FONT_FAMILY),
     monoFontFamily: sanitizedFontFamily().catch(""),
     uiBaseFontSize: clampedNumber(MIN_UI_BASE_FONT_SIZE, MAX_UI_BASE_FONT_SIZE)
       .optional()
