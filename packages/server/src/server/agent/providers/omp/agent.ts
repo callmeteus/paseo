@@ -9,6 +9,7 @@ import stripAnsi from "strip-ansi";
 import {
   type AgentCapabilityFlags,
   type AgentClient,
+  type AgentCreateSessionOptions,
   type AgentFeature,
   type AgentLaunchContext,
   type AgentMetadata,
@@ -2308,6 +2309,7 @@ export class OmpAgentClient implements AgentClient {
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
+    options?: AgentCreateSessionOptions,
   ): Promise<AgentSession> {
     const launchMode = this.resolveLaunchMode(config.modeId, config.providerOptions);
     const startInput: OmpStartSessionInput = {
@@ -2326,12 +2328,14 @@ export class OmpAgentClient implements AgentClient {
     );
     let hostTools: OmpHostToolRouter | undefined;
     try {
-      hostTools = await this.configureNativePaseoTools(
-        runtimeSession,
-        launchContext?.paseoTools,
-        config,
-        startInput.env,
-      );
+      hostTools = options?.sideQuestion
+        ? undefined
+        : await this.configureNativePaseoTools(
+            runtimeSession,
+            launchContext?.paseoTools,
+            config,
+            startInput.env,
+          );
       const initialState = await this.restoreFastMode(
         runtimeSession,
         config,

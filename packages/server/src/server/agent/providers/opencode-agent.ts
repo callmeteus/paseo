@@ -1467,10 +1467,9 @@ export class OpenCodeAgentClient implements AgentClient {
 
     // OpenCode stores permission rules on the session, so they are set here and on resume
     // rather than sent with each prompt, which drops them.
-    const permission = buildOpenCodePermissionRules(
-      openCodeConfig.providerOptions,
-      openCodeConfig.toolPolicy,
-    );
+    const permission = options?.sideQuestion
+      ? [{ permission: "*", pattern: "*", action: "deny" as const }]
+      : buildOpenCodePermissionRules(openCodeConfig.providerOptions, openCodeConfig.toolPolicy);
 
     try {
       // Creating the first session for a directory is part of OpenCode coming up, so it

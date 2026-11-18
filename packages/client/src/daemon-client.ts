@@ -60,6 +60,7 @@ import type {
   FileWriteResult,
   FetchAgentTimelineResponseMessage,
   AgentForkContextResponseMessage,
+  SideChatItem,
   GitSetupOptions,
   CheckoutStatusResponse,
   CheckoutCommit,
@@ -4090,6 +4091,82 @@ export class DaemonClient {
     }
 
     return payload;
+  }
+
+  async getSideChat(agentId: string, requestId?: string): Promise<SideChatItem[]> {
+    const payload = await this.sendCorrelatedSessionRequest<"agent.side_chat.get.response">({
+      requestId,
+      message: { type: "agent.side_chat.get.request", agentId },
+      responseType: "agent.side_chat.get.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.items;
+  }
+
+  async clearSideChat(agentId: string, requestId?: string): Promise<void> {
+    const payload = await this.sendCorrelatedSessionRequest<"agent.side_chat.clear.response">({
+      requestId,
+      message: { type: "agent.side_chat.clear.request", agentId },
+      responseType: "agent.side_chat.clear.response",
+    });
+    if (payload.error) throw new Error(payload.error);
+  }
+
+  async askSideQuestion(input: {
+    agentId: string;
+    text: string;
+    requestId?: string;
+    onDelta?: (delta: string) => void;
+    timeout?: number;
+  }): Promise<void> {
+    const requestId = this.createRequestId(input.requestId);
+    let active = true;
+    const unsubscribe = this.subscribeRawMessages((message) => {
+      if (
+        !active ||
+        !("payload" in message) ||
+        !("requestId" in message.payload) ||
+        message.payload.requestId !== requestId
+      ) {
+        return;
+      }
+      if (message.type === "agent.side_question.response" || message.type === "rpc_error") {
+        active = false;
+        return;
+      }
+      if (message.type !== "agent.side_question.update") return;
+      input.onDelta?.(message.payload.delta);
+    });
+    try {
+      const response = await this.sendRequest({
+        requestId,
+        message: {
+          type: "agent.side_question.request",
+          agentId: input.agentId,
+          text: input.text,
+          requestId,
+        },
+        timeout: input.timeout ?? 10 * 60 * 1000,
+        options: { skipQueue: true },
+        select: (message) =>
+          message.type === "agent.side_question.response" && message.payload.requestId === requestId
+            ? message.payload
+            : null,
+      });
+      if (response.error !== null) throw new Error(response.error);
+    } finally {
+      active = false;
+      unsubscribe();
+    }
+  }
+
+  async cancelSideQuestion(agentId: string, requestId?: string): Promise<void> {
+    const payload = await this.sendCorrelatedSessionRequest<"agent.side_question.cancel.response">({
+      requestId,
+      message: { type: "agent.side_question.cancel.request", agentId },
+      responseType: "agent.side_question.cancel.response",
+    });
+    if (payload.error) throw new Error(payload.error);
   }
 
   // ============================================================================

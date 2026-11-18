@@ -32,6 +32,7 @@ const exceptions = {
   agent_permission_resolved: ["agent_permission_response"],
   terminals_changed: ["subscribe_terminals_request"],
   "usage.list_reports.update": ["usage.list_reports.request"],
+  "agent.side_question.update": ["agent.side_question.request"],
   "daemon.update.progress": ["daemon.update.request"],
   "hub.local.install.progress": ["hub.local.install.request"],
   // Transcription belongs to the explicitly retained voice operation, not a request ID.

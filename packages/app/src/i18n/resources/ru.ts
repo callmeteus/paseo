@@ -216,6 +216,7 @@ export const ru: TranslationResources = {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",
       chatMode: "Переключать этот чат между режимом чата (OpenUI) и агента",
+      sideChat: "Спросить, не добавляя в этот чат",
     },
     goal: {
       active: "Цель",
@@ -311,8 +312,17 @@ export const ru: TranslationResources = {
       mode: "Изменить режим",
     },
   },
+  sideChat: {
+    title: "Боковой чат",
+    placeholder: "Спросить об этом чате",
+    send: "Отправить",
+    clear: "Очистить",
+    empty: "Задайте вопрос, не добавляя его в этот чат.",
+    updateHost: "Обновите хост, чтобы пользоваться боковым чатом.",
+  },
   agentStream: {
     addSelectionToChat: "Добавить в чат",
+    addSelectionToSideChat: "Добавить в боковой чат",
     empty: "Начните общаться с этим агентом...",
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",

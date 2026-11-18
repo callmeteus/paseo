@@ -480,6 +480,7 @@ interface ClaudeAgentSessionOptions {
   agentId?: string;
   launchEnv?: Record<string, string>;
   persistSession?: boolean;
+  sideQuestion?: boolean;
   logger: Logger;
   queryFactory?: ClaudeQueryFactory;
   resolveBinary: () => Promise<string>;
@@ -1616,6 +1617,7 @@ export class ClaudeAgentClient implements AgentClient {
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       persistSession: options?.persistSession,
+      sideQuestion: options?.sideQuestion,
       logger: this.logger,
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
@@ -2274,6 +2276,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly defaults?: { agents?: Record<string, AgentDefinition> };
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly persistSession?: boolean;
+  private readonly sideQuestion: boolean;
   private readonly logger: Logger;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
@@ -2389,6 +2392,7 @@ class ClaudeAgentSession implements AgentSession {
     this.runtimeSettings = options.runtimeSettings;
     this.harnessEnvironment = this.buildSdkEnv();
     this.persistSession = options.persistSession;
+    this.sideQuestion = options.sideQuestion === true;
     this.logger = options.logger.child({ agentId: this.agentId });
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary;
@@ -3664,7 +3668,7 @@ class ClaudeAgentSession implements AgentSession {
       env: sdkEnv,
     };
 
-    if (this.config.mcpServers) {
+    if (this.config.mcpServers && !this.sideQuestion) {
       base.mcpServers = this.normalizeMcpServers(this.config.mcpServers);
     }
 
@@ -3680,6 +3684,9 @@ class ClaudeAgentSession implements AgentSession {
         ...(base.disallowedTools ?? []),
         ...this.runtimeSettings.disallowedTools,
       ];
+    }
+    if (this.sideQuestion) {
+      base.allowedTools = [];
     }
     return base;
   }

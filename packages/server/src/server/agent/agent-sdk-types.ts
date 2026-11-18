@@ -679,6 +679,11 @@ export interface AgentCreateSessionOptions {
    */
   persistSession?: boolean;
   /**
+   * A side question. Providers drop their native tool catalog. The runner
+   * still fails the turn if a tool call or permission arrives.
+   */
+  sideQuestion?: boolean;
+  /**
    * Model ids added by provider configuration (`models` / `additionalModels`).
    * Providers that validate against runtime-advertised models must accept these.
    */

@@ -6,6 +6,7 @@ interface AssistantSelectionCopySurfaceProps {
   style?: StyleProp<ViewStyle>;
   /** Web only: the native selection menu owns its own actions. */
   onAddSelectionToChat?: (text: string) => void;
+  onAddSelectionToSideChat?: (text: string) => void;
 }
 
 export function AssistantSelectionCopySurface({

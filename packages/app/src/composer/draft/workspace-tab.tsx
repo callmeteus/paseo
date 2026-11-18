@@ -11,6 +11,7 @@ import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
 import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
+import { sideAgentId, useDraftAgentSideSelection } from "@/side-chat/use-add-selection";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
@@ -806,6 +807,7 @@ export function WorkspaceDraftAgentTab({
     },
     [setDraftAttachments],
   );
+  const onAddSelectionToSideChat = useDraftAgentSideSelection(serverId, sideAgentId(draftAgent));
 
   const dockContent = (
     <View style={styles.contentContainer}>
@@ -821,6 +823,7 @@ export function WorkspaceDraftAgentTab({
             pendingPermissions={EMPTY_PENDING_PERMISSIONS}
             onOpenWorkspaceFile={onOpenWorkspaceFile}
             onAddSelectionToChat={handleAddSelectionToChat}
+            onAddSelectionToSideChat={onAddSelectionToSideChat}
           />
         </View>
       ) : (

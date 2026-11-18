@@ -2462,6 +2462,31 @@ export const AgentForkContextRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const AgentSideChatGetRequestMessageSchema = z.object({
+  type: z.literal("agent.side_chat.get.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentSideChatClearRequestMessageSchema = z.object({
+  type: z.literal("agent.side_chat.clear.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentSideQuestionRequestMessageSchema = z.object({
+  type: z.literal("agent.side_question.request"),
+  agentId: z.string(),
+  text: z.string(),
+  requestId: z.string(),
+});
+
+export const AgentSideQuestionCancelRequestMessageSchema = z.object({
+  type: z.literal("agent.side_question.cancel.request"),
+  agentId: z.string(),
+  requestId: z.string(),
+});
+
 export const SetAgentModeRequestMessageSchema = z.object({
   type: z.literal("set_agent_mode_request"),
   agentId: z.string(),
@@ -4028,6 +4053,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderSubagentTimelineRequestMessageSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
   AgentForkContextRequestMessageSchema,
+  AgentSideChatGetRequestMessageSchema,
+  AgentSideChatClearRequestMessageSchema,
+  AgentSideQuestionRequestMessageSchema,
+  AgentSideQuestionCancelRequestMessageSchema,
   SetAgentModeRequestMessageSchema,
   SetAgentModelRequestMessageSchema,
   SetAgentThinkingRequestMessageSchema,
@@ -4457,6 +4486,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonSelfUpdate: z.boolean().optional(),
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: z.boolean().optional(),
+        // COMPAT(agentSideQuestion): added in v0.13.2, remove gate after 2027-11-18.
+        agentSideQuestion: z.boolean().optional(),
         // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
         chatSearch: z.boolean().optional(),
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.
@@ -5722,6 +5753,58 @@ export const AgentForkContextResponseMessageSchema = z.object({
     itemCount: z.number().int().nonnegative(),
     boundaryMessageId: z.string().nullable(),
     boundaryCursor: AgentTimelineCursorSchema.nullable().optional(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const SideChatItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["question", "answer", "error"]),
+  text: z.string().optional(),
+  message: z.string().optional(),
+  createdAt: z.string(),
+});
+
+export const AgentSideChatGetResponseMessageSchema = z.object({
+  type: z.literal("agent.side_chat.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    items: z.array(SideChatItemSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentSideChatClearResponseMessageSchema = z.object({
+  type: z.literal("agent.side_chat.clear.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentSideQuestionUpdateMessageSchema = z.object({
+  type: z.literal("agent.side_question.update"),
+  payload: z.object({
+    requestId: z.string(),
+    delta: z.string(),
+  }),
+});
+
+export const AgentSideQuestionResponseMessageSchema = z.object({
+  type: z.literal("agent.side_question.response"),
+  payload: z.object({
+    requestId: z.string(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentSideQuestionCancelResponseMessageSchema = z.object({
+  type: z.literal("agent.side_question.cancel.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
     error: z.string().nullable(),
   }),
 });
@@ -7970,6 +8053,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentTimelineSubscriptionResponseMessageSchema,
   AgentAttentionRequiredMessageSchema,
   AgentForkContextResponseMessageSchema,
+  AgentSideChatGetResponseMessageSchema,
+  AgentSideChatClearResponseMessageSchema,
+  AgentSideQuestionUpdateMessageSchema,
+  AgentSideQuestionResponseMessageSchema,
+  AgentSideQuestionCancelResponseMessageSchema,
   CancelAgentResponseMessageSchema,
   ClearAgentAttentionResponseMessageSchema,
   WorkspaceCreateResponseSchema,
@@ -8210,6 +8298,11 @@ export type AgentTimelineListPromptsResponseMessage = z.infer<
   typeof AgentTimelineListPromptsResponseMessageSchema
 >;
 export type AgentForkContextResponseMessage = z.infer<typeof AgentForkContextResponseMessageSchema>;
+export type SideChatItem = z.infer<typeof SideChatItemSchema>;
+export type AgentSideChatGetResponseMessage = z.infer<typeof AgentSideChatGetResponseMessageSchema>;
+export type AgentSideQuestionResponseMessage = z.infer<
+  typeof AgentSideQuestionResponseMessageSchema
+>;
 export type CancelAgentResponseMessage = z.infer<typeof CancelAgentResponseMessageSchema>;
 export type SendAgentMessageResponseMessage = z.infer<typeof SendAgentMessageResponseMessageSchema>;
 export type SetVoiceModeResponseMessage = z.infer<typeof SetVoiceModeResponseMessageSchema>;
@@ -8331,6 +8424,7 @@ export type FetchWorkspacesRequestMessage = z.infer<typeof FetchWorkspacesReques
 export type ProjectListRequestMessage = z.infer<typeof ProjectListRequestMessageSchema>;
 export type FetchAgentRequestMessage = z.infer<typeof FetchAgentRequestMessageSchema>;
 export type AgentForkContextRequestMessage = z.infer<typeof AgentForkContextRequestMessageSchema>;
+export type AgentSideQuestionRequestMessage = z.infer<typeof AgentSideQuestionRequestMessageSchema>;
 export type SendAgentMessageRequest = z.infer<typeof SendAgentMessageRequestSchema>;
 export type WaitForFinishRequest = z.infer<typeof WaitForFinishRequestSchema>;
 export type DictationStreamStartMessage = z.infer<typeof DictationStreamStartMessageSchema>;

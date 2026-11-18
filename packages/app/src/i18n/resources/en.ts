@@ -209,6 +209,7 @@ export const en = {
       archiveAgent: "Archive the current agent",
       freshDraft: "Archive this agent and start a fresh draft",
       chatMode: "Switch this chat between Chat (OpenUI) and Agent mode",
+      sideChat: "Ask without adding it to this chat",
     },
     goal: {
       active: "Goal",
@@ -304,8 +305,17 @@ export const en = {
       mode: "Change mode",
     },
   },
+  sideChat: {
+    title: "Side chat",
+    placeholder: "Ask about this chat",
+    send: "Send",
+    clear: "Clear",
+    empty: "Ask a question without adding it to this chat.",
+    updateHost: "Update the host to use side chat.",
+  },
   agentStream: {
     addSelectionToChat: "Add to chat",
+    addSelectionToSideChat: "Add to side chat",
     empty: "Start chatting with this agent...",
     scrollToBottom: "Scroll to bottom",
     historyLoadFailed: "Couldn't load agent history",

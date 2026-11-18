@@ -213,6 +213,7 @@ export const zhCN: TranslationResources = {
       archiveAgent: "归档当前 Agent",
       freshDraft: "归档此 Agent 并开始新的草稿",
       chatMode: "在此聊天 (OpenUI) 和智能体模式之间切换",
+      sideChat: "提问且不写入此对话",
     },
     goal: {
       active: "目标",
@@ -308,8 +309,17 @@ export const zhCN: TranslationResources = {
       mode: "更改模式",
     },
   },
+  sideChat: {
+    title: "侧边对话",
+    placeholder: "询问此对话",
+    send: "发送",
+    clear: "清除",
+    empty: "提问，且不写入此对话。",
+    updateHost: "更新主机后才能使用侧边对话。",
+  },
   agentStream: {
     addSelectionToChat: "添加到对话",
+    addSelectionToSideChat: "添加到侧边对话",
     empty: "开始和这个 Agent 对话...",
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",

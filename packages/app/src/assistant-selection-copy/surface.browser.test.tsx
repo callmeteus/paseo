@@ -72,6 +72,10 @@ function findAction(): Element | null {
   return document.querySelector('[data-testid="add-selection-to-chat"]');
 }
 
+function findSideAction(): Element | null {
+  return document.querySelector('[data-testid="add-selection-to-side-chat"]');
+}
+
 /**
  * The action hangs off a display:contents root, which generates no box. A guard that
  * measured the root instead of the selection range hid the action for every selection.
@@ -83,6 +87,34 @@ describe("AssistantSelectionCopySurface", () => {
     await selectMessageText(mounted[0]!.container);
 
     expect(findAction()?.textContent).toBe("Add to chat");
+  });
+
+  it("offers adding the selected text to the side chat without sending it", async () => {
+    const onAddSelectionToChat = vi.fn();
+    const onAddSelectionToSideChat = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    act(() => {
+      root.render(
+        <AssistantSelectionCopySurface
+          onAddSelectionToChat={onAddSelectionToChat}
+          onAddSelectionToSideChat={onAddSelectionToSideChat}
+        >
+          <p data-testid="message">select these words</p>
+        </AssistantSelectionCopySurface>,
+      );
+    });
+
+    await selectMessageText(container);
+    const sideAction = findSideAction();
+    expect(sideAction?.textContent).toBe("Add to side chat");
+    await act(async () => {
+      sideAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onAddSelectionToSideChat).toHaveBeenCalledWith("select these words");
+    expect(onAddSelectionToChat).not.toHaveBeenCalled();
   });
 
   it("hides the action when the selected text is not inside the surface", async () => {

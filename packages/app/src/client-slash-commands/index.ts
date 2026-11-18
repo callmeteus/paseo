@@ -4,7 +4,8 @@ import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
 export type ClientSlashCommandKind =
   | "archive-agent"
   | "replace-agent-with-draft"
-  | "toggle-chat-mode";
+  | "toggle-chat-mode"
+  | "open-side-chat";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
@@ -14,7 +15,8 @@ export interface ClientSlashCommand {
   descriptionKey:
     | "composer.clientCommands.archiveAgent"
     | "composer.clientCommands.freshDraft"
-    | "composer.clientCommands.chatMode";
+    | "composer.clientCommands.chatMode"
+    | "composer.clientCommands.sideChat";
   argumentHint: string;
   kind: ClientSlashCommandKind;
   execution: ClientSlashCommandExecution;
@@ -50,6 +52,16 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     descriptionKey: "composer.clientCommands.chatMode",
     argumentHint: "[chat|agent]",
     kind: "toggle-chat-mode",
+    execution: "immediate",
+    acceptsArgument: true,
+  },
+  {
+    name: "side",
+    aliases: ["btw"],
+    description: "Ask without adding it to this chat",
+    descriptionKey: "composer.clientCommands.sideChat",
+    argumentHint: "[question]",
+    kind: "open-side-chat",
     execution: "immediate",
     acceptsArgument: true,
   },

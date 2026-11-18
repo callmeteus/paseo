@@ -5,6 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { ZoomableImage } from "@/components/zoomable-viewport/image";
 import { AssistantSelectionCopySurface } from "@/assistant-selection-copy/surface";
 import { useAddSelectionToChat } from "@/composer/use-add-selection-to-chat";
+import { useAddSelectionToSideChat } from "@/side-chat/use-add-selection";
 import { useSessionStore } from "@/stores/session-store";
 import { FileHtmlPreview } from "./html-preview";
 import { FilePanelLoading } from "./loading";
@@ -58,12 +59,19 @@ function MarkdownPreview({ text, params, workspaceId, host }: TextFilePreviewPro
     serverId: host.id,
     workspaceId,
   });
+  const sideSelection = useAddSelectionToSideChat({
+    serverId: host.id,
+    workspaceId,
+  });
   return (
     <View style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator>
         <View onLayout={handleLayout}>
           <AssistantSelectionCopySurface
             onAddSelectionToChat={canAddSelection ? addSelection : undefined}
+            onAddSelectionToSideChat={
+              sideSelection.canAddSelection ? sideSelection.addSelection : undefined
+            }
           >
             <FileMarkdownPreview
               source={text}

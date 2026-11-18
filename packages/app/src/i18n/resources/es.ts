@@ -216,6 +216,7 @@ export const es: TranslationResources = {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",
       chatMode: "Alternar este chat entre modo Chat (OpenUI) y Agente",
+      sideChat: "Preguntar sin añadirlo a este chat",
     },
     goal: {
       active: "Objetivo",
@@ -312,8 +313,17 @@ export const es: TranslationResources = {
       mode: "Cambiar modo",
     },
   },
+  sideChat: {
+    title: "Chat lateral",
+    placeholder: "Pregunta sobre este chat",
+    send: "Enviar",
+    clear: "Borrar",
+    empty: "Haz una pregunta sin añadirla a este chat.",
+    updateHost: "Actualiza el host para usar el chat lateral.",
+  },
   agentStream: {
     addSelectionToChat: "Añadir al chat",
+    addSelectionToSideChat: "Añadir al chat lateral",
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",

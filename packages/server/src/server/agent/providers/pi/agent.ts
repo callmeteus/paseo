@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   type AgentCapabilityFlags,
   type AgentClient,
+  type AgentCreateSessionOptions,
   type AgentFeature,
   type AgentLaunchContext,
   type AgentMetadata,
@@ -2518,22 +2519,45 @@ export class PiRpcAgentClient implements AgentClient {
     this.usagePollScheduler = options.usagePollScheduler;
   }
 
-  async createSession(
+  private async preparePiLaunchExtras(
     config: AgentSessionConfig,
-    launchContext?: AgentLaunchContext,
-  ): Promise<AgentSession> {
-    const providerOptions = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
-    const runtime = this.resolveRuntime(providerOptions.rpcTimeoutMs);
-    const mcpEnv = {
-      ...this.runtimeSettings?.env,
-      ...launchContext?.env,
-    };
-    const mcp = await this.prepareMcpInjection(config.cwd, config.mcpServers, mcpEnv, runtime);
+    launchContext: AgentLaunchContext | undefined,
+    options: AgentCreateSessionOptions | undefined,
+    runtime: PiRuntime,
+  ) {
+    if (options?.sideQuestion) {
+      return { mcp: null, mcpConfigFile: null, paseoExtension: null };
+    }
+    const mcp = await this.prepareMcpInjection(
+      config.cwd,
+      config.mcpServers,
+      {
+        ...this.runtimeSettings?.env,
+        ...launchContext?.env,
+      },
+      runtime,
+    );
     const mcpConfigFile = mcp?.kind === "adapter" ? mcp.configFile : null;
     const paseoExtension = createPiPaseoExtensionFile({
       systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
       mcpServers: mcp?.kind === "builtin" ? mcp.servers : undefined,
     });
+    return { mcp, mcpConfigFile, paseoExtension };
+  }
+
+  async createSession(
+    config: AgentSessionConfig,
+    launchContext?: AgentLaunchContext,
+    options?: AgentCreateSessionOptions,
+  ): Promise<AgentSession> {
+    const providerOptions = PiProviderOptionsSchema.parse(config.providerOptions ?? {});
+    const runtime = this.resolveRuntime(providerOptions.rpcTimeoutMs);
+    const { mcp, mcpConfigFile, paseoExtension } = await this.preparePiLaunchExtras(
+      config,
+      launchContext,
+      options,
+      runtime,
+    );
     let runtimeSession: PiRuntimeSession;
     try {
       runtimeSession = await runtime.startSession({

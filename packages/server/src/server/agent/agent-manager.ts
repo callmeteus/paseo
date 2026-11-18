@@ -1,5 +1,6 @@
 import type { RuntimeCleanupCandidate } from "./idle-runtime-cleanup/index.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
+import { deleteSideChat } from "./side-chat-store.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
 import { submittedPromptMedia } from "./prompt-attachments.js";
@@ -443,6 +444,10 @@ export interface CreateAgentOptions {
   goal?: AgentGoal;
   /** Silence budget from the automation that created this agent. */
   idleTimeoutMs?: number;
+  /** Skip the Paseo tool catalog, project instructions, and workflow prompt. */
+  paseoTools?: "none";
+  /** Ask the provider session to start without native tools. */
+  sideQuestion?: boolean;
 }
 
 export interface GoalTurnPlan {
@@ -1953,6 +1958,7 @@ export class AgentManager {
     if (!options.preserveTimeline) {
       await this.deleteAgentState(resolvedAgentId);
     }
+    const disablePaseoTools = options.paseoTools === "none";
     const {
       storedConfig,
       launchConfig: preparedLaunchConfig,
@@ -1960,12 +1966,17 @@ export class AgentManager {
     } = await this.prepareSessionConfig(config, resolvedAgentId, {
       env: options?.env,
       taskTargetLabel: options.labels?.[MULTITASK_TASK_TARGET_LABEL],
+      ...(disablePaseoTools ? { paseoTools: "none" as const } : {}),
     });
-    const projectInstructions = await this.readProjectInstructions(storedConfig.cwd);
-    const launchConfig = this.appendSystemPromptText(
-      this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
-      HUB_AUTOMATION_CHAT_INSTRUCTION,
-    );
+    const projectInstructions = disablePaseoTools
+      ? ""
+      : await this.readProjectInstructions(storedConfig.cwd);
+    const launchConfig = disablePaseoTools
+      ? preparedLaunchConfig
+      : this.appendSystemPromptText(
+          this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
+          HUB_AUTOMATION_CHAT_INSTRUCTION,
+        );
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -1979,6 +1990,7 @@ export class AgentManager {
       options?.env,
       { reason: "create", purpose: "interactive", workspaceId: options.workspaceId ?? null },
       storedConfig.model,
+      disablePaseoTools ? "none" : undefined,
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     const createOptions = this.buildCreateSessionOptions(options);
@@ -2009,10 +2021,15 @@ export class AgentManager {
 
   private buildCreateSessionOptions(options?: {
     persistSession?: boolean;
+    sideQuestion?: boolean;
   }): AgentCreateSessionOptions | undefined {
-    return options?.persistSession === undefined
-      ? undefined
-      : { persistSession: options.persistSession };
+    if (options?.persistSession === undefined && options?.sideQuestion !== true) {
+      return undefined;
+    }
+    return {
+      ...(options.persistSession === undefined ? {} : { persistSession: options.persistSession }),
+      ...(options.sideQuestion ? { sideQuestion: true } : {}),
+    };
   }
 
   // Reconstruct an agent from provider persistence. Callers should explicitly
@@ -2642,6 +2659,7 @@ export class AgentManager {
     this.discardRetainedAgentState(agentId);
 
     await this.cascadeArchiveChildren(stored);
+    await deleteSideChat(this.registry.directory(), agentId);
 
     return { archivedAt };
   }
@@ -7242,8 +7260,16 @@ export class AgentManager {
       env?: Record<string, string>;
       purpose?: AgentResumePurpose;
       taskTargetLabel?: string;
+      paseoTools?: "none";
     } = {},
   ): Promise<PreparedSessionConfig> {
+    if (options.paseoTools === "none") {
+      const storedConfig = await this.normalizeConfig(
+        stripInternalPaseoMcpServer({ ...config, mcpServers: undefined, toolPolicy: undefined }),
+        { env: options.env, purpose: options.purpose },
+      );
+      return { storedConfig, launchConfig: storedConfig, paseoToolPolicy: { enabled: false } };
+    }
     let storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), {
       env: options.env,
       purpose: options.purpose,
@@ -7335,6 +7361,7 @@ export class AgentManager {
         }
       | undefined,
     model: string | null | undefined,
+    paseoTools?: "none",
   ): Promise<AgentLaunchContext> {
     if (this.pluginLifecycle) {
       const request: PluginSessionOpenRequest = {
@@ -7360,6 +7387,7 @@ export class AgentManager {
     const maxTools = this.toolSurfaceLimitFor(client.provider, model);
     if (maxTools) context.maxTools = maxTools;
     if (
+      paseoTools !== "none" &&
       this.paseoToolsEnabled &&
       isPaseoToolPolicyEnabled(paseoToolPolicy) &&
       client.capabilities.supportsNativePaseoTools &&

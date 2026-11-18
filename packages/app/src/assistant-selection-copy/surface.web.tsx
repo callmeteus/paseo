@@ -21,6 +21,8 @@ interface AssistantSelectionCopySurfaceProps {
   style?: StyleProp<ViewStyle>;
   /** When set, a floating action adds the selected chat text to the composer. */
   onAddSelectionToChat?: (text: string) => void;
+  /** When set, a second action quotes the selection into the side chat. */
+  onAddSelectionToSideChat?: (text: string) => void;
 }
 
 interface SelectionAction {
@@ -33,6 +35,7 @@ const DISPLAY_CONTENTS: CSSProperties = { display: "contents" };
 const ACTION_ATTRIBUTE = "data-paseo-selection-chat-action";
 const ACTION_DATASET: Record<string, string> = { paseoSelectionChatAction: "true" };
 const ACTION_WIDTH = 148;
+const ACTION_PAIR_WIDTH = 340;
 const ACTION_HEIGHT = 36;
 const ACTION_GAP = 8;
 const VIEWPORT_MARGIN = 8;
@@ -41,11 +44,14 @@ export function AssistantSelectionCopySurface({
   children,
   style,
   onAddSelectionToChat,
+  onAddSelectionToSideChat,
 }: AssistantSelectionCopySurfaceProps) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [action, setAction] = useState<SelectionAction | null>(null);
   const isPanelActive = useRetainedPanelActive();
+  const actionCount = (onAddSelectionToChat ? 1 : 0) + (onAddSelectionToSideChat ? 1 : 0);
+  const actionWidth = actionCount > 1 ? ACTION_PAIR_WIDTH : ACTION_WIDTH;
 
   // Switching tabs keeps this panel mounted but hidden while the DOM selection
   // remains in it. Drop the floating action so it cannot outlive its tab.
@@ -67,7 +73,7 @@ export function AssistantSelectionCopySurface({
   }, []);
 
   useEffect(() => {
-    if (!onAddSelectionToChat) {
+    if (actionCount === 0) {
       setAction(null);
       return;
     }
@@ -107,8 +113,8 @@ export function AssistantSelectionCopySurface({
       const rawTop = placeAbove ? rect.top - ACTION_HEIGHT - ACTION_GAP : rect.bottom + ACTION_GAP;
       const maxTop = window.innerHeight - ACTION_HEIGHT - VIEWPORT_MARGIN;
       const top = Math.min(Math.max(VIEWPORT_MARGIN, rawTop), maxTop);
-      const centeredLeft = rect.left + rect.width / 2 - ACTION_WIDTH / 2;
-      const maxLeft = window.innerWidth - ACTION_WIDTH - VIEWPORT_MARGIN;
+      const centeredLeft = rect.left + rect.width / 2 - actionWidth / 2;
+      const maxLeft = window.innerWidth - actionWidth - VIEWPORT_MARGIN;
       const left = Math.min(Math.max(VIEWPORT_MARGIN, centeredLeft), maxLeft);
       setAction({ text, top, left });
     };
@@ -145,38 +151,67 @@ export function AssistantSelectionCopySurface({
       window.removeEventListener("blur", clear);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [onAddSelectionToChat]);
+  }, [actionCount, actionWidth, onAddSelectionToChat]);
 
+  const clearSelection = useCallback(() => {
+    window.getSelection()?.removeAllRanges();
+    setAction(null);
+  }, []);
   const handleAddSelection = useCallback(() => {
     if (!action || !onAddSelectionToChat) {
       return;
     }
     onAddSelectionToChat(action.text);
-    window.getSelection()?.removeAllRanges();
-    setAction(null);
-  }, [action, onAddSelectionToChat]);
+    clearSelection();
+  }, [action, clearSelection, onAddSelectionToChat]);
+  const handleAddSelectionToSideChat = useCallback(() => {
+    if (!action || !onAddSelectionToSideChat) {
+      return;
+    }
+    onAddSelectionToSideChat(action.text);
+    clearSelection();
+  }, [action, clearSelection, onAddSelectionToSideChat]);
 
   return (
     <div ref={rootRef} onCopy={handleCopy} style={DISPLAY_CONTENTS}>
       <View style={style}>{children}</View>
-      {action && onAddSelectionToChat
+      {action && actionCount > 0
         ? createPortal(
             <View
               pointerEvents="box-none"
               dataSet={ACTION_DATASET}
-              style={[styles.actionAnchor, { top: action.top, left: action.left }]}
+              style={[
+                styles.actionAnchor,
+                styles.actionRow,
+                { top: action.top, left: action.left, width: actionWidth },
+              ]}
             >
-              <Button
-                variant="outline"
-                size="sm"
-                onPress={handleAddSelection}
-                style={styles.actionButton}
-                textStyle={styles.actionLabel}
-                accessibilityLabel={t("agentStream.addSelectionToChat")}
-                testID="add-selection-to-chat"
-              >
-                {t("agentStream.addSelectionToChat")}
-              </Button>
+              {onAddSelectionToChat ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={handleAddSelection}
+                  style={styles.actionButton}
+                  textStyle={styles.actionLabel}
+                  accessibilityLabel={t("agentStream.addSelectionToChat")}
+                  testID="add-selection-to-chat"
+                >
+                  {t("agentStream.addSelectionToChat")}
+                </Button>
+              ) : null}
+              {onAddSelectionToSideChat ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={handleAddSelectionToSideChat}
+                  style={styles.actionButton}
+                  textStyle={styles.actionLabel}
+                  accessibilityLabel={t("agentStream.addSelectionToSideChat")}
+                  testID="add-selection-to-side-chat"
+                >
+                  {t("agentStream.addSelectionToSideChat")}
+                </Button>
+              ) : null}
             </View>,
             getOverlayRoot(),
           )
@@ -190,7 +225,12 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     width: ACTION_WIDTH,
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: ACTION_GAP,
+  },
   actionButton: {
+    flex: 1,
     height: ACTION_HEIGHT,
     alignItems: "center",
     justifyContent: "center",

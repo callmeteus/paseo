@@ -750,6 +750,7 @@ interface ACPAgentSessionOptions {
   handle?: AgentPersistenceHandle;
   resumePurpose?: AgentResumePurpose;
   configuredModelIds?: readonly string[];
+  sideQuestion?: boolean;
   agentId?: string;
   launchEnv?: Record<string, string>;
   waitForInitialCommands?: boolean;
@@ -1254,8 +1255,9 @@ export class ACPAgentClient implements AgentClient {
   ): Promise<AgentSession> {
     this.assertProvider(config);
     const providerOptions = ACPProviderOptionsSchema.parse(config.providerOptions ?? {});
+    const sessionConfig = options?.sideQuestion ? { ...config, mcpServers: {} } : config;
     const session = new ACPAgentSession(
-      { ...config, provider: this.provider },
+      { ...sessionConfig, provider: this.provider },
       {
         provider: this.provider,
         providerId: this.providerId,
@@ -1282,6 +1284,7 @@ export class ACPAgentClient implements AgentClient {
             providerOptions.supportsMcpServers ?? this.capabilities.supportsMcpServers,
         },
         configuredModelIds: options?.configuredModelIds,
+        sideQuestion: options?.sideQuestion,
         agentId: launchContext?.agentId,
         launchEnv: launchContext?.env,
         extensionCommandsParser: this.extensionCommandsParser,
@@ -2047,6 +2050,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private fallbackAssistantMessageId: string | null = null;
   private closed = false;
   private readonly mcpConfigBridge?: ExternalMcpConfigBridge;
+  private readonly sideQuestion: boolean;
   private historyPending = false;
   private historyRuntimeReleased = false;
   private replayingHistory = false;
@@ -2091,6 +2095,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.thinkingOptionId = config.thinkingOptionId ?? null;
     this.currentTitle = config.title ?? null;
     this.baselineTitle = this.currentTitle?.trim() || null;
+    this.sideQuestion = options.sideQuestion === true;
     this.waitForInitialCommands = options.waitForInitialCommands ?? false;
     this.initialCommandsWaitTimeoutMs = options.initialCommandsWaitTimeoutMs ?? 1500;
     this.extensionCommandsParser = options.extensionCommandsParser;
@@ -2112,7 +2117,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private async prepareExternalMcpConfig(): Promise<void> {
-    if (!this.mcpConfigBridge) return;
+    if (this.sideQuestion || !this.mcpConfigBridge) return;
     try {
       await this.mcpConfigBridge.acquire();
     } catch (error) {
@@ -3544,6 +3549,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   private acpMcpServers(): McpServer[] {
+    if (this.sideQuestion) return [];
     return this.capabilities.supportsMcpServers ? normalizeMcpServers(this.config.mcpServers) : [];
   }
 

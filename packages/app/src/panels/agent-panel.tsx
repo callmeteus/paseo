@@ -22,6 +22,11 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
+import { SideChatPanel } from "@/side-chat/panel";
+import { useSideChatStore } from "@/side-chat/store";
+import { sideChatDraftKey } from "@/side-chat/draft-key";
+import { useDraftStore } from "@/stores/draft-store";
+import { hostSupportsFeature, useHostFeature } from "@/runtime/host-features";
 import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { HostPasswordPrompt } from "@/components/host-password-prompt";
@@ -1207,12 +1212,24 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
+  const sideChatEnabled = useHostFeature(serverId, "agentSideQuestion");
   const handleAddSelectionToChat = useCallback(
     (selection: string) => {
       setAttachments((current) => [...current, { kind: "quote", text: selection }]);
       requestAttachmentFocus();
     },
     [requestAttachmentFocus, setAttachments],
+  );
+  const handleAddSelectionToSideChat = useCallback(
+    (selection: string) => {
+      if (!agentId || !sideChatEnabled) return;
+      void useDraftStore.getState().attachQuote({
+        draftKey: sideChatDraftKey(serverId, agentId),
+        text: selection,
+      });
+      useSideChatStore.getState().requestFocus(agentId);
+    },
+    [agentId, serverId, sideChatEnabled],
   );
   const parentCallout = parentAgentId ? (
     <ParentAgentCallout serverId={serverId} parentAgentId={parentAgentId} />
@@ -1255,6 +1272,9 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           toast={toastApi}
           onOpenWorkspaceFile={onOpenWorkspaceFile}
           onAddSelectionToChat={agentId ? handleAddSelectionToChat : undefined}
+          onAddSelectionToSideChat={
+            agentId && sideChatEnabled ? handleAddSelectionToSideChat : undefined
+          }
         />
       </RenderProfile>
       {hasActiveComposer ? (
@@ -1313,6 +1333,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     >
       <View style={styles.root}>
         {dock}
+        <SideChatPanel serverId={serverId} agentId={agentId} />
 
         {isArchivingCurrentAgent ? (
           <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
@@ -1394,6 +1415,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   toast,
   onOpenWorkspaceFile,
   onAddSelectionToChat,
+  onAddSelectionToSideChat,
 }: {
   streamViewRef: React.RefObject<AgentStreamViewHandle | null>;
   serverId: string;
@@ -1407,6 +1429,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
   toast: ReturnType<typeof useToastHost>["api"];
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
   onAddSelectionToChat?: (text: string) => void;
+  onAddSelectionToSideChat?: (text: string) => void;
 }) {
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
@@ -1509,6 +1532,7 @@ const AgentStreamSection = memo(function AgentStreamSection({
       turnPresentation={turnPresentation}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
       onAddSelectionToChat={onAddSelectionToChat}
+      onAddSelectionToSideChat={onAddSelectionToSideChat}
     />
   );
 });
@@ -1634,6 +1658,16 @@ function ActiveAgentComposer({
       const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
       if (!agent) {
         throw new Error("Agent not found");
+      }
+
+      if (command.kind === "open-side-chat") {
+        useSideChatStore.getState().requestFocus(agentId);
+        const argument = command.argument?.trim();
+        const serverInfo = useSessionStore.getState().sessions[serverId]?.serverInfo;
+        if (argument && hostSupportsFeature(serverInfo, "agentSideQuestion")) {
+          await useSideChatStore.getState().send(serverId, agentId, argument);
+        }
+        return;
       }
 
       if (command.kind === "toggle-chat-mode") {
@@ -1818,10 +1852,12 @@ const animatedStaticStyles = RNStyleSheet.create({
 const styles = StyleSheet.create((theme) => ({
   root: {
     flex: 1,
+    flexDirection: "row",
     backgroundColor: theme.colors.surface0,
   },
   container: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: theme.colors.surface0,
   },
   contentContainer: {

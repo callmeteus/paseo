@@ -213,6 +213,7 @@ export const ar: TranslationResources = {
       archiveAgent: "أرشفة الوكيل الحالي",
       freshDraft: "أرشفة هذا الوكيل وابدأ مسودة جديدة",
       chatMode: "تبديل هذه الدردشة بين وضع الدردشة (OpenUI) والوكيل",
+      sideChat: "اسأل دون إضافته إلى هذه المحادثة",
     },
     goal: {
       active: "الهدف",
@@ -308,8 +309,17 @@ export const ar: TranslationResources = {
       mode: "تغيير الوضع",
     },
   },
+  sideChat: {
+    title: "محادثة جانبية",
+    placeholder: "اسأل عن هذه المحادثة",
+    send: "إرسال",
+    clear: "مسح",
+    empty: "اطرح سؤالاً دون إضافته إلى هذه المحادثة.",
+    updateHost: "حدّث المضيف لاستخدام المحادثة الجانبية.",
+  },
   agentStream: {
     addSelectionToChat: "أضف إلى المحادثة",
+    addSelectionToSideChat: "أضف إلى المحادثة الجانبية",
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",

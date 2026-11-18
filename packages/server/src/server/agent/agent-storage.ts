@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Logger } from "pino";
 
 import { writeJsonFileAtomic } from "../atomic-file.js";
+import { deleteSideChat } from "./side-chat-store.js";
 import { AgentFeatureSchema, AgentStatusSchema } from "../messages.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
@@ -182,6 +183,10 @@ export class AgentStorage {
     this.logger = logger.child({ module: "agent", component: "agent-storage" });
   }
 
+  directory(): string {
+    return this.baseDir;
+  }
+
   async initialize(): Promise<void> {
     await this.load();
   }
@@ -305,6 +310,7 @@ export class AgentStorage {
     this.removeOwnerIndex(agentId);
     this.pathById.delete(agentId);
     this.pathsById.delete(agentId);
+    await deleteSideChat(this.baseDir, agentId);
   }
 
   async applySnapshot(

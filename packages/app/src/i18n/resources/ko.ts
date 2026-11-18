@@ -214,6 +214,7 @@ export const ko: TranslationResources = {
       archiveAgent: "현재 에이전트 보관",
       freshDraft: "이 에이전트를 보관하고 새 초안을 시작합니다",
       chatMode: "이 채팅을 채팅(OpenUI)과 에이전트 모드 간에 전환합니다",
+      sideChat: "이 채팅에 남기지 않고 질문",
     },
     goal: {
       active: "목표",
@@ -309,8 +310,17 @@ export const ko: TranslationResources = {
       mode: "모드 변경",
     },
   },
+  sideChat: {
+    title: "사이드 채팅",
+    placeholder: "이 채팅에 대해 질문",
+    send: "보내기",
+    clear: "지우기",
+    empty: "이 채팅에 남기지 않는 질문을 합니다.",
+    updateHost: "사이드 채팅을 쓰려면 호스트를 업데이트하세요.",
+  },
   agentStream: {
     addSelectionToChat: "채팅에 추가",
+    addSelectionToSideChat: "사이드 채팅에 추가",
     empty: "이 에이전트와 대화를 시작하세요...",
     scrollToBottom: "맨 아래로 스크롤",
     historyLoadFailed: "에이전트 기록을 로드할 수 없습니다.",

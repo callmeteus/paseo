@@ -217,6 +217,7 @@ export const fr: TranslationResources = {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",
       chatMode: "Basculer ce chat entre le mode Chat (OpenUI) et Agent",
+      sideChat: "Demander sans l'ajouter à ce chat",
     },
     goal: {
       active: "Objectif",
@@ -313,8 +314,17 @@ export const fr: TranslationResources = {
       mode: "Changer de mode",
     },
   },
+  sideChat: {
+    title: "Chat latéral",
+    placeholder: "Question sur ce chat",
+    send: "Envoyer",
+    clear: "Effacer",
+    empty: "Posez une question sans l'ajouter à ce chat.",
+    updateHost: "Mettez l'hôte à jour pour utiliser le chat latéral.",
+  },
   agentStream: {
     addSelectionToChat: "Ajouter au chat",
+    addSelectionToSideChat: "Ajouter au chat latéral",
     empty: "Commencez à discuter avec cet agent…",
     scrollToBottom: "Faire défiler vers le bas",
     historyLoadFailed: "Impossible de charger l’historique de l’agent",

@@ -113,7 +113,9 @@ export class OpenCodeV2AgentClient implements AgentClient {
         title: config.title,
         agent: config.modeId ?? "build",
         model: config.model ? modelRef(config.model, config.thinkingOptionId) : undefined,
-        permissions: permissionRules(config),
+        permissions: options?.sideQuestion
+          ? [{ action: "*", resource: "*", effect: "deny" }]
+          : permissionRules(config),
       });
       return await this.attach(connection, info, config, launch, options?.persistSession !== false);
     } catch (error) {

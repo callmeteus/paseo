@@ -69,6 +69,7 @@ describe("resolveClientSlashCommand", () => {
       ["exit", ["quit", "q"], "immediate"],
       ["clear", ["new"], "immediate"],
       ["mode", [], "immediate"],
+      ["side", ["btw"], "immediate"],
     ]);
   });
 
@@ -83,6 +84,22 @@ describe("resolveClientSlashCommand", () => {
       kind: "toggle-chat-mode",
       argument: null,
     });
+  });
+
+  it("opens a side chat from /side and /btw, and ignores attachments", () => {
+    expect(resolveClientSlashCommand({ text: "/side", hasAttachments: false })).toMatchObject({
+      name: "side",
+      kind: "open-side-chat",
+      argument: null,
+    });
+    expect(
+      resolveClientSlashCommand({ text: "/btw pergunta", hasAttachments: false }),
+    ).toMatchObject({
+      name: "side",
+      kind: "open-side-chat",
+      argument: "pergunta",
+    });
+    expect(resolveClientSlashCommand({ text: "/side why", hasAttachments: true })).toBeNull();
   });
 
   it("resolves canonical names and aliases after trimming", () => {

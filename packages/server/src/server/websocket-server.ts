@@ -2131,6 +2131,8 @@ export class VoiceAssistantWebSocketServer {
         daemonSelfUpdate: this.daemonRuntimeConfig?.desktopManaged !== true,
         // COMPAT(agentForkContext): added in v0.1.102, remove gate after 2026-12-28.
         agentForkContext: true,
+        // COMPAT(agentSideQuestion): added in v0.13.2, remove gate after 2027-11-18.
+        agentSideQuestion: true,
         // COMPAT(chatSearch): added in v0.14.0, remove gate after 2027-05-01.
         chatSearch: true,
         // COMPAT(agentProviderSwap): added in v0.13.0, remove gate after 2027-01-31.

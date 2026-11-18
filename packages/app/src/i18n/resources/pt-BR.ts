@@ -215,6 +215,7 @@ export const ptBR: TranslationResources = {
       archiveAgent: "Arquivar o agente atual",
       freshDraft: "Arquivar este agente e iniciar um novo rascunho",
       chatMode: "Alternar este chat entre modo Chat (OpenUI) e Agente",
+      sideChat: "Perguntar sem entrar neste chat",
     },
     goal: {
       active: "Meta",
@@ -312,8 +313,17 @@ export const ptBR: TranslationResources = {
       mode: "Alterar modo de permissão",
     },
   },
+  sideChat: {
+    title: "Side chat",
+    placeholder: "Pergunte sobre este chat",
+    send: "Enviar",
+    clear: "Limpar",
+    empty: "Faça uma pergunta sem adicioná-la a este chat.",
+    updateHost: "Atualize o host para usar o side chat.",
+  },
   agentStream: {
     addSelectionToChat: "Adicionar ao chat",
+    addSelectionToSideChat: "Adicionar ao side chat",
     empty: "Comece a conversar com este agente...",
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",

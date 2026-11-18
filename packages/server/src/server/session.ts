@@ -141,6 +141,12 @@ import { buildStoredAgentPayload, toAgentPayload } from "./agent/agent-projectio
 import { assertPluginTimelineDataSize } from "./agent/agent-timeline-content.js";
 import { parsePluginClientId } from "./plugins/plugin-session-identity.js";
 import { buildAgentForkContextAttachment } from "./agent/activity-curator.js";
+import { clearSideChat, readSideChat } from "./agent/side-chat-store.js";
+import {
+  cancelSideQuestion,
+  runSideQuestion,
+  SideQuestionCanceled,
+} from "./agent/side-question.js";
 import { buildAgentPrompt } from "./agent/prompt-attachments.js";
 import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
 import {
@@ -3463,6 +3469,14 @@ export class Session {
       }
       case "agent.fork_context.request":
         return this.handleAgentForkContextRequest(msg);
+      case "agent.side_chat.get.request":
+        return this.handleSideChatGetRequest(msg, source);
+      case "agent.side_chat.clear.request":
+        return this.handleSideChatClearRequest(msg, source);
+      case "agent.side_question.request":
+        return this.handleSideQuestionRequest(msg);
+      case "agent.side_question.cancel.request":
+        return this.handleSideQuestionCancelRequest(msg, source);
       default:
         return undefined;
     }
@@ -9724,6 +9738,139 @@ export class Session {
           error: error instanceof Error ? error.message : String(error),
         },
       });
+    }
+  }
+
+  private sideQuestionErrorText(error: unknown): string {
+    if (error instanceof SideQuestionCanceled) return "canceled";
+    if (error instanceof Error) return error.message;
+    return String(error);
+  }
+
+  private async handleSideChatGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.side_chat.get.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      const items = await readSideChat(this.agentStorage.directory(), msg.agentId);
+      this.emitForSource(
+        {
+          type: "agent.side_chat.get.response",
+          payload: { requestId: msg.requestId, agentId: msg.agentId, items, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "agent.side_chat.get.response",
+          payload: {
+            requestId: msg.requestId,
+            agentId: msg.agentId,
+            items: [],
+            error: error instanceof Error ? error.message : String(error),
+          },
+        },
+        source,
+      );
+    }
+  }
+
+  private async handleSideChatClearRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.side_chat.clear.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      await clearSideChat(this.agentStorage.directory(), msg.agentId);
+      this.emitForSource(
+        {
+          type: "agent.side_chat.clear.response",
+          payload: { requestId: msg.requestId, agentId: msg.agentId, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "agent.side_chat.clear.response",
+          payload: {
+            requestId: msg.requestId,
+            agentId: msg.agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        },
+        source,
+      );
+    }
+  }
+
+  private async handleSideQuestionRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.side_question.request" }>,
+  ): Promise<void> {
+    const operation = this.delivery.operation(
+      (message) =>
+        message.type === "agent.side_question.update" ||
+        message.type === "agent.side_question.response",
+      () => {
+        void cancelSideQuestion(this.agentManager, msg.agentId);
+      },
+    );
+    try {
+      await runSideQuestion({
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        parentAgentId: msg.agentId,
+        text: msg.text,
+        logger: this.sessionLogger,
+        onDelta: (delta) => {
+          operation.emit({
+            type: "agent.side_question.update",
+            payload: { requestId: msg.requestId, delta },
+          });
+        },
+      });
+      operation.emit({
+        type: "agent.side_question.response",
+        payload: { requestId: msg.requestId, error: null },
+      });
+    } catch (error) {
+      operation.emit({
+        type: "agent.side_question.response",
+        payload: {
+          requestId: msg.requestId,
+          error: this.sideQuestionErrorText(error),
+        },
+      });
+    } finally {
+      await operation.release();
+    }
+  }
+
+  private async handleSideQuestionCancelRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.side_question.cancel.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      await cancelSideQuestion(this.agentManager, msg.agentId);
+      this.emitForSource(
+        {
+          type: "agent.side_question.cancel.response",
+          payload: { requestId: msg.requestId, agentId: msg.agentId, error: null },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "agent.side_question.cancel.response",
+          payload: {
+            requestId: msg.requestId,
+            agentId: msg.agentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        },
+        source,
+      );
     }
   }
 

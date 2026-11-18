@@ -7325,7 +7325,18 @@ export class CodexAppServerAgentClient implements AgentClient {
       // TODO: Honor persistSession=false if app-server adds support, or route
       // utility generations through `codex exec --ephemeral` in a larger change.
     }
-    const sessionConfig: AgentSessionConfig = { ...config, provider: CODEX_PROVIDER };
+    const sessionConfig: AgentSessionConfig = options?.sideQuestion
+      ? {
+          ...config,
+          provider: CODEX_PROVIDER,
+          providerOptions: {
+            ...config.providerOptions,
+            sandbox_mode: "read-only",
+            approval_policy: "untrusted",
+            web_search: "disabled",
+          },
+        }
+      : { ...config, provider: CODEX_PROVIDER };
     const goalsEnabled = await this.resolveGoalsEnabled();
     const autoReviewEnabled = await this.resolveAutoReviewEnabled();
     const environment = buildCodexAppServerEnv(this.runtimeSettings, launchContext?.env);

@@ -216,6 +216,7 @@ export const ja: TranslationResources = {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",
       chatMode: "このチャットをチャット (OpenUI) とエージェントモードで切り替えます",
+      sideChat: "このチャットに残さず質問する",
     },
     goal: {
       active: "目標",
@@ -311,8 +312,17 @@ export const ja: TranslationResources = {
       mode: "権限モードを変更",
     },
   },
+  sideChat: {
+    title: "サイドチャット",
+    placeholder: "このチャットについて質問",
+    send: "送信",
+    clear: "消去",
+    empty: "このチャットに残さない質問をします。",
+    updateHost: "サイドチャットを使うにはホストを更新してください。",
+  },
   agentStream: {
     addSelectionToChat: "チャットに追加",
+    addSelectionToSideChat: "サイドチャットに追加",
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",
