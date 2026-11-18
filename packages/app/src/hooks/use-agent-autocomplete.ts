@@ -11,6 +11,7 @@ import {
 } from "./use-agent-commands-query";
 import { orderAutocompleteOptions } from "@/components/ui/autocomplete-utils";
 import { useAutocomplete } from "./use-autocomplete";
+import { resolveAutocompleteEscape, type AutocompleteMode } from "./autocomplete-escape";
 import { useSessionStore } from "@/stores/session-store";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { CLIENT_SLASH_COMMANDS, type ClientSlashCommand } from "@/client-slash-commands";
@@ -217,8 +218,6 @@ function mapCommandToOption(entry: AvailableCommand, t: TFunction): AgentAutocom
   };
 }
 
-type AutocompleteMode = "command" | "file" | null;
-
 interface BuildAutocompleteOptionsInput {
   isVisible: boolean;
   mode: AutocompleteMode;
@@ -337,23 +336,6 @@ function resolveChatMentionSupport(args: {
   return args.chatSearch && args.agentForkContext;
 }
 
-function resolveAutocompleteEscape(args: {
-  mode: AutocompleteMode;
-  slashCommand: SlashCommandRange | null;
-  fileMention: FileMentionRange | null;
-  clearInput: () => void;
-  dismissMention: (start: number) => void;
-}): (() => void) | undefined {
-  if (args.mode === "command" && args.slashCommand?.position === "start") {
-    return args.clearInput;
-  }
-  const mention = args.fileMention;
-  if (args.mode === "file" && mention) {
-    return () => args.dismissMention(mention.start);
-  }
-  return undefined;
-}
-
 function resolveCanLoadCommands(args: {
   serverId: string;
   agentId: string;
@@ -432,6 +414,24 @@ function resolveAutocompleteEmptyText(args: {
   return args.t("agentAutocomplete.noCommands");
 }
 
+/**
+ * Escape closes the picker for the token it was pressed on. Tracking the start
+ * index keeps it closed while the user keeps editing that same token, and reopens
+ * it as soon as a different one begins.
+ */
+function useDismissedToken<TToken extends { start: number }>(
+  active: TToken | null,
+): { token: TToken | null; dismiss: (start: number) => void } {
+  const [dismissedStart, setDismissedStart] = useState<number | null>(null);
+  useEffect(() => {
+    if (dismissedStart !== null && active?.start !== dismissedStart) {
+      setDismissedStart(null);
+    }
+  }, [active, dismissedStart]);
+  const token = dismissedStart !== null && active?.start === dismissedStart ? null : active;
+  return { token, dismiss: setDismissedStart };
+}
+
 export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAutocompleteResult {
   const { t } = useTranslation();
   const {
@@ -457,8 +457,10 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }),
     [cursorIndex, maskedUserInput],
   );
-  const showCommandAutocomplete = activeSlashCommand !== null;
-  const commandFilterQuery = activeSlashCommand?.query ?? "";
+  const { token: slashCommand, dismiss: dismissSlashCommand } =
+    useDismissedToken(activeSlashCommand);
+  const showCommandAutocomplete = slashCommand !== null;
+  const commandFilterQuery = slashCommand?.query ?? "";
 
   const mentionWordLimit = resolveMentionWordLimit(useIsCompactFormFactor());
   const activeFileMention = useMemo(
@@ -470,18 +472,7 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
       }),
     [cursorIndex, maskedUserInput, mentionWordLimit],
   );
-  // Escape closes the picker for the token it was pressed on. Tracking the start
-  // index keeps it closed while the user keeps typing that same mention, and
-  // reopens it as soon as a different `@` token begins.
-  const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
-  useEffect(() => {
-    if (dismissedMentionStart !== null && activeFileMention?.start !== dismissedMentionStart) {
-      setDismissedMentionStart(null);
-    }
-  }, [activeFileMention, dismissedMentionStart]);
-  const mentionDismissed =
-    dismissedMentionStart !== null && activeFileMention?.start === dismissedMentionStart;
-  const fileMention = mentionDismissed ? null : activeFileMention;
+  const { token: fileMention, dismiss: dismissMention } = useDismissedToken(activeFileMention);
   const showFileAutocomplete = fileMention !== null;
   const fileFilterQuery = fileMention?.query ?? "";
   const [debouncedFileFilterQuery, setDebouncedFileFilterQuery] = useState(fileFilterQuery);
@@ -706,16 +697,13 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
   );
 
   const clearInputOnEscape = useCallback(() => setUserInput(""), [setUserInput]);
-  const dismissMentionOnEscape = useCallback(
-    (start: number) => setDismissedMentionStart(start),
-    [],
-  );
   const onEscape = resolveAutocompleteEscape({
     mode,
-    slashCommand: activeSlashCommand,
+    slashCommand,
     fileMention,
     clearInput: clearInputOnEscape,
-    dismissMention: dismissMentionOnEscape,
+    dismissCommand: dismissSlashCommand,
+    dismissMention,
   });
 
   const { selectedIndex, onKeyPress: handleAutocompleteKeyPress } = useAutocomplete({
@@ -726,8 +714,8 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
     onEscape,
   });
   // useAutocomplete ignores Escape when there are no options, which would let it
-  // fall through to the global shortcut (interrupt the agent) while the mention is
-  // still open with an empty result list. Escape belongs to the picker either way.
+  // fall through to the global shortcut (interrupt the agent) while a slash or
+  // mention token is still open with an empty result list. Escape owns the picker.
   const onKeyPress = useCallback(
     (event: AgentAutocompleteKeyPressEvent) => {
       if (event.key === "Escape" && onEscape) {
