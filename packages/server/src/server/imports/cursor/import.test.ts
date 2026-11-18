@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
-import { CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL, importCursorChats } from "./import.js";
+import {
+  CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL,
+  importCursorChats,
+  isCursorImportWithoutSession,
+} from "./import.js";
 import {
   cleanupFixtureDirectories,
   createCursorFixtureDb,
@@ -72,6 +76,29 @@ function importInput(
     })(),
   };
 }
+
+describe("isCursorImportWithoutSession", () => {
+  test("serves only an import that has not been continued", () => {
+    expect(
+      isCursorImportWithoutSession({
+        labels: { "paseo.import.source": "cursor" },
+        persistence: null,
+      }),
+    ).toBe(true);
+    expect(
+      isCursorImportWithoutSession({
+        labels: { "paseo.import.source": "cursor" },
+        persistence: { provider: "cursor", sessionId: "session-1" },
+      }),
+    ).toBe(false);
+    expect(
+      isCursorImportWithoutSession({
+        labels: {},
+        persistence: null,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("importCursorChats", () => {
   test("gives a root chat its own workspace and keeps subagents in it", async () => {

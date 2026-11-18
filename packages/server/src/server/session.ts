@@ -165,7 +165,11 @@ import {
   listImportableProviderSessions,
   normalizeImportAgentRequest,
 } from "./agent/import-sessions.js";
-import { importCursorChats, isCursorImportedRecord } from "./imports/cursor/import.js";
+import {
+  importCursorChats,
+  isCursorImportedRecord,
+  isCursorImportWithoutSession,
+} from "./imports/cursor/import.js";
 import { listCursorChats, readCursorChatModel } from "./imports/cursor/reader.js";
 import { openCursorStateDb, resolveCursorStateDbPath } from "./imports/cursor/state-db.js";
 import { suggestContinuationProvider } from "./imports/cursor/model-map.js";
@@ -9155,8 +9159,10 @@ export class Session {
 
   /**
    * Timeline reads must not instantiate a provider just to show history.
-   * Imported transcripts are served from their durable rows; every other agent
-   * goes through the normal resume-and-hydrate path.
+   * A Cursor import that was never continued is served from `portedTimeline`.
+   * A continued import has a persistence handle: its transcript is the provider
+   * history, and the import copy is empty. Serving that copy paints a blank
+   * chat after restart.
    */
   private async resolveTimelineSource(input: {
     agentId: string;
@@ -9171,7 +9177,9 @@ export class Session {
     const liveSnapshot = this.agentManager.getAgent(input.agentId);
     const storedRecord = liveSnapshot ? null : await this.agentStorage.get(input.agentId);
     const importedRecord =
-      !liveSnapshot && storedRecord && isCursorImportedRecord(storedRecord) ? storedRecord : null;
+      !liveSnapshot && storedRecord && isCursorImportWithoutSession(storedRecord)
+        ? storedRecord
+        : null;
 
     if (importedRecord) {
       return {

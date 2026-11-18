@@ -69,6 +69,18 @@ export function isCursorImportedRecord(record: Pick<StoredAgentRecord, "labels">
 }
 
 /**
+ * A Cursor import that was never continued has no persistence handle. Its
+ * transcript is `portedTimeline`, so a timeline read can serve that copy
+ * without starting a provider. Continuing the chat stores a handle; the
+ * provider history is the transcript after that, and the import copy is empty.
+ */
+export function isCursorImportWithoutSession(
+  record: Pick<StoredAgentRecord, "labels" | "persistence">,
+): boolean {
+  return isCursorImportedRecord(record) && record.persistence == null;
+}
+
+/**
  * Import Cursor IDE chats as durable Paseo agents.
  *
  * The imported record carries the transcript as `portedTimeline` and has no
