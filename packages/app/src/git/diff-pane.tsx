@@ -1642,11 +1642,16 @@ export function ChangesSurface({
     forge,
     authState,
     payloadError: prPayloadError,
+    refetch: refetchPrStatus,
+    isFetching: isFetchingPrStatus,
   } = useCheckoutPrStatusQuery({
     serverId,
     cwd,
     enabled: isGit,
   });
+  const handleRetryPrStatus = useCallback(() => {
+    void refetchPrStatus();
+  }, [refetchPrStatus]);
   const forgeProvidersSupported = useSessionStore(
     (s) => s.sessions[serverId]?.serverInfo?.features?.forgeProviders === true,
   );
@@ -2019,7 +2024,20 @@ export function ChangesSurface({
         </View>
       ) : null}
 
-      {prErrorMessage ? <Text style={styles.actionErrorText}>{prErrorMessage}</Text> : null}
+      {prErrorMessage ? (
+        <View style={styles.prErrorRow} testID="pr-status-error">
+          <Text style={styles.actionErrorText}>{prErrorMessage}</Text>
+          <Button
+            variant="ghost"
+            size="xs"
+            testID="pr-status-retry"
+            disabled={isFetchingPrStatus}
+            onPress={handleRetryPrStatus}
+          >
+            {t("common.actions.retry")}
+          </Button>
+        </View>
+      ) : null}
 
       <View style={styles.diffContainer}>
         {bodyContent}
@@ -2077,7 +2095,13 @@ const styles = StyleSheet.create((theme) => ({
   diffStatusIconHidden: {
     opacity: 0,
   },
+  prErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: theme.spacing[3],
+  },
   actionErrorText: {
+    flex: 1,
     paddingHorizontal: theme.spacing[3],
     paddingBottom: theme.spacing[1],
     fontSize: theme.fontSize.sm,

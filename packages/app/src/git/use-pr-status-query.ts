@@ -57,6 +57,7 @@ export function useCheckoutPrStatusQuery({
     isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
+    refetch: query.refetch,
   };
 }
 
