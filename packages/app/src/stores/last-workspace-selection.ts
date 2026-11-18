@@ -13,7 +13,7 @@ export interface LastWorkspaceSelectionStorage {
   clear(): Promise<void>;
 }
 
-const ActiveWorkspaceSelectionSchema: z.ZodType<ActiveWorkspaceSelection> = z.strictObject({
+export const ActiveWorkspaceSelectionSchema: z.ZodType<ActiveWorkspaceSelection> = z.strictObject({
   serverId: z.string().trim().min(1),
   workspaceId: z.string().trim().min(1),
 });

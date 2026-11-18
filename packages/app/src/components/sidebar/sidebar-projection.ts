@@ -85,7 +85,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   if (!input.pinnedCollapsed) {
     sections.push({ workspaces: pinnedGroups.pinnedChats });
   }
-  if (input.groupMode === "project") {
+  if (input.groupMode === "project" || input.groupMode === "host_tabs") {
     sections.push(
       ...pinnedGroups.unpinnedProjects.map((project) => ({
         workspaces: project.workspaces,
@@ -176,6 +176,8 @@ function buildWorkspaceGroups(
         buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey, input.t),
       );
     case "host":
+      return [];
+    case "host_tabs":
       return [];
   }
 }

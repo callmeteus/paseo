@@ -18,6 +18,7 @@ import {
   Diff,
   EyeOff,
   Folder,
+  GalleryHorizontal,
   GitBranch,
   GitPullRequest,
   Globe,
@@ -90,6 +91,7 @@ const GROUPING_ICONS: Record<SidebarGroupMode, OptionIcon> = {
   project: withUnistyles(Folder),
   status: withUnistyles(CircleDashed),
   host: withUnistyles(Server),
+  host_tabs: withUnistyles(GalleryHorizontal),
 };
 
 const TITLE_SOURCE_ICONS: Record<WorkspaceTitleSource, OptionIcon> = {
@@ -121,7 +123,7 @@ const TRAILING_ICONS: Record<SidebarTrailingChoice, OptionIcon> = {
   timestamp: withUnistyles(Clock),
 };
 
-const GROUPING_MODES: readonly SidebarGroupMode[] = ["project", "status", "host"];
+const GROUPING_MODES: readonly SidebarGroupMode[] = ["project", "status", "host", "host_tabs"];
 const TITLE_SOURCES: readonly WorkspaceTitleSource[] = ["title", "branch"];
 const TRAILING_CHOICES: readonly SidebarTrailingChoice[] = ["diff", "timestamp"];
 
@@ -129,6 +131,7 @@ const GROUPING_LABEL_KEYS: Record<SidebarGroupMode, string> = {
   project: "sidebar.display.grouping.project",
   status: "sidebar.display.grouping.status",
   host: "sidebar.display.grouping.host",
+  host_tabs: "sidebar.display.grouping.hostTabs",
 };
 
 const TITLE_SOURCE_LABEL_KEYS: Record<WorkspaceTitleSource, string> = {
@@ -191,9 +194,12 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   // the only way back to a filter that is still hiding workspaces.
   const showLabelFilter = labels.length > 0 || hasActiveSidebarLabelFilter(preferences.labelFilter);
   // Host grouping still lists each project's workspaces, so it uses the same
-  // sort as project grouping. Status rows are ordered by their bucket instead.
+  // sort as project grouping. The top-tabs mode falls back to project grouping
+  // in the sidebar. Status rows are ordered by their bucket instead.
   const workspaceSortVisible =
-    preferences.grouping === "project" || preferences.grouping === "host";
+    preferences.grouping === "project" ||
+    preferences.grouping === "host" ||
+    preferences.grouping === "host_tabs";
 
   const pages = useMemo<MenuPageDefinition[]>(() => {
     const definitions: MenuPageDefinition[] = [

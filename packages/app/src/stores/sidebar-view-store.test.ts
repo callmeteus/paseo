@@ -308,3 +308,7 @@ it("retains the manual sorting preference on reload", () => {
 it("persists the optional host grouping mode", () => {
   expect(migrateSidebarViewState({ groupMode: "host" }).groupMode).toBe("host");
 });
+
+it("persists the hosts-in-top-tabs grouping mode", () => {
+  expect(migrateSidebarViewState({ groupMode: "host_tabs" }).groupMode).toBe("host_tabs");
+});

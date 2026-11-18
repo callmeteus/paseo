@@ -1443,6 +1443,7 @@ export const fr: TranslationResources = {
         status: "Statut",
         labels: "Libellés",
         host: "Hôte",
+        hostTabs: "Hôtes (onglets en haut)",
       },
       titleSource: {
         label: "Titre",

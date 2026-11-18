@@ -148,7 +148,7 @@ export function useSidebarWorkspacesList(options?: {
   // buckets. Host grouping still lists each project's workspaces, and those
   // rows keep the same order they have in project grouping, including a drag.
   const sort =
-    (groupMode === "project" || groupMode === "host") &&
+    (groupMode === "project" || groupMode === "host" || groupMode === "host_tabs") &&
     (workspaceSort === "manual" || workspaceSortSupported)
       ? workspaceSort
       : undefined;

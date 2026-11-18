@@ -10,6 +10,11 @@ import {
   type LastWorkspaceSelectionStorage,
 } from "@/stores/last-workspace-selection";
 import {
+  createLastWorkspaceByHostStore,
+  LAST_WORKSPACE_BY_HOST_STORAGE_KEY,
+  type LastWorkspaceByHostStorage,
+} from "@/stores/last-workspace-by-host";
+import {
   navigateToLastWorkspace as navigateToLastWorkspacePure,
   navigateToWorkspace as navigateToWorkspacePure,
   parseActiveWorkspaceSelection,
@@ -34,6 +39,18 @@ const lastWorkspaceSelectionStore = createLastWorkspaceSelectionStore(
   lastWorkspaceSelectionStorage,
 );
 
+const lastWorkspaceByHostStorage: LastWorkspaceByHostStorage = {
+  read: () => AsyncStorage.getItem(LAST_WORKSPACE_BY_HOST_STORAGE_KEY),
+  write: (value) => AsyncStorage.setItem(LAST_WORKSPACE_BY_HOST_STORAGE_KEY, value),
+};
+
+const lastWorkspaceByHostStore = createLastWorkspaceByHostStore(lastWorkspaceByHostStorage);
+
+function rememberWorkspace(selection: ActiveWorkspaceSelection): void {
+  lastWorkspaceSelectionStore.remember(selection);
+  lastWorkspaceByHostStore.remember(selection);
+}
+
 function navigateDeps(): NavigateToWorkspaceDeps {
   return {
     revealTab: revealWorkspaceTab,
@@ -48,7 +65,7 @@ function navigateDeps(): NavigateToWorkspaceDeps {
     isWorkspaceLayoutHydrated: () => useWorkspaceLayoutStore.persist.hasHydrated(),
     deferOpenTab: (input) => useWorkspaceLayoutStore.getState().deferOpenTab(input),
     openTab: (input) => useWorkspaceLayoutStore.getState().openTab(input),
-    rememberLastWorkspace: (selection) => lastWorkspaceSelectionStore.remember(selection),
+    rememberLastWorkspace: rememberWorkspace,
     navigateToRoute: (route) => {
       navigateToHostWorkspaceRoute(route);
       stripHostWorkspaceRouteEchoSearchFromBrowserUrlAfterCommit();
@@ -57,7 +74,15 @@ function navigateDeps(): NavigateToWorkspaceDeps {
 }
 
 export function hydrateLastWorkspaceSelection(): Promise<void> {
-  return lastWorkspaceSelectionStore.hydrate();
+  return Promise.all([
+    lastWorkspaceSelectionStore.hydrate(),
+    lastWorkspaceByHostStore.hydrate(),
+  ]).then(() => undefined);
+}
+
+/** The last workspace opened on a host, used by the host tab rail to switch hosts. */
+export function getLastWorkspaceForHost(serverId: string): ActiveWorkspaceSelection | null {
+  return lastWorkspaceByHostStore.getForHost(serverId);
 }
 
 export function getLastWorkspaceSelection(): ActiveWorkspaceSelection | null {
@@ -91,7 +116,7 @@ export function useActiveWorkspaceSelection(): ActiveWorkspaceSelection | null {
     if (!serverId || !workspaceId) {
       return;
     }
-    lastWorkspaceSelectionStore.remember({ serverId, workspaceId });
+    rememberWorkspace({ serverId, workspaceId });
   }, [serverId, workspaceId]);
   return selection;
 }

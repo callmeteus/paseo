@@ -1418,6 +1418,7 @@ export const ko: TranslationResources = {
         status: "상태",
         labels: "레이블",
         host: "호스트",
+        hostTabs: "호스트 (상단 탭)",
       },
       titleSource: {
         label: "제목",

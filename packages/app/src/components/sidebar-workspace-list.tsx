@@ -2223,7 +2223,7 @@ export function SidebarWorkspaceList({
     ) {
       togglePinnedCollapsed();
     }
-    if (groupMode === "project") {
+    if (groupMode === "project" || groupMode === "host_tabs") {
       const project = projects.find((candidate) =>
         candidate.workspaces.some((workspace) => workspace.workspaceKey === workspaceKey),
       );

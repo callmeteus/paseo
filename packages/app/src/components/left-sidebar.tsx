@@ -836,7 +836,7 @@ function HostGroupingToggle() {
   const { t } = useTranslation();
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const setGroupMode = useSidebarViewStore((state) => state.setGroupMode);
-  const active = groupMode === "host";
+  const active = groupMode === "host" || groupMode === "host_tabs";
   const label = t(active ? "sidebar.hostGrouping.disable" : "sidebar.hostGrouping.enable");
   const handlePress = useCallback(() => {
     setGroupMode(active ? "project" : "host");

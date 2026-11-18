@@ -1425,6 +1425,7 @@ export const ja: TranslationResources = {
         status: "ステータス",
         labels: "ラベル",
         host: "ホスト",
+        hostTabs: "ホスト（上部タブ）",
       },
       titleSource: {
         label: "タイトル",

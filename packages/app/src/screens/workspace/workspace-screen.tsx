@@ -224,6 +224,13 @@ import { findAdjacentPane } from "@/utils/split-navigation";
 import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { getIsElectron, isNative, isWeb } from "@/constants/platform";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
+import { HostTabsRow } from "@/components/hosts/host-tabs-row";
+import { useSidebarViewStore, type SidebarGroupMode } from "@/stores/sidebar-view-store";
+import {
+  getLastWorkspaceForHost,
+  navigateToWorkspace,
+} from "@/stores/navigation-active-workspace-store";
+import { navigateToHostWorkspaceRoute } from "@/navigation/workspace-route-navigation";
 import { useWorkspaceTerminals } from "@/screens/workspace/terminals/use-workspace-terminals";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
@@ -1031,6 +1038,32 @@ function useLastMainPane(input: {
 
 function shouldRenderDesktopSplitContent(isMobile: boolean, desktopSplitContent: unknown): boolean {
   return !isMobile && desktopSplitContent !== null;
+}
+
+/**
+ * What a press on a host tab does. Kept outside the screen component so the
+ * component's branching budget stays with the workspace logic it owns.
+ */
+function selectHostFromTab(hostServerId: string, currentServerId: string): void {
+  if (hostServerId === currentServerId) {
+    return;
+  }
+  const remembered = getLastWorkspaceForHost(hostServerId);
+  if (remembered) {
+    navigateToWorkspace(remembered);
+    return;
+  }
+  navigateToHostWorkspaceRoute(buildHostRootRoute(hostServerId));
+}
+
+function renderHostTabsRow(
+  groupMode: SidebarGroupMode,
+  activeServerId: string,
+  onSelectHost: (serverId: string) => void,
+): ReactNode {
+  return groupMode === "host_tabs" ? (
+    <HostTabsRow activeServerId={activeServerId} onSelectHost={onSelectHost} />
+  ) : null;
 }
 
 function WorkspaceCenterBody({ content, canvas }: { content: ReactNode; canvas: ReactNode }) {
@@ -3598,6 +3631,13 @@ function WorkspaceScreenContent({
       workspaceHeaderTitle,
     ],
   );
+  const groupMode = useSidebarViewStore((state) => state.groupMode);
+  const handleSelectHost = useCallback(
+    (hostServerId: string) => selectHostFromTab(hostServerId, normalizedServerId),
+    [normalizedServerId],
+  );
+  const hostTabsRow = renderHostTabsRow(groupMode, normalizedServerId, handleSelectHost);
+
   const desktopSplitContent = useMemo(() => {
     if (!canRenderDesktopPaneSplits || !workspaceLayout || !persistenceKey) {
       return null;
@@ -3760,6 +3800,7 @@ function WorkspaceScreenContent({
   // Compact sheets escape to the app overlay host, above both sidebars.
   const workspaceCenterColumn = isMobile ? (
     <View style={styles.centerColumn}>
+      {hostTabsRow}
       <FloatingHeaderLayout
         header={compactHeaderLayout.header}
         floating={compactHeaderLayout.floating}
@@ -3782,6 +3823,7 @@ function WorkspaceScreenContent({
   ) : (
     <View style={styles.centerColumn}>
       {rendersDesktopSplitContent ? null : renderWorkspaceScreenHeader()}
+      {hostTabsRow}
 
       {shouldRenderDesktopPaneFallback ? (
         <WorkspaceTabLineChromeProvider soleMainRow chromePaneId={null} trailing={tabLineTrailing}>

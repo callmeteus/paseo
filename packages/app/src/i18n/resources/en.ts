@@ -1417,6 +1417,7 @@ export const en = {
         status: "Status",
         labels: "Labels",
         host: "Host",
+        hostTabs: "Hosts (top tabs)",
       },
       titleSource: {
         label: "Title",

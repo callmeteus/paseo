@@ -1427,6 +1427,7 @@ export const ru: TranslationResources = {
         status: "Статус",
         labels: "Метки",
         host: "Хост",
+        hostTabs: "Хосты (вкладки сверху)",
       },
       titleSource: {
         label: "Заголовок",

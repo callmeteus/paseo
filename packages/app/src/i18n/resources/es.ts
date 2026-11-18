@@ -1447,6 +1447,7 @@ export const es: TranslationResources = {
         status: "Estado",
         labels: "Etiquetas",
         host: "Host",
+        hostTabs: "Hosts (pestañas arriba)",
       },
       titleSource: {
         label: "Título",

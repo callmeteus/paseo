@@ -1406,6 +1406,7 @@ export const ar: TranslationResources = {
         status: "الحالة",
         labels: "التسميات",
         host: "المضيف",
+        hostTabs: "المضيفون (علامات تبويب أعلى)",
       },
       titleSource: {
         label: "العنوان",

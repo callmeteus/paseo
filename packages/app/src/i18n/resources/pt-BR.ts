@@ -1440,6 +1440,7 @@ export const ptBR: TranslationResources = {
         status: "Status",
         labels: "Etiquetas",
         host: "Host",
+        hostTabs: "Hosts (abas no topo)",
       },
       titleSource: {
         label: "Título",
