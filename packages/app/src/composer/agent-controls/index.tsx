@@ -130,7 +130,12 @@ import {
   useModelPickerRequest,
   useModelPickerRequestStore,
 } from "@/composer/model-picker-request-store";
-import { switchModelAndRetry } from "@/agent-stream/switch-model-and-retry";
+import { commitPickedModelAndRetry } from "@/agent-stream/switch-model-and-retry";
+import {
+  finishPortingActivity,
+  startPortingActivity,
+} from "@/composer/agent-controls/porting-activity";
+import { navigateToAgent } from "@/utils/navigate-to-agent";
 
 interface AgentControlOption {
   id: string;
@@ -1925,6 +1930,70 @@ export const AgentControls = memo(function AgentControls({
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
 
+  const retryPickedModel = useCallback(
+    async (pick: {
+      provider: string;
+      modelId: string;
+      targetServerId: string;
+      clearRouter: boolean;
+      routerId?: string | null;
+    }) => {
+      useModelPickerRequestStore.getState().clearIntent();
+      clearProviderSwitch(serverId, agentId);
+      const retryClient = getHostRuntimeStore().getClient(serverId);
+      if (!retryClient) {
+        return;
+      }
+      const workspaceId =
+        useSessionStore.getState().sessions[serverId]?.agents.get(agentId)?.workspaceId ?? null;
+      const ports = pick.provider !== agentProvider || pick.targetServerId !== serverId;
+      if (ports) {
+        startPortingActivity(serverId, agentId, { toProvider: pick.provider });
+      }
+      try {
+        await commitPickedModelAndRetry({
+          client: retryClient,
+          serverId,
+          agentId,
+          provider: pick.provider,
+          modelId: pick.modelId,
+          currentProvider: agentProvider,
+          targetServerId: pick.targetServerId,
+          clearRouter: pick.clearRouter,
+          ...(pick.routerId !== undefined ? { routerId: pick.routerId } : {}),
+          workspaceId,
+          persistPreference: (nextProvider, nextModelId) =>
+            updatePreferences((current) =>
+              mergeProviderPreferences({
+                preferences: current,
+                provider: nextProvider as AgentProvider,
+                updates: { model: nextModelId || undefined },
+              }),
+            ),
+          navigate: ({
+            serverId: nextServerId,
+            agentId: nextAgentId,
+            workspaceId: nextWorkspaceId,
+          }) => {
+            navigateToAgent({
+              serverId: nextServerId,
+              agentId: nextAgentId,
+              ...(nextWorkspaceId ? { workspaceId: nextWorkspaceId } : {}),
+            });
+          },
+        });
+      } catch (error: unknown) {
+        console.warn("[AgentControls] switch model and retry failed", error);
+        toast.error(toErrorMessage(error));
+      } finally {
+        if (ports) {
+          finishPortingActivity(serverId, agentId);
+        }
+      }
+    },
+    [agentId, agentProvider, serverId, toast, updatePreferences],
+  );
+
   const handleSelectProviderAndModel = useCallback(
     async (provider: string, modelId: string, targetServerId?: string | null) => {
       const plan = planProviderSwitch({
@@ -1943,9 +2012,19 @@ export const AgentControls = memo(function AgentControls({
         toast.error(t(plan.messageKey));
         return;
       }
-      // Every target pick is staged and committed by the next message: a port
-      // would archive this agent, and even a plain model change must not apply
-      // to a goal auto-continuation the user did not send.
+      // A pick from the provider error card commits now and resends the rejected
+      // prompt. Every other pick stays staged until the next message: a port
+      // would archive this agent, and a plain model change must not apply to a
+      // goal auto-continuation the user did not send.
+      if (retryAfterModelPick) {
+        await retryPickedModel({
+          provider,
+          modelId,
+          targetServerId: plan.targetHost,
+          clearRouter: Boolean(agent?.modelRouterId),
+        });
+        return;
+      }
       stageProviderSwitch(serverId, agentId, {
         kind: "model",
         targetServerId: plan.targetHost,
@@ -1955,7 +2034,17 @@ export const AgentControls = memo(function AgentControls({
       });
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent?.modelRouterId, agentId, agentProvider, serverId, supportsProviderSwap, t, toast],
+    [
+      agent?.modelRouterId,
+      agentId,
+      agentProvider,
+      retryAfterModelPick,
+      retryPickedModel,
+      serverId,
+      supportsProviderSwap,
+      t,
+      toast,
+    ],
   );
 
   /**
@@ -1966,19 +2055,15 @@ export const AgentControls = memo(function AgentControls({
   const handleSelectModelFromPicker = useCallback(
     (modelId: string) => {
       if (retryAfterModelPick) {
-        const retryClient = getHostRuntimeStore().getClient(serverId);
-        useModelPickerRequestStore.getState().clearIntent();
-        if (retryClient) {
-          void switchModelAndRetry({
-            client: retryClient,
-            serverId,
-            agentId,
-            modelId,
-            clearRouter: Boolean(agent?.modelRouterId),
-          }).catch((error: unknown) => {
-            console.warn("[AgentControls] switch model and retry failed", error);
-          });
+        if (!agentProvider) {
+          return;
         }
+        void retryPickedModel({
+          provider: agentProvider,
+          modelId,
+          targetServerId: serverId,
+          clearRouter: Boolean(agent?.modelRouterId),
+        });
         return;
       }
       if (updateStagedProviderModel(serverId, agentId, modelId)) {
@@ -1996,7 +2081,16 @@ export const AgentControls = memo(function AgentControls({
       });
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent?.modelRouterId, agentId, agentProvider, retryAfterModelPick, serverId, t, toast],
+    [
+      agent?.modelRouterId,
+      agentId,
+      agentProvider,
+      retryAfterModelPick,
+      retryPickedModel,
+      serverId,
+      t,
+      toast,
+    ],
   );
 
   useEffect(() => {
@@ -2174,11 +2268,22 @@ export const AgentControls = memo(function AgentControls({
       }
       if (routerId) {
         // The trigger shows the router's entry model now. The next send commits
-        // that model and keeps the chat bound to the router.
+        // that model and keeps the chat bound to the router. A pick from the
+        // provider error card commits immediately and resends the rejected prompt.
         const pickedRouter = config?.modelRouters?.routers.find((entry) => entry.id === routerId);
         const staged = pickedRouter
           ? routerPickAsModel({ targetServerId: serverId, routerId, router: pickedRouter })
           : null;
+        if (retryAfterModelPick && staged) {
+          void retryPickedModel({
+            provider: staged.provider,
+            modelId: staged.modelId,
+            targetServerId: staged.targetServerId,
+            clearRouter: false,
+            routerId: staged.routerId,
+          });
+          return;
+        }
         stageProviderSwitch(
           serverId,
           agentId,
@@ -2186,6 +2291,15 @@ export const AgentControls = memo(function AgentControls({
         );
       } else {
         if (!agentProvider) {
+          return;
+        }
+        if (retryAfterModelPick) {
+          void retryPickedModel({
+            provider: agentProvider,
+            modelId: agent.runtimeModelId ?? agent.model ?? "",
+            targetServerId: serverId,
+            clearRouter: true,
+          });
           return;
         }
         stageProviderSwitch(serverId, agentId, {
@@ -2198,7 +2312,17 @@ export const AgentControls = memo(function AgentControls({
       }
       toast.show(t("agentControls.provider.pendingOnNextMessage"), { variant: "info" });
     },
-    [agent, agentId, agentProvider, config?.modelRouters?.routers, serverId, t, toast],
+    [
+      agent,
+      agentId,
+      agentProvider,
+      config?.modelRouters?.routers,
+      retryAfterModelPick,
+      retryPickedModel,
+      serverId,
+      t,
+      toast,
+    ],
   );
 
   const liveTaskTarget = useLiveMultitaskTaskTarget(serverId, agentId);
