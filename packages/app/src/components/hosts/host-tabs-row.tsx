@@ -4,7 +4,10 @@ import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { connectionLabelKey, HostStatusDot } from "@/components/host-status-dot";
 import { StatusIcon } from "@/components/status-icon";
+import { useTranslation } from "react-i18next";
+import { useHostRuntimeConnectionStatus, useHostRuntimeLastError } from "@/runtime/host-runtime";
 import { HOST_COLORS, type HostColor } from "@/hosts/appearance";
 import { identityForeground } from "@/styles/identity-colors";
 import type { Theme } from "@/styles/theme";
@@ -96,6 +99,10 @@ function HostTabChip({
   onPress: (serverId: string) => void;
 }): ReactElement {
   const { runningCount, dominantBucket } = useHostAgentSummary(host.serverId);
+  const hostStatus = useHostRuntimeConnectionStatus(host.serverId);
+  const lastError = useHostRuntimeLastError(host.serverId);
+  const { t } = useTranslation();
+  const connectionLabel = t(connectionLabelKey(hostStatus));
   const label = normalizeHostLabel(host.label, host.serverId);
   const handlePress = useCallback(() => onPress(host.serverId), [host.serverId, onPress]);
   const chipStyle = useCallback(
@@ -108,7 +115,7 @@ function HostTabChip({
   );
   const statusTextStyle = countTextStyle(dominantBucket);
   const accessibilityState = useMemo(() => ({ selected: active }), [active]);
-  const accessibilityLabel = `${label}, ${runningCount} ${runningCount === 1 ? "agent" : "agents"} running`;
+  const accessibilityLabel = `${label}, ${connectionLabel}, ${runningCount} ${runningCount === 1 ? "agent" : "agents"} running`;
 
   return (
     <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
@@ -132,6 +139,7 @@ function HostTabChip({
               uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
             />
           </StatusIcon>
+          <HostStatusDot serverId={host.serverId} status={hostStatus} />
           <Text
             style={[styles.label, active ? styles.labelActive : null]}
             numberOfLines={1}
@@ -146,6 +154,10 @@ function HostTabChip({
       </TooltipTrigger>
       <TooltipContent side="bottom" align="center" offset={8}>
         <Text style={styles.tooltipText}>{label}</Text>
+        <Text style={styles.tooltipStatus}>
+          {connectionLabel}
+          {hostStatus === "error" && lastError ? ` — ${lastError}` : ""}
+        </Text>
       </TooltipContent>
     </Tooltip>
   );
@@ -220,6 +232,10 @@ const styles = StyleSheet.create((theme) => ({
   tooltipText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.popoverForeground,
+  },
+  tooltipStatus: {
+    fontSize: theme.fontSize["2xs"],
+    color: theme.colors.foregroundMuted,
   },
   // Reserved width so the chip does not move when a running agent appears.
   countBadge: {
