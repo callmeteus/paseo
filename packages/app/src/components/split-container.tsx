@@ -785,6 +785,8 @@ const SplitPaneView = memo(function SplitPaneView({
             focusModeEnabled={Boolean(focusModeEnabled)}
             onExitFocusMode={onExitFocusMode}
           />
+          {/* The row's own rule ends at the chrome padding. This one crosses it. */}
+          <View pointerEvents="none" style={styles.paneTabsRule} />
         </WindowChromeSafeArea>
 
         <View style={styles.paneContent}>
@@ -897,6 +899,14 @@ const styles = StyleSheet.create((theme) => ({
   paneTabs: {
     position: "relative",
     minWidth: 0,
+  },
+  paneTabsRule: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    height: theme.borderWidth[1],
+    backgroundColor: theme.colors.border,
   },
   paneContent: {
     position: "relative",

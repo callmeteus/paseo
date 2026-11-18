@@ -22,6 +22,7 @@ import {
   cancelComposerAgent,
   dispatchComposerAgentMessage,
   editQueuedComposerMessage,
+  removeQueuedComposerMessage,
   reorderQueuedComposerMessages,
   findForgeItemByOption,
   isAttachmentSelectedForForgeItem,
@@ -798,6 +799,37 @@ describe("reorderQueuedComposerMessages", () => {
       queue,
     });
 
+    expect(queue.state).toBe(before);
+  });
+});
+
+describe("removeQueuedComposerMessage", () => {
+  it("drops the selected item and keeps the rest of the queue", () => {
+    const queue = createFakeQueue(
+      new Map([
+        [
+          "agent",
+          [
+            { id: "keep", text: "stay", attachments: [] },
+            { id: "drop", text: "go", attachments: [] },
+          ],
+        ],
+      ]),
+    );
+
+    expect(removeQueuedComposerMessage({ agentId: "agent", messageId: "drop", queue })).toBe(true);
+    expect(queue.state.get("agent")).toEqual([{ id: "keep", text: "stay", attachments: [] }]);
+  });
+
+  it("leaves the queue untouched when the message is already gone", () => {
+    const queue = createFakeQueue(
+      new Map([["agent", [{ id: "keep", text: "stay", attachments: [] }]]]),
+    );
+    const before = queue.state;
+
+    expect(removeQueuedComposerMessage({ agentId: "agent", messageId: "missing", queue })).toBe(
+      false,
+    );
     expect(queue.state).toBe(before);
   });
 });

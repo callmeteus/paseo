@@ -53,6 +53,7 @@ import {
 } from "@/stores/sidebar-view-store";
 import { workspaceLabelKey, type WorkspaceLabelColor } from "@getpaseo/protocol/workspace-labels";
 import type { WorkspaceTitleSource } from "@/hooks/use-settings";
+import type { WorkspaceSort } from "@/projects/workspace-structure";
 import { SIDEBAR_CHECKS_DISPLAYS, type SidebarChecksDisplay } from "./checks-display";
 import { useSidebarDisplayPreferences, type SidebarTrailingChoice } from "./model";
 import { SIDEBAR_ROW_ITEMS, type SidebarRowItem } from "./row-items";
@@ -336,7 +337,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
             <MenuSubTrigger
               id="sort"
               value={
-                workspaceSortSupported || preferences.workspaceSort === "manual"
+                showsWorkspaceSortValue(preferences.workspaceSort, workspaceSortSupported)
                   ? t(`sidebar.display.sort.${preferences.workspaceSort}`)
                   : undefined
               }
@@ -410,6 +411,10 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   );
 }
 
+function showsWorkspaceSortValue(sort: WorkspaceSort, hostTimesSupported: boolean): boolean {
+  return hostTimesSupported || sort === "manual" || sort === "title" || sort === "updated";
+}
+
 function SortPage({
   preferences,
   automaticSortSupported,
@@ -420,12 +425,20 @@ function SortPage({
   const { t } = useTranslation();
   const { setWorkspaceSort } = preferences;
   const selectManual = useCallback(() => setWorkspaceSort("manual"), [setWorkspaceSort]);
+  const selectTitle = useCallback(() => setWorkspaceSort("title"), [setWorkspaceSort]);
+  const selectUpdated = useCallback(() => setWorkspaceSort("updated"), [setWorkspaceSort]);
   const selectCreated = useCallback(() => setWorkspaceSort("created"), [setWorkspaceSort]);
   const selectLastPrompt = useCallback(() => setWorkspaceSort("lastPrompt"), [setWorkspaceSort]);
   return (
     <>
       <MenuItem selected={preferences.workspaceSort === "manual"} onSelect={selectManual}>
         {t("sidebar.display.sort.manual")}
+      </MenuItem>
+      <MenuItem selected={preferences.workspaceSort === "title"} onSelect={selectTitle}>
+        {t("sidebar.display.sort.title")}
+      </MenuItem>
+      <MenuItem selected={preferences.workspaceSort === "updated"} onSelect={selectUpdated}>
+        {t("sidebar.display.sort.updated")}
       </MenuItem>
       {automaticSortSupported ? (
         <>

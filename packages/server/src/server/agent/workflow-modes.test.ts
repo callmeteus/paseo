@@ -65,6 +65,7 @@ describe("workflow modes", () => {
     expect(prompt).toContain("Do NOT edit project files");
     expect(prompt).toContain("plan_build");
     expect(prompt).toContain("## Checklist");
+    expect(prompt).toContain("$PASEO_HOME/plans");
     expect(prompt).toContain("- [x]");
     expect(WORKFLOW_MODES.find((mode) => mode.id === "plan")?.readOnly).toBe(true);
   });

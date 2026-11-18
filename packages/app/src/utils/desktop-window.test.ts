@@ -4,6 +4,7 @@ import {
   resolveHasOwnedWindowChromeObstruction,
   resolveWindowChromeObstruction,
   resolveWindowChromeSafeArea,
+  windowChromeObstructionBelowCover,
 } from "@/utils/desktop-window";
 
 describe("window chrome", () => {
@@ -29,6 +30,24 @@ describe("window chrome", () => {
     expect(resolveWindowChromeObstruction({ mode: "custom-linux", isFullscreen: false })).toEqual({
       topLeft: null,
       topRight: { width: 108, height: 36 },
+    });
+  });
+
+  it("stops reserving a corner the top rail already covers", () => {
+    expect(
+      windowChromeObstructionBelowCover({
+        obstruction: { topLeft: null, topRight: { width: 108, height: 36 } },
+        coverHeight: 36,
+      }),
+    ).toEqual({ topLeft: null, topRight: null });
+    expect(
+      windowChromeObstructionBelowCover({
+        obstruction: { topLeft: { width: 78, height: 45 }, topRight: null },
+        coverHeight: 36,
+      }),
+    ).toEqual({
+      topLeft: { width: 78, height: 45 },
+      topRight: null,
     });
   });
 

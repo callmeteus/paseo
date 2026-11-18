@@ -1,19 +1,18 @@
-export interface DragState<T> {
+export interface DragState {
   activeId: string | null;
-  dragItems: T[] | null;
 }
 
-export type DragAction<T> = { type: "start"; id: string; data: T[] } | { type: "clear" };
+export type DragAction = { type: "start"; id: string } | { type: "clear" };
 
-export function dragStateInitial<T>(): DragState<T> {
-  return { activeId: null, dragItems: null };
+export function dragStateInitial(): DragState {
+  return { activeId: null };
 }
 
-export function dragStateReducer<T>(state: DragState<T>, action: DragAction<T>): DragState<T> {
+export function dragStateReducer(state: DragState, action: DragAction): DragState {
   switch (action.type) {
     case "start":
-      return { activeId: action.id, dragItems: action.data };
+      return { activeId: action.id };
     case "clear":
-      return { activeId: null, dragItems: null };
+      return { activeId: null };
   }
 }

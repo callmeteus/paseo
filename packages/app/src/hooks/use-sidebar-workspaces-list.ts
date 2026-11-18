@@ -144,12 +144,16 @@ export function useSidebarWorkspacesList(options?: {
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const sortSupport = useHostFeatureMap(directoryServerIds, "workspaceSortTimes");
   const workspaceSortSupported = [...sortSupport.values()].every(Boolean);
+  // Title and last update are computed from data the client already has. Created
+  // and last prompt still need the host to stamp those times.
+  const sortsWithoutHostTimes =
+    workspaceSort === "manual" || workspaceSort === "title" || workspaceSort === "updated";
   // Status grouping orders rows by status, so a workspace sort would fight the
   // buckets. Host grouping still lists each project's workspaces, and those
   // rows keep the same order they have in project grouping, including a drag.
   const sort =
     (groupMode === "project" || groupMode === "host" || groupMode === "host_tabs") &&
-    (workspaceSort === "manual" || workspaceSortSupported)
+    (sortsWithoutHostTimes || workspaceSortSupported)
       ? workspaceSort
       : undefined;
   const { projects: hostProjects } = useWorkspaceStructure(directoryServerIds, sort);

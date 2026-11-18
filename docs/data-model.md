@@ -53,6 +53,9 @@ $PASEO_HOME/
 ├── agents/
 │   └── {sanitized-cwd}/
 │       └── {agentId}.json               # One file per agent
+├── plans/
+│   └── {workspaceId}/
+│       └── {name}.md                    # Sidebar plan. Not part of the workspace checkout.
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
 ├── projects/
@@ -71,6 +74,8 @@ $PASEO_HOME/
 ```
 
 The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` by stripping the filesystem root and replacing path separators with `-` (Windows drive letters become a `C-` style prefix). Persistent server stores write atomically by writing a temp file in the target directory and then renaming it into place.
+
+Sidebar plans live under `plans/{workspaceId}/` so writing one never shows up as a change in the workspace checkout. `plan_create_update` resolves the file in `packages/server/src/server/agent/plan-files.ts`. A name such as `feature-name.md` or the older `plans/feature-name.md` both land in that directory.
 
 ---
 

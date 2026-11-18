@@ -21,6 +21,7 @@ import {
 } from "./selectors";
 import {
   useSessionStore,
+  type Agent,
   type ProjectDescriptor,
   type WorkspaceDescriptor,
 } from "../session-store";
@@ -640,6 +641,87 @@ it("a prompt changes only its project's structure and output preserves both proj
   expect(output[0]).toBe(after[0]);
   expect(output[1]).toBe(after[1]);
 });
+
+it("reorders by agent activity only for last update", () => {
+  const alpha = createWorkspace({
+    id: "alpha",
+    name: "Alpha",
+    projectId: "p",
+    createdAt: new Date("2026-01-01"),
+  });
+  const zed = createWorkspace({
+    id: "zed",
+    name: "Zed",
+    projectId: "p",
+    createdAt: new Date("2026-02-01"),
+  });
+  const projects = new Map([["p", projectDescriptorFromTestWorkspace(alpha)]]);
+  const workspaces = new Map([
+    [alpha.id, alpha],
+    [zed.id, zed],
+  ]);
+  const agents = new Map([["busy", activityAgent("busy", "alpha", "2026-03-01")]]);
+  const state = {
+    sessions: { [SERVER_ID]: { projects, workspaces, agents } },
+    agentLastActivity: new Map<string, Date>(),
+  };
+  const updated = createWorkspaceStructureProjectsSelector([SERVER_ID], "updated");
+  expect(updated(state)[0]?.workspaceKeys).toEqual([`${SERVER_ID}:alpha`, `${SERVER_ID}:zed`]);
+
+  const live = {
+    ...state,
+    agentLastActivity: new Map([["busy", new Date("2026-04-01")]]),
+    sessions: {
+      [SERVER_ID]: {
+        projects,
+        workspaces,
+        agents: new Map([
+          ["busy", activityAgent("busy", "zed", "2026-01-15")],
+          ["other", activityAgent("other", "alpha", "2026-03-01")],
+        ]),
+      },
+    },
+  };
+  expect(updated(live)[0]?.workspaceKeys).toEqual([`${SERVER_ID}:zed`, `${SERVER_ID}:alpha`]);
+
+  const byTitle = createWorkspaceStructureProjectsSelector([SERVER_ID], "title");
+  const titled = byTitle(state);
+  expect(titled[0]?.workspaceKeys).toEqual([`${SERVER_ID}:alpha`, `${SERVER_ID}:zed`]);
+  expect(byTitle(live)[0]).toBe(titled[0]);
+});
+
+function activityAgent(id: string, workspaceId: string, updatedAt: string): Agent {
+  return {
+    serverId: SERVER_ID,
+    id,
+    provider: "codex",
+    status: "idle",
+    turn: { phase: "idle", cancellationRequestId: null },
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date(updatedAt),
+    lastUserMessageAt: null,
+    lastActivityAt: new Date(updatedAt),
+    capabilities: {
+      supportsStreaming: true,
+      supportsSessionPersistence: true,
+      supportsDynamicModes: true,
+      supportsMcpServers: true,
+      supportsReasoningStream: true,
+      supportsToolInvocations: true,
+    },
+    currentModeId: null,
+    availableModes: [],
+    pendingPermissions: [],
+    persistence: null,
+    title: null,
+    cwd: "/repo",
+    workspaceId,
+    model: null,
+    archivedAt: null,
+    parentAgentId: null,
+    labels: {},
+  };
+}
 
 it("applies manual order only when requested without mutating the automatic baseline", () => {
   const project = {

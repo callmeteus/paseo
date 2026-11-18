@@ -49,7 +49,8 @@ import { ProviderSettingsHost } from "@/components/provider-settings-host";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
-import { HostTabsRail } from "@/components/hosts/host-tabs-rail";
+import { HostTabsRail, isHostTabsRailVisible } from "@/components/hosts/host-tabs-rail";
+import { HOST_TAB_RAIL_HEIGHT } from "@/components/hosts/host-tabs-row";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
 import { HostConfirmationSheet } from "@/hosts/host-confirmation-sheet";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
@@ -116,11 +117,13 @@ import { usePanelStore } from "@/stores/panel-store";
 import { flushDraftPersistStorage } from "@/stores/draft-store";
 import { getNextThemePreference, ICON_STROKE_WIDTH } from "@/styles/theme";
 import { useSessionStore } from "@/stores/session-store";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { WorkspaceLayoutModePublisher } from "@/workspace-tabs/layout-mode-publisher";
 import { installWebScrollbarStyles } from "@/styles/install-web-scrollbar-styles";
 import type { HostProfile } from "@/types/host-connection";
 import {
   useHasWindowChromeObstruction,
+  WindowChromeBelowCover,
   WindowChromeProvider,
   WindowChromeRegion,
   WindowChromeSafeArea,
@@ -350,9 +353,26 @@ interface AppContainerProps {
 
 const WINDOW_SIDEBAR_TOGGLE_HORIZONTAL_PADDING = 12;
 
+function workspaceBelowHostTabs(input: {
+  hostTabsRailVisible: boolean;
+  workspaceChrome: ReactNode;
+}): ReactNode {
+  if (!input.hostTabsRailVisible) return input.workspaceChrome;
+  return (
+    <WindowChromeBelowCover coverHeight={HOST_TAB_RAIL_HEIGHT}>
+      {input.workspaceChrome}
+    </WindowChromeBelowCover>
+  );
+}
+
 function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppContainerProps) {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
   const daemons = useHosts();
+  const sidebarGroupMode = useSidebarViewStore((state) => state.groupMode);
+  const hostTabsRailVisible = isHostTabsRailVisible({
+    groupMode: sidebarGroupMode,
+    hostCount: daemons.length,
+  });
   const { settings, updateSettings } = useAppSettings();
   const toggleMobileAgentList = usePanelStore((state) => state.toggleMobileAgentList);
   const toggleDesktopAgentList = usePanelStore((state) => state.toggleDesktopAgentList);
@@ -473,7 +493,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const surface = (
     <View style={layoutStyles.surfaceFill}>
       <HostTabsRail />
-      {workspaceChrome}
+      {workspaceBelowHostTabs({ hostTabsRailVisible, workspaceChrome })}
       <AppearanceStyleBoundary>
         {!isCompactLayout && appChromeLayout.sidebarToggleOwner === "window" ? (
           <WindowChromeRegion corners="top-left">

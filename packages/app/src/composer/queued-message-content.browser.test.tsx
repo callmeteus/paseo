@@ -14,6 +14,8 @@ const TEXT = `Veja ${serializeInlineChip(chip)} e depois:\n- item\n\`code\``;
 const QUEUE_STYLE = { color: "#f4f4f5", fontSize: 14 };
 const NO_SKILLS: string[] = [];
 const NO_ATTACHMENTS: never[] = [];
+
+function noopOpenAttachment(): void {}
 const mounted: { root: Root; container: HTMLDivElement }[] = [];
 
 afterEach(() => {
@@ -33,6 +35,7 @@ function mount() {
       <QueuedMessageContent
         text={TEXT}
         attachments={NO_ATTACHMENTS}
+        onOpenAttachment={noopOpenAttachment}
         skillNames={NO_SKILLS}
         style={QUEUE_STYLE}
       />,

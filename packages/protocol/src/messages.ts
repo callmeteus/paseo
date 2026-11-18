@@ -5140,7 +5140,7 @@ export const PlanUpdateMessageSchema = z.object({
   type: z.literal("plan_update"),
   payload: z.object({
     workspaceId: z.string(),
-    /** Workspace-relative markdown path. */
+    /** Absolute markdown path under `$PASEO_HOME/plans/{workspaceId}`. */
     path: z.string(),
     title: z.string().optional(),
     agentId: z.string(),

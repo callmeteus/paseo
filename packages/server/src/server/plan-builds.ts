@@ -2,7 +2,7 @@ import type { AgentManagerEvent } from "./agent/agent-manager.js";
 
 export interface PlanBuildEntry {
   workspaceId: string;
-  /** Workspace-relative markdown path. */
+  /** Absolute markdown path under `$PASEO_HOME/plans`. */
   path: string;
   title: string;
   agentId: string;
