@@ -3,7 +3,9 @@ import { ScrollView, Text, View, type PressableStateCallbackType } from "react-n
 import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { PressHighlight } from "@/components/ui/press-highlight";
+import { SortableInlineList } from "@/components/sortable-inline-list";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useHostTabOrderStore } from "@/stores/host-tab-order-store";
 import { connectionLabelKey, HostStatusDot } from "@/components/host-status-dot";
 import { StatusIcon } from "@/components/status-icon";
 import { useTranslation } from "react-i18next";
@@ -23,6 +25,8 @@ const ThemedServer = withUnistyles(Server);
 // A row tab's glyph is the same 14px the workspace tab rail uses. The 12px badge
 // glyph is too small here: the status overlay covers the host icon completely.
 const HOST_TAB_ICON_SIZE = 14;
+
+const hostTabKeyExtractor = (host: HostProfile): string => host.serverId;
 
 const noneMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -46,6 +50,24 @@ export interface HostTabsRowProps {
   onSelectHost: (serverId: string) => void;
 }
 
+/** A saved drag order wins; hosts added since then keep registry order at the end. */
+function orderHostsForTabs(
+  hosts: HostProfile[],
+  savedOrder: readonly string[],
+  localServerId: string | null,
+): HostProfile[] {
+  if (savedOrder.length === 0) {
+    return orderHostsLocalFirst(hosts.slice(), localServerId);
+  }
+  const rank = new Map(savedOrder.map((serverId, index) => [serverId, index]));
+  const last = Number.MAX_SAFE_INTEGER;
+  return hosts.slice().sort((a, b) => {
+    const aRank = rank.get(a.serverId) ?? last;
+    const bRank = rank.get(b.serverId) ?? last;
+    return aRank - bRank;
+  });
+}
+
 /**
  * The top rail that makes hosts navigable: one chip per host, with the count of
  * agents currently working there and the host's most urgent agent state.
@@ -59,9 +81,21 @@ export function HostTabsRow({
 }: HostTabsRowProps): ReactElement | null {
   const hosts = useHosts();
   const localServerId = useLocalDaemonServerId();
+  const savedOrder = useHostTabOrderStore((state) => state.order);
+  const setOrder = useHostTabOrderStore((state) => state.setOrder);
   const orderedHosts = useMemo(
-    () => orderHostsLocalFirst(hosts.slice(), localServerId),
-    [hosts, localServerId],
+    () => orderHostsForTabs(hosts, savedOrder, localServerId),
+    [hosts, localServerId, savedOrder],
+  );
+  const handleDragEnd = useCallback(
+    (next: HostProfile[]) => setOrder(next.map((host) => host.serverId)),
+    [setOrder],
+  );
+  const renderHostTab = useCallback(
+    ({ item: host }: { item: HostProfile }) => (
+      <HostTabChip host={host} active={host.serverId === activeServerId} onPress={onSelectHost} />
+    ),
+    [activeServerId, onSelectHost],
   );
 
   if (orderedHosts.length <= 1) {
@@ -77,14 +111,12 @@ export function HostTabsRow({
       contentContainerStyle={styles.row}
       keyboardShouldPersistTaps="handled"
     >
-      {orderedHosts.map((host) => (
-        <HostTabChip
-          key={host.serverId}
-          host={host}
-          active={host.serverId === activeServerId}
-          onPress={onSelectHost}
-        />
-      ))}
+      <SortableInlineList
+        data={orderedHosts}
+        keyExtractor={hostTabKeyExtractor}
+        onDragEnd={handleDragEnd}
+        renderItem={renderHostTab}
+      />
     </ScrollView>
   );
 }
