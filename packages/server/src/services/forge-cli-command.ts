@@ -102,13 +102,23 @@ export interface ForgeCliRunnerFactory {
  * trio. The three adapters differ only in the params passed here.
  */
 export function createForgeCliRunner(options: CreateForgeCliRunnerOptions): ForgeCliRunnerFactory {
-  const run: ForgeCliRunner = (args, runOptions) =>
-    execCommand(options.binary, args, {
+  // On Windows a bare command name ("gh") is launched through cmd.exe, which
+  // truncates multi-line arguments such as GraphQL queries at the first newline
+  // ("Expected NAME, actual: (none) at [1, N]"). Resolving to the real exe path
+  // makes the spawn bypass cmd.exe and deliver the argument intact. If the CLI
+  // is not installed we fall back to the bare name so ENOENT still normalizes
+  // into the forge's "missing CLI" error.
+  const resolveCliPath = createCachedCliPathResolver(() => findExecutable(options.binary));
+  const run: ForgeCliRunner = async (args, runOptions) => {
+    const isBareName = !options.binary.includes("/") && !options.binary.includes("\\");
+    const binary = isBareName ? ((await resolveCliPath()) ?? options.binary) : options.binary;
+    return execCommand(binary, args, {
       cwd: runOptions.cwd,
       envOverlay: { ...options.envOverlay, ...runOptions.envOverlay },
       maxBuffer: 10 * 1024 * 1024,
       timeout: options.timeoutMs,
     });
+  };
 
   function normalizeError(
     error: unknown,
