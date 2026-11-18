@@ -1,8 +1,9 @@
 import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
-import { CircleCheck, Server } from "lucide-react-native";
+import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { PressHighlight } from "@/components/ui/press-highlight";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusIcon } from "@/components/status-icon";
 import { HOST_COLORS, type HostColor } from "@/hosts/appearance";
 import { identityForeground } from "@/styles/identity-colors";
@@ -15,7 +16,6 @@ import { useHosts } from "@/runtime/host-runtime";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 
 const ThemedServer = withUnistyles(Server);
-const ThemedCircleCheck = withUnistyles(CircleCheck);
 
 // A row tab's glyph is the same 14px the workspace tab rail uses. The 12px badge
 // glyph is too small here: the status overlay covers the host icon completely.
@@ -95,7 +95,7 @@ function HostTabChip({
   active: boolean;
   onPress: (serverId: string) => void;
 }): ReactElement {
-  const { runningCount, dominantBucket, hasFinished } = useHostAgentSummary(host.serverId);
+  const { runningCount, dominantBucket } = useHostAgentSummary(host.serverId);
   const label = normalizeHostLabel(host.label, host.serverId);
   const handlePress = useCallback(() => onPress(host.serverId), [host.serverId, onPress]);
   const chipStyle = useCallback(
@@ -111,43 +111,45 @@ function HostTabChip({
   const accessibilityLabel = `${label}, ${runningCount} ${runningCount === 1 ? "agent" : "agents"} running`;
 
   return (
-    <PressHighlight
-      testID={`host-tab-${host.serverId}`}
-      accessibilityRole="tab"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={accessibilityState}
-      onPress={handlePress}
-      style={chipStyle}
-    >
-      <StatusIcon
-        statusBucket={dominantBucket}
-        size={HOST_TAB_ICON_SIZE}
-        backdrop={active ? "surface2" : "surface0"}
-      >
-        <ThemedServer
-          size={HOST_TAB_ICON_SIZE}
-          strokeWidth={2.25}
-          uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
-        />
-      </StatusIcon>
-      <Text
-        style={[styles.label, active ? styles.labelActive : null]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {label}
-      </Text>
-      <View style={[styles.countBadge, statusTextStyle.badge]}>
-        <Text style={[styles.countText, statusTextStyle.text]}>{runningCount}</Text>
-      </View>
-      {hasFinished && dominantBucket === "attention" ? (
-        <ThemedCircleCheck size={12} uniProps={finishedMapping} />
-      ) : null}
-    </PressHighlight>
+    <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger asChild>
+        <PressHighlight
+          testID={`host-tab-${host.serverId}`}
+          accessibilityRole="tab"
+          accessibilityLabel={accessibilityLabel}
+          accessibilityState={accessibilityState}
+          onPress={handlePress}
+          style={chipStyle}
+        >
+          <StatusIcon
+            statusBucket={dominantBucket}
+            size={HOST_TAB_ICON_SIZE}
+            backdrop={active ? "surface2" : "surface0"}
+          >
+            <ThemedServer
+              size={HOST_TAB_ICON_SIZE}
+              strokeWidth={2.25}
+              uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
+            />
+          </StatusIcon>
+          <Text
+            style={[styles.label, active ? styles.labelActive : null]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {label}
+          </Text>
+          <View style={[styles.countBadge, statusTextStyle.badge]}>
+            <Text style={[styles.countText, statusTextStyle.text]}>{runningCount}</Text>
+          </View>
+        </PressHighlight>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{label}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
-
-const finishedMapping = (theme: Theme) => ({ color: theme.colors.statusSuccess });
 
 function countTextStyle(bucket: SidebarStateBucket | null): {
   badge: Record<string, unknown>;
@@ -214,6 +216,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   labelActive: {
     color: theme.colors.foreground,
+  },
+  tooltipText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.popoverForeground,
   },
   // Reserved width so the chip does not move when a running agent appears.
   countBadge: {
