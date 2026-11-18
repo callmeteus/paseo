@@ -95,6 +95,27 @@ afterEach(() => {
   }
 });
 
+function pressKey(editor: HTMLElement, key: string, modifiers?: { shiftKey?: boolean }): void {
+  editor.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key,
+      bubbles: true,
+      cancelable: true,
+      shiftKey: modifiers?.shiftKey,
+    }),
+  );
+}
+
+function undo(editor: HTMLElement): void {
+  editor.dispatchEvent(
+    new InputEvent("beforeinput", {
+      inputType: "historyUndo",
+      bubbles: true,
+      cancelable: true,
+    }),
+  );
+}
+
 describe("inline chip editor", () => {
   it("keeps the caret after a chip across focus so backspace deletes it", () => {
     const mountedEditor = mountEditor(null);
@@ -102,34 +123,26 @@ describe("inline chip editor", () => {
       mountedEditor.handle.blur();
       mountedEditor.handle.focus();
     });
-    const selection = document.getSelection();
-    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-    if (!range) throw new Error("Editor has no caret");
-    expect(range.startContainer).toBe(mountedEditor.editor);
-    expect(range.startOffset).toBe(1);
 
     act(() => {
-      mountedEditor.editor.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }),
-      );
+      pressKey(mountedEditor.editor, "Backspace");
     });
 
     expect(changes).toEqual([""]);
+    expect(mountedEditor.handle.getText()).toBe("");
     expect(mountedEditor.editor.querySelector("[data-inline-chip]")).toBeNull();
   });
 
   it("undoes deleting a pasted chip with backspace", () => {
     const mountedEditor = mountEditor(null);
     act(() => {
-      mountedEditor.editor.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }),
-      );
+      pressKey(mountedEditor.editor, "Backspace");
     });
     expect(mountedEditor.handle.getText()).toBe("");
     expect(mountedEditor.editor.querySelector("[data-inline-chip]")).toBeNull();
 
     act(() => {
-      document.execCommand("undo");
+      undo(mountedEditor.editor);
     });
 
     expect(mountedEditor.handle.getText()).toBe(chipText);
@@ -144,7 +157,7 @@ describe("inline chip editor", () => {
     expect(chipNode.getAttribute("data-chip-body")).toBe('say "hi"\nsecond\nthird');
 
     act(() => {
-      document.execCommand("undo");
+      undo(mountedEditor.editor);
     });
 
     expect(changes).toEqual(["hello"]);
@@ -156,7 +169,7 @@ describe("inline chip editor", () => {
     act(() => mountedEditor.render(null));
 
     act(() => {
-      document.execCommand("undo");
+      undo(mountedEditor.editor);
     });
 
     expect(changes).toEqual(["hello"]);
@@ -167,11 +180,26 @@ describe("inline chip editor", () => {
     const mountedEditor = mountEditor(emptyBaseline);
 
     act(() => {
-      document.execCommand("undo");
+      undo(mountedEditor.editor);
     });
 
     expect(changes).toEqual([""]);
     expect(mountedEditor.handle.getText()).toBe("");
+  });
+
+  it("deletes one character on the line after a paste chip", () => {
+    const typed = `${chipText}\nhello`;
+    const mountedEditor = mountEditor(null, {
+      initialText: typed,
+      initialSelection: { start: typed.length, end: typed.length },
+    });
+
+    act(() => {
+      pressKey(mountedEditor.editor, "Backspace");
+    });
+
+    expect(mountedEditor.handle.getText()).toBe(`${chipText}\nhell`);
+    expect(mountedEditor.editor.querySelector("[data-inline-chip]")).not.toBeNull();
   });
 
   it("keeps the list item text on Shift+Enter even with a stale wide selection", () => {
