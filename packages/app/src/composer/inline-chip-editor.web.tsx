@@ -307,10 +307,15 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
   },
 );
 
+// CodeMirror's scrollIntoView scrolls every overflowing ancestor and stops at a
+// fixed or sticky one. Sticky (with no offsets it lays out like relative) keeps
+// End inside the composer, so a wide transcript can't shift the column around it.
 const hostStyle: CSSProperties = {
   width: "100%",
   height: "100%",
   minHeight: "100%",
+  overflow: "hidden",
+  position: "sticky",
 };
 
 const EMPTY_PAINT: ComposerPaint = { names: [], color: "", epoch: 0 };

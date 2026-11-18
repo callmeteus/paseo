@@ -1849,6 +1849,7 @@ const foregroundColorMapping = (theme: Theme) => ({
 const animatedStaticStyles = RNStyleSheet.create({
   content: {
     flex: 1,
+    minWidth: 0,
   },
   inputAreaWrapper: {
     width: "100%",
@@ -1871,6 +1872,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   contentContainer: {
     flex: 1,
+    minWidth: 0,
     overflow: "hidden",
     ...(isWeb ? { userSelect: "none" as const } : {}),
   },

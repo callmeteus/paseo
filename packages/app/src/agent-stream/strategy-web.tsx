@@ -233,9 +233,7 @@ function applyViewportScrollJumpKey(input: {
   }
   event.preventDefault();
   event.stopPropagation();
-  if (scrollContainer.scrollLeft !== 0) {
-    scrollContainer.scrollLeft = 0;
-  }
+  clearHorizontalScroll(scrollContainer);
   if (event.key === "End") {
     input.setFollowOutput(true);
     input.forceStickToBottom();
@@ -287,12 +285,21 @@ function isVerticalScrollbarGutterPress(
     : event.clientX >= bounds.right - scrollbarWidth;
 }
 
+function clearHorizontalScroll(scrollContainer: HTMLElement): void {
+  if (scrollContainer.scrollLeft !== 0) {
+    scrollContainer.scrollLeft = 0;
+  }
+}
+
 function scrollElementToBottom(
   scrollContainer: HTMLElement,
   behavior: ScrollBehaviorLike = "auto",
 ): void {
+  // `left` stays 0. A wide table makes the feed's scroll width larger than the
+  // pane, and a vertical scroll that omits `left` lets End leave the column shifted.
   scrollContainer.scrollTo({
     top: scrollContainer.scrollHeight,
+    left: 0,
     behavior,
   });
 }
@@ -941,6 +948,10 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
       return;
     }
 
+    // End, and CodeMirror revealing the caret, scroll this pane sideways when a
+    // row is wider than it. The feed has no horizontal scroll.
+    clearHorizontalScroll(scrollContainer);
+
     const currentScrollTop = scrollContainer.scrollTop;
     const isAtBottom = isScrollContainerAtBottom(scrollContainer);
     const scrolledUp = currentScrollTop < lastKnownScrollTopRef.current - USER_SCROLL_DELTA_EPSILON;
@@ -1362,7 +1373,9 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     return {
       width: "100%",
       height: "100%",
-      overflowX: "hidden",
+      // `hidden` still accepts scrollLeft, so End can slide a wide row and leave
+      // a gap beside the sidebar. `clip` ignores that scroll.
+      overflowX: "clip",
       overflowY: scrollEnabled ? "auto" : "hidden",
       overscrollBehaviorY: "contain",
       // The browser still anchors delayed image growth while following output.

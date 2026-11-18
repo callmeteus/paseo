@@ -591,7 +591,7 @@ describe("createWebStreamStrategy", () => {
       viewportRef.current?.scrollToBottom("message-sent");
     });
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 5725, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 5725, left: 0, behavior: "auto" });
 
     scrollTo.mockClear();
     scrollContainer.scrollTop = 4960.5;
@@ -600,7 +600,7 @@ describe("createWebStreamStrategy", () => {
       viewportRef.current?.scrollToBottom("message-sent");
     });
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 5725, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 5725, left: 0, behavior: "auto" });
 
     scrollTo.mockClear();
     scrollContainer.scrollTop = 4967;
@@ -685,7 +685,13 @@ describe("createWebStreamStrategy", () => {
 
     expect(defaultPrevented).toBe(true);
     expect(scrollContainer.scrollLeft).toBe(0);
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, left: 0, behavior: "auto" });
+
+    scrollContainer.scrollLeft = 48;
+    act(() => {
+      scrollContainer.dispatchEvent(new Event("scroll"));
+    });
+    expect(scrollContainer.scrollLeft).toBe(0);
   });
 
   it("waits for bottom anchoring before evaluating a delayed initial tail", async () => {
@@ -1366,7 +1372,7 @@ describe("createWebStreamStrategy", () => {
       );
     });
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 1800, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1800, left: 0, behavior: "auto" });
   });
 
   it("stops following output after scrollbar and middle-button upward scrolling", () => {
@@ -1697,7 +1703,7 @@ describe("createWebStreamStrategy", () => {
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, left: 0, behavior: "auto" });
 
     act(() => root?.render(renderWithActivity(false)));
     scrollTo.mockClear();
@@ -1726,6 +1732,6 @@ describe("createWebStreamStrategy", () => {
       );
     });
     expect(container.querySelector('[data-testid="agent-chat-scroll"]')).toBe(scrollContainer);
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "auto" });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, left: 0, behavior: "auto" });
   });
 });

@@ -71,8 +71,10 @@ export function ComposerDock({
 
 const styles = StyleSheet.create((theme) => ({
   surface: { flex: 1, overflow: "hidden" },
-  content: { flex: 1, justifyContent: "flex-end" },
-  composer: { width: "100%", flexShrink: 1 },
+  // A wide row's min-content width otherwise becomes the dock's scroll width.
+  // End then slides the chat and the composer together, leaving a gap by the sidebar.
+  content: { flex: 1, justifyContent: "flex-end", minWidth: 0 },
+  composer: { width: "100%", flexShrink: 1, minWidth: 0 },
   // Fixed, not absolute: a touch pan that starts inside an overflow-hidden ancestor
   // never reaches the zoomed visual viewport, while a fixed box chains to the viewport
   // directly. React Native Web renders `fixed`; React Native's style type omits it.
