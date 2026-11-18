@@ -332,6 +332,8 @@ export const fr: TranslationResources = {
     messageCapped: "Ce message a été tronqué ({{bytes}} octets).",
     sessionLimit: {
       reached: "La session de ce modèle a atteint sa limite.",
+      billing:
+        "Cursor a atteint la limite de son forfait. Ajoute un moyen de paiement pour continuer.",
       resetsAt:
         "La session de ce modèle a atteint sa limite et revient à {{time}}, heure de {{place}}.",
       resetsRaw: "La session de ce modèle a atteint sa limite et revient à {{when}}.",

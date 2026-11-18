@@ -328,6 +328,7 @@ export const ko: TranslationResources = {
     messageCapped: "이 메시지는 길이 제한으로 잘렸습니다({{bytes}}바이트).",
     sessionLimit: {
       reached: "이 모델의 세션이 한도에 도달했습니다.",
+      billing: "Cursor의 플랜 한도에 도달했습니다. 계속하려면 결제 수단을 추가하세요.",
       resetsAt: "이 모델의 세션이 한도에 도달했고 {{place}} 시간 {{time}}에 돌아옵니다.",
       resetsRaw: "이 모델의 세션이 한도에 도달했고 {{when}}에 돌아옵니다.",
       resume: "한도가 끝나면 이 채팅을 다시 시작",

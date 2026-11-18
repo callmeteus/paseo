@@ -331,6 +331,7 @@ export const ptBR: TranslationResources = {
     messageCapped: "Esta mensagem foi truncada ({{bytes}} bytes).",
     sessionLimit: {
       reached: "A sessão deste modelo chegou no limite.",
+      billing: "O limite do Cursor foi atingido. Adicione um método de pagamento para continuar.",
       resetsAt:
         "A sessão deste modelo chegou no limite e volta às {{time}} no horário de {{place}}.",
       resetsRaw: "A sessão deste modelo chegou no limite e volta em {{when}}.",

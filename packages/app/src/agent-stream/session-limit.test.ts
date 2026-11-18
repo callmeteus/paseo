@@ -3,9 +3,10 @@ import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import { ptBR } from "@/i18n/resources/pt-BR";
 import { readProviderErrorText } from "./provider-error";
-import { sessionLimitWarning } from "./session-limit";
+import { readSessionLimitNotice, sessionLimitWarning } from "./session-limit";
 
 const PHRASE = "You've hit your session limit \u00b7 resets 12:40am (America/Sao_Paulo)";
+const BILLING = "Add a payment method to continue";
 const copy = ptBR.agentStream.sessionLimit;
 
 function translate(key: string, params?: Record<string, unknown>): string {
@@ -13,6 +14,7 @@ function translate(key: string, params?: Record<string, unknown>): string {
     "agentStream.sessionLimit.reached": copy.reached,
     "agentStream.sessionLimit.resetsAt": copy.resetsAt,
     "agentStream.sessionLimit.resetsRaw": copy.resetsRaw,
+    "agentStream.sessionLimit.billing": copy.billing,
   };
   const template = templates[key];
   if (!template) {
@@ -75,6 +77,33 @@ describe("sessionLimitWarning", () => {
     );
   });
 
+  it("turns Cursor's billing line into a plan-limit warning", () => {
+    expect(sessionLimitWarning(BILLING, t)).toBe(
+      "O limite do Cursor foi atingido. Adicione um método de pagamento para continuar.",
+    );
+    expect(sessionLimitWarning("Please add a payment method to continue.", t)).toBe(copy.billing);
+    expect(sessionLimitWarning("Add a payment method to continue using Cursor", t)).toBe(
+      copy.billing,
+    );
+    expect(
+      sessionLimitWarning(
+        "You've reached your free trial limit. Add a payment method to continue.",
+        t,
+      ),
+    ).toBe(copy.billing);
+    expect(sessionLimitWarning(`${SYSTEM_ERROR_PREFIX} ${BILLING}`, t)).toBe(copy.billing);
+    expect(readSessionLimitNotice(BILLING)).toEqual({ kind: "billing", reset: null });
+    expect(readSessionLimitNotice(PHRASE)).toEqual({
+      kind: "session",
+      reset: "12:40am (America/Sao_Paulo)",
+    });
+  });
+
+  it("leaves a reply that mentions the billing line alone", () => {
+    expect(sessionLimitWarning("I fixed it. Add a payment method to continue.", t)).toBeNull();
+    expect(sessionLimitWarning(`${BILLING}\n\nThen restart the app.`, t)).toBeNull();
+  });
+
   it("reads the same sentence from a system error, including the daemon tail", () => {
     const line = `${SYSTEM_ERROR_PREFIX} ${PHRASE}`;
     const withTail = `${line}\n\ncode: session_limit\n\ntry again later`;
@@ -99,6 +128,7 @@ describe("sessionLimitWarning", () => {
 
   it("counts the sentence as a provider error so the timeline does not treat it as a reply", () => {
     expect(readProviderErrorText(PHRASE)).toBe(PHRASE);
+    expect(readProviderErrorText(BILLING)).toBe(BILLING);
     expect(readProviderErrorText("Failed to authenticate: OAuth session expired")).toBe(
       "Failed to authenticate: OAuth session expired",
     );

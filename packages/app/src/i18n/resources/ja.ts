@@ -330,6 +330,7 @@ export const ja: TranslationResources = {
     messageCapped: "このメッセージは上限で切り詰められました（{{bytes}}バイト）。",
     sessionLimit: {
       reached: "このモデルのセッションは上限に達しました。",
+      billing: "Cursor のプランの上限に達しました。続けるには支払い方法を追加してください。",
       resetsAt: "このモデルのセッションは上限に達しました。{{place}}時間の{{time}}に戻ります。",
       resetsRaw: "このモデルのセッションは上限に達しました。戻りは {{when}} です。",
       resume: "制限が終わったらこのチャットを再開する",

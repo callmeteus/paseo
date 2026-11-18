@@ -327,6 +327,7 @@ export const zhCN: TranslationResources = {
     messageCapped: "此消息已被截断（{{bytes}} 字节）。",
     sessionLimit: {
       reached: "这个模型的会话已达到上限。",
+      billing: "Cursor 已达到套餐上限。添加付款方式即可继续。",
       resetsAt: "这个模型的会话已达到上限，{{place}}时间 {{time}} 恢复。",
       resetsRaw: "这个模型的会话已达到上限，恢复时间是 {{when}}。",
       resume: "额度结束后自动继续这个聊天",

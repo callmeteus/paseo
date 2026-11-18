@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isLimitResumeNotice,
   latestLimitResumeItemId,
   limitResumeAction,
   limitResumeIsOffered,
@@ -62,6 +63,19 @@ describe("resolveLimitResumeAt", () => {
         now: NOW,
       }),
     ).toBeNull();
+  });
+
+  it("does not wait for a resumption after Cursor's billing line", () => {
+    const text = "Add a payment method to continue";
+    expect(
+      resolveLimitResumeAt({
+        text,
+        windows: [{ usedPct: 100, resetsAt: "2026-11-06T12:00:00.000Z" }],
+        now: NOW,
+      }),
+    ).toBeNull();
+    expect(isLimitResumeNotice(text)).toBe(false);
+    expect(isLimitResumeNotice(PHRASE)).toBe(true);
   });
 });
 

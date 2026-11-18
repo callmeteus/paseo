@@ -331,6 +331,7 @@ export const es: TranslationResources = {
     messageCapped: "Este mensaje fue truncado ({{bytes}} bytes).",
     sessionLimit: {
       reached: "La sesión de este modelo llegó al límite.",
+      billing: "Cursor alcanzó el límite de su plan. Añade un método de pago para continuar.",
       resetsAt:
         "La sesión de este modelo llegó al límite y vuelve a las {{time}}, horario de {{place}}.",
       resetsRaw: "La sesión de este modelo llegó al límite y vuelve a las {{when}}.",

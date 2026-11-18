@@ -327,6 +327,7 @@ export const ar: TranslationResources = {
     messageCapped: "تم اقتطاع هذه الرسالة ({{bytes}} بايت).",
     sessionLimit: {
       reached: "بلغت جلسة هذا النموذج حدها.",
+      billing: "وصل Cursor إلى حد الخطّة. أضف طريقة دفع للمتابعة.",
       resetsAt: "بلغت جلسة هذا النموذج حدها وتعود عند {{time}} بتوقيت {{place}}.",
       resetsRaw: "بلغت جلسة هذا النموذج حدها وتعود عند {{when}}.",
       resume: "استئناف هذه المحادثة عند انتهاء الحد",

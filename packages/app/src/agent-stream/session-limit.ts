@@ -18,6 +18,15 @@ const SESSION_LIMIT_LINE =
 const RESET_CLOCK = /^(\d{1,2}):(\d{2})\s*([ap]m)\s+\(([^)]+)\)$/i;
 
 /**
+ * Cursor answers with its billing line instead of a reply when the account has
+ * no payment method: "Add a payment method to continue". The shared classifier
+ * misses it because it does not open with a failure verb. The whole line has to
+ * match, so a model quoting it in prose keeps its reply.
+ */
+const BILLING_LINE =
+  /^(?:(?:you['\u2019]ve|you have) reached your (?:free )?(?:plan|trial) limit\.\s*)?(?:please\s+)?add a payment method(?: to continue(?: using (?:cursor|an api key))?)?\.?$/i;
+
+/**
  * America/Sao_Paulo names the city São Paulo. The id drops the accent, and the
  * generic zone name is Brasília, which is a different label than the city.
  */
@@ -26,6 +35,8 @@ const ZONE_PLACE: Readonly<Record<string, string>> = {
 };
 
 export interface SessionLimitNotice {
+  /** A spent session, or the billing line Cursor sends when the account cannot run. */
+  kind: "session" | "billing";
   /** The clause after "resets", or null when the line names no reset. */
   reset: string | null;
 }
@@ -40,16 +51,20 @@ export interface SessionLimitClock {
 export function readSessionLimitNotice(text: string): SessionLimitNotice | null {
   const line = sessionLimitLine(text);
   if (!line) return null;
+  if (BILLING_LINE.test(line)) return { kind: "billing", reset: null };
   const match = SESSION_LIMIT_LINE.exec(line);
   if (!match) return null;
   const reset = match[1]?.trim();
-  return { reset: reset ? reset : null };
+  return { kind: "session", reset: reset ? reset : null };
 }
 
 /** The warning sentence for this notice, or null when the text is not one. */
 export function sessionLimitWarning(text: string, t: TFunction): string | null {
   const notice = readSessionLimitNotice(text);
   if (!notice) return null;
+  if (notice.kind === "billing") {
+    return t("agentStream.sessionLimit.billing");
+  }
   if (!notice.reset) {
     return t("agentStream.sessionLimit.reached");
   }
@@ -70,10 +85,14 @@ function sessionLimitLine(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   if (!isSystemErrorText(trimmed)) {
-    return SESSION_LIMIT_LINE.test(trimmed) ? trimmed : null;
+    return isNoticeLine(trimmed) ? trimmed : null;
   }
   const head = systemErrorMessage(trimmed).split("\n\n")[0]?.trim() ?? "";
-  return SESSION_LIMIT_LINE.test(head) ? head : null;
+  return isNoticeLine(head) ? head : null;
+}
+
+function isNoticeLine(line: string): boolean {
+  return SESSION_LIMIT_LINE.test(line) || BILLING_LINE.test(line);
 }
 
 /** The clock in a session-limit sentence, or null when the clause is not one. */

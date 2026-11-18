@@ -323,6 +323,7 @@ export const en = {
     messageCapped: "This message was capped ({{bytes}} bytes).",
     sessionLimit: {
       reached: "This model's session has hit its limit.",
+      billing: "Cursor reached its plan limit. Add a payment method to continue.",
       resetsAt:
         "This model's session has hit its limit and comes back at {{time}}, {{place}} time.",
       resetsRaw: "This model's session has hit its limit and comes back at {{when}}.",
