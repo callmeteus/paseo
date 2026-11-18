@@ -174,6 +174,113 @@ describe("question form card core", () => {
     ]);
   });
 
+  test("parses an MCP elicitation field that has no options", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "As próximas ações do SSH não pedem confirmação por 8 horas.",
+          header: "Grant do SSH por 8 horas",
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: true,
+          type: "boolean",
+        },
+        {
+          question: "Duração do grant",
+          header: "duration",
+          options: [{ label: "4h" }, { label: "8h" }],
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: false,
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    const [checkbox] = questions;
+    if (!checkbox) throw new Error("checkbox missing");
+    expect(checkbox.type).toBe("boolean");
+    expect(questionShowsTextInput(checkbox)).toBe(false);
+    // Leaving the box unchecked is an answer: submitting it accepts the dialog
+    // without granting anything.
+    expect(areQuestionsAnswered(questions, { 1: new Set([1]) }, {})).toBe(true);
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([0]), 1: new Set([1]) }, {})).toEqual({
+      "Grant do SSH por 8 horas": "true",
+      duration: "8h",
+    });
+    expect(buildQuestionFormAnswers(questions, { 1: new Set([1]) }, {})).toEqual({
+      duration: "8h",
+    });
+  });
+
+  test("keeps a checkbox default so the card starts in the server's state", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Grant?",
+          header: "grant_tool",
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: true,
+          type: "boolean",
+          defaultChecked: true,
+        },
+      ],
+    });
+
+    expect(questions?.[0]?.defaultChecked).toBe(true);
+  });
+
+  test("dismissing an elicitation with a checkbox declines it instead of accepting", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Grant?",
+          header: "grant_tool",
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: true,
+          type: "boolean",
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(shouldSubmitEmptyOnDismiss(questions)).toBe(false);
+  });
+
+  test("parses an external field as a link instead of a text input", () => {
+    const questions = parseQuestionFormQuestions({
+      questions: [
+        {
+          question: "Authorize the MCP server",
+          header: "url",
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: true,
+          type: "link",
+          url: "https://example.com/authorize",
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    const [link] = questions;
+    if (!link) throw new Error("link missing");
+    expect(link.type).toBe("link");
+    expect(link.url).toBe("https://example.com/authorize");
+    expect(questionShowsTextInput(link)).toBe(false);
+    expect(buildQuestionFormAnswers(questions, {}, {})).toEqual({});
+    expect(shouldSubmitEmptyOnDismiss(questions)).toBe(false);
+  });
+
+  test("parses a form with no fields so the card can still be confirmed", () => {
+    const questions = parseQuestionFormQuestions({ questions: [] });
+
+    expect(questions).toEqual([]);
+    expect(areQuestionsAnswered(questions, {}, {})).toBe(true);
+  });
+
   test("leaves Codex-style { questions: [...] } payloads unchanged", () => {
     const raw = {
       questions: [

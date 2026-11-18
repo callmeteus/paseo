@@ -543,6 +543,7 @@ export const ru: TranslationResources = {
       next: "Далее",
       answerPlaceholder: "Введите ответ...",
       otherPlaceholder: "Другой ответ...",
+      openLink: "Открыть ссылку",
     },
     todo: {
       title: "Задачи",

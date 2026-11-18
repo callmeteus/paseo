@@ -39,7 +39,10 @@ afterEach(() => {
   }
 });
 
-function buildPermission(question: Record<string, unknown>): PendingPermission {
+function buildPermission(
+  question: Record<string, unknown>,
+  overrides: Partial<PendingPermission["request"]> = {},
+): PendingPermission {
   return {
     key: "perm-1",
     agentId: "agent-1",
@@ -49,11 +52,15 @@ function buildPermission(question: Record<string, unknown>): PendingPermission {
       name: "AskUserQuestion",
       kind: "question",
       input: { questions: [question] },
+      ...overrides,
     },
   };
 }
 
-function mountCard(question: Record<string, unknown>) {
+function mountCard(
+  question: Record<string, unknown>,
+  overrides: Partial<PendingPermission["request"]> = {},
+) {
   const onRespond = vi.fn<(response: AgentPermissionResponse) => void>();
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -61,7 +68,7 @@ function mountCard(question: Record<string, unknown>) {
   act(() =>
     root.render(
       <QuestionFormCard
-        permission={buildPermission(question)}
+        permission={buildPermission(question, overrides)}
         onRespond={onRespond}
         isResponding={false}
         responseError={null}
@@ -85,12 +92,14 @@ function mountCard(question: Record<string, unknown>) {
     });
   };
   const submit = () => act(() => view.getByRole("button", { name: "Submit" }).click());
+  const dismiss = () => act(() => view.getByTestId("question-form-dismiss").click());
   const submittedAnswers = (): Record<string, string> => {
     const response = onRespond.mock.calls[0]?.[0];
     if (!response || response.behavior !== "allow") throw new Error("card did not submit");
     return (response.updatedInput as { answers: Record<string, string> }).answers;
   };
-  return { check, type, otherInput, submit, submittedAnswers };
+  const response = () => onRespond.mock.calls[0]?.[0];
+  return { view, check, type, otherInput, submit, dismiss, submittedAnswers, response };
 }
 
 const multiSelectQuestion = {
@@ -152,5 +161,40 @@ describe("QuestionFormCard other answers", () => {
     expect(card.otherInput().value).toBe("");
     card.submit();
     expect(card.submittedAnswers()).toEqual({ Provider: "Codex" });
+  });
+});
+
+describe("QuestionFormCard MCP elicitation", () => {
+  const grantQuestion = {
+    question: "As próximas ações do SSH de produção não pedem confirmação por 8 horas.",
+    header: "Grant do SSH de produção por 8 horas",
+    options: [],
+    multiSelect: false,
+    allowOther: false,
+    allowEmpty: true,
+    type: "boolean",
+  };
+  const elicitation = {
+    title: "luckymaker-prod is requesting input",
+    description: "Conceder grant de SSH de produção\nAlvo: prod-eu-1",
+  };
+
+  it("shows the operator facts and accepts a checked grant", () => {
+    const card = mountCard(grantQuestion, elicitation);
+
+    expect(card.view.getByTestId("question-form-message")).toBeTruthy();
+    expect(card.view.getByText(/Conceder grant de SSH de produção/)).toBeTruthy();
+    act(() => card.view.getByRole("checkbox", { name: grantQuestion.header }).click());
+    card.submit();
+
+    expect(card.submittedAnswers()).toEqual({ [grantQuestion.header]: "true" });
+  });
+
+  it("declines the elicitation when dismissed without checking the box", () => {
+    const card = mountCard(grantQuestion, elicitation);
+
+    card.dismiss();
+
+    expect(card.response()).toMatchObject({ behavior: "deny" });
   });
 });

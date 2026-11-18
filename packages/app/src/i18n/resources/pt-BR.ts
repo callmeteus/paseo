@@ -545,6 +545,7 @@ export const ptBR: TranslationResources = {
       next: "Próximo",
       answerPlaceholder: "Digite sua resposta...",
       otherPlaceholder: "Outro...",
+      openLink: "Abrir link",
     },
     todo: {
       title: "Tarefas",

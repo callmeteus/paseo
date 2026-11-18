@@ -534,6 +534,7 @@ export const ar: TranslationResources = {
       next: "التالي",
       answerPlaceholder: "اكتب إجابتك...",
       otherPlaceholder: "آخر...",
+      openLink: "فتح الرابط",
     },
     todo: {
       title: "المهام",

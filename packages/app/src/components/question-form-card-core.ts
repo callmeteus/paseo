@@ -13,6 +13,15 @@ export interface QuestionFormQuestion {
   allowEmpty: boolean;
   placeholder?: string;
   dismissLabel?: string;
+  /**
+   * A checkbox (`boolean`) or a link the user opens in the browser (`link`) reads
+   * differently from a text field or a list of options. Providers that send an MCP
+   * elicitation mark it; anything else is a text question.
+   */
+  type: "text" | "boolean" | "link";
+  url?: string;
+  /** A checkbox the server already considers checked. */
+  defaultChecked?: boolean;
 }
 
 export type QuestionSelections = Record<number, ReadonlySet<number>>;
@@ -63,47 +72,74 @@ export function normalizeQuestionFormInput(input: unknown): unknown {
 
 export function parseQuestionFormQuestions(input: unknown): QuestionFormQuestion[] | null {
   const normalized = normalizeQuestionFormInput(input);
-  if (
-    typeof normalized !== "object" ||
-    normalized === null ||
-    !("questions" in normalized) ||
-    !Array.isArray((normalized as Record<string, unknown>).questions)
-  ) {
-    return null;
-  }
-  const raw = (normalized as Record<string, unknown>).questions as unknown[];
+  if (typeof normalized !== "object" || normalized === null) return null;
+  if (!("questions" in normalized)) return null;
+  const raw = (normalized as Record<string, unknown>).questions;
+  if (!Array.isArray(raw)) return null;
   const questions: QuestionFormQuestion[] = [];
   for (const item of raw) {
-    if (typeof item !== "object" || item === null) return null;
-    const q = item as Record<string, unknown>;
-    if (typeof q.question !== "string" || typeof q.header !== "string") return null;
-    if (!Array.isArray(q.options)) return null;
-    const options: QuestionOption[] = [];
-    for (const opt of q.options as unknown[]) {
-      if (typeof opt !== "object" || opt === null) return null;
-      const o = opt as Record<string, unknown>;
-      if (typeof o.label !== "string") return null;
-      options.push({
-        label: o.label,
-        description: typeof o.description === "string" ? o.description : undefined,
-        preview: readOptionalString(o, "preview"),
-      });
-    }
-    questions.push({
-      question: q.question,
-      header: q.header,
-      options,
-      multiSelect: q.multiSelect === true,
-      allowOther: q.allowOther === true || q.isOther === true,
-      allowEmpty: q.allowEmpty === true,
-      placeholder: readOptionalString(q, "placeholder"),
-      dismissLabel: readOptionalString(q, "dismissLabel"),
+    const parsed = parseQuestion(item);
+    if (!parsed) return null;
+    questions.push(parsed);
+  }
+  return questions;
+}
+
+function parseQuestionOptions(raw: unknown): QuestionOption[] | null {
+  if (!Array.isArray(raw)) return null;
+  const options: QuestionOption[] = [];
+  for (const opt of raw as unknown[]) {
+    if (typeof opt !== "object" || opt === null) return null;
+    const o = opt as Record<string, unknown>;
+    if (typeof o.label !== "string") return null;
+    options.push({
+      label: o.label,
+      description: typeof o.description === "string" ? o.description : undefined,
+      preview: readOptionalString(o, "preview"),
     });
   }
-  return questions.length > 0 ? questions : null;
+  return options;
+}
+
+function questionType(value: unknown): QuestionFormQuestion["type"] {
+  if (value === "boolean") return "boolean";
+  if (value === "link") return "link";
+  return "text";
+}
+
+function parseQuestion(item: unknown): QuestionFormQuestion | null {
+  if (typeof item !== "object" || item === null) return null;
+  const q = item as Record<string, unknown>;
+  if (typeof q.question !== "string" || typeof q.header !== "string") return null;
+  // A field with no choices (a checkbox, a free-text answer, a link) arrives
+  // without `options`. Reading it as a broken question made the whole card
+  // disappear, which is how an MCP elicitation turned into a hung turn.
+  const options = parseQuestionOptions(q.options ?? []);
+  if (!options) return null;
+  const type = questionType(q.type);
+  const question: QuestionFormQuestion = {
+    question: q.question,
+    header: q.header,
+    options,
+    multiSelect: q.multiSelect === true,
+    allowOther: q.allowOther === true || q.isOther === true,
+    allowEmpty: q.allowEmpty === true || type === "boolean" || type === "link",
+    placeholder: readOptionalString(q, "placeholder"),
+    dismissLabel: readOptionalString(q, "dismissLabel"),
+    type,
+  };
+  if (type === "link") {
+    const url = readOptionalString(q, "url");
+    return url ? { ...question, url } : question;
+  }
+  if (type === "boolean" && q.defaultChecked === true) {
+    return { ...question, defaultChecked: true };
+  }
+  return question;
 }
 
 export function questionShowsTextInput(question: QuestionFormQuestion): boolean {
+  if (question.type !== "text") return false;
   return question.options.length === 0 || question.allowOther;
 }
 
@@ -113,6 +149,12 @@ export function isQuestionAnswered(
   selections: QuestionSelections,
   otherTexts: QuestionOtherTexts,
 ): boolean {
+  // A checkbox and a link are never blocking: leaving the box unchecked and
+  // submitting is the answer, the way the MCP client itself treats them.
+  if (question.type === "boolean" || question.type === "link") {
+    return true;
+  }
+
   const selected = selections[qIndex];
   if (selected && selected.size > 0) {
     return true;
@@ -152,7 +194,23 @@ export function buildQuestionFormAnswers(
     const q = questions[i];
     const selected = selections[i];
     const otherText = otherTexts[i]?.trim();
-    const labels = selected ? Array.from(selected).map((idx) => q.options[idx].label) : [];
+
+    if (q.type === "boolean") {
+      if (selected && selected.size > 0) {
+        answers[q.header] = "true";
+      }
+      continue;
+    }
+    if (q.type === "link") {
+      continue;
+    }
+
+    const labels = selected
+      ? Array.from(selected).flatMap((idx) => {
+          const option = q.options[idx];
+          return option ? [option.label] : [];
+        })
+      : [];
 
     if (questionShowsTextInput(q)) {
       if (otherText && otherText.length > 0) {
@@ -177,7 +235,10 @@ export function buildQuestionFormAnswers(
 export function shouldSubmitEmptyOnDismiss(questions: QuestionFormQuestion[]): boolean {
   return (
     questions.length > 0 &&
-    questions.every((question) => question.allowEmpty && question.options.length === 0)
+    questions.every(
+      (question) =>
+        question.allowEmpty && question.options.length === 0 && question.type === "text",
+    )
   );
 }
 

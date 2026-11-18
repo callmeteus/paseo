@@ -533,6 +533,7 @@ export const en = {
       next: "Next",
       answerPlaceholder: "Type your answer...",
       otherPlaceholder: "Other...",
+      openLink: "Open link",
     },
     todo: {
       title: "Tasks",

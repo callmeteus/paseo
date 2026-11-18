@@ -106,11 +106,12 @@ describe("OpenCode v2 question tool", () => {
             header: "Next task",
             question: "What would you like me to work on next?",
             options: [
-              { value: "Explore", label: "Explore", description: "Map the codebase" },
-              { value: "Fix a bug", label: "Fix a bug", description: "Track down a bug" },
+              { label: "Explore", description: "Map the codebase" },
+              { label: "Fix a bug", description: "Track down a bug" },
             ],
             multiSelect: false,
             allowOther: true,
+            allowEmpty: false,
           },
         ],
       });
@@ -218,6 +219,141 @@ describe("OpenCode v2 question tool", () => {
         }),
       ).rejects.toThrow("Invalid answer for OpenCode question q0");
       expect(answers).toEqual([]);
+    } finally {
+      await session.close();
+    }
+  });
+});
+
+describe("OpenCode v2 MCP elicitation", () => {
+  test("surfaces the operator facts and the grant checkboxes from a LuckyMaker elicitation", async () => {
+    const harness = new V2Harness();
+    harness.api.session.form.list = async () => [
+      {
+        id: "elicitation",
+        sessionID: "session",
+        title: "luckymaker-prod is requesting input",
+        metadata: {
+          kind: "mcp-elicitation",
+          server: "luckymaker-prod",
+          message:
+            "Conceder grant de SSH de produção\nAlvo: prod-eu-1 (mascarado)\nEfeito: as próximas ações não pedem confirmação.",
+        },
+        fields: [
+          {
+            key: "grant_tool",
+            type: "boolean",
+            title: "Grant do SSH de produção por 8 horas",
+            description: "As próximas ações do SSH de produção não pedem confirmação por 8 horas.",
+            default: false,
+          },
+          {
+            key: "grant_any",
+            type: "boolean",
+            title: "Auto-accept de qualquer comando por 8 horas",
+            description: "Infisical, E7 e o SSH de produção não pedem confirmação por 8 horas.",
+            default: false,
+          },
+          {
+            key: "duration",
+            type: "string",
+            title: "Duração",
+            required: true,
+            options: [
+              { value: "4h", label: "4h" },
+              { value: "8h", label: "8h" },
+            ],
+          },
+        ],
+      },
+    ];
+    const answers: Parameters<V2Api["session"]["form"]["reply"]>[0][] = [];
+    harness.api.session.form.reply = async (input) => {
+      answers.push(input);
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      const [request] = session.getPendingPermissions();
+      expect(request.title).toBe("luckymaker-prod is requesting input");
+      expect(request.description).toContain("Conceder grant de SSH de produção");
+      expect(request.input).toMatchObject({
+        questions: [
+          {
+            header: "Grant do SSH de produção por 8 horas",
+            question: "As próximas ações do SSH de produção não pedem confirmação por 8 horas.",
+            options: [],
+            type: "boolean",
+            allowEmpty: true,
+          },
+          {
+            header: "Auto-accept de qualquer comando por 8 horas",
+            type: "boolean",
+            allowEmpty: true,
+          },
+          {
+            header: "Duração",
+            options: [{ label: "4h" }, { label: "8h" }],
+            allowEmpty: false,
+          },
+        ],
+      });
+      const duration = (request.input as { questions: Array<Record<string, unknown>> })
+        .questions[2];
+      expect(duration?.type).toBeUndefined();
+
+      await session.respondToPermission("elicitation", {
+        behavior: "allow",
+        updatedInput: {
+          answers: { "Grant do SSH de produção por 8 horas": "true", Duração: "8h" },
+        },
+      });
+      expect(answers).toEqual([
+        {
+          sessionID: "session",
+          formID: "elicitation",
+          answer: { grant_tool: true, duration: "8h" },
+        },
+      ]);
+      expect(session.getPendingPermissions()).toHaveLength(0);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("declines the elicitation instead of accepting it with empty answers", async () => {
+    const harness = new V2Harness();
+    harness.api.session.form.list = async () => [
+      {
+        id: "elicitation",
+        sessionID: "session",
+        title: "luckymaker-prod is requesting input",
+        metadata: { kind: "mcp-elicitation", message: "Conceder grant de SSH de produção" },
+        fields: [
+          { key: "grant_tool", type: "boolean", title: "Grant do SSH de produção por 8 horas" },
+        ],
+      },
+    ];
+    const cancelled: Parameters<V2Api["session"]["form"]["cancel"]>[0][] = [];
+    const answers: Parameters<V2Api["session"]["form"]["reply"]>[0][] = [];
+    harness.api.session.form.cancel = async (input) => {
+      cancelled.push(input);
+    };
+    harness.api.session.form.reply = async (input) => {
+      answers.push(input);
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      await session.respondToPermission("elicitation", { behavior: "deny" });
+      expect(answers).toEqual([]);
+      expect(cancelled).toEqual([{ sessionID: "session", formID: "elicitation" }]);
     } finally {
       await session.close();
     }

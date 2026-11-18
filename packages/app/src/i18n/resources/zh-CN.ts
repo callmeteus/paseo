@@ -534,6 +534,7 @@ export const zhCN: TranslationResources = {
       next: "下一步",
       answerPlaceholder: "输入你的回答...",
       otherPlaceholder: "其他...",
+      openLink: "打开链接",
     },
     todo: {
       title: "任务",
