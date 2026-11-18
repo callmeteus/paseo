@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -14,6 +14,7 @@ import { HOST_COLORS, type HostColor } from "@/hosts/appearance";
 import { identityForeground } from "@/styles/identity-colors";
 import type { Theme } from "@/styles/theme";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
+import { isWeb } from "@/constants/platform";
 import { useHostAgentSummary } from "@/hooks/use-host-agent-summary";
 import type { HostProfile } from "@/types/host-connection";
 import { normalizeHostLabel, orderHostsLocalFirst } from "@/types/host-connection";
@@ -97,6 +98,16 @@ export function HostTabsRow({
     ),
     [activeServerId, onSelectHost],
   );
+
+  // dnd-kit can keep DOM focus on the previously pressed chip after a selection
+  // change, leaving a stale focus ring on a different host. Drop it on web.
+  useEffect(() => {
+    if (!isWeb || typeof document === "undefined") return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.closest('[data-testid="host-tabs-row"]')) {
+      focused.blur();
+    }
+  }, [activeServerId]);
 
   if (orderedHosts.length <= 1) {
     return null;
@@ -183,9 +194,11 @@ function HostTabChip({
           >
             {label}
           </Text>
-          <View style={[styles.countBadge, statusTextStyle.badge]}>
-            <Text style={[styles.countText, statusTextStyle.text]}>{runningCount}</Text>
-          </View>
+          {runningCount > 0 ? (
+            <View style={[styles.countBadge, statusTextStyle.badge]}>
+              <Text style={[styles.countText, statusTextStyle.text]}>{runningCount}</Text>
+            </View>
+          ) : null}
         </SidebarHostContextMenu>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="center" offset={8}>

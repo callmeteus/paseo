@@ -96,6 +96,22 @@ describe("workspace attachments store", () => {
     ).toBe("workspace-attachments:server=local:cwd=%2Frepo");
   });
 
+  it("never shares attachments between different hosts", () => {
+    resetWorkspaceAttachmentsStore();
+    const scope = { workspaceId: "workspace-1", cwd: "/repo" };
+    const hostA = buildWorkspaceAttachmentScopeKey({ ...scope, serverId: "host-a" });
+    const hostB = buildWorkspaceAttachmentScopeKey({ ...scope, serverId: "host-b" });
+    expect(hostA).not.toBe(hostB);
+
+    const attachment = reviewAttachment("Please simplify this.");
+    useWorkspaceAttachmentsStore
+      .getState()
+      .setWorkspaceAttachments({ scopeKey: hostA, attachments: [attachment] });
+
+    expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope[hostA]).toEqual([attachment]);
+    expect(useWorkspaceAttachmentsStore.getState().attachmentsByScope[hostB]).toBeUndefined();
+  });
+
   it("scopes draft attachments by draft id", () => {
     expect(buildDraftWorkspaceAttachmentScopeKey("draft-1")).toBe(
       "workspace-attachments:draft=draft-1",
