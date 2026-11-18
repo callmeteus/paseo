@@ -10,7 +10,12 @@ import {
   shell,
 } from "electron";
 
-import type { WindowState, WindowStateStore } from "../settings/window-state.js";
+import {
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  type WindowState,
+  type WindowStateStore,
+} from "../settings/window-state.js";
 import type { DesktopWindowChromeMode } from "./chrome.js";
 import { popupContextMenu } from "./context-menu-popup.js";
 
@@ -85,16 +90,26 @@ export const DEFAULT_WINDOW_HEIGHT = 800;
  * a restored state when available. Falls back to the default size, and only
  * sets x/y when a full position was persisted (a partial state lets the OS
  * place the window).
+ *
+ * The minimums must be applied to the live window, not only to persisted state.
+ * The frameless titlebar is draggable through a single overlay that the
+ * no-drag window controls subtract from. Below the minimum width those controls
+ * cover the whole bar, leaving nothing to grab and stranding the window at a
+ * size the user cannot drag back.
  */
 export function resolveWindowBounds(
   state: WindowState | null,
-): Pick<Electron.BrowserWindowConstructorOptions, "width" | "height" | "x" | "y"> {
+): Pick<
+  Electron.BrowserWindowConstructorOptions,
+  "width" | "height" | "minWidth" | "minHeight" | "x" | "y"
+> {
   const width = state?.width ?? DEFAULT_WINDOW_WIDTH;
   const height = state?.height ?? DEFAULT_WINDOW_HEIGHT;
+  const minimums = { minWidth: MIN_WINDOW_WIDTH, minHeight: MIN_WINDOW_HEIGHT };
   if (state?.x !== undefined && state?.y !== undefined) {
-    return { width, height, x: state.x, y: state.y };
+    return { width, height, ...minimums, x: state.x, y: state.y };
   }
-  return { width, height };
+  return { width, height, ...minimums };
 }
 
 function readOverlayColor(input: unknown): string | null {

@@ -12,6 +12,7 @@ import {
   preventSystemWindowContextMenu,
   resolveWindowBounds,
 } from "./window-manager";
+import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from "../settings/window-state";
 
 describe("window-manager", () => {
   describe("readBadgeCount", () => {
@@ -131,20 +132,37 @@ describe("window-manager", () => {
       expect(resolveWindowBounds(null)).toEqual({
         width: DEFAULT_WINDOW_WIDTH,
         height: DEFAULT_WINDOW_HEIGHT,
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
       });
     });
 
     it("restores the full size and position", () => {
       expect(
         resolveWindowBounds({ x: 120, y: 80, width: 1024, height: 720, isMaximized: false }),
-      ).toEqual({ width: 1024, height: 720, x: 120, y: 80 });
+      ).toEqual({
+        width: 1024,
+        height: 720,
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
+        x: 120,
+        y: 80,
+      });
     });
 
     it("omits the position when only the size was persisted", () => {
       expect(resolveWindowBounds({ width: 1024, height: 720, isMaximized: true })).toEqual({
         width: 1024,
         height: 720,
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
       });
+    });
+
+    it("keeps the live window above the draggable titlebar minimum", () => {
+      const bounds = resolveWindowBounds(null);
+      expect(bounds.minWidth).toBeGreaterThanOrEqual(400);
+      expect(bounds.minHeight).toBeGreaterThanOrEqual(300);
     });
   });
 
