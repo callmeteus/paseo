@@ -18,6 +18,8 @@ import {
   HostsRouteOpenResponseSchema,
   HostsRouteFrameSchema,
   HostsRouteClosedSchema,
+  HostsSelfUpdateRequestSchema,
+  HostsSelfUpdateResponseSchema,
 } from "./hosts.js";
 import { PluginRegistryIdentitySchema } from "./plugin-registry.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "./agent-profile.js";
@@ -38,6 +40,8 @@ export {
 } from "./plugin-config.js";
 import { TerminalProfileSchema } from "./terminal-profile.js";
 export { TerminalProfileSchema, type TerminalProfile } from "./terminal-profile.js";
+import { ClusterConfigSchema } from "./cluster.js";
+export { ClusterConfigSchema, type ClusterConfig } from "./cluster.js";
 import { RemoteAccessConfigSchema } from "./remote-access.js";
 export {
   RemoteAccessConfigSchema,
@@ -428,6 +432,11 @@ export const MutableDaemonConfigSchema = z
     // COMPAT(speechSettings): added in v0.12.0, optional because older daemons omit it.
     features: SpeechSettingsSchema.optional(),
     envOverrides: z.record(z.string(), z.string()).optional(),
+    // COMPAT(clusterSettings): added in v0.14.0, optional because older daemons omit it.
+    // announceHosts: this daemon publishes its saved host list to connected daemons.
+    // syncHostNames: a host's saved label is sent back to the daemon; the daemon hostname
+    // only fills in a label when the app has none.
+    cluster: ClusterConfigSchema.optional(),
   })
   .passthrough();
 
@@ -459,6 +468,8 @@ export const MutableDaemonConfigPatchSchema = z
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     features: SpeechSettingsPatchSchema.optional(),
+    // COMPAT(clusterSettings): added in v0.14.0, optional for older daemons.
+    cluster: ClusterConfigSchema.partial().optional(),
   })
   .partial()
   .passthrough();
@@ -3903,6 +3914,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   HostsRouteOpenRequestSchema,
   HostsRouteFrameRequestSchema,
   HostsRouteCloseRequestSchema,
+  HostsSelfUpdateRequestSchema,
 
   McpBridgeListServersRequestSchema,
   McpBridgeListToolsRequestSchema,
@@ -7852,6 +7864,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   HostsRouteOpenResponseSchema,
   HostsRouteFrameSchema,
   HostsRouteClosedSchema,
+  HostsSelfUpdateResponseSchema,
 
   McpBridgeListServersResponseSchema,
   McpBridgeListToolsResponseSchema,

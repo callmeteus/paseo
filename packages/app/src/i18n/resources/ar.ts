@@ -2615,6 +2615,7 @@ export const ar: TranslationResources = {
       permissions: "الأذونات",
       diagnostics: "التشخيص",
       about: "عن",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2658,7 +2659,9 @@ export const ar: TranslationResources = {
       terminals: "Terminals",
       plugins: "Plugins",
       host: "نظرة عامة",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "الوصول عن بُعد",
       inboundTitle: "السماح للمضيفين الآخرين بالعمل هنا",

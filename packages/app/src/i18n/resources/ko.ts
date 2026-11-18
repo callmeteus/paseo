@@ -2594,6 +2594,7 @@ export const ko: TranslationResources = {
       permissions: "권한",
       diagnostics: "진단",
       about: "정보",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2637,7 +2638,9 @@ export const ko: TranslationResources = {
       terminals: "터미널",
       plugins: "플러그인",
       host: "개요",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "원격 액세스",
       inboundTitle: "다른 호스트의 작업 허용",

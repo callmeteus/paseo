@@ -5278,7 +5278,11 @@ describe("host mirror", () => {
     });
   }
 
-  function bootMirrorStore(input: { hosts: HostProfile[]; connectedHosts?: boolean }): {
+  function bootMirrorStore(input: {
+    hosts: HostProfile[];
+    connectedHosts?: boolean;
+    announceHosts?: boolean;
+  }): {
     store: HostRuntimeStore;
     clients: Map<string, FakeDaemonClient>;
   } {
@@ -5306,6 +5310,10 @@ describe("host mirror", () => {
         }),
         getClientId: async () => "cid_test_runtime",
         readInitialConnectionHint: () => ({ listen: "lan:17000" }),
+        readClusterPreferences: () => ({
+          autoSyncNames: false,
+          announceHosts: input.announceHosts ?? true,
+        }),
       },
       revokePushNotifications: async () => {},
     });
@@ -5346,6 +5354,20 @@ describe("host mirror", () => {
     const { store, clients } = bootMirrorStore({
       hosts: [mirrorTargetHost(), mirrorRemoteHost()],
       connectedHosts: false,
+    });
+    await store.boot();
+    await flushMirror(store);
+
+    const client = targetClient(clients);
+    expect(client.listHostsCalls).toBe(0);
+    expect(client.addedHosts).toEqual([]);
+  });
+
+  it("does not publish hosts when the announce option is off", async () => {
+    useHostRuntimeClock();
+    const { store, clients } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost()],
+      announceHosts: false,
     });
     await store.boot();
     await flushMirror(store);

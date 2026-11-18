@@ -2556,6 +2556,7 @@ export const zhCN: TranslationResources = {
       permissions: "权限",
       diagnostics: "诊断",
       about: "关于",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2599,7 +2600,9 @@ export const zhCN: TranslationResources = {
       terminals: "Terminals",
       plugins: "插件",
       host: "概览",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "远程访问",
       inboundTitle: "允许其他主机在此操作",

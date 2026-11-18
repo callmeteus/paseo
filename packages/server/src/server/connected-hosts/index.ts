@@ -19,7 +19,9 @@ import {
   type HostSummary,
   type HostAdd,
   type HostUpdate,
+  type AnnouncedHost,
 } from "@getpaseo/protocol/hosts";
+import type { ClusterConfig } from "@getpaseo/protocol/messages";
 import type { DaemonPermission, WSHelloMessage } from "@getpaseo/protocol/messages";
 
 export class HostError extends Error {
@@ -40,11 +42,25 @@ export interface HostActor {
 interface Live {
   client: DaemonClient;
   accepted: boolean;
+  /** Subscription to the connected daemon's host directory, for cluster announcements. */
+  announceStop?: () => void;
   stop(): void;
 }
+/** Cluster config as read from the daemon config store at any moment. */
+export type ReadClusterConfig = () => ClusterConfig | undefined;
 interface Route {
   registrationId: string;
   close(code?: string, message?: string): void;
+}
+
+function sameAnnounced(a: readonly AnnouncedHost[], b: readonly AnnouncedHost[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (host, i) =>
+      host.serverId === b[i]?.serverId &&
+      host.label === b[i]?.label &&
+      host.viaServerId === b[i]?.viaServerId,
+  );
 }
 
 function assertHostRouteAllowed(input: {
@@ -83,12 +99,15 @@ export class ConnectedHosts {
   private readonly live = new Map<string, Live>();
   private readonly routes = new Set<Route>();
   private readonly listeners = new Set<() => void>();
+  /** Hosts learned from connected daemons, keyed by the origin daemon serverId. */
+  private readonly announced = new Map<string, AnnouncedHost[]>();
   private queue: Promise<unknown> = Promise.resolve();
   private readonly ready: Promise<void>;
   private closed = false;
   constructor(
     private readonly home: string,
-    private readonly self: HostDirectory["self"],
+    private self: HostDirectory["self"],
+    private readonly readClusterConfig: ReadClusterConfig = () => undefined,
   ) {
     this.ready = this.load();
     void this.ready.catch(() => {});
@@ -111,14 +130,47 @@ export class ConnectedHosts {
   }
   async list(): Promise<HostDirectory> {
     await this.ready;
+    const announcedHosts = this.readClusterConfig()?.announceHosts
+      ? Array.from(this.announced.values()).flat()
+      : [];
     return {
       self: { ...this.self },
       hosts: this.rows.map(({ connection: _secret, ...row }) => structuredClone(row)),
+      announcedHosts: announcedHosts.map((host) => structuredClone(host)),
     };
   }
 
+  /** Re-evaluates announcement subscriptions after the cluster config changes. */
+  refreshClusterConfig(): void {
+    for (const live of this.live.values()) {
+      const shouldAnnounce = this.readClusterConfig()?.announceHosts === true && live.accepted;
+      if (shouldAnnounce && !live.announceStop) this.startAnnouncing(live);
+      if (!shouldAnnounce && live.announceStop) {
+        live.announceStop();
+        live.announceStop = undefined;
+        const via = this.liveVia.get(live);
+        if (via) this.announced.delete(via);
+      }
+    }
+    this.changed();
+  }
+  private readonly liveVia = new Map<Live, string>();
+
   getSelfServerId(): string {
     return this.self.serverId;
+  }
+  getSelfLabel(): string {
+    return this.self.label;
+  }
+  clusterConfigReader(): ReadClusterConfig {
+    return this.readClusterConfig;
+  }
+  /** Updates the name this daemon announces to connected daemons and clients. */
+  setSelfLabel(label: string): void {
+    const normalized = label.trim();
+    if (!normalized || this.self.label === normalized) return;
+    this.self = { ...this.self, label: normalized };
+    this.changed();
   }
   observe(changed: () => void): () => void {
     this.listeners.add(changed);
@@ -237,8 +289,26 @@ export class ConnectedHosts {
       this.rows = rows.map((entry) => (entry === row ? previous : entry));
       if (restart) this.start(previous);
       this.changed();
+      this.propagateLabelIfNeeded(patch.label, restart, previous.serverId);
       return this.summary(previous);
     });
+  }
+  private propagateLabelIfNeeded(
+    label: HostUpdate["label"],
+    restart: boolean | undefined,
+    serverId: string | null,
+  ): void {
+    if (label === undefined || restart || serverId === null) return;
+    if (this.readClusterConfig()?.syncHostNames !== true) return;
+    const trimmed = label?.trim();
+    if (!trimmed) return;
+    const registrationId = Array.from(this.live.entries()).find(
+      ([id]) => this.rows.find((row) => row.registrationId === id)?.serverId === serverId,
+    )?.[0];
+    if (!registrationId) return;
+    const live = this.live.get(registrationId);
+    if (live?.accepted && live.client.isConnected)
+      void live.client.updateSelfLabel(trimmed).catch(() => {});
   }
   remove(id: string, actor: HostActor): Promise<void> {
     return this.mutate(async () => {
@@ -261,7 +331,14 @@ export class ConnectedHosts {
     return row;
   }
   private stop(id: string, code = "host_offline"): void {
-    this.live.get(id)?.stop();
+    const live = this.live.get(id);
+    live?.stop();
+    if (live) {
+      live.announceStop?.();
+      const via = this.liveVia.get(live);
+      if (via && this.announced.delete(via)) this.changed();
+      this.liveVia.delete(live);
+    }
     this.live.delete(id);
     for (const route of this.routes)
       if (route.registrationId === id)
@@ -335,6 +412,8 @@ export class ConnectedHosts {
           if (stopped || client.getLastServerInfoMessage() !== info || !client.isConnected) return;
           Object.assign(row, next);
           live.accepted = true;
+          this.liveVia.set(live, info.serverId);
+          if (this.readClusterConfig()?.announceHosts === true) this.startAnnouncing(live);
           this.changed();
         });
       } catch (error) {
@@ -355,6 +434,12 @@ export class ConnectedHosts {
       if (state.status === "connected") {
         void accept();
         return;
+      }
+      const via = this.liveVia.get(live);
+      if (via) {
+        live.announceStop?.();
+        live.announceStop = undefined;
+        if (this.announced.delete(via)) this.changed();
       }
       for (const route of this.routes)
         if (route.registrationId === row.registrationId) route.close();
@@ -382,6 +467,53 @@ export class ConnectedHosts {
     });
     void client.connect().catch(() => {});
   }
+  /**
+   * Publishes the connected daemon's saved hosts into our own directory so clients of this
+   * daemon can discover and route to them. The directory exposes no credentials; callers route
+   * through the origin daemon via `viaServerId`.
+   */
+  private startAnnouncing(live: Live): void {
+    const { client } = live;
+    const via = this.liveVia.get(live);
+    if (!via) return;
+    let released = false;
+    try {
+      const observation = client.observeHosts();
+      const apply = (directory: HostDirectory) => {
+        if (released || this.closed) return;
+        const hosts: AnnouncedHost[] = [];
+        for (const host of directory.hosts) {
+          if (!host.serverId || host.serverId === via || host.serverId === this.self.serverId)
+            continue;
+          hosts.push({
+            serverId: host.serverId,
+            label: host.label ?? null,
+            viaServerId: via,
+          });
+        }
+        const previous = this.announced.get(via) ?? [];
+        if (!sameAnnounced(previous, hosts)) {
+          this.announced.set(via, hosts);
+          this.changed();
+        }
+      };
+      const unsubscribe = observation.subscribe({
+        snapshot: apply,
+        update: (message) => {
+          if (message.type === "hosts.changed") apply(message.payload.directory);
+        },
+      });
+      live.announceStop = () => {
+        released = true;
+        unsubscribe();
+        void observation.release();
+      };
+      void observation.ready.then(apply).catch(() => {});
+    } catch {
+      live.announceStop = undefined;
+    }
+  }
+
   async openRoute(input: {
     serverId: string;
     scopeId: string;

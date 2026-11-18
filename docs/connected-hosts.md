@@ -38,6 +38,23 @@ principal. An ordinary direct B consumer does not become that producer by supply
 The optional `server_info.sourceId` reports this producer identity separately from the authenticated admission principal.
 Trusted server plugins retain the authority of their runtime; they are not sandboxed by this feature.
 
+## Cluster settings and name sync
+
+Each daemon owns two cluster flags in its mutable config:
+
+- `cluster.announceHosts`: when on, a daemon that has an enabled link to another daemon observes
+  that daemon's `hosts.list` and republishes the discovered hosts in its own directory as
+  `announcedHosts`. Each entry carries the `viaServerId` it was learned through. Clients route
+  through that daemon with a `routed` connection; no credentials leave the originating daemon.
+  Turning the flag off removes all announced rows. The app keeps its own equivalent flag in device
+  settings, which also controls whether it mirrors its saved hosts into the bootstrap daemon.
+- `cluster.syncHostNames`: when on, renaming a connected host through `hosts.update` sends a
+  `hosts.self.update.request` to that daemon, which updates the `hostname` it announces. A saved
+  app label always wins; the daemon hostname only fills a label when the app has none. The request
+  is guarded by `tunnel.manage` and rejected when the destination has the flag off.
+
+Older daemons and clients omit the new fields; `announcedHosts` and the `cluster` config are optional.
+
 ## Delegating agents
 
 Agent MCP discovers destination IDs with `list_hosts`. `create_workspace`, `list_workspaces`,

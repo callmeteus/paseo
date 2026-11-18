@@ -51,6 +51,7 @@ import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { ClusterSection } from "@/screens/settings/cluster-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
 import { OpenLocationSection } from "@/screens/settings/open-location/open-location-section";
 import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
@@ -226,6 +227,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   },
   { id: "diagnostics", labelKey: "settings.sections.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.sections.about", icon: Info },
+  { id: "cluster", labelKey: "settings.sections.cluster", icon: Network, Content: ClusterSection },
 ];
 
 function isSectionAvailable(item: SidebarSectionItem, isDesktopApp: boolean): boolean {
@@ -253,6 +255,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "terminals", labelKey: "settings.hostSections.terminals", icon: SquareTerminal },
   { id: "remote", labelKey: "settings.remoteAccess.title", icon: Globe },
   { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Blocks },
+  { id: "cluster", labelKey: "settings.hostSections.cluster", icon: Network },
 ];
 
 function renderHostSettingsContent(
@@ -286,6 +289,8 @@ function renderHostSettingsContent(
       return <HostRemoteAccessPage serverId={view.serverId} />;
     case "plugins":
       return <HostPluginsPage serverId={view.serverId} />;
+    case "cluster":
+      return <ClusterSection serverId={view.serverId} />;
     case "host":
       return <HostSettingsPage serverId={view.serverId} onHostRemoved={onHostRemoved} />;
   }

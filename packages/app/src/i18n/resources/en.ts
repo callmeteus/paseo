@@ -2609,6 +2609,7 @@ export const en = {
       permissions: "Permissions",
       diagnostics: "Diagnostics",
       about: "About",
+      cluster: "Cluster",
     },
     layout: {
       openInSidePane: {
@@ -2690,6 +2691,23 @@ export const en = {
       terminals: "Terminals",
       plugins: "Plugins",
       host: "Overview",
+      cluster: "Cluster",
+    },
+    cluster: {
+      title: "Cluster",
+      hostsTitle: "Hosts in this cluster",
+      hostsEmpty: "No hosts saved yet. Connect a host to see it here.",
+      autoSyncNamesTitle: "Sync host names automatically",
+      autoSyncNamesHint:
+        "Use the name a daemon announces when a host has no saved name. Renaming a host here also updates its name on that daemon.",
+      announceHostsTitle: "Announce this host's hosts",
+      announceHostsHint:
+        "Share the hosts saved on this device with connected daemons, so their clients can reach them through this host.",
+      daemonConfigTitle: "On this daemon",
+      daemonConfigHint: "These flags control how this daemon shares and syncs names.",
+      daemonAnnounceTitle: "Announce saved hosts",
+      daemonSyncNamesTitle: "Sync names",
+      routedBadge: "via {{host}}",
     },
     remoteAccess: {
       title: "Remote access",

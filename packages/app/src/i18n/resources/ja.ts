@@ -2609,6 +2609,7 @@ export const ja: TranslationResources = {
       permissions: "権限",
       diagnostics: "診断",
       about: "アプリ情報",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2652,7 +2653,9 @@ export const ja: TranslationResources = {
       terminals: "ターミナル",
       plugins: "プラグイン",
       host: "概要",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "リモートアクセス",
       inboundTitle: "他のホストからの操作を許可",

@@ -14,6 +14,7 @@ import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
   DEFAULT_APP_SETTINGS,
+  DEFAULT_CLUSTER_PREFERENCES,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_CODE_FONT_SIZE,
   DEFAULT_CONTENT_FONT_SIZE,
@@ -43,6 +44,7 @@ import {
   type AppSettings,
   type AppSettingsUpdate,
   type ChatDisplay,
+  type ClusterPreferences,
   type OpenInSidePanePreferences,
   type PullRequestOpenLocation,
   type DesktopSettingsBridge,
@@ -82,11 +84,13 @@ export {
   parseTerminalScrollbackLines,
   resolveContentMaxWidth,
   sanitizeFontFamily,
+  DEFAULT_CLUSTER_PREFERENCES,
 };
 export type {
   AppSettings,
   AppSettingsUpdate,
   ChatDisplay,
+  ClusterPreferences,
   AppLanguage,
   OpenInSidePanePreferences,
   PullRequestOpenLocation,
@@ -145,6 +149,12 @@ export interface UseSettingsReturn {
 }
 
 type SettingsSelector<TSelected> = (settings: Settings) => TSelected;
+
+/** Reads cluster preferences outside React, for the host runtime. */
+export function getClusterPreferencesFromCache(): import("./storage").ClusterPreferences {
+  const settings = appQueryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY);
+  return settings?.cluster ?? DEFAULT_CLUSTER_PREFERENCES;
+}
 
 export function useAppSettings(): UseAppSettingsReturn {
   const queryClient = useQueryClient();

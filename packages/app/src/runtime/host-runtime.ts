@@ -1,4 +1,5 @@
 import { watchdog } from "@/watchdog";
+import { getClusterPreferencesFromCache, type ClusterPreferences } from "@/hooks/use-settings";
 import { createHostChannelTransport } from "@getpaseo/client/internal/hosts";
 import type { OwnedSubscription } from "@getpaseo/client";
 import type { HostDirectory, HostSummary, HostUpdate } from "@getpaseo/protocol/hosts";
@@ -241,6 +242,7 @@ export interface HostRuntimeControllerDeps {
     host: HostProfile;
     connection: HostConnection;
   }) => () => void;
+  readClusterPreferences?: () => ClusterPreferences;
 }
 
 export interface HostRuntimeStorage {
@@ -1988,6 +1990,24 @@ export class HostRuntimeStore {
 
   // --- Host registry ---
 
+  private clusterPrefs(): ClusterPreferences {
+    return this.deps.readClusterPreferences?.() ?? getClusterPreferencesFromCache();
+  }
+
+  /** Applies the device's cluster preferences to a daemon so its own announce/sync flags match. */
+  async applyClusterConfigToDaemon(serverId: string): Promise<void> {
+    const client = this.getClient(serverId);
+    const prefs = this.clusterPrefs();
+    if (!client?.isConnected) return;
+    try {
+      await client.patchDaemonConfig({
+        cluster: { announceHosts: prefs.announceHosts, syncHostNames: prefs.autoSyncNames },
+      });
+    } catch {
+      // Older daemons omit the field; the config patch is best-effort by design.
+    }
+  }
+
   getHosts(): HostProfile[] {
     return this.hosts;
   }
@@ -2536,6 +2556,11 @@ export class HostRuntimeStore {
 
   async renameHost(serverId: string, label: string): Promise<void> {
     await this.updateHost(serverId, (host) => ({ ...host, label }));
+    if (this.clusterPrefs().autoSyncNames) {
+      const client = this.getClient(serverId);
+      if (client?.isConnected && label.trim())
+        void client.updateSelfLabel(label.trim()).catch(() => {});
+    }
   }
 
   async setHostPassword(serverId: string, password: string): Promise<void> {
@@ -2801,12 +2826,23 @@ export class HostRuntimeStore {
     const observation = client.observeHosts();
     const apply = (directory: HostDirectory) => {
       if (this.hostObservations.get(serverId)?.client !== client) return;
-      for (const target of directory.hosts) {
-        if (!target.serverId || target.serverId === serverId) continue;
+      const syncNames = this.clusterPrefs().autoSyncNames;
+      const announcedLabel = syncNames
+        ? directory.self.label?.trim() ||
+          client.getLastServerInfoMessage()?.hostname?.trim() ||
+          null
+        : null;
+      const upsert = (targetServerId: string, label: string | null | undefined) => {
+        if (!targetServerId || targetServerId === serverId) return;
+        const existing = this.hosts.find((candidate) => candidate.serverId === targetServerId);
+        // Opção 2b: o label salvo no app prevalece; o nome anunciado só preenche um label ausente.
+        const resolvedLabel = existing?.label?.trim()
+          ? undefined
+          : (label ?? announcedLabel ?? undefined);
         const next = upsertHostConnectionInProfiles({
           profiles: this.hosts,
-          serverId: target.serverId,
-          label: target.label ?? undefined,
+          serverId: targetServerId,
+          label: resolvedLabel,
           connection: {
             id: `via:${serverId}`,
             type: "routed",
@@ -2817,11 +2853,16 @@ export class HostRuntimeStore {
           this.setHostsAndSync(next);
           void this.persistHosts();
         }
-        if (!this.fleetDirectoryDemand.has(target.serverId))
+        if (!this.fleetDirectoryDemand.has(targetServerId))
           this.fleetDirectoryDemand.set(
-            target.serverId,
-            this.acquireDirectoryDemand(target.serverId),
+            targetServerId,
+            this.acquireDirectoryDemand(targetServerId),
           );
+      };
+      for (const target of directory.hosts)
+        if (target.serverId) upsert(target.serverId, target.label);
+      for (const target of directory.announcedHosts ?? []) {
+        if (target.viaServerId === serverId) upsert(target.serverId, target.label);
       }
     };
     const unsubscribe = observation.subscribe({
@@ -2975,6 +3016,7 @@ export class HostRuntimeStore {
       void invalidateCheckoutGitQueriesForServer(queryClient, serverId);
       invalidateServerDataQueriesAfterReconnect({ queryClient, serverId });
       void queryClient.invalidateQueries({ queryKey: schedulesQueryBaseKey });
+      void this.applyClusterConfigToDaemon(serverId);
       this.scheduleHostMirror(0);
     }
   }
@@ -3055,6 +3097,7 @@ export class HostRuntimeStore {
   }
 
   private async isHostMirrorDisabled(): Promise<boolean> {
+    if (!this.clusterPrefs().announceHosts) return true;
     if (this.hostMirrorDisabled !== null) return this.hostMirrorDisabled;
     try {
       const isE2E = await readValidatedString(this.storage, E2E_STORAGE_KEY, z.string().min(1));

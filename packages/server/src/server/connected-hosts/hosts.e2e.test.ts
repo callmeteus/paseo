@@ -2108,3 +2108,78 @@ test.each(["removed", "disabled"] as const)(
     ).toEqual([]);
   },
 );
+
+test(
+  "announceHosts republishes hosts learned from a connected daemon without credentials",
+  { timeout: 30000 },
+  async () => {
+    const c = await daemon();
+    const cApi = await api(c);
+    const cServerIdExpected = cApi.client.getLastServerInfoMessage()!.serverId;
+    const b = await daemon();
+    const bApi = await api(b);
+    const bServerId = bApi.client.getLastServerInfoMessage()!.serverId;
+    const savedC = await bApi.paseo.hosts.add({
+      connection: `127.0.0.1:${c.port}`,
+      label: "C via B",
+    });
+    const bDirectory = await online(bApi.paseo);
+    const cServerId = bDirectory.hosts[0]!.serverId!;
+    expect(cServerId).toBe(cServerIdExpected);
+
+    const a = await daemon();
+    const aApi = await api(a);
+    await aApi.client.patchDaemonConfig({ cluster: { announceHosts: true } });
+    await aApi.paseo.hosts.add({ connection: `127.0.0.1:${b.port}`, label: "B" });
+    await online(aApi.paseo);
+
+    await expect
+      .poll(
+        async () => {
+          const directory = await aApi.paseo.hosts.list();
+          return directory.announcedHosts?.find((host) => host.serverId === cServerId);
+        },
+        { timeout: 20000 },
+      )
+      .toMatchObject({ serverId: cServerId, label: "C via B", viaServerId: bServerId });
+
+    // The announced row carries no connection/credential material.
+    const directory = await aApi.paseo.hosts.list();
+    expect(JSON.stringify(directory.announcedHosts)).not.toContain("password");
+    expect(savedC.registrationId).toMatch(/^hst_/);
+
+    await aApi.client.patchDaemonConfig({ cluster: { announceHosts: false } });
+    await expect
+      .poll(async () => (await aApi.paseo.hosts.list()).announcedHosts ?? [], { timeout: 10000 })
+      .toEqual([]);
+  },
+);
+
+test("syncHostNames lets a connected daemon rename the hostname we announce", async () => {
+  const a = await daemon();
+  const { client } = await api(a);
+  const before = client.getLastServerInfoMessage()!.hostname;
+  await expect(client.updateSelfLabel("Renamed by cluster")).rejects.toMatchObject({
+    code: "permission_denied",
+  });
+  await client.patchDaemonConfig({ cluster: { syncHostNames: true } });
+  await expect
+    .poll(async () => (await client.getDaemonConfig()).config.cluster?.syncHostNames)
+    .toBe(true);
+  // The RPC is delivered after the config reaches the daemon; retry briefly for the round trip.
+  await expect
+    .poll(async () => {
+      try {
+        return await client.updateSelfLabel("Renamed by cluster");
+      } catch {
+        return null;
+      }
+    })
+    .toBe("Renamed by cluster");
+  await expect.poll(async () => (await client.listHosts()).self.label).toBe("Renamed by cluster");
+  await client.patchDaemonConfig({ cluster: { syncHostNames: false } });
+  await expect(client.updateSelfLabel("Again")).rejects.toMatchObject({
+    code: "permission_denied",
+  });
+  expect(before).toBeTruthy();
+});

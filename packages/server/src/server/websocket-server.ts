@@ -784,7 +784,12 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceAutoName = workspaceAutoName;
     this.downloadTokenStore = downloadTokenStore;
     this.paseoHome = paseoHome;
-    this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
+    this.connectedHosts = new ConnectedHosts(
+      paseoHome,
+      { serverId, label: getHostName() },
+      () => this.daemonConfigStore.get().cluster,
+    );
+
     this.mcpBridgeAuthority = wsConfig.mcpBridgeAuthority;
     this.mcpCatalog = wsConfig.mcpCatalog;
     this.messageQueueStore = wsConfig.messageQueueStore;
@@ -822,6 +827,7 @@ export class VoiceAssistantWebSocketServer {
       updateProviderRegistry: (state) => this.agentManager.updateProviderRegistry(state),
     });
     const unsubscribeChange = this.daemonConfigStore.onChange((config) => {
+      this.connectedHosts.refreshClusterConfig();
       this.broadcastDaemonConfigChanged(config);
     });
     this.unsubscribeDaemonConfigChange = () => {
@@ -1994,7 +2000,7 @@ export class VoiceAssistantWebSocketServer {
       status: "server_info",
       protocolVersion: WS_PROTOCOL_VERSION,
       serverId: this.serverId,
-      hostname: getHostName(),
+      hostname: this.connectedHosts.getSelfLabel(),
       version: this.daemonVersion,
       sourceId: session.getHostSourceId(),
       permissions: session.getPermissions(),

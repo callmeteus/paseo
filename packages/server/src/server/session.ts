@@ -10377,6 +10377,7 @@ function createHostSession(options: SessionOptions, session: Session): Connected
     () => session.getHopPath(),
     () => session.getOriginServerId(),
     () => session.getMaxHops(),
+    options.connectedHosts.clusterConfigReader(),
   );
 }
 

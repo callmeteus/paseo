@@ -27,14 +27,24 @@ export const HostSummarySchema = z.object({
   nextRetryAt: z.string().nullable(),
   error: z.object({ code: z.string(), message: z.string() }).nullable(),
 });
+export const AnnouncedHostSchema = z.object({
+  serverId: z.string(),
+  label: z.string().nullable(),
+  // The connected daemon this host was learned through. Clients route through it.
+  viaServerId: z.string(),
+});
 export const HostDirectorySchema = z.object({
   self: z.object({ serverId: z.string(), label: z.string() }),
   hosts: z.array(HostSummarySchema),
+  // COMPAT(announcedHosts): added in v0.14.0, older daemons and clients omit it.
+  // Hosts learned from connected daemons when the cluster announce option is on.
+  announcedHosts: z.array(AnnouncedHostSchema).optional(),
 });
 export type HostAdd = z.infer<typeof HostAddSchema>;
 export type HostUpdate = z.infer<typeof HostUpdateSchema>;
 export type HostSummary = z.infer<typeof HostSummarySchema>;
 export type HostDirectory = z.infer<typeof HostDirectorySchema>;
+export type AnnouncedHost = z.infer<typeof AnnouncedHostSchema>;
 
 export const HostsListRequestSchema = z.object({
   type: z.literal("hosts.list.request"),
@@ -109,6 +119,18 @@ export const HostsRouteFrameSchema = z.object({
 export const HostsRouteClosedSchema = z.object({
   type: z.literal("hosts.route.closed"),
   payload: z.object({ subscriptionId: z.string(), code: z.string(), message: z.string() }),
+});
+
+// COMPAT(selfLabel): added in v0.14.0. Lets a connected daemon update the name this
+// daemon announces, used by cluster name sync. Guarded by the syncHostNames config.
+export const HostsSelfUpdateRequestSchema = z.object({
+  type: z.literal("hosts.self.update.request"),
+  requestId: z.string(),
+  label: z.string().min(1).max(256),
+});
+export const HostsSelfUpdateResponseSchema = z.object({
+  type: z.literal("hosts.self.update.response"),
+  payload: z.object({ requestId: z.string(), label: z.string() }),
 });
 
 // Logical B sessions are admitted under the authenticated physical link, never hello auth.

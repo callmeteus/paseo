@@ -2622,6 +2622,7 @@ export const ptBR: TranslationResources = {
       permissions: "Permissões",
       diagnostics: "Diagnósticos",
       about: "Sobre",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2665,6 +2666,23 @@ export const ptBR: TranslationResources = {
       terminals: "Terminais",
       plugins: "Plugins",
       host: "Visão geral",
+      cluster: "Cluster",
+    },
+    cluster: {
+      title: "Cluster",
+      hostsTitle: "Hosts neste cluster",
+      hostsEmpty: "Nenhum host salvo ainda. Conecte um host para vê-lo aqui.",
+      autoSyncNamesTitle: "Sincronizar nomes dos hosts automaticamente",
+      autoSyncNamesHint:
+        "Usa o nome que um daemon anuncia quando um host não tem nome salvo. Renomear um host aqui também atualiza o nome dele nesse daemon.",
+      announceHostsTitle: "Anunciar os hosts deste host",
+      announceHostsHint:
+        "Compartilha os hosts salvos neste dispositivo com os daemons conectados, para que os clientes deles possam alcançá-los através deste host.",
+      daemonConfigTitle: "Neste daemon",
+      daemonConfigHint: "Estas opções controlam como este daemon compartilha e sincroniza nomes.",
+      daemonAnnounceTitle: "Anunciar hosts salvos",
+      daemonSyncNamesTitle: "Sincronizar nomes",
+      routedBadge: "via {{host}}",
     },
     remoteAccess: {
       title: "Acesso remoto",

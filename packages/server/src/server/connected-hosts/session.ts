@@ -4,7 +4,7 @@ import type {
   SessionOutboundMessage,
   DaemonPermission,
 } from "@getpaseo/protocol/messages";
-import { ConnectedHosts, HostError, type HostActor } from "./index.js";
+import { ConnectedHosts, HostError, type HostActor, type ReadClusterConfig } from "./index.js";
 import type { SessionDelivery } from "../session/owned-subscriptions/index.js";
 
 type HostRequest<T extends SessionInboundMessage["type"]> = Extract<
@@ -34,6 +34,7 @@ export class ConnectedHostSession {
     private readonly hopPath: () => readonly string[],
     private readonly originServerId: () => string | null,
     private readonly maxHops: () => number,
+    private readonly readClusterConfig: ReadClusterConfig = () => undefined,
   ) {}
   binary(frame: HostRouteFrame, source: object): void {
     const route = this.routes.get(frame.routeId);
@@ -155,6 +156,18 @@ export class ConnectedHostSession {
                 entry.scopeId === message.scopeId && entry.source === this.delivery.currentSource,
             );
         if (route && route.source === this.delivery.currentSource) await route.release();
+        return;
+      }
+      case "hosts.self.update.request": {
+        if (this.readClusterConfig()?.syncHostNames !== true)
+          throw new HostError("permission_denied", "Host name sync is disabled on this daemon");
+        const label = message.label.trim();
+        if (!label) throw new HostError("invalid_connection", "A host name is required");
+        this.hosts.setSelfLabel(label);
+        this.emit({
+          type: "hosts.self.update.response",
+          payload: { requestId: message.requestId, label: this.hosts.getSelfLabel() },
+        });
         return;
       }
     }

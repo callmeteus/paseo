@@ -2638,6 +2638,7 @@ export const fr: TranslationResources = {
       permissions: "Autorisations",
       diagnostics: "Diagnostic",
       about: "À propos",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2681,7 +2682,9 @@ export const fr: TranslationResources = {
       terminals: "Terminaux",
       plugins: "Plugins",
       host: "Aperçu",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "Accès distant",
       inboundTitle: "Autoriser d'autres hôtes à agir ici",

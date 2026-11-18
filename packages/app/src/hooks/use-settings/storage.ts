@@ -110,7 +110,21 @@ export interface AppSettings {
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
   pullRequestOpenLocation: PullRequestOpenLocation;
+  /** Cluster-wide host discovery and name synchronization preferences. */
+  cluster: ClusterPreferences;
 }
+
+export interface ClusterPreferences {
+  /** Sync a host's saved label back to the daemon and fill missing labels from daemon names. */
+  autoSyncNames: boolean;
+  /** Publish this device's saved hosts to the local daemon for connected clients. */
+  announceHosts: boolean;
+}
+
+export const DEFAULT_CLUSTER_PREFERENCES: ClusterPreferences = {
+  autoSyncNames: false,
+  announceHosts: true,
+};
 
 export type WorkflowModeSource = "paseo" | "cli";
 
@@ -168,6 +182,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   filePanelAssociations: {},
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
   pullRequestOpenLocation: "explorer",
+  cluster: DEFAULT_CLUSTER_PREFERENCES,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -294,6 +309,15 @@ const StoredAppSettingsSchema = z
         legacyPullRequestsInSidePane: undefined,
       }),
     pullRequestOpenLocation: z.enum(["main", "side", "explorer"]).optional(),
+    // COMPAT(clusterPreferences): added in v0.14.0, defaults keep older stored settings valid.
+    cluster: z
+      .object({
+        autoSyncNames: z.boolean().catch(DEFAULT_CLUSTER_PREFERENCES.autoSyncNames),
+        announceHosts: z.boolean().catch(DEFAULT_CLUSTER_PREFERENCES.announceHosts),
+      })
+      .partial()
+      .catch({})
+      .transform((preferences) => ({ ...DEFAULT_CLUSTER_PREFERENCES, ...preferences })),
     // COMPAT(explorerSidebarRouting): replaced by source-specific side-pane preferences in v0.6.
     openSupportingTabsInSidePanel: z.boolean().optional().catch(undefined),
     // COMPAT(rendererDesktopSettings): these fields used to share this renderer-owned key.

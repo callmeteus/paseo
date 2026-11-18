@@ -44,6 +44,7 @@ interface SupportedMutableConfigPatch {
   pluginsEnabled?: boolean;
   plugins?: MutableDaemonConfig["plugins"];
   features?: SpeechSettingsPatch;
+  cluster?: MutableDaemonConfigPatch["cluster"];
 }
 
 const SPEECH_PERSISTED_PATHS = ["features.dictation", "features.voiceMode"];
@@ -359,7 +360,14 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(patch.features !== undefined ? { features: patch.features } : {}),
+    ...pickClusterPatch(patch),
   };
+}
+
+function pickClusterPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "cluster"> {
+  return patch.cluster !== undefined ? { cluster: patch.cluster } : {};
 }
 
 export function applyMutableProviderConfigToOverrides(

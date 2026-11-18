@@ -508,6 +508,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "permissions",
   "diagnostics",
   "about",
+  "cluster",
 ] as const;
 
 export type SettingsSectionSlug = (typeof SETTINGS_SECTION_SLUGS)[number];
@@ -531,6 +532,7 @@ export const HOST_SECTION_SLUGS = [
   "plugins",
   "remote",
   "host",
+  "cluster",
 ] as const;
 
 export type HostSectionSlug = (typeof HOST_SECTION_SLUGS)[number];

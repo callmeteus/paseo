@@ -1840,6 +1840,16 @@ export class DaemonClient {
       responseType: "hosts.remove.response",
     });
   }
+  /** COMPAT(selfLabel): updates the name the destination daemon announces. */
+  async updateSelfLabel(label: string): Promise<string> {
+    this.requireConnectedHosts();
+    return (
+      await this.sendCorrelatedSessionRequest({
+        message: { type: "hosts.self.update.request", label },
+        responseType: "hosts.self.update.response",
+      })
+    ).label;
+  }
   async openHostRoute(serverId: string, scopeId: string): Promise<string> {
     this.requireConnectedHosts();
     try {

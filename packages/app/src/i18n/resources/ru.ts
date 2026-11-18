@@ -2618,6 +2618,7 @@ export const ru: TranslationResources = {
       permissions: "Разрешения",
       diagnostics: "Диагностика",
       about: "О приложении",
+      cluster: "Cluster",
     },
     layout: en.settings.layout,
     editor: {
@@ -2661,7 +2662,9 @@ export const ru: TranslationResources = {
       terminals: "Терминалы",
       plugins: "Плагины",
       host: "Обзор",
+      cluster: "Cluster",
     },
+    cluster: en.settings.cluster,
     remoteAccess: {
       title: "Удалённый доступ",
       inboundTitle: "Разрешить другим хостам действовать здесь",
