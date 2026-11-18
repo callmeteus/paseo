@@ -5057,6 +5057,23 @@ export class AgentManager {
     });
   }
 
+  /**
+   * A resumed provider session can end up with a different native session id
+   * than the persisted handle (for example, an ACP provider that no longer has
+   * the old session opens a fresh one). When that happens, persist the handle
+   * from the live session so the next reload does not reuse the stale id.
+   */
+  private resolveRegisteredPersistence(
+    session: AgentSession,
+    provided: AgentPersistenceHandle | undefined,
+  ): AgentPersistenceHandle | null {
+    const described = session.describePersistence();
+    if (session.didRecreateSessionOnResume?.() && described) {
+      return described;
+    }
+    return provided ?? described;
+  }
+
   private async registerSession(
     session: AgentSession,
     config: AgentSessionConfig,
@@ -5317,7 +5334,7 @@ export class AgentManager {
       finalizedForegroundTurnIds: new Set<string>(),
       unsubscribeSession: null,
       persistence: attachPersistenceCwd(
-        options?.persistence ?? session.describePersistence(),
+        this.resolveRegisteredPersistence(session, options?.persistence),
         config.cwd,
       ),
       historyPrimed: options?.historyPrimed ?? durableTimelineHasRows,

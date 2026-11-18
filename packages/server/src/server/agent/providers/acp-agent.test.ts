@@ -5222,6 +5222,7 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
     handle: AgentPersistenceHandle;
     loadSession?: ReturnType<typeof vi.fn>;
     unstableResumeSession?: ReturnType<typeof vi.fn>;
+    newSession?: ReturnType<typeof vi.fn>;
   }) {
     const loadSession =
       args.loadSession ??
@@ -5239,6 +5240,14 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
         models: null,
         configOptions: [],
       });
+    const newSession =
+      args.newSession ??
+      vi.fn().mockResolvedValue({
+        sessionId: "new-session",
+        modes: null,
+        models: null,
+        configOptions: [],
+      });
 
     class TestSession extends ACPAgentSession {
       protected override async spawnProcess(): Promise<SpawnedACPProcess> {
@@ -5246,6 +5255,7 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
           child: createProbeChildStub(),
           connection: {
             prompt: vi.fn(),
+            newSession,
             loadSession,
             unstable_resumeSession: unstableResumeSession,
           } as unknown as ClientSideConnection,
@@ -5275,7 +5285,7 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
       },
     );
 
-    return { session, loadSession, unstableResumeSession };
+    return { session, loadSession, unstableResumeSession, newSession };
   }
 
   test("loadSession is always called with sessionId, cwd, and mcpServers even when mcpServers is empty", async () => {
@@ -5481,6 +5491,61 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
       cwd: "/tmp/paseo-acp-test",
       mcpServers: [],
     });
+  });
+
+  test("starts a new session when session/load reports the session is gone", async () => {
+    const loadSession = vi.fn().mockRejectedValue(
+      new RequestError(-32602, "Invalid params", {
+        details: `Session "session-1" not found`,
+      }),
+    );
+    const { session, newSession } = makeTestSession({
+      capabilities: { loadSession: true },
+      handle: { sessionId: "session-1", provider: "claude-acp" },
+      loadSession,
+    });
+
+    await session.initializeResumedSession();
+
+    expect(loadSession).toHaveBeenCalledOnce();
+    expect(newSession).toHaveBeenCalledWith({
+      cwd: "/tmp/paseo-acp-test",
+      mcpServers: [],
+    });
+    expect(session.id).toBe("new-session");
+  });
+
+  test("starts a new session when unstable_resumeSession reports the session is gone", async () => {
+    const unstableResumeSession = vi.fn().mockRejectedValue(
+      new RequestError(-32602, "Invalid params", {
+        details: `Session "session-1" not found`,
+      }),
+    );
+    const { session, newSession } = makeTestSession({
+      capabilities: { sessionCapabilities: { resume: {} } },
+      handle: { sessionId: "session-1", provider: "claude-acp" },
+      unstableResumeSession,
+    });
+
+    await session.initializeResumedSession();
+
+    expect(unstableResumeSession).toHaveBeenCalledOnce();
+    expect(newSession).toHaveBeenCalledOnce();
+    expect(session.id).toBe("new-session");
+  });
+
+  test("still fails when session/load fails for another reason", async () => {
+    const loadSession = vi
+      .fn()
+      .mockRejectedValue(new RequestError(-32602, "Invalid params", { details: "bad cwd" }));
+    const { session, newSession } = makeTestSession({
+      capabilities: { loadSession: true },
+      handle: { sessionId: "session-1", provider: "claude-acp" },
+      loadSession,
+    });
+
+    await expect(session.initializeResumedSession()).rejects.toThrow("bad cwd");
+    expect(newSession).not.toHaveBeenCalled();
   });
 });
 

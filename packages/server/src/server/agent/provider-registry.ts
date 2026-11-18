@@ -491,6 +491,7 @@ export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession
     getPendingPermissions: () => inner.getPendingPermissions(),
     respondToPermission: (requestId, response) => inner.respondToPermission(requestId, response),
     describePersistence: () => mapPersistenceHandle(provider, inner.describePersistence()),
+    didRecreateSessionOnResume: inner.didRecreateSessionOnResume?.bind(inner),
     observeSessionTitle: inner.observeSessionTitle?.bind(inner),
     interrupt: () => inner.interrupt(),
     close: () => inner.close(),

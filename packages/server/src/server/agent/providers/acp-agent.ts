@@ -208,6 +208,20 @@ function isACPInvalidParams(error: unknown): boolean {
   return isACPError(error) && error.code === -32602;
 }
 
+/**
+ * Some ACP providers (notably the Cursor CLI) do not keep sessions alive across
+ * processes. A persisted handle then points at a session the provider no longer
+ * knows about. Paseo keeps the conversation in its own timeline, so a missing
+ * provider session is recoverable: open a fresh session and continue there.
+ */
+function isACPSessionNotFoundError(error: unknown): boolean {
+  if (!isACPInvalidParams(error)) return false;
+  const summary = summarizeACPRequestError(error).message.toLowerCase();
+  return (
+    /session\s+["']?[^"'\s]+["']?\s+not\s+found/.test(summary) || /session not found/.test(summary)
+  );
+}
+
 function extractACPErrorDataMessage(data: unknown): string | null {
   if (!isRecord(data)) {
     return null;
@@ -1993,6 +2007,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly persistedHistory: AgentTimelineItem[] = [];
   private readonly initialHandle?: AgentPersistenceHandle;
   private readonly resumePurpose: AgentResumePurpose;
+  private resumedSessionRecreated = false;
 
   private readonly config: AgentSessionConfig;
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -2155,30 +2170,57 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.bootstrapThreadEventPending = true;
 
       const sessionCapabilities = this.agentCapabilities?.sessionCapabilities;
+      let resumeRequest: (() => Promise<SessionStateResponse>) | null = null;
       if (this.agentCapabilities?.loadSession) {
-        this.replayingHistory = true;
-        const response = await this.runACPRequest(() =>
+        resumeRequest = () =>
           this.connection!.loadSession({
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
             mcpServers: this.acpMcpServers(),
-          }),
-        );
-        this.deliverTranslatedEvents(this.flushPendingUserMessage());
-        this.replayingHistory = false;
-        this.historyPending = this.persistedHistory.length > 0;
-        this.applySessionState(response);
+          });
       } else if (sessionCapabilities?.resume) {
-        const response = await this.runACPRequest(() =>
+        resumeRequest = () =>
           this.connection!.unstable_resumeSession({
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
             mcpServers: this.acpMcpServers(),
+          });
+      }
+      if (!resumeRequest) {
+        throw new Error(`${this.provider} does not support ACP session resume`);
+      }
+
+      const replaying = this.agentCapabilities?.loadSession === true;
+      let resumed = false;
+      try {
+        this.replayingHistory = replaying;
+        const response = await this.runACPRequest(resumeRequest);
+        if (replaying) {
+          this.deliverTranslatedEvents(this.flushPendingUserMessage());
+          this.historyPending = this.persistedHistory.length > 0;
+        }
+        this.applySessionState(response);
+        resumed = true;
+      } catch (error) {
+        if (!isACPSessionNotFoundError(error)) throw error;
+        this.logger.warn(
+          { err: error, provider: this.provider, sessionId: handle.sessionId },
+          "ACP session no longer exists; starting a new session",
+        );
+      } finally {
+        this.replayingHistory = false;
+      }
+
+      if (!resumed) {
+        const response = await this.runACPRequest(() =>
+          this.connection!.newSession({
+            cwd: this.config.cwd,
+            mcpServers: this.acpMcpServers(),
           }),
         );
+        this.sessionId = response.sessionId;
+        this.resumedSessionRecreated = true;
         this.applySessionState(response);
-      } else {
-        throw new Error(`${this.provider} does not support ACP session resume`);
       }
 
       await this.applyConfiguredOverrides();
@@ -3012,6 +3054,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (response.behavior === "deny" && response.interrupt && this.connection && this.sessionId) {
       await this.connection.cancel({ sessionId: this.sessionId });
     }
+  }
+
+  didRecreateSessionOnResume(): boolean {
+    return this.resumedSessionRecreated;
   }
 
   describePersistence(): AgentPersistenceHandle | null {

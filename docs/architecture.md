@@ -461,6 +461,8 @@ All providers:
 - Map tool calls to a normalized `ToolCallDetail` type
 - Expose provider-specific modes (plan, default, full-access)
 
+ACP sessions live inside the provider process, so a persisted ACP session id can stop resolving after the CLI exits. The Cursor CLI does this routinely. When `session/load` or `unstable_resumeSession` reports "session not found", `ACPAgentSession` opens a fresh session on the same connection instead of failing the reload; the conversation is already durable in Paseo's timeline. `didRecreateSessionOnResume()` tells `AgentManager` to persist the new handle over the stale one. Other load errors still fail the resume.
+
 Providers that can accept native tool definitions should set `supportsNativePaseoTools` and read `launchContext.paseoTools`. The daemon then passes the shared Paseo tool catalog directly and removes the internal Paseo MCP server from that provider launch config. Providers that only support MCP continue to receive the same tools through the MCP fallback at `/mcp/agents`.
 
 ## Data flow: running an agent

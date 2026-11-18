@@ -3256,6 +3256,46 @@ test("resumeAgentFromPersistence closes and rejects a session that cannot honor 
   }
 });
 
+test("resumeAgentFromPersistence records the new session id when the provider opens a fresh session", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class FreshSession extends TestAgentSession {
+    override readonly id = "fresh-provider-session";
+    override didRecreateSessionOnResume(): boolean {
+      return true;
+    }
+  }
+  class RecreatingResumeClient extends TestAgentClient {
+    override async resumeSession(): Promise<AgentSession> {
+      return new FreshSession({ provider: "codex", cwd: workdir });
+    }
+  }
+
+  const agentId = "00000000-0000-4000-8000-000000000109";
+  const manager = new AgentManager({
+    clients: { codex: new RecreatingResumeClient() },
+    registry: storage,
+    logger,
+  });
+  const handle: AgentPersistenceHandle = {
+    provider: "codex",
+    sessionId: "stale-provider-session",
+    metadata: { cwd: workdir },
+  };
+
+  try {
+    const agent = await manager.resumeAgentFromPersistence(handle, { cwd: workdir }, agentId);
+    expect(agent.persistence?.sessionId).toBe("fresh-provider-session");
+    await manager.flush();
+    const stored = await storage.get(agentId);
+    expect(stored?.persistence?.sessionId).toBe("fresh-provider-session");
+  } finally {
+    for (const id of manager.listAgents().map((item) => item.id)) await manager.closeAgent(id);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("reloadAgentSession preserves the live session when its replacement cannot honor external MCP", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const original = new CloseRecordingTestAgentSession({ provider: "codex", cwd: workdir });

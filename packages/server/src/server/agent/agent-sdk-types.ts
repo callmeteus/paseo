@@ -736,6 +736,11 @@ export interface AgentSession {
   ): Promise<AgentPermissionResult | void>;
   describePersistence(): AgentPersistenceHandle | null;
   /**
+   * True when a resume had to open a fresh provider session because the stored
+   * session id was gone. The live handle then supersedes the persisted one.
+   */
+  didRecreateSessionOnResume?(): boolean;
+  /**
    * Reports a provider session title that replaced the prompt the session
    * started with. The initial prompt is not reported.
    */
