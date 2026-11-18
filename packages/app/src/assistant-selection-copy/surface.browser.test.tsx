@@ -82,7 +82,7 @@ describe("AssistantSelectionCopySurface", () => {
 
     await selectMessageText(mounted[0]!.container);
 
-    expect(findAction()?.textContent).toBe("Add to chat");
+    expect(findAction()?.textContent).toContain("Add to chat");
   });
 
   it("hides the action when the selected text is not inside the surface", async () => {
@@ -103,5 +103,36 @@ describe("AssistantSelectionCopySurface", () => {
     } finally {
       outside.remove();
     }
+  });
+
+  it("adds the selection on Ctrl+L while the action is showing", async () => {
+    const add = vi.fn();
+    mountSurface(add);
+
+    await selectMessageText(mounted[0]!.container);
+    expect(findAction()).not.toBeNull();
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith("select these words");
+    expect(findAction()).toBeNull();
+  });
+
+  it("does nothing on Ctrl+L when there is no selection action", () => {
+    const add = vi.fn();
+    mountSurface(add);
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true, cancelable: true }),
+      );
+    });
+
+    expect(add).not.toHaveBeenCalled();
   });
 });
