@@ -360,11 +360,16 @@ export const InlineChipEditor = forwardRef<EditingTextInputHandle, InlineChipEdi
           !native.altKey
         ) {
           event.preventDefault();
+          // A break is an insertion, never a replacement. A wide DOM selection
+          // (stale after a paste or a chip re-render) would otherwise feed
+          // insertTextAtSelection a range and wipe the selected text. Collapse
+          // to the caret so Shift+Enter only opens a line under it.
+          const caret = { start: selection.end, end: selection.end };
           const next =
-            continueComposerList(textRef.current, selection) ??
+            continueComposerList(textRef.current, caret) ??
             insertTextAtSelection({
               text: textRef.current,
-              selection,
+              selection: caret,
               insert: "\n",
             });
           commitDocument(next.text, next.selection, true);

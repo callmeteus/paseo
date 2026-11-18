@@ -39,13 +39,15 @@ const mounted: MountedEditor[] = [];
 function EditorHarness(props: {
   undoBaseline: InlineChipEditSnapshot | null;
   inputRef: React.Ref<EditingTextInputHandle>;
+  initialText?: string;
+  initialSelection?: { start: number; end: number };
 }) {
   return (
     <I18nextProvider i18n={i18n}>
       <InlineChipEditor
         ref={props.inputRef}
-        initialText={chipText}
-        initialSelection={chipSelection}
+        initialText={props.initialText ?? chipText}
+        initialSelection={props.initialSelection ?? chipSelection}
         undoBaseline={props.undoBaseline}
         editable
         accessibilityLabel="Message"
@@ -56,13 +58,23 @@ function EditorHarness(props: {
   );
 }
 
-function mountEditor(undoBaseline: InlineChipEditSnapshot | null): MountedEditor {
+function mountEditor(
+  undoBaseline: InlineChipEditSnapshot | null,
+  options?: { initialText: string; initialSelection: { start: number; end: number } },
+): MountedEditor {
   const inputRef = React.createRef<EditingTextInputHandle>();
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   const render = (baseline: InlineChipEditSnapshot | null) => {
-    root.render(<EditorHarness undoBaseline={baseline} inputRef={inputRef} />);
+    root.render(
+      <EditorHarness
+        undoBaseline={baseline}
+        inputRef={inputRef}
+        initialText={options?.initialText}
+        initialSelection={options?.initialSelection}
+      />,
+    );
   };
   act(() => render(undoBaseline));
   const editor = container.querySelector("[data-inline-chip-editor]");
@@ -160,5 +172,50 @@ describe("inline chip editor", () => {
 
     expect(changes).toEqual([""]);
     expect(mountedEditor.handle.getText()).toBe("");
+  });
+
+  it("keeps the list item text on Shift+Enter even with a stale wide selection", () => {
+    const listText = `${chipText}\n- Transporte é obrigatório`;
+    const mountedEditor = mountEditor(null, {
+      initialText: listText,
+      initialSelection: { start: listText.length, end: listText.length },
+    });
+    const editor = mountedEditor.editor;
+
+    // A selection left over from a paste or a re-render spans the visible item.
+    // The line break must collapse to the caret, not replace that selection.
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node: Node | null = walker.nextNode();
+    let target: Text | null = null;
+    while (node) {
+      if (node.textContent?.includes("Transporte")) {
+        target = node as Text;
+        break;
+      }
+      node = walker.nextNode();
+    }
+    if (!target) throw new Error("List item text node is missing");
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = document.getSelection();
+    if (!selection) throw new Error("Document has no selection");
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    act(() => {
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    const result = mountedEditor.handle.getText();
+    expect(result).toContain("- Transporte é obrigatório");
+    expect(result).toContain(chipText);
+    expect(result).toContain("\n- ");
   });
 });
