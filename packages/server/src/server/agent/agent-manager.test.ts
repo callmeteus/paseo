@@ -28,7 +28,7 @@ import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/
 import { OPENUI_CHAT_LABEL } from "@getpaseo/protocol/openui";
 import { startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
-import { GOAL_COMPLETE_MARKER } from "./agent-goal.js";
+import { GOAL_COMPLETE_MARKER, GOAL_SLASH_COMMAND } from "./agent-goal.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type {
@@ -1998,7 +1998,7 @@ test("normalizeConfig strips legacy 'default' model id", async () => {
   expect(snapshot.config.modeId).toBeUndefined();
 });
 
-test("listDraftCommands returns no commands without guessing a missing model", async () => {
+test("listDraftCommands lists only daemon commands without guessing a missing model", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-draft-commands-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
@@ -2031,7 +2031,10 @@ test("listDraftCommands returns no commands without guessing a missing model", a
     logger,
   });
 
-  await expect(manager.listDraftCommands({ provider: "codex", cwd: workdir })).resolves.toEqual([]);
+  // The daemon owns /goal, so it is listed even before a model is chosen.
+  await expect(manager.listDraftCommands({ provider: "codex", cwd: workdir })).resolves.toEqual([
+    GOAL_SLASH_COMMAND,
+  ]);
 
   expect(client.fetchCatalogCalls).toBe(0);
   expect(client.createSessionCalls).toBe(0);
@@ -2084,7 +2087,7 @@ test("listDraftCommands uses explicit model config without default model fetchin
     model: "gpt-5.4",
   });
 
-  expect(commands).toEqual([draftCommand]);
+  expect(commands).toEqual([GOAL_SLASH_COMMAND, draftCommand]);
   expect(client.fetchCatalogCalls).toBe(0);
   expect(client.createSessionCalls).toBe(1);
   expect(client.commandConfigs).toEqual([
