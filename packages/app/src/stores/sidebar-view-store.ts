@@ -69,6 +69,8 @@ interface SidebarViewStoreState {
   setWorkspaceSort: (sort: WorkspaceSort) => void;
   toggleHostFilter: (serverId: string) => void;
   clearHostFilters: () => void;
+  /** Pin the sidebar to exactly one host, or clear it with null. */
+  setHostFilter: (serverId: string | null) => void;
   toggleProjectFilter: (viewKey: string) => void;
   clearProjectFilters: () => void;
   toggleLabelFilter: (name: string) => void;
@@ -208,6 +210,7 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       toggleHostFilter: (serverId) =>
         set((state) => ({ hostFilters: toggleFilterEntry(state.hostFilters, serverId) })),
       clearHostFilters: () => set({ hostFilters: [] }),
+      setHostFilter: (serverId) => set({ hostFilters: serverId ? [serverId] : [] }),
       toggleProjectFilter: (viewKey) =>
         set((state) => ({ projectFilters: toggleFilterEntry(state.projectFilters, viewKey) })),
       clearProjectFilters: () => set({ projectFilters: [] }),

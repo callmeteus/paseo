@@ -57,6 +57,18 @@ describe("sidebar view store", () => {
     expect(useSidebarViewStore.getState().hostFilters).toEqual([]);
   });
 
+  it("pins the sidebar to exactly one host from a host tab", () => {
+    const store = useSidebarViewStore.getState();
+    store.toggleHostFilter("host-a");
+    store.toggleHostFilter("host-b");
+
+    store.setHostFilter("host-b");
+    expect(useSidebarViewStore.getState().hostFilters).toEqual(["host-b"]);
+
+    store.setHostFilter(null);
+    expect(useSidebarViewStore.getState().hostFilters).toEqual([]);
+  });
+
   it("keeps host filters that still point at available hosts", () => {
     const store = useSidebarViewStore.getState();
     store.toggleHostFilter("host-a");

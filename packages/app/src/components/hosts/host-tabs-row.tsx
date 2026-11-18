@@ -4,7 +4,6 @@ import { CircleCheck, Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { StatusIcon } from "@/components/status-icon";
-import { HOST_BADGE_ICON_SIZE } from "@/hosts/host-badge";
 import { HOST_COLORS, type HostColor } from "@/hosts/appearance";
 import { identityForeground } from "@/styles/identity-colors";
 import type { Theme } from "@/styles/theme";
@@ -17,6 +16,10 @@ import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 
 const ThemedServer = withUnistyles(Server);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
+
+// A row tab's glyph is the same 14px the workspace tab rail uses. The 12px badge
+// glyph is too small here: the status overlay covers the host icon completely.
+const HOST_TAB_ICON_SIZE = 14;
 
 const noneMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -118,11 +121,12 @@ function HostTabChip({
     >
       <StatusIcon
         statusBucket={dominantBucket}
-        size={HOST_BADGE_ICON_SIZE}
+        size={HOST_TAB_ICON_SIZE}
         backdrop={active ? "surface2" : "surface0"}
       >
         <ThemedServer
-          size={HOST_BADGE_ICON_SIZE}
+          size={HOST_TAB_ICON_SIZE}
+          strokeWidth={2.25}
           uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
         />
       </StatusIcon>
@@ -166,29 +170,37 @@ function countTextStyle(bucket: SidebarStateBucket | null): {
 const styles = StyleSheet.create((theme) => ({
   // A fixed height keeps the rail from stretching to fill the column it sits in.
   scrollView: {
-    height: 32,
+    height: 36,
     flexGrow: 0,
     flexShrink: 0,
+    borderBottomWidth: theme.borderWidth[1],
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
   },
   row: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[1],
   },
+  // Tabs sit on the strip's bottom rule. Only the top corners are round, and
+  // the selected one gets the underline — a pill would float above the rule.
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
-    height: 24,
-    maxWidth: 160,
+    gap: theme.spacing[2],
+    height: 28,
+    maxWidth: 176,
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.full,
+    borderTopLeftRadius: theme.borderRadius.md,
+    borderTopRightRadius: theme.borderRadius.md,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
     backgroundColor: theme.colors.surface0,
   },
   chipActive: {
     backgroundColor: theme.colors.surface2,
+    borderBottomColor: theme.colors.foreground,
   },
   chipHighlighted: {
     backgroundColor: theme.colors.interactionHighlight,
@@ -205,8 +217,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   // Reserved width so the chip does not move when a running agent appears.
   countBadge: {
-    minWidth: 16,
-    height: 16,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: theme.spacing[1],
     alignItems: "center",
     justifyContent: "center",
@@ -216,8 +228,8 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   countText: {
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 13,
     includeFontPadding: false,
     textAlign: "center",
     textAlignVertical: "center",
