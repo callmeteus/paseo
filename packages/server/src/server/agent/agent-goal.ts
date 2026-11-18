@@ -114,6 +114,24 @@ function buildGoalPreamble(goal: AgentGoal, instruction: string): string {
   ].join("\n");
 }
 
+/** Goal-tracking boilerplate, without an objective, so a title can skip it. */
+export function goalInstructionCorpus(): string {
+  const goal: AgentGoal = {
+    objective: "",
+    status: "active",
+    createdAt: "",
+    updatedAt: "",
+  };
+  return [
+    buildGoalPreamble(goal, "Start working toward this goal now."),
+    buildGoalPreamble(goal, "Keep working toward this goal. The user's message follows."),
+    buildGoalPreamble(
+      goal,
+      "No new user message is pending. Continue working toward this goal now.",
+    ),
+  ].join("\n");
+}
+
 /** First turn after `/goal <objective>`: the user expects work to start now. */
 export function buildGoalStartPrompt(goal: AgentGoal): string {
   return buildGoalPreamble(goal, "Start working toward this goal now.");

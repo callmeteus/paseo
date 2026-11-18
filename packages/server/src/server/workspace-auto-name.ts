@@ -3,6 +3,7 @@ import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 
 import {
   applyGeneratedChatTitle,
+  isInstructionDerivedTitle,
   resolveFirstAgentPromptTitle,
   type ChatTitleTarget,
 } from "./agent/create-agent-title.js";
@@ -236,7 +237,7 @@ export class WorkspaceAutoName {
     observedTitle: string;
   }): Promise<void> {
     const observed = input.observedTitle.trim();
-    if (!observed) {
+    if (!observed || isInstructionDerivedTitle(observed)) {
       return;
     }
     if (!input.workspaceId) {

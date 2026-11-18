@@ -1,26 +1,76 @@
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@getpaseo/protocol/agent-title-limits";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
+import { goalInstructionCorpus, parseGoalCommand } from "./agent-goal.js";
+import { workflowInstructionCorpus } from "./workflow-modes.js";
 
 const MAX_INITIAL_AGENT_TITLE_CHARS = Math.min(60, MAX_EXPLICIT_AGENT_TITLE_CHARS);
+const WORKFLOW_BLOCK = /<paseo-workflow>\n[\s\S]*?\n<\/paseo-workflow>\s*/g;
+const GOAL_BLOCK = /<paseo-goal>\n([\s\S]*?)\n<\/paseo-goal>\s*/g;
+
+let instructionCorpus: string | null = null;
+
+function instructionText(): string {
+  if (!instructionCorpus) {
+    instructionCorpus = `${workflowInstructionCorpus()}\n${goalInstructionCorpus()}`
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+  return instructionCorpus;
+}
+
+/**
+ * True when a title is a slice of the Paseo plan/workflow instructions or the
+ * goal-tracking boilerplate. The user's task, including a goal objective, is not.
+ */
+export function isInstructionDerivedTitle(title: string): boolean {
+  const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
+  if (normalized.length < 12) return false;
+  return instructionText().includes(normalized);
+}
+
+function goalObjective(body: string): string | null {
+  const line = body
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith("Goal:"));
+  const objective = line?.slice("Goal:".length).trim();
+  return objective ? objective : null;
+}
+
+/**
+ * The task a title should name. Workflow blocks and goal-tracking instructions
+ * are removed. A goal objective stays, and so does the user's own text.
+ */
+export function promptTextForTitle(prompt: string): string {
+  const objectives: string[] = [];
+  const withoutWorkflow = prompt.replace(WORKFLOW_BLOCK, "");
+  const withoutGoal = withoutWorkflow.replace(GOAL_BLOCK, (_match, body: string) => {
+    const objective = goalObjective(body);
+    if (objective) objectives.push(objective);
+    return "";
+  });
+  const command = parseGoalCommand(withoutGoal);
+  const task = command?.kind === "set" ? command.objective : withoutGoal.trim();
+  const objective = objectives.filter((entry) => entry.length > 0).join("\n");
+  if (objective && task) return `${objective}\n\n${task}`;
+  return objective || task;
+}
 
 /**
  * Provisional title from a prompt that has no stored name.
- * Uses the first non-empty line, collapses spaces, and cuts at 60 characters.
+ * Uses the first non-empty line of the task, collapses spaces, and cuts at 60 characters.
  */
 export function deriveInitialAgentTitle(prompt: string): string | null {
-  const firstContentLine = prompt
+  const lines = promptTextForTitle(prompt)
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  if (!firstContentLine) {
-    return null;
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 0);
+  for (const line of lines) {
+    if (isInstructionDerivedTitle(line)) continue;
+    const clamped = line.slice(0, MAX_INITIAL_AGENT_TITLE_CHARS).trim();
+    if (clamped.length > 0 && !isInstructionDerivedTitle(clamped)) return clamped;
   }
-  const normalized = firstContentLine.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return null;
-  }
-  const clamped = normalized.slice(0, MAX_INITIAL_AGENT_TITLE_CHARS).trim();
-  return clamped.length > 0 ? clamped : null;
+  return null;
 }
 
 export function resolveCreateAgentTitles(options: {

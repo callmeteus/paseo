@@ -258,6 +258,18 @@ export function stripWorkflowInstruction(text: string): string {
   return text.replace(/^<paseo-workflow>\n[\s\S]*?\n<\/paseo-workflow>\n*/, "");
 }
 
+/** Static workflow instructions, so a generated title can recognize them and skip them. */
+export function workflowInstructionCorpus(): string {
+  const ctx: WorkflowModeContext = {
+    agentId: "agent",
+    cwd: "/repo",
+    debugEndpoint: "http://127.0.0.1/debug",
+    debugLogPath: "/tmp/paseo-debug.log",
+    debugSessionId: "agent",
+  };
+  return WORKFLOW_MODES.map((mode) => mode.prompt(ctx)).join("\n");
+}
+
 export function composeWorkflowPrompt(
   modeId: string | null | undefined,
   ctx: WorkflowModeContext,

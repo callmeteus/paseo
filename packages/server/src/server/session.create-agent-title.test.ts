@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { applyGeneratedChatTitle, resolveCreateAgentTitles } from "./agent/create-agent-title.js";
+import {
+  applyGeneratedChatTitle,
+  deriveInitialAgentTitle,
+  isInstructionDerivedTitle,
+  resolveCreateAgentTitles,
+} from "./agent/create-agent-title.js";
 
 describe("resolveCreateAgentTitles", () => {
   test("derives a provisional title from prompt when explicit title is absent", () => {
@@ -21,6 +26,35 @@ describe("resolveCreateAgentTitles", () => {
 
     expect(resolved.explicitTitle).toBe("Keep This Title");
     expect(resolved.provisionalTitle).toBe("Keep This Title");
+  });
+
+  test("names the user's task, not the plan instructions or the goal boilerplate", () => {
+    const planWrapped = [
+      "<paseo-workflow>",
+      "You are in Paseo Plan mode.",
+      "Write the plan as markdown with the plan_create_update tool.",
+      "</paseo-workflow>",
+      "",
+      "Fix the login redirect",
+    ].join("\n");
+    const goalWrapped = [
+      "<paseo-goal>",
+      "The user set a persistent goal for this session. It stays in effect across turns until it is achieved or cleared.",
+      "",
+      "Goal: make the test suite pass",
+      "",
+      "Start working toward this goal now.",
+      "</paseo-goal>",
+    ].join("\n");
+
+    expect(deriveInitialAgentTitle(planWrapped)).toBe("Fix the login redirect");
+    expect(deriveInitialAgentTitle(goalWrapped)).toBe("make the test suite pass");
+    expect(deriveInitialAgentTitle("/goal make the test suite pass")).toBe(
+      "make the test suite pass",
+    );
+    expect(isInstructionDerivedTitle("You are in Paseo Plan mode.")).toBe(true);
+    expect(isInstructionDerivedTitle("Start working toward this goal now.")).toBe(true);
+    expect(isInstructionDerivedTitle("Fix the login redirect")).toBe(false);
   });
 
   test("returns null values when prompt and title are empty", () => {

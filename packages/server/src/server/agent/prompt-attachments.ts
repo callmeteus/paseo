@@ -1,5 +1,6 @@
 import { getForgeDefinitionOrNeutral } from "@getpaseo/protocol/forge-manifest";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import { promptTextForTitle } from "./create-agent-title.js";
 import type { AgentPromptContentBlock, AgentPromptInput } from "./agent-sdk-types.js";
 
 const REVIEW_LINE_MARKERS = { add: "+", remove: "-", context: " " } as const;
@@ -226,7 +227,7 @@ export function buildAgentBranchNameSeed(
     return undefined;
   }
   const parts: string[] = [];
-  const prompt = firstAgentContext.prompt?.trim();
+  const prompt = promptTextForTitle(firstAgentContext.prompt ?? "").trim();
   if (prompt) {
     parts.push(["<user-prompt>", prompt, "</user-prompt>"].join("\n"));
   }

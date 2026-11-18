@@ -124,6 +124,15 @@ test("auto-name gives the workspace and the OpenCode agent the same title", asyn
   });
 
   expect(workspace.title).toBe("Shorter login fix");
+
+  await autoName.applyObservedSessionTitle({
+    workspaceId: workspace.workspaceId,
+    agentId: "opencode",
+    agentTitle: "Shorter login fix",
+    observedTitle: "You are in Paseo Plan mode.",
+  });
+
+  expect(workspace.title).toBe("Shorter login fix");
   expect(agentTitles).toEqual([
     "Repair the login",
     "Repair the login",

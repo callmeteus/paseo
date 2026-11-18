@@ -172,6 +172,36 @@ describe("prompt attachments", () => {
     );
   });
 
+  it("drops plan and goal instructions from the naming seed and keeps the task", () => {
+    expect(
+      buildAgentBranchNameSeed({
+        prompt: [
+          "<paseo-workflow>",
+          "You are in Paseo Plan mode.",
+          "Call plan_create_update.",
+          "</paseo-workflow>",
+          "",
+          "Fix the login redirect",
+        ].join("\n"),
+      }),
+    ).toBe("<user-prompt>\nFix the login redirect\n</user-prompt>");
+    expect(
+      buildAgentBranchNameSeed({
+        prompt: [
+          "<paseo-goal>",
+          "The user set a persistent goal for this session.",
+          "",
+          "Goal: make the test suite pass",
+          "",
+          "Start working toward this goal now.",
+          "</paseo-goal>",
+          "",
+          "The suite is still red",
+        ].join("\n"),
+      }),
+    ).toBe("<user-prompt>\nmake the test suite pass\n\nThe suite is still red\n</user-prompt>");
+  });
+
   it("returns undefined when firstAgentContext is empty", () => {
     expect(buildAgentBranchNameSeed(undefined)).toBeUndefined();
     expect(buildAgentBranchNameSeed({})).toBeUndefined();
