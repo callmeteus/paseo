@@ -4300,6 +4300,59 @@ test("restartServer remains restart-only and sends restart_server_request", asyn
   });
 });
 
+test("keeps a queued send across a connect timeout when reconnect is enabled", async () => {
+  useHeartbeatClock();
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: true, baseDelayMs: 10, maxDelayMs: 10 },
+    connectTimeoutMs: 100,
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connecting = client.connect();
+  const ping = client.ping({ timeoutMs: 5_000 });
+  let failed = false;
+  void ping.catch(() => {
+    failed = true;
+  });
+
+  await vi.advanceTimersByTimeAsync(100);
+  expect(failed).toBe(false);
+  expect(client.getConnectionState().status).toBe("disconnected");
+
+  await vi.advanceTimersByTimeAsync(10);
+  expect(client.getConnectionState().status).toBe("connecting");
+  mock.triggerOpen();
+
+  const sentPing = mock.sent
+    .filter((frame): frame is string => typeof frame === "string")
+    .map(
+      (frame) =>
+        JSON.parse(frame) as { type?: string; message?: { type?: string; requestId?: string } },
+    )
+    .find((frame) => frame.type === "session" && frame.message?.type === "ping");
+  expect(sentPing?.message?.requestId).toEqual(expect.any(String));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "pong",
+      payload: {
+        requestId: sentPing?.message?.requestId,
+        serverReceivedAt: Date.now(),
+        serverSentAt: Date.now(),
+      },
+    }),
+  );
+
+  await expect(ping).resolves.toEqual(expect.objectContaining({ rttMs: expect.any(Number) }));
+  await expect(connecting).resolves.toBeUndefined();
+  expect(failed).toBe(false);
+});
+
 test("transitions out of connecting when connect timeout elapses", async () => {
   useHeartbeatClock();
   try {

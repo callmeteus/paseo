@@ -7724,6 +7724,7 @@ export class DaemonClient {
     }
     const wasDisposed = this.connectionState.status === "disposed";
     const reason = input?.reason;
+    const preserveUnsentSends = this.shouldPreserveUnsentSends();
 
     if (typeof reason === "string" && reason.trim().length > 0) {
       this.lastErrorValue = reason.trim();
@@ -7743,8 +7744,10 @@ export class DaemonClient {
       },
     );
     this.connectionFailure = input?.failure;
-    this.clearWaiters(connectionError, true);
-    this.rejectPendingSendQueue(connectionError);
+    if (!preserveUnsentSends) {
+      this.clearWaiters(connectionError, true);
+      this.rejectPendingSendQueue(connectionError);
+    }
     this.rejectPingProbe(connectionError);
     this.terminalStreams.clearSlots();
     this.lastServerInfoMessage = null;
@@ -7766,6 +7769,17 @@ export class DaemonClient {
     }
 
     this.armReconnectTimer();
+  }
+
+  // A send queued while the socket is still connecting has not reached the
+  // host. Dropping it is the "Connection timed out" the composer shows even
+  // though reconnect is about to try the same host again.
+  private shouldPreserveUnsentSends(): boolean {
+    return (
+      this.connectionState.status === "connecting" &&
+      this.shouldReconnect &&
+      this.config.reconnect?.enabled !== false
+    );
   }
 
   private emitDisconnectedStateForReconnect(
