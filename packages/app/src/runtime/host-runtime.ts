@@ -27,6 +27,7 @@ import {
   type HostProfile,
 } from "@/types/host-connection";
 import { defaultHostAppearance, type HostBadgeDisplay, type HostColor } from "@/hosts/appearance";
+import { hostIsAnnounced, hostSyncsName } from "@/hosts/cluster-membership";
 import {
   buildDaemonWebSocketUrl,
   buildRelayWebSocketUrl,
@@ -1969,6 +1970,8 @@ export class HostRuntimeStore {
   private hostMirrorSalt: Promise<string> | null = null;
   private hostMirrorClientId: Promise<string> | null = null;
   private hostMirrorDisabled: boolean | null = null;
+  /** True after this session published a mirror, so turning announce off can remove those rows. */
+  private publishedHostMirror = false;
   private hostMirrorErrorLogged = new Set<string>();
   private registryLoad: Promise<void> | null = null;
   private readonly hostConfirmations = new HostConfirmations();
@@ -1992,6 +1995,11 @@ export class HostRuntimeStore {
 
   private clusterPrefs(): ClusterPreferences {
     return this.deps.readClusterPreferences?.() ?? getClusterPreferencesFromCache();
+  }
+
+  /** Re-reads cluster membership and republishes the mirrored host set. */
+  refreshClusterMirror(): void {
+    this.scheduleHostMirror(0);
   }
 
   /** Applies the device's cluster preferences to a daemon so its own announce/sync flags match. */
@@ -2556,7 +2564,7 @@ export class HostRuntimeStore {
 
   async renameHost(serverId: string, label: string): Promise<void> {
     await this.updateHost(serverId, (host) => ({ ...host, label }));
-    if (this.clusterPrefs().autoSyncNames) {
+    if (hostSyncsName(this.clusterPrefs(), serverId)) {
       const client = this.getClient(serverId);
       if (client?.isConnected && label.trim())
         void client.updateSelfLabel(label.trim()).catch(() => {});
@@ -2826,16 +2834,14 @@ export class HostRuntimeStore {
     const observation = client.observeHosts();
     const apply = (directory: HostDirectory) => {
       if (this.hostObservations.get(serverId)?.client !== client) return;
-      const syncNames = this.clusterPrefs().autoSyncNames;
-      const announcedLabel = syncNames
-        ? directory.self.label?.trim() ||
-          client.getLastServerInfoMessage()?.hostname?.trim() ||
-          null
-        : null;
+      const prefs = this.clusterPrefs();
+      const observerName =
+        directory.self.label?.trim() || client.getLastServerInfoMessage()?.hostname?.trim() || null;
       const upsert = (targetServerId: string, label: string | null | undefined) => {
         if (!targetServerId || targetServerId === serverId) return;
         const existing = this.hosts.find((candidate) => candidate.serverId === targetServerId);
-        // Opção 2b: o label salvo no app prevalece; o nome anunciado só preenche um label ausente.
+        // A saved app label wins. The daemon hostname fills a missing label only for hosts in name sync.
+        const announcedLabel = hostSyncsName(prefs, targetServerId) ? observerName : null;
         const resolvedLabel = existing?.label?.trim()
           ? undefined
           : (label ?? announcedLabel ?? undefined);
@@ -3045,9 +3051,17 @@ export class HostRuntimeStore {
     );
   }
 
+  private async beginHostMirror(): Promise<boolean | null> {
+    if (await this.isHostMirrorDisabled()) return null;
+    const announce = this.clusterPrefs().announceHosts;
+    if (!announce && !this.publishedHostMirror) return null;
+    return announce;
+  }
+
   private async reconcileMirroredHosts(): Promise<void> {
     try {
-      if (await this.isHostMirrorDisabled()) return;
+      const announce = await this.beginHostMirror();
+      if (announce === null) return;
       const target = await this.resolveHostMirrorTarget();
       if (!target) return;
       const { client, serverId } = target;
@@ -3055,9 +3069,10 @@ export class HostRuntimeStore {
       if (!client.isConnected || !serverInfo?.features?.connectedHosts) return;
       const sourceId = serverInfo.sourceId;
       if (!sourceId) return;
+      if (announce) this.publishedHostMirror = true;
 
       const directory = await client.listHosts();
-      const desired = await this.buildMirroredHosts(serverId);
+      const desired = await this.desiredMirroredHosts(serverId, announce);
       const keyPrefix = await this.hostMirrorKeyPrefix();
       const desiredByKey = new Map(desired.map((entry) => [entry.sourceKey, entry]));
       const owned = directory.hosts.filter(
@@ -3088,6 +3103,7 @@ export class HostRuntimeStore {
         });
       }
       this.hostMirrorErrorLogged.clear();
+      if (!announce) this.publishedHostMirror = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (this.hostMirrorErrorLogged.has(message)) return;
@@ -3097,7 +3113,6 @@ export class HostRuntimeStore {
   }
 
   private async isHostMirrorDisabled(): Promise<boolean> {
-    if (!this.clusterPrefs().announceHosts) return true;
     if (this.hostMirrorDisabled !== null) return this.hostMirrorDisabled;
     try {
       const isE2E = await readValidatedString(this.storage, E2E_STORAGE_KEY, z.string().min(1));
@@ -3139,12 +3154,19 @@ export class HostRuntimeStore {
     return client ? { client, serverId: profile.serverId } : null;
   }
 
+  private async desiredMirroredHosts(serverId: string, announce: boolean): Promise<MirroredHost[]> {
+    if (!announce) return [];
+    return this.buildMirroredHosts(serverId);
+  }
+
   private async buildMirroredHosts(targetServerId: string): Promise<MirroredHost[]> {
     const salt = await this.getHostMirrorSalt();
     const keyPrefix = await this.hostMirrorKeyPrefix();
     const mirrored: MirroredHost[] = [];
+    const prefs = this.clusterPrefs();
     for (const profile of this.hosts) {
       if (profile.serverId === targetServerId || isPlaceholderServerId(profile.serverId)) continue;
+      if (!hostIsAnnounced(prefs, profile.serverId)) continue;
       const connection = mirrorableConnection(profile);
       if (!connection) continue;
       const uri = serializeMirrorConnection(profile, connection);

@@ -258,6 +258,13 @@ class FakeDaemonClient {
     this.hostRows = this.hostRows.filter((row) => row.registrationId !== registrationId);
   }
 
+  public selfLabels: string[] = [];
+
+  async updateSelfLabel(label: string): Promise<string> {
+    this.selfLabels.push(label);
+    return label;
+  }
+
   observeHosts() {
     return subscriptionFixture(this.hostDirectory, () => () => {});
   }
@@ -5282,12 +5289,27 @@ describe("host mirror", () => {
     hosts: HostProfile[];
     connectedHosts?: boolean;
     announceHosts?: boolean;
+    autoSyncNames?: boolean;
+    syncExcluded?: string[];
+    announceExcluded?: string[];
   }): {
     store: HostRuntimeStore;
     clients: Map<string, FakeDaemonClient>;
+    cluster: {
+      autoSyncNames: boolean;
+      announceHosts: boolean;
+      syncExcluded: string[];
+      announceExcluded: string[];
+    };
   } {
     const connectedHosts = input.connectedHosts ?? true;
     const clients = new Map<string, FakeDaemonClient>();
+    const cluster = {
+      autoSyncNames: input.autoSyncNames ?? false,
+      announceHosts: input.announceHosts ?? true,
+      syncExcluded: input.syncExcluded ?? [],
+      announceExcluded: input.announceExcluded ?? [],
+    };
     const clientFor = (serverId: string): FakeDaemonClient => {
       const existing = clients.get(serverId);
       if (existing) return existing;
@@ -5310,14 +5332,11 @@ describe("host mirror", () => {
         }),
         getClientId: async () => "cid_test_runtime",
         readInitialConnectionHint: () => ({ listen: "lan:17000" }),
-        readClusterPreferences: () => ({
-          autoSyncNames: false,
-          announceHosts: input.announceHosts ?? true,
-        }),
+        readClusterPreferences: () => cluster,
       },
       revokePushNotifications: async () => {},
     });
-    return { store, clients };
+    return { store, clients, cluster };
   }
 
   function targetClient(clients: Map<string, FakeDaemonClient>): FakeDaemonClient {
@@ -5458,5 +5477,52 @@ describe("host mirror", () => {
     expect(client.removedHosts).toEqual([registrationId]);
     expect(client.hostRows).toEqual([]);
     expect(client.addedHosts).toHaveLength(1);
+  });
+
+  it("leaves an excluded host out of the announcement and removes it when excluded later", async () => {
+    useHostRuntimeClock();
+    const quiet = mirrorRemoteHost({
+      serverId: "srv_quiet",
+      label: "quiet",
+      endpoint: "10.1.1.1:6767",
+    });
+    const { store, clients, cluster } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost(), quiet],
+      announceExcluded: ["srv_quiet"],
+    });
+    await store.boot();
+    await flushMirror(store);
+
+    const client = targetClient(clients);
+    expect(client.addedHosts.map((host) => host.label)).toEqual(["remote"]);
+    const remoteRegistrationId = client.hostRows[0]!.registrationId;
+
+    cluster.announceExcluded = ["srv_remote"];
+    store.refreshClusterMirror();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(client.removedHosts).toEqual([remoteRegistrationId]);
+    expect(client.addedHosts.map((host) => host.label)).toEqual(["remote", "quiet"]);
+    expect(client.hostRows.map((host) => host.label)).toEqual(["quiet"]);
+  });
+
+  it("does not push a rename to a host left out of name sync", async () => {
+    useHostRuntimeClock();
+    const { store, clients, cluster } = bootMirrorStore({
+      hosts: [mirrorTargetHost(), mirrorRemoteHost()],
+      autoSyncNames: true,
+    });
+    await store.boot();
+    await flushMirror(store);
+    const remote = clients.get("srv_remote");
+    if (!remote) throw new Error("expected a client for srv_remote");
+
+    cluster.syncExcluded = ["srv_remote"];
+    await store.renameHost("srv_remote", "kept local");
+    expect(remote.selfLabels).toEqual([]);
+
+    cluster.syncExcluded = [];
+    await store.renameHost("srv_remote", "pushed");
+    expect(remote.selfLabels).toEqual(["pushed"]);
   });
 });

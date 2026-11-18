@@ -2683,6 +2683,10 @@ export const ptBR: TranslationResources = {
       daemonConfigHint: "Estas opções controlam como este daemon compartilha e sincroniza nomes.",
       daemonAnnounceTitle: "Anunciar hosts salvos",
       daemonSyncNamesTitle: "Sincronizar nomes",
+      hostSyncName: "Sincronizar nome",
+      hostSyncNameA11y: "Sincronizar o nome de {{host}}",
+      hostAnnounce: "Anunciar",
+      hostAnnounceA11y: "Anunciar {{host}}",
       routedBadge: "via {{host}}",
     },
     remoteAccess: {

@@ -521,6 +521,25 @@ describe("loadAppSettingsFromStorage", () => {
 
     expect(result.language).toBe("system");
   });
+
+  it("treats a cluster setting saved before per-host exclusions as include-all", async () => {
+    const result = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({
+            cluster: { autoSyncNames: true, announceHosts: false },
+          }),
+        }),
+      }),
+    );
+
+    expect(result.cluster).toEqual({
+      autoSyncNames: true,
+      announceHosts: false,
+      syncExcluded: [],
+      announceExcluded: [],
+    });
+  });
 });
 
 describe("saveAppSettings", () => {

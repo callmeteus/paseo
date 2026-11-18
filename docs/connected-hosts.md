@@ -48,10 +48,12 @@ Each daemon owns two cluster flags in its mutable config:
   through that daemon with a `routed` connection; no credentials leave the originating daemon.
   Turning the flag off removes all announced rows. The app keeps its own equivalent flag in device
   settings, which also controls whether it mirrors its saved hosts into the bootstrap daemon.
+  The device setting `announceExcluded` names hosts left out of that mirror.
 - `cluster.syncHostNames`: when on, renaming a connected host through `hosts.update` sends a
   `hosts.self.update.request` to that daemon, which updates the `hostname` it announces. A saved
   app label always wins; the daemon hostname only fills a label when the app has none. The request
-  is guarded by `tunnel.manage` and rejected when the destination has the flag off.
+  is guarded by `tunnel.manage` and rejected when the destination has the flag off. The device
+  setting `syncExcluded` names hosts this device neither renames nor fills from the daemon hostname.
 
 Older daemons and clients omit the new fields; `announcedHosts` and the `cluster` config are optional.
 

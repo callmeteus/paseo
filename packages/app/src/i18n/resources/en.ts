@@ -2708,6 +2708,10 @@ export const en = {
       daemonConfigHint: "These flags control how this daemon shares and syncs names.",
       daemonAnnounceTitle: "Announce saved hosts",
       daemonSyncNamesTitle: "Sync names",
+      hostSyncName: "Sync name",
+      hostSyncNameA11y: "Sync the name of {{host}}",
+      hostAnnounce: "Announce",
+      hostAnnounceA11y: "Announce {{host}}",
       routedBadge: "via {{host}}",
     },
     remoteAccess: {

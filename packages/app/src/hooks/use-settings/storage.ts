@@ -119,11 +119,17 @@ export interface ClusterPreferences {
   autoSyncNames: boolean;
   /** Publish this device's saved hosts to the local daemon for connected clients. */
   announceHosts: boolean;
+  /** Hosts left out of name sync while `autoSyncNames` is on. Omitted ids follow the flag. */
+  syncExcluded: string[];
+  /** Hosts left out of announcement while `announceHosts` is on. Omitted ids follow the flag. */
+  announceExcluded: string[];
 }
 
 export const DEFAULT_CLUSTER_PREFERENCES: ClusterPreferences = {
   autoSyncNames: false,
   announceHosts: true,
+  syncExcluded: [],
+  announceExcluded: [],
 };
 
 export type WorkflowModeSource = "paseo" | "cli";
@@ -314,6 +320,8 @@ const StoredAppSettingsSchema = z
       .object({
         autoSyncNames: z.boolean().catch(DEFAULT_CLUSTER_PREFERENCES.autoSyncNames),
         announceHosts: z.boolean().catch(DEFAULT_CLUSTER_PREFERENCES.announceHosts),
+        syncExcluded: z.array(z.string()).catch([]),
+        announceExcluded: z.array(z.string()).catch([]),
       })
       .partial()
       .catch({})
