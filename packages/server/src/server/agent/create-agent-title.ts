@@ -78,12 +78,18 @@ function normalizeChatTitle(title: string | null | undefined): string | null {
 
 /**
  * A name still follows the chat title when it was never set, it is still the
- * opening prompt, or it is still the previous title this flow wrote.
+ * opening prompt, it is still the previous title this flow wrote, or it is the
+ * workspace title. The last case covers a second agent in an existing workspace:
+ * `adoptWorkspaceTitleForAgent` stamps it with the workspace name, and after a
+ * daemon restart the in-memory prompt/previous title maps no longer recognise
+ * that stamp. Without it, the title the provider generates for this chat never
+ * reaches the tab and it stays showing the workspace name forever.
  */
 function followsGeneratedChatTitle(
   current: string | null,
   promptTitle: string | null,
   previousTitle: string | null,
+  workspaceTitle?: string | null,
 ): boolean {
   if (!current) {
     return true;
@@ -91,7 +97,10 @@ function followsGeneratedChatTitle(
   if (promptTitle !== null && current === promptTitle) {
     return true;
   }
-  return previousTitle !== null && current === previousTitle;
+  if (previousTitle !== null && current === previousTitle) {
+    return true;
+  }
+  return workspaceTitle !== null && current === workspaceTitle;
 }
 
 /**
@@ -141,10 +150,18 @@ export function applyGeneratedChatTitle(input: {
     tabTitle: nextWorkspace,
     wroteGeneratedTitle: nextWorkspace === generated,
     agents: agents.map((agent) => {
-      if (!followsGeneratedChatTitle(agent.title, promptTitle, previousTitle)) {
+      if (!followsGeneratedChatTitle(agent.title, promptTitle, previousTitle, workspaceTitle)) {
         return agent;
       }
-      const next = nextWorkspace ?? generated;
+      // An agent still carrying the workspace title follows this chat's own
+      // generated title, which can differ from the workspace's established name.
+      // `adoptWorkspaceTitleForAgent` stamps the workspace name onto every agent
+      // created after it, and after a daemon restart that stamp is the only
+      // remaining link between the agent and the title the provider later emits.
+      const next =
+        workspaceTitle !== null && agent.title === workspaceTitle
+          ? generated
+          : (nextWorkspace ?? generated);
       return { id: agent.id, title: next };
     }),
   };

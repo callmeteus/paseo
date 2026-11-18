@@ -111,4 +111,24 @@ describe("applyGeneratedChatTitle", () => {
     expect(applied.tabTitle).toBe(applied.workspaceTitle);
     expect(applied.agents).toEqual([{ id: "opencode", title: "Custom session" }]);
   });
+
+  test("applies a later title to an agent still carrying the workspace title", () => {
+    // After a daemon restart the in-memory prompt/previous title maps are gone.
+    // A second agent in the workspace was stamped with the workspace title when
+    // it was created, so that stamp is the only thing tying it to the chat title.
+    const applied = applyGeneratedChatTitle({
+      generatedTitle: "Pendrive multiboot Windows 10 e Debian",
+      promptTitle: null,
+      previousTitle: null,
+      workspaceTitle: "Servers, Deploys e Peças",
+      agentTitles: [{ id: "opencode", title: "Servers, Deploys e Peças" }],
+    });
+
+    // The workspace keeps its own name, but the agent's tab takes the title
+    // the provider generated for this chat.
+    expect(applied.workspaceTitle).toBe("Servers, Deploys e Peças");
+    expect(applied.agents).toEqual([
+      { id: "opencode", title: "Pendrive multiboot Windows 10 e Debian" },
+    ]);
+  });
 });
