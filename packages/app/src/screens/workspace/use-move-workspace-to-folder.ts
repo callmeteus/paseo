@@ -10,19 +10,13 @@ import { buildOpenWorkspaceFolderRows } from "@/screens/workspace/move-workspace
 import { useMoveWorkspaceDirectorySearch } from "@/screens/workspace/use-move-workspace-directory-search";
 import { useMoveWorkspaceRelocation } from "@/screens/workspace/use-move-workspace-relocation";
 import type { WorkspaceFolderRowModel } from "@/screens/workspace/move-workspace-to-folder-options";
+import type { CommandPanelSearch } from "@/components/ui/command-panel";
 
 interface MoveWorkspaceToFolderViewModel {
   visible: boolean;
   header: {
     title: string;
-    search: {
-      onChange: (value: string) => void;
-      resetKey: string;
-      placeholder: string;
-      autoFocus: boolean;
-      focusOnResetKey: boolean;
-      testID: string;
-    };
+    search: CommandPanelSearch;
   };
   filteredRows: WorkspaceFolderRowModel[];
   suggestionRows: WorkspaceFolderRowModel[];
@@ -73,11 +67,10 @@ export function useMoveWorkspaceToFolder(): MoveWorkspaceToFolderViewModel {
     () => ({
       title: t("workspace.tabs.menu.moveWorkspace.title"),
       search: {
-        onChange: setSearchQuery,
+        onChangeText: setSearchQuery,
         resetKey: `${request?.workspaceId ?? "closed"}:${searchResetKey}`,
         placeholder: t("workspace.tabs.menu.moveWorkspace.searchPlaceholder"),
         autoFocus: isWeb,
-        focusOnResetKey: true,
         testID: "move-workspace-to-folder-search",
       },
     }),

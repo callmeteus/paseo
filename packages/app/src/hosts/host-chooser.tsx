@@ -1,29 +1,13 @@
 import { usePanelStore } from "@/stores/panel-store";
-import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type PressableStateCallbackType,
-} from "react-native";
-import {
-  EditingTextInput as TextInput,
-  type EditingTextInputHandle,
-} from "@/components/ui/text-input";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { router } from "expo-router";
 import { Server } from "lucide-react-native";
 import { create } from "zustand";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { CommandPanel } from "@/components/ui/command-panel";
 import { HostStatusDotSlot } from "@/components/hosts/host-picker";
-import { isWeb } from "@/constants/platform";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
-import {
-  OverlayLayerProvider,
-  useGlobalWebOverlayLayer,
-  useWebOverlayRegistration,
-} from "@/lib/overlay-root";
 import { useHosts } from "@/runtime/host-runtime";
 import { orderHostsLocalFirst, type HostProfile } from "@/types/host-connection";
 import { buildSettingsAddHostRoute } from "@/utils/host-routes";
@@ -151,14 +135,11 @@ function HostChooserRow({
 }
 
 export function HostChooserModal() {
-  const { theme } = useUnistyles();
   const hosts = useHosts();
   const request = useHostChooserStore((state) => state.request);
   const close = useHostChooserStore((state) => state.close);
-  const inputRef = useRef<EditingTextInputHandle>(null);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const modalLayer = useGlobalWebOverlayLayer("modal", isWeb && request != null);
 
   const requestHosts = useMemo(() => {
     if (!request) return [];
@@ -177,11 +158,8 @@ export function HostChooserModal() {
 
   useEffect(() => {
     if (!request) return;
-    inputRef.current?.replaceText("");
     setQuery("");
     setActiveIndex(0);
-    const id = setTimeout(() => inputRef.current?.focus(), 0);
-    return () => clearTimeout(id);
   }, [request]);
 
   const handleQueryChange = useCallback((value: string) => {
@@ -240,97 +218,52 @@ export function HostChooserModal() {
     },
     [activeOptionIndex, chooseHost, close, options],
   );
-  const setWebOverlayScope = useWebOverlayRegistration({
-    active: isWeb && request != null,
-    layer: modalLayer,
-    onKeyDown: handleWebOverlayKeyDown,
-  });
-
-  if (!request) return null;
-
-  const modal = (
-    <Modal visible transparent animationType="fade" onRequestClose={close} testID="host-chooser">
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={close} />
-        <View ref={setWebOverlayScope} style={styles.panel}>
-          <View style={styles.header}>
-            <Text style={styles.title}>{request.title}</Text>
-            <TextInput
-              ref={inputRef}
-              initialValue={query}
-              onChangeText={handleQueryChange}
-              placeholder="Search hosts..."
-              placeholderTextColor={theme.colors.foregroundMuted}
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              testID="host-chooser-search"
-            />
-          </View>
-          <ScrollView
-            style={styles.results}
-            contentContainerStyle={styles.resultsContent}
-            keyboardShouldPersistTaps="always"
-            showsVerticalScrollIndicator={false}
-          >
-            {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
-            {options.map((host, index) => (
-              <HostChooserRow
-                key={host.serverId}
-                host={host}
-                active={index === activeOptionIndex}
-                onChooseHost={chooseHost}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
+  const search = useMemo(
+    () =>
+      request
+        ? {
+            onChangeText: handleQueryChange,
+            placeholder: "Search hosts...",
+            autoFocus: true,
+            resetKey: request.id,
+            testID: "host-chooser-search",
+          }
+        : undefined,
+    [handleQueryChange, request],
   );
 
-  return createElement(OverlayLayerProvider, { layer: isWeb ? modalLayer : 0 }, modal);
+  if (!request || !search) return null;
+
+  return (
+    <CommandPanel
+      visible
+      onClose={close}
+      title={request.title}
+      onKeyDown={handleWebOverlayKeyDown}
+      testID="host-chooser"
+      search={search}
+    >
+      <ScrollView
+        style={styles.results}
+        contentContainerStyle={styles.resultsContent}
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}
+      >
+        {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
+        {options.map((host, index) => (
+          <HostChooserRow
+            key={host.serverId}
+            host={host}
+            active={index === activeOptionIndex}
+            onChooseHost={chooseHost}
+          />
+        ))}
+      </ScrollView>
+    </CommandPanel>
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-start",
-    alignItems: "center",
-    paddingTop: theme.spacing[12],
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  panel: {
-    width: 640,
-    maxWidth: "92%",
-    maxHeight: "80%",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.surface0,
-    overflow: "hidden",
-    ...theme.shadow.lg,
-  },
-  header: {
-    gap: theme.spacing[3],
-    paddingHorizontal: theme.spacing[4],
-    paddingVertical: theme.spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  title: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
-  },
-  input: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    padding: 0,
-    outlineStyle: "none",
-  } as object,
   results: {
     maxHeight: 420,
   },

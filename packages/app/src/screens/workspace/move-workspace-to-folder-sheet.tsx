@@ -1,10 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ArrowRight, Check, FolderInput, FolderOpen, Search } from "lucide-react-native";
-import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { PressHighlight } from "@/components/ui/press-highlight";
+import { Check, FolderInput, FolderOpen } from "lucide-react-native";
+import { CommandPanel, CommandPanelRow } from "@/components/ui/command-panel";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { closeMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
@@ -15,11 +14,8 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedFolderOpen = withUnistyles(FolderOpen);
 const ThemedCheck = withUnistyles(Check);
-const ThemedArrowRight = withUnistyles(ArrowRight);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
-const ThemedSearch = withUnistyles(Search);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const accentMapping = (theme: Theme) => ({ color: theme.colors.accentBright });
 
 function WorkspaceFolderRow({
   row,
@@ -34,40 +30,29 @@ function WorkspaceFolderRow({
 }) {
   const { t } = useTranslation();
   const handlePress = useCallback(() => onSelect(row.directory), [onSelect, row.directory]);
-  const rowStyle = useMemo(() => [styles.row, disabled && styles.rowDisabled], [disabled]);
   let trailing;
   if (moving) {
     trailing = <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />;
   } else if (row.isCurrent) {
     trailing = (
       <View style={styles.currentBadge}>
-        <ThemedCheck size={ICON_SIZE.sm} uniProps={accentMapping} />
+        <ThemedCheck size={ICON_SIZE.sm} uniProps={mutedMapping} />
         <Text style={styles.currentLabel}>{t("workspace.tabs.menu.moveWorkspace.current")}</Text>
       </View>
     );
-  } else {
-    trailing = <ThemedArrowRight size={ICON_SIZE.sm} uniProps={mutedMapping} />;
   }
 
   return (
-    <PressHighlight
+    <CommandPanelRow
       disabled={disabled}
       onPress={handlePress}
-      highlightStyle={styles.rowActive}
-      style={rowStyle}
       testID={`move-workspace-to-folder-${row.directory}`}
+      title={row.name}
+      meta={row.project ? `${row.project} · ${row.directory}` : row.directory}
+      trailing={trailing}
     >
       <ThemedFolderInput size={ICON_SIZE.sm} uniProps={mutedMapping} />
-      <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {row.name}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {row.project ? `${row.project} · ${row.directory}` : row.directory}
-        </Text>
-      </View>
-      {trailing}
-    </PressHighlight>
+    </CommandPanelRow>
   );
 }
 
@@ -81,27 +66,20 @@ function ChooseAnotherFolderRow({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const rowStyle = useMemo(() => [styles.row, disabled && styles.rowDisabled], [disabled]);
+  let trailing;
+  if (moving) {
+    trailing = <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />;
+  }
   return (
-    <PressHighlight
+    <CommandPanelRow
       disabled={disabled}
       onPress={onSelect}
-      highlightStyle={styles.rowActive}
-      style={rowStyle}
       testID="move-workspace-to-folder-pick"
+      title={t("workspace.tabs.menu.moveWorkspace.fallback")}
+      trailing={trailing}
     >
       <ThemedFolderOpen size={ICON_SIZE.sm} uniProps={mutedMapping} />
-      <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {t("workspace.tabs.menu.moveWorkspace.fallback")}
-        </Text>
-      </View>
-      {moving ? (
-        <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />
-      ) : (
-        <ThemedArrowRight size={ICON_SIZE.sm} uniProps={mutedMapping} />
-      )}
-    </PressHighlight>
+    </CommandPanelRow>
   );
 }
 
@@ -131,14 +109,11 @@ function MoveWorkspaceToFolderList({
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
       {showListEmpty ? (
-        <View style={styles.emptyState}>
-          <ThemedSearch size={ICON_SIZE.md} uniProps={mutedMapping} />
-          <Text style={styles.empty}>
-            {normalizedQuery
-              ? t("workspace.tabs.menu.moveWorkspace.noMatches")
-              : t("workspace.tabs.menu.moveWorkspace.empty")}
-          </Text>
-        </View>
+        <Text style={styles.empty}>
+          {normalizedQuery
+            ? t("workspace.tabs.menu.moveWorkspace.noMatches")
+            : t("workspace.tabs.menu.moveWorkspace.empty")}
+        </Text>
       ) : (
         <>
           {filteredRows.map((row) => (
@@ -186,11 +161,12 @@ export function MoveWorkspaceToFolderSheet() {
   const view = useMoveWorkspaceToFolder();
 
   return (
-    <AdaptiveModalSheet
-      header={view.header}
+    <CommandPanel
+      title={view.header.title}
       visible={view.visible}
       onClose={closeMoveWorkspaceToFolder}
       testID="move-workspace-to-folder-sheet"
+      search={view.header.search}
     >
       <MoveWorkspaceToFolderList
         filteredRows={view.filteredRows}
@@ -203,7 +179,7 @@ export function MoveWorkspaceToFolderSheet() {
         onSelect={view.selectWorkspace}
         onPickAnother={view.pickAnotherFolder}
       />
-    </AdaptiveModalSheet>
+    </CommandPanel>
   );
 }
 
@@ -213,52 +189,18 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: 420,
   },
   content: {
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[6],
-    gap: theme.spacing[1],
-  },
-  emptyState: {
-    alignItems: "center",
-    gap: theme.spacing[2],
-    paddingVertical: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
   },
   empty: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     textAlign: "center",
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
   },
   loadingRow: {
     alignItems: "center",
     paddingVertical: theme.spacing[2],
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    minHeight: 52,
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-  },
-  rowActive: {
-    backgroundColor: theme.colors.surface2,
-  },
-  rowDisabled: {
-    opacity: 0.5,
-  },
-  rowBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-  },
-  rowMeta: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize["2xs"],
   },
   currentBadge: {
     flexDirection: "row",
@@ -266,7 +208,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   currentLabel: {
-    color: theme.colors.accentBright,
-    fontSize: theme.fontSize["2xs"],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
 }));

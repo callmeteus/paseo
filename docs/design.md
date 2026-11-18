@@ -96,11 +96,13 @@ Pane chrome — the workspace pane header, the file-explorer header, the diff pa
 
 ## 6. Pickers
 
-Five primitives. The pick is determined by option count, the need to search, and how the picker is anchored.
+Six primitives. The pick is determined by option count, the need to search, and how the picker is anchored.
 
 `<DropdownMenu>` is for a small fixed set anchored to a trigger. Theme picker, kebab menus on workspace and project rows (`packages/app/src/components/sidebar-workspace-list.tsx:684-770`), row "more" menus. Items can be async (`status: "pending"`) and can include destructive entries. Under ~10 options where the user knows what they're looking for.
 
-`<Combobox>` is for a large or searchable list. Host switcher in the sidebar footer, model selector in the composer, branch switcher in the workspace header (`packages/app/src/components/branch-switcher.tsx`). The user types to find the option, or the list is long enough to scroll.
+`<Combobox>` is for a large or searchable list anchored to a field. Host switcher in the sidebar footer, model selector in the composer, branch switcher in the workspace header (`packages/app/src/components/branch-switcher.tsx`). The user types to find the option, or the list is long enough to scroll.
+
+`<CommandPanel>` is the floating list (`packages/app/src/components/ui/command-panel.tsx`): host chooser, move workspace, import session, keyboard shortcuts. It matches the command center. Title, a borderless search field, no close button, flush rows. A form, a confirmation, or a split settings pane stays `<AdaptiveModalSheet>`.
 
 `<ContextMenu>` is for right-click and long-press on a target. The row is the trigger; there is no visible affordance. Used for incidental actions on workspace rows in the sidebar (`packages/app/src/components/sidebar-workspace-list.tsx`).
 
@@ -110,7 +112,7 @@ Five primitives. The pick is determined by option count, the need to search, and
 
 `confirmDialog` is for destructive yes/no and imperative confirmation. Promise-based: `await confirmDialog({ destructive: true, ... })`. Anything where a wrong click loses work.
 
-Three themes is `DropdownMenu`. Thirty hosts is `Combobox`. A label and a value is `AdaptiveModalSheet`. "Are you sure?" is `confirmDialog`.
+Three themes is `DropdownMenu`. Thirty hosts in a field is `Combobox`. A floating list you search is `CommandPanel`. A label and a value is `AdaptiveModalSheet`. "Are you sure?" is `confirmDialog`.
 
 ---
 
@@ -266,7 +268,7 @@ New status pills use `<StatusBadge>`. Identity, shortcut, and interactive link b
 - Color changes for disabled state. Opacity only.
 - Destructive actions without `confirmDialog`. Restart, remove, and future destructive actions are confirmed. Archive workspace is confirmed only when its worktree backing reports uncommitted changes or unpushed commits; otherwise it archives immediately.
 - Bespoke status pills. `<StatusBadge>` is the pill primitive.
-- Raw `Modal` for a focused task. `<AdaptiveModalSheet>` is the modal primitive.
+- Raw `Modal` for a focused task. `<AdaptiveModalSheet>` is the form modal. A floating search list uses `<CommandPanel>`, which owns its modal.
 - Importing `ActivityIndicator` directly. `<LoadingSpinner>` is the loading primitive.
 
 ---
@@ -289,7 +291,8 @@ New status pills use `<StatusBadge>`. Identity, shortcut, and interactive link b
 | Pane chrome with single bottom border               | `packages/app/src/components/git-diff-pane.tsx`, `packages/app/src/components/file-explorer-pane.tsx`, `packages/app/src/components/terminal-pane.tsx`                                                                                                                                                   |
 | Page-level alert (info / success / warning / error) | `packages/app/src/components/ui/alert.tsx`, `packages/app/src/screens/project-settings-screen.tsx`                                                                                                                                                                                                       |
 | Sidebar callout (cross-cutting alert)               | `packages/app/src/components/sidebar-callout.tsx`, `packages/app/src/contexts/sidebar-callout-context.tsx`, `packages/app/src/components/worktree-setup-callout-source.tsx`, `packages/app/src/desktop/updates/rosetta-callout-source.tsx`, `packages/app/src/desktop/updates/update-callout-source.tsx` |
-| Searchable picker                                   | `packages/app/src/components/ui/combobox.tsx`, `packages/app/src/components/branch-switcher.tsx`                                                                                                                                                                                                         |
+| Searchable picker, anchored to a field              | `packages/app/src/components/ui/combobox.tsx`, `packages/app/src/components/branch-switcher.tsx`                                                                                                                                                                                                         |
+| Floating search list                                | `packages/app/src/components/ui/command-panel.tsx`, `packages/app/src/hosts/host-chooser.tsx`                                                                                                                                                                                                            |
 | Trigger-anchored menu                               | `packages/app/src/components/ui/dropdown-menu.tsx` (used in `sidebar-workspace-list.tsx`, theme picker)                                                                                                                                                                                                  |
 | Right-click / long-press menu                       | `packages/app/src/components/ui/context-menu.tsx` (used in `sidebar-workspace-list.tsx`)                                                                                                                                                                                                                 |
 | Headers (back, screen, menu)                        | `packages/app/src/components/headers/back-header.tsx`, `screen-header.tsx`, `menu-header.tsx`                                                                                                                                                                                                            |

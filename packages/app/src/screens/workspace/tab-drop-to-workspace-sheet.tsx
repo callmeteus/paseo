@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { Archive, ArrowRight, Copy, FolderInput, Trash2, X } from "lucide-react-native";
-import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { PressHighlight } from "@/components/ui/press-highlight";
+import { Archive, Copy, FolderInput, Trash2, X } from "lucide-react-native";
+import { CommandPanel, CommandPanelRow } from "@/components/ui/command-panel";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/contexts/toast-context";
@@ -25,7 +24,6 @@ import { workspaceIsEmptyAfterMove } from "@/screens/workspace/workspace-empty-a
 import { archiveWorkspaceOptimistically } from "@/workspace/workspace-archive";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 
-const ThemedArrowRight = withUnistyles(ArrowRight);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedArchive = withUnistyles(Archive);
@@ -53,7 +51,6 @@ function ActionRow({
   testID: string;
   onPress: () => void;
 }) {
-  const rowStyle = useMemo(() => [styles.row, disabled && styles.rowDisabled], [disabled]);
   let icon;
   if (variant === "move") {
     icon = <ThemedFolderInput size={ICON_SIZE.sm} uniProps={mutedMapping} />;
@@ -66,29 +63,22 @@ function ActionRow({
   } else {
     icon = <ThemedX size={ICON_SIZE.sm} uniProps={mutedMapping} />;
   }
+  let trailing;
+  if (pending) {
+    trailing = <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />;
+  }
   return (
-    <PressHighlight
+    <CommandPanelRow
       disabled={disabled}
       onPress={onPress}
-      highlightStyle={styles.rowActive}
-      style={rowStyle}
       testID={testID}
+      title={title}
+      meta={description}
+      metaLines={2}
+      trailing={trailing}
     >
       {icon}
-      <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={2}>
-          {description}
-        </Text>
-      </View>
-      {pending ? (
-        <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />
-      ) : (
-        <ThemedArrowRight size={ICON_SIZE.sm} uniProps={mutedMapping} />
-      )}
-    </PressHighlight>
+    </CommandPanelRow>
   );
 }
 
@@ -447,8 +437,8 @@ export function TabDropToWorkspaceSheet() {
   }, [pendingAction]);
 
   return (
-    <AdaptiveModalSheet
-      header={header}
+    <CommandPanel
+      title={header.title}
       visible={visible}
       onClose={close}
       testID="tab-drop-to-workspace-sheet"
@@ -467,7 +457,7 @@ export function TabDropToWorkspaceSheet() {
           t={t}
         />
       </ScrollView>
-    </AdaptiveModalSheet>
+    </CommandPanel>
   );
 }
 
@@ -477,43 +467,12 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: 420,
   },
   content: {
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[6],
-    gap: theme.spacing[1],
+    paddingBottom: theme.spacing[2],
   },
   message: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    paddingHorizontal: theme.spacing[2],
-    paddingBottom: theme.spacing[2],
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    minHeight: 52,
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-  },
-  rowActive: {
-    backgroundColor: theme.colors.surface2,
-  },
-  rowDisabled: {
-    opacity: 0.5,
-  },
-  rowBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-  },
-  rowMeta: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize["2xs"],
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
   },
 }));

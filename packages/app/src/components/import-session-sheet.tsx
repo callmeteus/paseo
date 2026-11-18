@@ -4,8 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Inbox, Layers, RotateCw } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import type { SheetHeader } from "@/components/adaptive-modal-sheet";
+import { CommandPanel } from "@/components/ui/command-panel";
 import { Button } from "@/components/ui/button";
+import { ScrollView } from "@/components/ui/scroll-view";
 import { ImportSessionList } from "@/components/import-session-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/contexts/toast-context";
@@ -41,7 +43,6 @@ import {
   resolveImportTarget,
 } from "@/components/import-session-sheet-view-model";
 
-const IMPORT_SHEET_SNAP_POINTS = ["70%", "92%"];
 const DISABLED_ACCESSIBILITY_STATE = { disabled: true };
 
 interface ImportedAgentTarget {
@@ -361,29 +362,38 @@ function SessionRows({
     [serverId, disabled, importingSessionKey, resolveFolder, onImportSession],
   );
   const renderItem = useCallback(
-    (item: ImportSessionEntry) => <View style={styles.listRow}>{renderSessionRow(item)}</View>,
+    (item: ImportSessionEntry) => renderSessionRow(item),
     [renderSessionRow],
   );
   const virtualHeader = useMemo(
     () => (listHeader ? <View style={styles.listHeader}>{listHeader}</View> : null),
     [listHeader],
   );
-  const virtualFooter = useMemo(
-    () => <View style={styles.listFooter}>{listFooter}</View>,
-    [listFooter],
+  const virtualFooter = useMemo(() => <View>{listFooter}</View>, [listFooter]);
+  const search = useMemo(
+    () =>
+      header.search
+        ? {
+            onChangeText: header.search.onChange,
+            placeholder: header.search.placeholder,
+            testID: header.search.testID,
+            resetKey: header.search.resetKey,
+            autoFocus: header.search.autoFocus,
+          }
+        : undefined,
+    [header.search],
   );
 
   return (
-    <AdaptiveModalSheet
+    <CommandPanel
       visible={visible}
       onClose={onClose}
-      header={header}
+      title={header.title}
+      subtitle={header.subtitle}
+      search={search}
+      headerTrailing={header.actions}
+      fill={virtualized}
       testID="import-session-sheet"
-      desktopMaxWidth={560}
-      desktopHeight={virtualized ? "85%" : undefined}
-      snapPoints={IMPORT_SHEET_SNAP_POINTS}
-      scrollable={!virtualized}
-      contentStyle={virtualized ? styles.listBody : undefined}
     >
       {ImportSessionList && virtualized ? (
         <View style={styles.list}>
@@ -396,15 +406,15 @@ function SessionRows({
           />
         </View>
       ) : (
-        <>
+        <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
           {listHeader}
           {entries.length > 0 ? (
             <View style={styles.smallList}>{entries.map(renderSessionRow)}</View>
           ) : null}
           {listFooter}
-        </>
+        </ScrollView>
       )}
-    </AdaptiveModalSheet>
+    </CommandPanel>
   );
 }
 
@@ -907,53 +917,42 @@ const styles = StyleSheet.create((theme) => ({
   filterTrigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1.5],
+    gap: theme.spacing[2],
     alignSelf: "flex-start",
     maxWidth: "100%",
-    paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface1,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
+    paddingVertical: theme.spacing[1],
   },
   filterTriggerHovered: {
-    backgroundColor: theme.colors.surface2,
+    opacity: 0.8,
   },
   filterTriggerPressed: {
-    backgroundColor: theme.colors.surface3,
+    opacity: 0.7,
   },
   filterTriggerText: {
     flexShrink: 1,
     minWidth: 0,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
-  listBody: {
-    gap: 0,
+  scroll: {
+    flexGrow: 0,
+    maxHeight: 480,
   },
   list: {
     flex: 1,
     minHeight: 0,
-    marginHorizontal: -theme.spacing[2],
   },
   listHeader: {
-    marginHorizontal: theme.spacing[2],
-    paddingBottom: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
   },
   listHeaderContent: {
-    gap: theme.spacing[4],
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[3],
   },
   smallList: {
-    gap: theme.spacing[1],
-  },
-  listFooter: {
-    marginHorizontal: theme.spacing[2],
-  },
-  listRow: {
-    marginHorizontal: theme.spacing[2],
-    paddingBottom: theme.spacing[1],
+    paddingTop: theme.spacing[1],
   },
   footer: {
     paddingTop: theme.spacing[2],
@@ -962,17 +961,16 @@ const styles = StyleSheet.create((theme) => ({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
-    marginHorizontal: -theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
+    gap: theme.spacing[3],
+    minHeight: 56,
+    paddingVertical: theme.spacing[3],
+    paddingHorizontal: theme.spacing[4],
   },
   rowHovered: {
     backgroundColor: theme.colors.surface1,
   },
   rowPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surface1,
   },
   rowIconWrap: {
     width: theme.iconSize.md,
@@ -1003,7 +1001,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPreview: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
+    fontSize: theme.fontSize.sm,
     lineHeight: 20,
   },
   rowFolder: {
@@ -1012,10 +1010,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowImportedBadge: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize["2xs"],
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    fontSize: theme.fontSize.sm,
   },
   statusRow: {
     flexDirection: "row",

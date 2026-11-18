@@ -130,15 +130,15 @@ vi.mock("@/components/ui/combobox", () => ({
   ComboboxItem: ({ label }: { label: string }) => React.createElement("span", null, label),
 }));
 
-interface SheetSearchProps {
-  onChange: (value: string) => void;
+interface CommandPanelSearchProps {
+  onChangeText: (value: string) => void;
   placeholder?: string;
   testID?: string;
 }
 
-function SheetSearchInput({ search }: { search: SheetSearchProps }) {
+function CommandPanelSearchInput({ search }: { search: CommandPanelSearchProps }) {
   const handleChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => search.onChange(event.target.value),
+    (event: React.ChangeEvent<HTMLInputElement>) => search.onChangeText(event.target.value),
     [search],
   );
   return (
@@ -146,29 +146,30 @@ function SheetSearchInput({ search }: { search: SheetSearchProps }) {
   );
 }
 
-vi.mock("@/components/adaptive-modal-sheet", () => ({
-  AdaptiveModalSheet: ({
+vi.mock("@/components/ui/command-panel", () => ({
+  CommandPanel: ({
     visible,
-    header,
+    title,
+    subtitle,
+    search,
+    headerTrailing,
     children,
     testID,
   }: {
     visible: boolean;
-    header?: {
-      title: string;
-      subtitle?: ReactNode;
-      actions?: ReactNode;
-      search?: { onChange: (value: string) => void; placeholder?: string; testID?: string };
-    };
+    title?: string;
+    subtitle?: ReactNode;
+    headerTrailing?: ReactNode;
+    search?: CommandPanelSearchProps;
     children: ReactNode;
     testID?: string;
   }) =>
     visible ? (
       <section data-testid={testID}>
-        <h1>{header?.title}</h1>
-        {header?.subtitle}
-        {header?.actions}
-        {header?.search ? <SheetSearchInput search={header.search} /> : null}
+        <h1>{title}</h1>
+        {subtitle}
+        {headerTrailing}
+        {search ? <CommandPanelSearchInput search={search} /> : null}
         {children}
       </section>
     ) : null,

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
+import { ScrollView } from "@/components/ui/scroll-view";
 import { StyleSheet } from "react-native-unistyles";
 import { getIsElectronRuntime } from "@/constants/layout";
-import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { CommandPanel } from "@/components/ui/command-panel";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { getShortcutOs } from "@/utils/shortcut-platform";
@@ -13,8 +14,6 @@ import {
 } from "@/keyboard/keyboard-shortcuts";
 import { filterShortcutHelpSections } from "@/keyboard/shortcut-help-search";
 import { useKeyboardShortcutOverrides } from "@/hooks/use-keyboard-shortcut-overrides";
-
-const SNAP_POINTS: string[] = ["70%", "92%"];
 
 export function KeyboardShortcutsDialog() {
   const { t } = useTranslation();
@@ -43,32 +42,35 @@ export function KeyboardShortcutsDialog() {
   }, [open]);
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
-  const header = useMemo<SheetHeader>(
+  const search = useMemo(
     () => ({
-      title: t("settings.shortcuts.dialogTitle"),
-      search: {
-        onChange: setQuery,
-        resetKey: Number(open),
-        placeholder: t("settings.shortcuts.searchPlaceholder"),
-        autoFocus: true,
-      },
+      onChangeText: setQuery,
+      resetKey: Number(open),
+      placeholder: t("settings.shortcuts.searchPlaceholder"),
+      autoFocus: true,
     }),
     [open, t],
   );
 
   return (
-    <AdaptiveModalSheet
-      header={header}
+    <CommandPanel
+      title={t("settings.shortcuts.dialogTitle")}
       visible={open}
       onClose={handleClose}
       testID="keyboard-shortcuts-dialog"
-      snapPoints={SNAP_POINTS}
+      fill
+      search={search}
     >
-      <View testID="keyboard-shortcuts-dialog-content" style={styles.content}>
+      <ScrollView
+        testID="keyboard-shortcuts-dialog-content"
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         {visibleSections.map((section) => (
           <View key={section.title} style={styles.section}>
             <Text style={styles.sectionTitle}>{t(section.titleKey)}</Text>
-            <View style={styles.rows}>
+            <View>
               {section.rows.map((row) => (
                 <View key={row.id} style={styles.row} testID={`shortcut-help-row-${row.id}`}>
                   <View style={styles.rowText}>
@@ -90,38 +92,37 @@ export function KeyboardShortcutsDialog() {
         {visibleSections.length === 0 ? (
           <Text style={styles.empty}>{t("common.empty.noResults")}</Text>
         ) : null}
-      </View>
-    </AdaptiveModalSheet>
+      </ScrollView>
+    </CommandPanel>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   content: {
-    gap: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
   },
   section: {
-    gap: theme.spacing[2],
+    paddingTop: theme.spacing[2],
   },
   sectionTitle: {
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.foregroundMuted,
-  },
-  rows: {
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.surface2,
-    borderRadius: theme.borderRadius.lg,
-    overflow: "hidden",
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[3],
+    minHeight: 56,
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: theme.colors.surface2,
   },
   rowText: {
     flex: 1,

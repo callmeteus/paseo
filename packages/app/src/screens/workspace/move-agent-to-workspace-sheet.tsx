@@ -1,10 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ArrowRight, Check, FolderInput } from "lucide-react-native";
-import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { PressHighlight } from "@/components/ui/press-highlight";
+import { Check, FolderInput } from "lucide-react-native";
+import { CommandPanel, CommandPanelRow } from "@/components/ui/command-panel";
 import { ScrollView } from "@/components/ui/scroll-view";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/contexts/toast-context";
@@ -23,10 +22,8 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 
 const ThemedFolderInput = withUnistyles(FolderInput);
 const ThemedCheck = withUnistyles(Check);
-const ThemedArrowRight = withUnistyles(ArrowRight);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const accentMapping = (theme: Theme) => ({ color: theme.colors.accentBright });
 
 interface WorkspaceMoveRowModel {
   id: string;
@@ -60,35 +57,24 @@ function WorkspaceMoveRow({
   onSelect: (workspaceId: string) => void;
 }) {
   const handlePress = useCallback(() => onSelect(row.id), [onSelect, row.id]);
-  const rowStyle = useMemo(() => [styles.row, disabled && styles.rowDisabled], [disabled]);
   let trailing;
   if (moving) {
     trailing = <ThemedLoadingSpinner size="small" uniProps={mutedMapping} />;
   } else if (row.isCurrent) {
-    trailing = <ThemedCheck size={ICON_SIZE.sm} uniProps={accentMapping} />;
-  } else {
-    trailing = <ThemedArrowRight size={ICON_SIZE.sm} uniProps={mutedMapping} />;
+    trailing = <ThemedCheck size={ICON_SIZE.sm} uniProps={mutedMapping} />;
   }
 
   return (
-    <PressHighlight
+    <CommandPanelRow
       disabled={disabled}
       onPress={handlePress}
-      highlightStyle={styles.rowActive}
-      style={rowStyle}
       testID={`move-agent-to-workspace-${row.id}`}
+      title={row.name}
+      meta={`${row.project} · ${row.directory}`}
+      trailing={trailing}
     >
       <ThemedFolderInput size={ICON_SIZE.sm} uniProps={mutedMapping} />
-      <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {row.name}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {row.project} · {row.directory}
-        </Text>
-      </View>
-      {trailing}
-    </PressHighlight>
+    </CommandPanelRow>
   );
 }
 
@@ -113,7 +99,6 @@ export function MoveAgentToWorkspaceSheet() {
   );
   const [movingTo, setMovingTo] = useState<string | null>(null);
   const visible = Boolean(agentId && serverId && agent);
-  const sheetHeader = useMemo(() => ({ title: t("workspace.tabs.menu.moveChat.title") }), [t]);
 
   const rows = useMemo<WorkspaceMoveRowModel[]>(() => {
     const currentWorkspaceId = agent?.workspaceId ?? null;
@@ -170,8 +155,8 @@ export function MoveAgentToWorkspaceSheet() {
   );
 
   return (
-    <AdaptiveModalSheet
-      header={sheetHeader}
+    <CommandPanel
+      title={t("workspace.tabs.menu.moveChat.title")}
       visible={visible}
       onClose={closeMoveAgentToWorkspace}
       testID="move-agent-to-workspace-sheet"
@@ -191,7 +176,7 @@ export function MoveAgentToWorkspaceSheet() {
           ))
         )}
       </ScrollView>
-    </AdaptiveModalSheet>
+    </CommandPanel>
   );
 }
 
@@ -201,43 +186,13 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: 420,
   },
   content: {
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[6],
-    gap: theme.spacing[1],
+    paddingBottom: theme.spacing[2],
   },
   empty: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
+    paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[4],
     textAlign: "center",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    minHeight: 52,
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-  },
-  rowActive: {
-    backgroundColor: theme.colors.surface2,
-  },
-  rowDisabled: {
-    opacity: 0.5,
-  },
-  rowBody: {
-    minWidth: 0,
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-  },
-  rowMeta: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize["2xs"],
   },
 }));
