@@ -7,6 +7,10 @@ import {
   sendBoundedPhysicalFrameAndWait,
 } from "./physical-socket.js";
 
+test("the lease outlasts a one-minute background timer clamp", () => {
+  expect(APPLICATION_SOCKET_LEASE_MS).toBeGreaterThan(60_000);
+});
+
 test("sockets remain exempt until they send an application ping", () => {
   let now = 0;
   const lease = new ApplicationSocketLease<object>(() => now);
