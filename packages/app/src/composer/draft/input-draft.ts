@@ -114,6 +114,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const attachmentFocusRequestId = useDraftStore(
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
   );
+  const textReplacementRequestId = useDraftStore(
+    (state) => state.textReplacementRequestByDraftKey[draftKey] ?? 0,
+  );
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const isHydrated = hydratedDraftKey === draftKey;
   const textReplacementRevisionRef = useRef(0);
@@ -134,6 +137,16 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     },
     [draftKey],
   );
+
+  // A selection added from another panel edits the draft text directly. The web
+  // editor is a contenteditable that only redraws on a replacement, so mirror the
+  // store text back into it when that path asks for one.
+  const seenTextReplacementRequestRef = useRef(textReplacementRequestId);
+  useEffect(() => {
+    if (seenTextReplacementRequestRef.current === textReplacementRequestId) return;
+    seenTextReplacementRequestRef.current = textReplacementRequestId;
+    publishTextReplacement("replace", textSource.getSnapshot());
+  }, [textReplacementRequestId, publishTextReplacement, textSource]);
 
   const saveDraft = useCallback(
     (

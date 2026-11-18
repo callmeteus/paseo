@@ -21,7 +21,10 @@ import {
 } from "@/plugins/themes";
 import { PLUGIN_THEME_NAMES, PLUGIN_THEME_PREFERENCE, THEME_TO_UNISTYLES } from "@/styles/theme";
 import { applyAppearance } from "./apply";
+import { loadBundledFonts } from "./load-bundled-fonts";
 import { AppearanceSystemBars } from "./system-bars";
+
+loadBundledFonts();
 
 interface ContributedThemes {
   options: PluginThemeOption[];

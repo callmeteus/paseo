@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { readValidatedJson } from "@/storage/validated-storage";
 import { APP_SETTINGS_KEY, SETTINGS_MIGRATIONS_KEY } from "./keys";
+import { DEFAULT_UI_FONT_FAMILY } from "@/appearance/font-families";
 import type { AppSettings, KeyValueStorage, PersistedAppSettings } from "./storage";
 
 const AppliedMigrationsSchema = z.strictObject({ applied: z.array(z.string()) });
@@ -15,6 +16,13 @@ const STEER_DEFAULT_MIGRATION = "steer-default";
 
 /** Existing mobile installs materialized the old 15px content default in storage. */
 const MOBILE_CONTENT_16_MIGRATION = "mobile-content-16";
+
+/**
+ * The interface font used to default to the platform stack, stored as "".
+ * Allo is the product default now. This rewrites a stored "" once; choosing
+ * System afterwards stores "" and sticks.
+ */
+const ALLO_UI_FONT_MIGRATION = "allo-ui-font";
 
 /**
  * Brings stored settings up to date, returning what the caller should use. Owns both writes so
@@ -44,6 +52,15 @@ export async function migrateAppSettings(
     addedMigration = true;
   }
 
+  if (!applied.has(ALLO_UI_FONT_MIGRATION)) {
+    migrated =
+      migrated.uiFontFamily === ""
+        ? { ...migrated, uiFontFamily: DEFAULT_UI_FONT_FAMILY }
+        : migrated;
+    applied.add(ALLO_UI_FONT_MIGRATION);
+    addedMigration = true;
+  }
+
   if (options.native && !applied.has(MOBILE_CONTENT_16_MIGRATION)) {
     migrated = migrated.contentFontSize === 15 ? { ...migrated, contentFontSize: 16 } : migrated;
     applied.add(MOBILE_CONTENT_16_MIGRATION);
@@ -55,17 +72,32 @@ export async function migrateAppSettings(
   }
 
   if (migrated !== settings) {
-    const storedSidebarRowItems = stored?.sidebarRowItems ?? {};
-    await storage.setItem(
-      APP_SETTINGS_KEY,
-      JSON.stringify({
-        ...stored,
-        ...migrated,
-        sidebarRowItems: { ...storedSidebarRowItems, ...migrated.sidebarRowItems },
-      }),
-    );
+    const patched = await patchStoredSettings(storage, stored, settings, migrated);
+    await storage.setItem(APP_SETTINGS_KEY, JSON.stringify(patched));
   }
 
   await storage.setItem(SETTINGS_MIGRATIONS_KEY, JSON.stringify({ applied: [...applied] }));
   return migrated;
+}
+
+async function patchStoredSettings(
+  storage: KeyValueStorage,
+  stored: PersistedAppSettings | undefined,
+  previous: AppSettings,
+  migrated: AppSettings,
+): Promise<Record<string, unknown>> {
+  const rawText = await storage.getItem(APP_SETTINGS_KEY);
+  const raw: unknown = rawText ? JSON.parse(rawText) : null;
+  const base: Record<string, unknown> =
+    raw !== null && typeof raw === "object" ? { ...raw } : { ...stored };
+  if (migrated.sendBehavior !== previous.sendBehavior) {
+    base.sendBehavior = migrated.sendBehavior;
+  }
+  if (migrated.uiFontFamily !== previous.uiFontFamily) {
+    base.uiFontFamily = migrated.uiFontFamily;
+  }
+  if (migrated.contentFontSize !== previous.contentFontSize) {
+    base.contentFontSize = migrated.contentFontSize;
+  }
+  return base;
 }

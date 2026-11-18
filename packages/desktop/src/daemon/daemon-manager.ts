@@ -47,6 +47,7 @@ import {
 import type { DesktopSettings } from "../settings/desktop-settings.js";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
 import { isRunningUnderARM64Translation } from "../system/arm64-translation.js";
+import { execFileText, listInstalledFonts } from "../system/installed-fonts.js";
 import { describeSandbox } from "../diagnostics/sandbox.js";
 import { getDesktopAppLogs } from "../diagnostics/app-logs.js";
 import { getDesktopUpdaterDiagnostics } from "../diagnostics/updater.js";
@@ -495,6 +496,16 @@ async function getLocalDaemonVersion(): Promise<{ version: string | null; error:
   };
 }
 
+async function listInstalledFontsForPicker() {
+  try {
+    const faces = await listInstalledFonts({ platform: process.platform, execFile: execFileText });
+    return { faces };
+  } catch (error) {
+    log.warn("[fonts] failed to list installed fonts", error);
+    return { faces: [] };
+  }
+}
+
 async function resolveRequestedReleaseChannel(
   args: Record<string, unknown> | undefined,
 ): Promise<AppReleaseChannel> {
@@ -536,6 +547,7 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     desktop_app_logs: () => getDesktopAppLogs(),
     desktop_update_diagnostics: () => getDesktopUpdaterDiagnostics(),
     desktop_get_system_idle_time: () => powerMonitor.getSystemIdleTime() * 1000,
+    list_installed_fonts: () => listInstalledFontsForPicker(),
     cli_daemon_status: () => getCliDaemonStatus(),
     write_attachment_base64: (args) => writeAttachmentBase64(args ?? {}),
     write_attachment_bytes: (args) => writeAttachmentBytes(args ?? {}),

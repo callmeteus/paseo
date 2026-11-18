@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
+import { DEFAULT_UI_FONT_FAMILY } from "@/appearance/font-families";
 import {
   APP_SETTINGS_KEY,
   APP_SETTINGS_QUERY_KEY,
@@ -805,7 +806,7 @@ describe("appearance settings", () => {
 
     const result = await loadAppSettingsFromStorage(deps);
 
-    expect(result.uiFontFamily).toBe("");
+    expect(result.uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
     expect(result.monoFontFamily).toBe("");
     expect(result.uiBaseFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
     expect(result.contentFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
@@ -1029,14 +1030,14 @@ describe("appearance settings", () => {
     expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe("Menlo");
   });
 
-  it("keeps an explicit empty font family as the default sentinel", async () => {
+  it("moves an unset interface font to Allo", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
         [APP_SETTINGS_KEY]: JSON.stringify({ uiFontFamily: "" }),
       }),
     });
 
-    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe("");
+    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
   });
 
   it("rejects a font family containing CSS-breaking characters", async () => {
@@ -1046,7 +1047,7 @@ describe("appearance settings", () => {
       }),
     });
 
-    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe("");
+    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
   });
 
   it("rejects an over-length font family", async () => {
@@ -1056,7 +1057,7 @@ describe("appearance settings", () => {
       }),
     });
 
-    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe("");
+    expect((await loadAppSettingsFromStorage(deps)).uiFontFamily).toBe(DEFAULT_UI_FONT_FAMILY);
   });
 
   it("accepts a known syntax theme id", async () => {
@@ -1163,15 +1164,23 @@ describe("font family CSS safety", () => {
     expect(sanitizeFontFamily(value)).toBe(value),
   );
 
-  it.each(["uiFontFamily", "monoFontFamily"])(
-    "recovers a persisted unmatched quote in %s",
-    async (field) => {
-      const deps = makeDeps({
-        storage: createInMemoryKeyValueStorage({
-          [APP_SETTINGS_KEY]: JSON.stringify({ [field]: "'foo" }),
-        }),
-      });
-      expect(await loadAppSettingsFromStorage(deps)).toMatchObject({ [field]: "" });
-    },
-  );
+  it("recovers a persisted unmatched quote in the interface font", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ uiFontFamily: "'foo" }),
+      }),
+    });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({
+      uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+    });
+  });
+
+  it("recovers a persisted unmatched quote in the code font", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ monoFontFamily: "'foo" }),
+      }),
+    });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject({ monoFontFamily: "" });
+  });
 });

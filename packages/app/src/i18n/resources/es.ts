@@ -3036,9 +3036,9 @@ export const es: TranslationResources = {
       fonts: {
         title: "Fuentes",
         systemDefault: "Valor predeterminado del sistema",
+        searchPlaceholder: "Buscar fuentes",
         interfaceFont: "Fuente de interfaz",
-        interfaceFontHint:
-          "Utilizado en toda la aplicación. Déjelo vacío para el valor predeterminado del sistema.",
+        interfaceFontHint: "Utilizado en toda la aplicación.",
         interfaceFontAccessibility: "Familia de fuentes de interfaz",
         interfaceSize: "Tamaño de interfaz",
         interfaceSizeHint: "Se usa en la navegación, los controles y las etiquetas",
@@ -3047,8 +3047,7 @@ export const es: TranslationResources = {
         contentSizeHint: "Se usa en el texto del chat y el Markdown renderizado",
         contentSizeAccessibility: "Tamaño de fuente de contenido",
         codeFont: "Fuente de código",
-        codeFontHint:
-          "Se utiliza en código, diferencias y salida del terminal. Déjelo vacío para el valor predeterminado del sistema.",
+        codeFontHint: "Se utiliza en código, diferencias y salida del terminal.",
         codeFontAccessibility: "Familia de fuentes de código",
         codeSize: "Tamaño del código",
         codeSizeHint: "Se usa en código, diferencias y la salida del terminal",

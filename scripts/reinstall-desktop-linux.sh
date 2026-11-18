@@ -46,11 +46,11 @@ echo "[reinstall-desktop-linux] Installer: $DEB_PATH"
 
 if command -v pkexec >/dev/null 2>&1; then
   echo "[reinstall-desktop-linux] pkexec: graphical password prompt (PolicyKit)"
-  pkexec env DEBIAN_FRONTEND=noninteractive apt-get install -y "$DEB_PATH"
+  pkexec env DEBIAN_FRONTEND=noninteractive apt-get install --reinstall -y "$DEB_PATH"
 elif command -v sudo >/dev/null 2>&1; then
   echo "[reinstall-desktop-linux] pkexec not found; using sudo in this terminal." >&2
   echo "[reinstall-desktop-linux] Install policykit-1 (Debian/Ubuntu) for a graphical prompt next time." >&2
-  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$DEB_PATH"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install --reinstall -y "$DEB_PATH"
 else
   echo "[reinstall-desktop-linux] Neither pkexec nor sudo found. Run as root:" >&2
   echo "  apt-get install -y '$DEB_PATH'" >&2

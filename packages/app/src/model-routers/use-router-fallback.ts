@@ -8,7 +8,9 @@ import {
   startPortingActivity,
 } from "@/composer/agent-controls/porting-activity";
 import { useToast } from "@/contexts/toast-context";
+import { useHostFeature } from "@/runtime/host-features";
 import { selectAgentSentMessages, useSessionStore } from "@/stores/session-store";
+import { providerDisplayName } from "@/utils/provider-display-name";
 import { generateMessageId } from "@/types/stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -240,6 +242,7 @@ interface RouterFailureHandlerInput {
   serverId: string;
   agentId: string;
   errorKey: string;
+  daemonRecoversCrashes: boolean;
   notify: {
     retrying: (provider: string) => void;
     crashPersists: (provider: string) => void;
@@ -316,7 +319,7 @@ function startRouterPort(input: {
 
 /** Decides between retrying in place, repairing the session, or porting away. */
 function handleRouterFailure(input: RouterFailureHandlerInput): void {
-  const { client, serverId, agentId, errorKey, notify, state } = input;
+  const { client, serverId, agentId, errorKey, daemonRecoversCrashes, notify, state } = input;
   const session = useSessionStore.getState().sessions[serverId];
   const liveAgent = session?.agents?.get(agentId);
   if (!liveAgent || liveAgent.archivedAt) return;
@@ -339,6 +342,12 @@ function handleRouterFailure(input: RouterFailureHandlerInput): void {
 
   switch (action.kind) {
     case "retry-same":
+      // A daemon with crash recovery re-drives the prompt itself, independent of
+      // whether this chat tab is mounted. The app still owns the user-facing notice.
+      if (daemonRecoversCrashes) {
+        notify.retrying(provider);
+        return;
+      }
       retryCrashedProvider({
         client,
         serverId,
@@ -414,6 +423,7 @@ export function useRouterFallback({
   const crashRetriesRef = useRef(new Map<string, number>());
   const shrinkAttemptedKeyRef = useRef<string | null>(null);
   const errorKey = useSessionStore((state) => selectFailureError(state, serverId, agentId));
+  const daemonRecoversCrashes = useHostFeature(serverId, "daemonCrashRecovery");
 
   useEffect(() => {
     if (!client || !isConnected || !agentId || !errorKey) return;
@@ -422,6 +432,7 @@ export function useRouterFallback({
       serverId,
       agentId,
       errorKey,
+      daemonRecoversCrashes,
       state: {
         attemptedKey: attemptedKeyRef,
         inFlight: inFlightRef,
@@ -430,29 +441,41 @@ export function useRouterFallback({
       },
       notify: {
         retrying: (provider) =>
-          toast.show(t("settings.modelRouters.retryingProvider", { provider }), {
-            variant: "info",
-            durationMs: 3000,
-          }),
+          toast.show(
+            t("settings.modelRouters.retryingProvider", {
+              provider: providerDisplayName(provider),
+            }),
+            { variant: "info", durationMs: 3000 },
+          ),
         crashPersists: (provider) =>
-          toast.error(t("settings.modelRouters.crashPersists", { provider })),
+          toast.error(
+            t("settings.modelRouters.crashPersists", {
+              provider: providerDisplayName(provider),
+            }),
+          ),
         repaired: (provider) =>
-          toast.show(t("settings.modelRouters.sessionRepaired", { provider }), {
-            variant: "info",
-            durationMs: 4000,
-          }),
+          toast.show(
+            t("settings.modelRouters.sessionRepaired", {
+              provider: providerDisplayName(provider),
+            }),
+            { variant: "info", durationMs: 4000 },
+          ),
         shrinking: (provider) =>
-          toast.show(t("settings.modelRouters.shrinkingTools", { provider }), {
-            variant: "info",
-            durationMs: 4000,
-          }),
+          toast.show(
+            t("settings.modelRouters.shrinkingTools", {
+              provider: providerDisplayName(provider),
+            }),
+            { variant: "info", durationMs: 4000 },
+          ),
         noTargets: () => toast.error(t("settings.modelRouters.noMoreTargets")),
         ported: (provider) =>
-          toast.show(t("settings.modelRouters.fallbackMoved", { provider }), {
-            variant: "info",
-            durationMs: 4000,
-          }),
+          toast.show(
+            t("settings.modelRouters.fallbackMoved", {
+              provider: providerDisplayName(provider),
+            }),
+            { variant: "info", durationMs: 4000 },
+          ),
       },
     });
-  }, [agentId, client, errorKey, isConnected, serverId, t, toast]);
+  }, [agentId, client, daemonRecoversCrashes, errorKey, isConnected, serverId, t, toast]);
 }

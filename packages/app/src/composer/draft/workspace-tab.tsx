@@ -14,6 +14,7 @@ import { AgentStreamView } from "@/agent-stream/view";
 import { sideAgentId, useDraftAgentSideSelection } from "@/side-chat/use-add-selection";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
+import { insertSelectionAsInlineChip } from "@/composer/selection-inline-chip";
 import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { buildDraftQueueKey, moveDraftQueueToAgent } from "@/composer/draft/message-queue";
@@ -802,10 +803,19 @@ export function WorkspaceDraftAgentTab({
   );
   const handleAddSelectionToChat = useCallback(
     (selection: string) => {
-      setDraftAttachments((current) => [...current, { kind: "quote", text: selection }]);
+      const next = insertSelectionAsInlineChip({
+        currentText: draftInput.textSource.getSnapshot(),
+        selectionText: selection,
+        labels: {
+          pastedWord: t("composer.inlineChip.pastedWord"),
+          lineOne: t("composer.inlineChip.line_one"),
+          lineOther: t("composer.inlineChip.line_other"),
+        },
+      });
+      replaceDraftText(next.text);
       focusInputRef.current?.();
     },
-    [setDraftAttachments],
+    [draftInput, replaceDraftText, t],
   );
   const onAddSelectionToSideChat = useDraftAgentSideSelection(serverId, sideAgentId(draftAgent));
 

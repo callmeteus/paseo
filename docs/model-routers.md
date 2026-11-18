@@ -10,9 +10,12 @@ is bound to.
 - `icon` stores a model-icon id, and the app draws that mark for the router. With `icon`
   unset, the app draws the mark of the router's models.
 
-Fallback execution runs in the app
-(`packages/app/src/model-routers/use-router-fallback.ts`). The daemon only stores the
-router and the chat binding.
+Fallback execution for credits, quota, and rate-limit failures runs in the app
+(`packages/app/src/model-routers/use-router-fallback.ts`); the daemon stores the router
+and the chat binding. Provider crashes are different: the daemon retries them itself
+(`packages/server/src/server/agent/agent-crash-recovery.ts`) so recovery does not wait
+for the chat tab to be focused. The app skips its own crash retry when the daemon
+advertises `server_info.features.daemonCrashRecovery`.
 
 ## Automatic open-weight routers
 

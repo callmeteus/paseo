@@ -88,7 +88,9 @@ agent never arrives. A runtime that dies mid-turn is reported by whatever is dra
 between turns nothing is watching, so the agent sits at `idle` looking healthy while its background
 work is gone. Report that exit as a turn failure so the agent lands in `error` with a timeline entry.
 Claude and OMP report exits between turns. OMP relaunches from its session file on the next prompt;
-the unfinished turn is lost.
+the unfinished turn is lost. A stream failure that matches the provider-crash classifier is retried
+by the daemon: it re-drives the last prompt a bounded number of times so the agent recovers without
+a client focusing the chat.
 
 ### Cancellation
 

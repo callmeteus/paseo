@@ -1,12 +1,8 @@
 import { UnistylesRuntime } from "react-native-unistyles";
 import { resolveSyntaxColors, type SyntaxThemeId } from "@getpaseo/highlight";
-import {
-  DEFAULT_UI_FONT_STACK,
-  DEFAULT_MONO_FONT_STACK,
-  FONT_SIZE,
-  REGISTERED_THEMES,
-  type Theme,
-} from "@/styles/theme";
+import { FONT_SIZE, REGISTERED_THEMES, type Theme } from "@/styles/theme";
+import { isNative } from "@/constants/platform";
+import { resolveMonoFontStack, resolveUiFontStack } from "./font-families";
 import { applyRootUiFont } from "./apply-root-font";
 
 const ALL_THEME_KEYS = Object.keys(REGISTERED_THEMES) as (keyof typeof REGISTERED_THEMES)[];
@@ -62,8 +58,8 @@ function scaleFontSize(
  * `...t` first.
  */
 export function applyAppearance(input: AppearanceInput): void {
-  const ui = input.uiFontFamily.trim() || DEFAULT_UI_FONT_STACK;
-  const mono = input.monoFontFamily.trim() || DEFAULT_MONO_FONT_STACK;
+  const ui = resolveUiFontStack(input.uiFontFamily, isNative);
+  const mono = resolveMonoFontStack(input.monoFontFamily);
   const diffLineHeight = Math.round(input.codeFontSize * 1.5); // couple to code size
   const activeTheme = UnistylesRuntime.themeName;
   // Unistyles web emits after each registry patch. Updating the mounted theme

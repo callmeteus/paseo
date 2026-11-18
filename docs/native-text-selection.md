@@ -2,7 +2,7 @@
 
 Keep completed assistant prose in one native text view so selection crosses paragraphs, headings and lists. The shared [Markdown renderer](markdown-renderer.md) owns that view.
 
-Selecting assistant text on web shows a floating "Add to chat" action that appends the selection to the composer as a Markdown quote, and "Add to side chat" beside it. Native selection keeps the platform menu; a custom action there needs a native library change.
+Selecting assistant text on web shows a floating "Add to chat" action. It appends the selection to the composer as a paste chip in the message, not as a quote pill above it. Ctrl+L (Cmd+L on macOS) runs the same action while the floating button is showing. "Add to side chat" sits beside it and quotes the selection into the side chat without sending. Native selection keeps the platform menu; a custom action there needs a native library change.
 
 ## Android inverted chat
 

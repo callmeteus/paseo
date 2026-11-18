@@ -80,6 +80,8 @@ import {
 import type { ImageAttachment, MessagePayload, TextReplacement } from "./types";
 import { ICON_SIZE, FONT_SIZE, type Theme } from "@/styles/theme";
 import type { AgentGoalState } from "@/utils/agent-snapshots";
+import { shouldListCommandsForComposer } from "@/hooks/agent-commands-query";
+import { QueuedMessageContent } from "./queued-message-content";
 import { useAgentCommandsQuery, type DraftCommandTarget } from "@/hooks/use-agent-commands-query";
 import { encodeImages } from "@/utils/encode-images";
 import { usePendingComposerSendStore } from "@/composer/pending-send";
@@ -185,7 +187,6 @@ import {
 } from "@/attachments/workspace-attachments-store";
 import { createChatMentionAttachment } from "@/composer/chat-history-attachment";
 import {
-  inlineChipDisplayText,
   inlineChipIdKey,
   preserveDisplaySelection,
   textContainsInlineChipId,
@@ -521,6 +522,7 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 
 interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
+  skillNames: readonly string[];
   handleEditQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
   handleReorderQueuedMessages: (items: QueuedMessage[]) => void;
@@ -537,6 +539,7 @@ const webGrabCursor = isWeb ? RNStyleSheet.create({ handle: { cursor: "grab" } }
 
 const QueueTrack = memo(function QueueTrack({
   queuedMessages,
+  skillNames,
   handleEditQueuedMessage,
   handleSendQueuedNow,
   handleReorderQueuedMessages,
@@ -549,6 +552,7 @@ const QueueTrack = memo(function QueueTrack({
     ({ item, drag, dragHandleProps }: DraggableRenderItemInfo<QueuedMessage>) => (
       <QueuedMessageRow
         item={item}
+        skillNames={skillNames}
         onEdit={handleEditQueuedMessage}
         onSendNow={handleSendQueuedNow}
         editLabel={editLabel}
@@ -558,7 +562,14 @@ const QueueTrack = memo(function QueueTrack({
         dragHandleProps={dragHandleProps}
       />
     ),
-    [editLabel, handleEditQueuedMessage, handleSendQueuedNow, reorderLabel, sendNowLabel],
+    [
+      editLabel,
+      handleEditQueuedMessage,
+      handleSendQueuedNow,
+      reorderLabel,
+      sendNowLabel,
+      skillNames,
+    ],
   );
   if (data.length === 0) return null;
   return (
@@ -851,6 +862,7 @@ function resolveMessageInputPassthroughAction(
 
 interface QueuedMessageRowProps {
   item: QueuedMessage;
+  skillNames: readonly string[];
   onEdit: (id: string) => void;
   onSendNow: (id: string) => void;
   editLabel: string;
@@ -862,6 +874,7 @@ interface QueuedMessageRowProps {
 
 function QueuedMessageRow({
   item,
+  skillNames,
   onEdit,
   onSendNow,
   editLabel,
@@ -880,9 +893,13 @@ function QueuedMessageRow({
     drag();
   }, [drag]);
   const message = (
-    <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-      {inlineChipDisplayText(item.text)}
-    </Text>
+    <QueuedMessageContent
+      text={item.text}
+      attachments={item.attachments}
+      skillNames={skillNames}
+      numberOfLines={2}
+      style={styles.queueText}
+    />
   );
   return (
     <View style={styles.queueItem}>
@@ -1855,16 +1872,22 @@ function ComposerContentImpl({
   const skillCommandsQuery = useAgentCommandsQuery({
     serverId,
     agentId,
-    enabled:
-      Boolean(serverId) &&
-      (commandDraft === undefined ? Boolean(agentId) : skillDraftConfig !== undefined),
+    enabled: shouldListCommandsForComposer({
+      serverId,
+      agentId,
+      hasReadyDraftConfig: skillDraftConfig !== undefined,
+    }),
     draftConfig: skillDraftConfig,
   });
   const skillNames = useMemo(() => {
     const names = highlightedCommandNames(skillCommandsQuery.commands);
+    for (const command of pluginClientSlashCommands) {
+      const name = command.name.trim().replace(/^\//, "");
+      if (name.length > 0) names.push(name);
+    }
     names.sort();
     return names;
-  }, [skillCommandsQuery.commands]);
+  }, [skillCommandsQuery.commands, pluginClientSlashCommands]);
   const isComposerLocked = resolveIsComposerLocked(
     submitBehavior,
     isSubmitLoading && !isDraftCreating,
@@ -3107,6 +3130,7 @@ function ComposerContentImpl({
             {isFullscreen ? null : (
               <QueueTrack
                 queuedMessages={queuedMessages}
+                skillNames={skillNames}
                 handleEditQueuedMessage={handleEditQueuedMessage}
                 handleSendQueuedNow={handleSendQueuedNow}
                 handleReorderQueuedMessages={handleReorderQueuedMessages}

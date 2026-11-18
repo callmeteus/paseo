@@ -3,6 +3,7 @@ import { ensureAgentLoaded } from "./agent-loading.js";
 import { deleteSideChat } from "./side-chat-store.js";
 import { HUB_AUTOMATION_CHAT_INSTRUCTION } from "./tools/hub-automation-tools.js";
 import { startAgentRun } from "./agent-prompt.js";
+import { resolveCrashRecovery } from "./agent-crash-recovery.js";
 import { submittedPromptMedia } from "./prompt-attachments.js";
 import {
   CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL,
@@ -1135,6 +1136,8 @@ function detachedAgentLabelPatch(labels: Record<string, string>): AgentLabelPatc
  */
 const RETIRED_INTERNAL_AGENT_TTL_MS = 10 * 60 * 1000;
 const RETIRED_INTERNAL_AGENT_LIMIT = 500;
+/** Long enough for the turn-failure state to reach clients before the retry starts. */
+const CRASH_RECOVERY_DELAY_MS = 1_200;
 /** Skill names change on install, not per turn; a stale list costs at most one turn. */
 const SKILL_NAMES_TTL_MS = 30_000;
 
@@ -1171,6 +1174,9 @@ export class AgentManager {
   private readonly goalContinuationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly goalAutoContinueCounts = new Map<string, number>();
   private readonly goalContinuationInFlight = new Set<string>();
+  /** Bounded daemon retries for provider crashes, keyed by agent id and error. */
+  private readonly crashRecoveryAttempts = new Map<string, number>();
+  private readonly crashRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /**
    * Set right before a goal turn goes idle: the continuation is about to start,
    * so the idle edge must not emit a "finished" notification for that turn.
@@ -4082,6 +4088,11 @@ export class AgentManager {
     mutableAgent.activeForegroundTurnId = null;
     this.applyActiveTurnTerminal(mutableAgent, turnId);
     const terminalError = mutableAgent.lastError;
+    if (!terminalError) {
+      for (const key of this.crashRecoveryAttempts.keys()) {
+        if (key.startsWith(`${mutableAgent.id}:`)) this.crashRecoveryAttempts.delete(key);
+      }
+    }
     const shouldHoldBusyForReplacement = mutableAgent.pendingReplacement && !terminalError;
     let nextLifecycle: "running" | "error" | "idle";
     if (shouldHoldBusyForReplacement) {
@@ -6477,7 +6488,8 @@ export class AgentManager {
     agent.lastError = event.error;
     this.learnToolSurfaceLimit(agent, event);
     if (!options?.fromHistory) {
-      this.dropPromptForFailedTurn(agent, eventTurnId);
+      const recovering = this.scheduleCrashRecovery(agent, event, eventTurnId, options);
+      this.dropPromptForFailedTurn(agent, eventTurnId, recovering);
     }
     await this.appendSystemErrorTimelineMessage(
       agent,
@@ -6769,12 +6781,12 @@ export class AgentManager {
     return existing;
   }
 
-  /**
-   * A turn that dies before producing anything leaves the submitted prompt as
-   * dead history. Drop it and tell clients to put the text back in the composer.
-   */
-  private dropPromptForFailedTurn(agent: ActiveManagedAgent, turnId: string | undefined): void {
-    if (!this.timelineStore.has(agent.id)) return;
+  /** The last human prompt that belongs to a failed turn, if one is still in history. */
+  private findFailedTurnPrompt(
+    agent: ActiveManagedAgent,
+    turnId: string | undefined,
+  ): { index: number; clientMessageId: string; text: string } | null {
+    if (!this.timelineStore.has(agent.id)) return null;
     const rows = this.timelineStore.getRows(agent.id);
     let promptIndex = -1;
     for (let index = rows.length - 1; index >= 0; index -= 1) {
@@ -6785,32 +6797,100 @@ export class AgentManager {
       break;
     }
     const prompt = rows[promptIndex];
-    if (!prompt || prompt.item.type !== "user_message") return;
+    if (!prompt || prompt.item.type !== "user_message") return null;
     const clientMessageId = prompt.item.clientMessageId;
-    if (!clientMessageId) return;
-    // Only human prompts come back to the composer. Agent messages and schedule
-    // fires carry an envelope and must never land in a chat draft.
-    if (parseAgentMessages(prompt.item.text) || isSystemInjectedEnvelope(prompt.item.text)) return;
+    if (!clientMessageId) return null;
+    // Only human prompts come back to the composer or get re-driven. Agent messages
+    // and schedule fires carry an envelope and must never land in a chat draft.
+    if (parseAgentMessages(prompt.item.text) || isSystemInjectedEnvelope(prompt.item.text)) {
+      return null;
+    }
+    return { index: promptIndex, clientMessageId, text: prompt.item.text };
+  }
+
+  /**
+   * A turn that dies before producing anything leaves the submitted prompt as
+   * dead history. Drop it and tell clients to put the text back in the composer.
+   */
+  private dropPromptForFailedTurn(
+    agent: ActiveManagedAgent,
+    turnId: string | undefined,
+    suppressDispatch = false,
+  ): void {
+    const prompt = this.findFailedTurnPrompt(agent, turnId);
+    if (!prompt) return;
+    const rows = this.timelineStore.getRows(agent.id);
     const producedOutput = rows
-      .slice(promptIndex + 1)
+      .slice(prompt.index + 1)
       .some(
         (row) =>
           row.item.type === "assistant_message" ||
           row.item.type === "tool_call" ||
           row.item.type === "reasoning",
       );
-    if (producedOutput) return;
+    // A retry replaces this row with a fresh one, so never keep the old copy.
+    if (producedOutput && !suppressDispatch) return;
     const removed = this.timelineStore.removeRows(
       agent.id,
-      (row) => row.item.type === "user_message" && row.item.clientMessageId === clientMessageId,
+      (row) =>
+        row.item.type === "user_message" && row.item.clientMessageId === prompt.clientMessageId,
     );
-    if (removed.length === 0) return;
+    if (removed.length === 0 || suppressDispatch) return;
     this.dispatch({
       type: "prompt_dropped",
       agentId: agent.id,
-      clientMessageId,
-      text: prompt.item.text,
+      clientMessageId: prompt.clientMessageId,
+      text: prompt.text,
     });
+  }
+
+  /**
+   * A provider crash is local, so respawn the helper and re-drive the failed prompt
+   * here instead of waiting for a client to focus the chat. The run starts after the
+   * current turn-failure event has settled, which releases the foreground turn.
+   */
+  private scheduleCrashRecovery(
+    agent: ActiveManagedAgent,
+    event: { error?: string | null; code?: string | null; diagnostic?: string | null },
+    turnId: string | undefined,
+    options: { fromHistory?: boolean } | undefined,
+  ): boolean {
+    const key = `${agent.id}:${event.error ?? event.code ?? event.diagnostic ?? ""}`;
+    const decision = resolveCrashRecovery({
+      event,
+      fromHistory: options?.fromHistory === true,
+      attempts: this.crashRecoveryAttempts.get(key) ?? 0,
+    });
+    if (decision === "none") return false;
+    if (decision === "give-up") {
+      this.crashRecoveryAttempts.delete(key);
+      return false;
+    }
+    const prompt = this.findFailedTurnPrompt(agent, turnId);
+    if (!prompt) return false;
+    this.crashRecoveryAttempts.set(key, (this.crashRecoveryAttempts.get(key) ?? 0) + 1);
+    const timer = setTimeout(() => {
+      this.crashRecoveryTimers.delete(key);
+      void this.runCrashRecovery(agent.id, prompt.text, key);
+    }, CRASH_RECOVERY_DELAY_MS);
+    const previous = this.crashRecoveryTimers.get(key);
+    if (previous) clearTimeout(previous);
+    this.crashRecoveryTimers.set(key, timer);
+    return true;
+  }
+
+  private async runCrashRecovery(agentId: string, text: string, key: string): Promise<void> {
+    const agent = this.getAgent(agentId);
+    if (!agent || agent.lifecycle !== "error" || agent.activeForegroundTurnId) return;
+    try {
+      await startAgentRun(this, agentId, text, this.logger, {
+        replaceRunning: true,
+        runOptions: { clientMessageId: randomUUID(), submittedPromptText: text },
+      });
+    } catch (error) {
+      this.crashRecoveryAttempts.delete(key);
+      this.logger.warn({ agentId, err: error }, "Daemon crash recovery failed");
+    }
   }
 
   private async appendSystemErrorTimelineMessage(

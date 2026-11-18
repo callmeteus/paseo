@@ -13,7 +13,9 @@ import { createPortal } from "react-dom";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { getOverlayRoot } from "@/lib/overlay-root";
+import { getOverlayRoot, OVERLAY_Z, useWebOverlayRegistration } from "@/lib/overlay-root";
+import { formatShortcut } from "@/utils/format-shortcut";
+import { getShortcutOs } from "@/utils/shortcut-platform";
 import { createAssistantSelectionClipboardContent } from "./content.web";
 
 interface AssistantSelectionCopySurfaceProps {
@@ -34,8 +36,8 @@ interface SelectionAction {
 const DISPLAY_CONTENTS: CSSProperties = { display: "contents" };
 const ACTION_ATTRIBUTE = "data-paseo-selection-chat-action";
 const ACTION_DATASET: Record<string, string> = { paseoSelectionChatAction: "true" };
-const ACTION_WIDTH = 148;
-const ACTION_PAIR_WIDTH = 340;
+const ACTION_WIDTH = 210;
+const ACTION_PAIR_WIDTH = 460;
 const ACTION_HEIGHT = 36;
 const ACTION_GAP = 8;
 const VIEWPORT_MARGIN = 8;
@@ -47,11 +49,18 @@ export function AssistantSelectionCopySurface({
   onAddSelectionToSideChat,
 }: AssistantSelectionCopySurfaceProps) {
   const { t } = useTranslation();
+  const shortcutHint = formatShortcut(["mod", "L"], getShortcutOs());
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [action, setAction] = useState<SelectionAction | null>(null);
   const isPanelActive = useRetainedPanelActive();
   const actionCount = (onAddSelectionToChat ? 1 : 0) + (onAddSelectionToSideChat ? 1 : 0);
   const actionWidth = actionCount > 1 ? ACTION_PAIR_WIDTH : ACTION_WIDTH;
+  const addSelectionRef = useRef(onAddSelectionToChat);
+  addSelectionRef.current = onAddSelectionToChat;
+  const addSideSelectionRef = useRef(onAddSelectionToSideChat);
+  addSideSelectionRef.current = onAddSelectionToSideChat;
+  const actionRef = useRef<SelectionAction | null>(null);
+  actionRef.current = action;
 
   // Switching tabs keeps this panel mounted but hidden while the DOM selection
   // remains in it. Drop the floating action so it cannot outlive its tab.
@@ -60,6 +69,54 @@ export function AssistantSelectionCopySurface({
       setAction(null);
     }
   }, [isPanelActive]);
+
+  const clearSelection = useCallback(() => {
+    window.getSelection()?.removeAllRanges();
+    setAction(null);
+  }, []);
+  const handleAddSelection = useCallback(() => {
+    const current = actionRef.current;
+    const add = addSelectionRef.current;
+    if (!current || !add) {
+      return;
+    }
+    add(current.text);
+    clearSelection();
+  }, [clearSelection]);
+  const handleAddSelectionToSideChat = useCallback(() => {
+    const current = actionRef.current;
+    const add = addSideSelectionRef.current;
+    if (!current || !add) {
+      return;
+    }
+    add(current.text);
+    clearSelection();
+  }, [clearSelection]);
+
+  // Ctrl/Cmd+L adds the current selection to chat. The overlay gets first
+  // refusal on keys, so this wins over the global "Focus message input" binding
+  // only while a selection action is actually showing.
+  const handleShortcutKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.isComposing || event.key === "Process") return false;
+      const isMac = getShortcutOs() === "mac";
+      const modifiersMatch = isMac
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+      if (!modifiersMatch || event.altKey || event.shiftKey) return false;
+      if (event.key.toLowerCase() !== "l") return false;
+      if (!actionRef.current || !addSelectionRef.current) return false;
+      handleAddSelection();
+      return true;
+    },
+    [handleAddSelection],
+  );
+  const setOverlayScope = useWebOverlayRegistration({
+    active: action !== null,
+    layer: OVERLAY_Z.tooltip + 1,
+    onKeyDown: handleShortcutKeyDown,
+    manageFocus: false,
+  });
 
   const handleCopy = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     const content = createAssistantSelectionClipboardContent(window.getSelection());
@@ -151,26 +208,7 @@ export function AssistantSelectionCopySurface({
       window.removeEventListener("blur", clear);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [actionCount, actionWidth, onAddSelectionToChat]);
-
-  const clearSelection = useCallback(() => {
-    window.getSelection()?.removeAllRanges();
-    setAction(null);
-  }, []);
-  const handleAddSelection = useCallback(() => {
-    if (!action || !onAddSelectionToChat) {
-      return;
-    }
-    onAddSelectionToChat(action.text);
-    clearSelection();
-  }, [action, clearSelection, onAddSelectionToChat]);
-  const handleAddSelectionToSideChat = useCallback(() => {
-    if (!action || !onAddSelectionToSideChat) {
-      return;
-    }
-    onAddSelectionToSideChat(action.text);
-    clearSelection();
-  }, [action, clearSelection, onAddSelectionToSideChat]);
+  }, [actionCount, actionWidth]);
 
   return (
     <div ref={rootRef} onCopy={handleCopy} style={DISPLAY_CONTENTS}>
@@ -178,6 +216,7 @@ export function AssistantSelectionCopySurface({
       {action && actionCount > 0
         ? createPortal(
             <View
+              ref={setOverlayScope}
               pointerEvents="box-none"
               dataSet={ACTION_DATASET}
               style={[
@@ -196,7 +235,7 @@ export function AssistantSelectionCopySurface({
                   accessibilityLabel={t("agentStream.addSelectionToChat")}
                   testID="add-selection-to-chat"
                 >
-                  {t("agentStream.addSelectionToChat")}
+                  {`${t("agentStream.addSelectionToChat")}  ${shortcutHint}`}
                 </Button>
               ) : null}
               {onAddSelectionToSideChat ? (

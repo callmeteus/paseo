@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import { router, usePathname, useRootNavigationState, type Href } from "expo-router";
+import { focusHostTab } from "@/navigation/host-tab-navigation";
 import { useHostRegistryStatus } from "@/runtime/host-runtime";
 import {
   navigateToWorkspace,
   useIsLastWorkspaceSelectionHydrated,
 } from "@/stores/navigation-active-workspace-store";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { parseServerIdFromPathname } from "@/utils/host-routes";
 import { createNotificationOpenRouter } from "../model";
 import { createNotificationOpenSource } from "../source";
 
@@ -13,14 +15,23 @@ let ready = false;
 const waiters = new Set<() => void>();
 const notificationRouter = createNotificationOpenRouter({
   source: createNotificationOpenSource(),
-  openAgent: (target) => navigateToAgent({ ...target, pin: true }),
-  openTerminal: ({ serverId, workspaceId, terminalId }) =>
+  openAgent: (target) => {
+    focusHostTab(target.serverId);
+    navigateToAgent({ ...target, pin: true });
+  },
+  openTerminal: ({ serverId, workspaceId, terminalId }) => {
+    focusHostTab(serverId);
     navigateToWorkspace({
       serverId,
       workspaceId,
       target: { kind: "terminal", terminalId },
-    }),
-  openRoute: (route) => router.navigate(route as Href),
+    });
+  },
+  openRoute: (route) => {
+    const serverId = parseServerIdFromPathname(route);
+    if (serverId) focusHostTab(serverId);
+    router.navigate(route as Href);
+  },
   whenReadyToNavigate: () =>
     ready
       ? Promise.resolve()

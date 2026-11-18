@@ -3020,9 +3020,9 @@ export const ru: TranslationResources = {
       fonts: {
         title: "Шрифты",
         systemDefault: "Системный шрифт",
+        searchPlaceholder: "Поиск шрифтов",
         interfaceFont: "Шрифт интерфейса",
-        interfaceFontHint:
-          "Используется во всём приложении. Оставьте поле пустым, чтобы использовать системный шрифт.",
+        interfaceFontHint: "Используется во всём приложении.",
         interfaceFontAccessibility: "Семейство интерфейсных шрифтов",
         interfaceSize: "Размер интерфейса",
         interfaceSizeHint: "Используется для навигации, элементов управления и подписей",
@@ -3031,8 +3031,7 @@ export const ru: TranslationResources = {
         contentSizeHint: "Используется для текста чата и отображаемого Markdown",
         contentSizeAccessibility: "Размер шрифта содержимого",
         codeFont: "Шрифт кода",
-        codeFontHint:
-          "Используется для кода, диффов и вывода терминала. Оставьте поле пустым, чтобы использовать системный шрифт.",
+        codeFontHint: "Используется для кода, диффов и вывода терминала.",
         codeFontAccessibility: "Семейство шрифтов кода",
         codeSize: "Размер кода",
         codeSizeHint: "Используется для кода, диффов и вывода терминала",
