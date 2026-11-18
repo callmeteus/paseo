@@ -56,6 +56,7 @@ interface DraftStoreActions {
   }) => Promise<void>;
   attachQuote: (input: { draftKey: string; text: string }) => Promise<void>;
   requestAttachmentFocus: (input: { draftKey: string }) => void;
+  requestTextReplacement: (input: { draftKey: string }) => void;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
   collectActiveAttachmentIds: () => string[];
@@ -63,6 +64,7 @@ interface DraftStoreActions {
 
 interface DraftStoreRuntimeState {
   attachmentFocusRequestByDraftKey: Record<string, number>;
+  textReplacementRequestByDraftKey: Record<string, number>;
 }
 
 type DraftStore = DraftStoreState & DraftStoreRuntimeState & DraftStoreActions;
@@ -270,6 +272,7 @@ export const useDraftStore = create<DraftStore>()(
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+      textReplacementRequestByDraftKey: {},
 
       getDraftInput: (draftKey) => {
         const record = get().drafts[draftKey];
@@ -393,6 +396,15 @@ export const useDraftStore = create<DraftStore>()(
           attachmentFocusRequestByDraftKey: {
             ...state.attachmentFocusRequestByDraftKey,
             [draftKey]: (state.attachmentFocusRequestByDraftKey[draftKey] ?? 0) + 1,
+          },
+        }));
+      },
+
+      requestTextReplacement: ({ draftKey }) => {
+        set((state) => ({
+          textReplacementRequestByDraftKey: {
+            ...state.textReplacementRequestByDraftKey,
+            [draftKey]: (state.textReplacementRequestByDraftKey[draftKey] ?? 0) + 1,
           },
         }));
       },

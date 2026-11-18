@@ -151,6 +151,7 @@ describe("useAgentInputDraft live contract", () => {
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+      textReplacementRequestByDraftKey: {},
     });
   });
 
@@ -612,5 +613,41 @@ describe("useAgentInputDraft live contract", () => {
       lifecycle: "abandoned",
       input: { text: "", attachments: [] },
     });
+  });
+
+  it("publishes a replacement when another panel edits the draft text", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function getLatest(): ReturnType<typeof useAgentInputDraft> {
+      if (!latest) throw new Error("Expected hook result");
+      return latest;
+    }
+    function Probe() {
+      latest = useAgentInputDraft({ draftKey: "draft:external" });
+      return null;
+    }
+
+    const queryClient = new QueryClient();
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createTestRoot(container);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+
+    const before = getLatest().textReplacement;
+    await act(async () => {
+      useDraftStore.getState().editDraftText({ draftKey: "draft:external", text: "from file" });
+      useDraftStore.getState().requestTextReplacement({ draftKey: "draft:external" });
+    });
+
+    expect(getLatest().textReplacement).not.toBe(before);
+    expect(getLatest().textReplacement.kind).toBe("replace");
+    expect(getLatest().textReplacement.text).toBe("from file");
+
+    await act(async () => root.unmount());
   });
 });

@@ -35,6 +35,7 @@ import {
   useComposerFullscreen,
   type ComposerEditingSession,
 } from "@/composer/editing-session";
+import { insertSelectionAsInlineChip } from "@/composer/selection-inline-chip";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import {
   resolveComposerTrackControlClearance,
@@ -1209,10 +1210,18 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   );
   const handleAddSelectionToChat = useCallback(
     (selection: string) => {
-      setAttachments((current) => [...current, { kind: "quote", text: selection }]);
-      requestAttachmentFocus();
+      const next = insertSelectionAsInlineChip({
+        currentText: textSource.getSnapshot(),
+        selectionText: selection,
+        labels: {
+          pastedWord: t("composer.inlineChip.pastedWord"),
+          lineOne: t("composer.inlineChip.line_one"),
+          lineOther: t("composer.inlineChip.line_other"),
+        },
+      });
+      replaceText(next.text);
     },
-    [requestAttachmentFocus, setAttachments],
+    [textSource, replaceText, t],
   );
   const parentCallout = parentAgentId ? (
     <ParentAgentCallout serverId={serverId} parentAgentId={parentAgentId} />
