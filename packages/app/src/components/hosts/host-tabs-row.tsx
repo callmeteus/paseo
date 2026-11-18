@@ -66,6 +66,7 @@ export function HostTabsRow({
     <ScrollView
       horizontal
       testID="host-tabs-row"
+      style={styles.scrollView}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
       keyboardShouldPersistTaps="handled"
@@ -163,20 +164,27 @@ function countTextStyle(bucket: SidebarStateBucket | null): {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // A fixed height keeps the rail from stretching to fill the column it sits in.
+  scrollView: {
+    height: 32,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
   },
   chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
-    height: 28,
+    height: 24,
     maxWidth: 160,
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.surface0,
   },
   chipActive: {
@@ -199,10 +207,10 @@ const styles = StyleSheet.create((theme) => ({
   countBadge: {
     minWidth: 16,
     height: 16,
-    paddingHorizontal: 2,
+    paddingHorizontal: theme.spacing[1],
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.borderRadius.sm,
+    borderRadius: theme.borderRadius.full,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.foregroundMuted,
     flexShrink: 0,

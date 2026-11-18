@@ -49,6 +49,7 @@ import { ProviderSettingsHost } from "@/components/provider-settings-host";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
+import { HostTabsRail } from "@/components/hosts/host-tabs-rail";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
 import { HostConfirmationSheet } from "@/hosts/host-confirmation-sheet";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
@@ -471,6 +472,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   // Their tracked styles update in place; web numeric styles still need remounting.
   const surface = (
     <View style={layoutStyles.surfaceFill}>
+      <HostTabsRail />
       {workspaceChrome}
       <AppearanceStyleBoundary>
         {!isCompactLayout && appChromeLayout.sidebarToggleOwner === "window" ? (
