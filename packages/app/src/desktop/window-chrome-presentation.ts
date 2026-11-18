@@ -1,5 +1,6 @@
 import { DESKTOP_WINDOW_CONTROLS_HEIGHT } from "@/constants/layout";
 import type { DesktopWindowChromeMode } from "@/desktop/host";
+import { BORDER_WIDTH } from "@/styles/theme";
 
 export type CustomDesktopWindowChromeMode = Extract<
   DesktopWindowChromeMode,
@@ -47,4 +48,16 @@ export function getDesktopWindowControlsPresentation(
 
 export function getDesktopWindowControlsWidth(mode: CustomDesktopWindowChromeMode): number {
   return getDesktopWindowControlsPresentation(mode).controlWidth * 3;
+}
+
+/**
+ * Full height hides the rule of whichever header the buttons sit on. The host
+ * tab rail is that header, and its rule has to keep running under the buttons.
+ */
+export function desktopWindowControlsHeight(input: {
+  controlHeight: number;
+  hostTabsRailVisible: boolean;
+}): number {
+  if (!input.hostTabsRailVisible) return input.controlHeight;
+  return input.controlHeight - BORDER_WIDTH[1];
 }

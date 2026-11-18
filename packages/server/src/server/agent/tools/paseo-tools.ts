@@ -14,7 +14,8 @@ import type { RemoteAccessCapability } from "@getpaseo/protocol/remote-access";
 import { hasRemoteToolsConfigured, registerRemoteTools } from "./remote-tools.js";
 import { AgentDirectory } from "../directory.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, relative } from "node:path";
+import { dirname } from "node:path";
+import { PlanPathError, resolvePlanFile } from "../plan-files.js";
 import { z } from "zod";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
@@ -633,10 +634,6 @@ function resolveTerminalKeyToken({ key, literal, preamble }: TerminalKeyTokenInp
   );
 }
 
-function ensureMarkdownPath(path: string): string {
-  return /\.(md|markdown)$/i.test(path) ? path : `${path}.md`;
-}
-
 function multitaskFailureResult(failure: Extract<MultitaskLaunchResult, { ok: false }>) {
   return {
     isError: true,
@@ -748,8 +745,8 @@ function createToolCatalog(
     if (!options.finishSubscriptions) throw new Error("Finish subscriptions are not configured");
     return options.finishSubscriptions();
   }
-  /** Resolves a workspace-relative plan path and proves the file stays in the workspace. */
-  async function resolveWorkspacePlan(requestedPath: string, toolName: string) {
+  /** Resolves a plan name to its file under `$PASEO_HOME/plans/{workspaceId}`. */
+  function resolveWorkspacePlan(requestedPath: string, toolName: string) {
     if (!callerAgentId) {
       throw new PaseoToolInputError(`${toolName} requires an agent caller`);
     }
@@ -761,20 +758,23 @@ function createToolCatalog(
     if (!workspaceId) {
       throw new PaseoToolInputError("Caller agent has no workspace");
     }
-    const workspace = options.workspaceRegistry
-      ? await options.workspaceRegistry.get(workspaceId)
-      : null;
-    const workspaceRoot = workspace?.cwd ?? caller.cwd;
-    const absolutePath = ensureMarkdownPath(resolvePathFromBase(workspaceRoot, requestedPath));
-    if (!isSameOrDescendantPath(workspaceRoot, absolutePath)) {
-      throw new PaseoToolInputError("Plan path must stay inside the workspace");
+    const paseoHome = options.paseoHome;
+    if (!paseoHome) {
+      throw new PaseoToolInputError("Paseo home is not configured");
+    }
+    let plan: ReturnType<typeof resolvePlanFile>;
+    try {
+      plan = resolvePlanFile({ paseoHome, workspaceId, requestedPath });
+    } catch (error) {
+      if (error instanceof PlanPathError) throw new PaseoToolInputError(error.message);
+      throw error;
     }
     return {
       agentId: callerAgentId,
       workspaceId,
-      absolutePath,
-      planPath: relative(workspaceRoot, absolutePath).replace(/\\/g, "/"),
-      planTitle: basename(absolutePath, extname(absolutePath)),
+      absolutePath: plan.absolutePath,
+      planPath: plan.absolutePath,
+      planTitle: plan.title,
     };
   }
   async function prepareRemoteNotification(
@@ -2804,9 +2804,14 @@ function createToolCatalog(
     {
       title: "Create or update plan",
       description:
-        'Create or update a markdown plan and open it in the workspace sidebar. Pass a workspace-relative path such as plans/feature.md. The content must include a "## Checklist" section of markdown checkboxes; check items off as they are completed so the task list tracks progress.',
+        'Create or update a markdown plan and open it in the workspace sidebar. Pass a file name such as feature-name.md. Paseo stores the file in its home directory, outside the workspace. The content must include a "## Checklist" section of markdown checkboxes; check items off as they are completed so the task list tracks progress.',
       inputSchema: {
-        path: z.string().min(1).describe("Markdown plan path, relative to the workspace."),
+        path: z
+          .string()
+          .min(1)
+          .describe(
+            "Plan file name, such as feature-name.md. To update a plan, pass the path returned by an earlier plan_create_update.",
+          ),
         title: z.string().optional().describe("Plan title shown in the sidebar."),
         content: z
           .string()
@@ -2861,10 +2866,7 @@ function createToolCatalog(
       description:
         "Start executing a plan the user asked to build, approve, or implement. Switches this agent to Agent workflow mode, queues the build to start as soon as this turn ends, and marks the plan as building in the sidebar. Call it instead of asking the user to switch modes. While building, check items off in the plan with plan_create_update as they are verified.",
       inputSchema: {
-        path: z
-          .string()
-          .min(1)
-          .describe("Workspace-relative plan path, as returned by plan_create_update."),
+        path: z.string().min(1).describe("Plan path returned by plan_create_update."),
       },
       outputSchema: {
         path: z.string(),

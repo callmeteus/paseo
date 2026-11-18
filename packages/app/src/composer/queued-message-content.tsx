@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useRef, useState, type ComponentRef } from "react";
+import { useCallback, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { Text, View, type StyleProp, type TextStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { parseInlineParts, type InlineChip } from "@getpaseo/protocol/inline-chip";
 import type { Rect } from "@/components/ui/anchor";
-import { AttachmentThumbnail } from "@/components/attachment-pill";
+import { AttachmentFrame, AttachmentThumbnail } from "@/components/attachment-pill";
 import { isWeb } from "@/constants/platform";
 import type { ComposerAttachment } from "@/attachments/types";
 import { ComposerMirrorText } from "./composer-mirror-text";
@@ -21,12 +21,14 @@ export function QueuedMessageContent({
   text,
   attachments,
   skillNames,
+  onOpenAttachment,
   numberOfLines = 2,
   style,
 }: {
   text: string;
   attachments: readonly ComposerAttachment[];
   skillNames: readonly string[];
+  onOpenAttachment: (attachment: ComposerAttachment) => void;
   numberOfLines?: number;
   style?: StyleProp<TextStyle>;
 }) {
@@ -45,6 +47,7 @@ export function QueuedMessageContent({
     [attachments],
   );
   const others = attachments.length - images.length;
+  const openImageLabel = t("composer.attachments.openImage");
   const handleOpen = useCallback((chip: InlineChip, anchor: Rect) => setOpen({ chip, anchor }), []);
   const handleClose = useCallback(() => setOpen(null), []);
 
@@ -54,9 +57,14 @@ export function QueuedMessageContent({
         <View style={styles.attachments}>
           {images.map((attachment) =>
             attachment.kind === "image" ? (
-              <View key={attachment.metadata.id} style={styles.thumbnail}>
+              <QueuedAttachmentButton
+                key={attachment.metadata.id}
+                attachment={attachment}
+                label={attachment.metadata.fileName || openImageLabel}
+                onOpen={onOpenAttachment}
+              >
                 <AttachmentThumbnail metadata={attachment.metadata} />
-              </View>
+              </QueuedAttachmentButton>
             ) : null,
           )}
           {others > 0 ? <Text style={styles.attachmentCount}>+{others}</Text> : null}
@@ -87,6 +95,34 @@ export function QueuedMessageContent({
       ) : null}
     </View>
   );
+}
+
+function QueuedAttachmentButton({
+  attachment,
+  label,
+  onOpen,
+  children,
+}: {
+  attachment: ComposerAttachment;
+  label: string;
+  onOpen: (attachment: ComposerAttachment) => void;
+  children: ReactNode;
+}) {
+  const handlePress = useCallback(() => {
+    onOpen(attachment);
+  }, [attachment, onOpen]);
+  return (
+    <View style={styles.thumbnail} {...(isWeb ? { onPointerDown: stopQueueDrag } : {})}>
+      <AttachmentFrame onPress={handlePress} accessibilityLabel={label} testID="queued-attachment">
+        {children}
+      </AttachmentFrame>
+    </View>
+  );
+}
+
+function stopQueueDrag(event: { stopPropagation: () => void }): void {
+  // The message text is the drag handle. A press on the thumbnail has to stay a click.
+  event.stopPropagation();
 }
 
 function QueuedChipSpan({
@@ -151,6 +187,7 @@ const styles = StyleSheet.create((theme) => ({
     height: 28,
     borderRadius: theme.borderRadius.sm,
     overflow: "hidden",
+    ...(isWeb ? { cursor: "pointer" as const } : {}),
   },
   attachmentCount: {
     color: theme.colors.foregroundMuted,

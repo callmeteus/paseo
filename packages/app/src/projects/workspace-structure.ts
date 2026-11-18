@@ -30,7 +30,16 @@ interface WorkspaceStructureSession {
   workspaces: Iterable<WorkspaceDescriptor>;
 }
 
-export type WorkspaceSort = "manual" | "created" | "lastPrompt";
+export type WorkspaceSort = "manual" | "title" | "updated" | "created" | "lastPrompt";
+
+/** The clocks that move a workspace under Last update. Status changes are not one of them. */
+export interface WorkspaceActivityAgent {
+  id: string;
+  workspaceId?: string;
+  updatedAt: Date;
+  lastUserMessageAt: Date | null;
+  lastActivityAt: Date;
+}
 
 interface WorkspaceSortItem {
   workspaceName: string;
@@ -53,6 +62,7 @@ interface ProjectDraft {
 export function buildWorkspaceStructureProjects(input: {
   sessions: WorkspaceStructureSession[];
   workspaceSort?: WorkspaceSort;
+  activityAtByWorkspaceKey?: ReadonlyMap<string, number>;
 }): WorkspaceStructureProject[] {
   const byProject = new Map<string, ProjectDraft>();
   const projectEntries: Array<{ serverId: string; project: ProjectDescriptor }> = [];
@@ -92,10 +102,15 @@ export function buildWorkspaceStructureProjects(input: {
     for (const workspace of session.workspaces) {
       const viewKey = viewKeyByServerProjectId.get(session.serverId)?.get(workspace.projectId);
       if (!viewKey) continue;
+      const workspaceKey = `${session.serverId}:${workspace.id}`;
       byProject.get(viewKey)?.workspaces.push({
-        sortTime: workspaceSortTime(workspace, input.workspaceSort),
+        sortTime: workspaceSortTime(
+          workspace,
+          input.workspaceSort,
+          input.activityAtByWorkspaceKey?.get(workspaceKey) ?? 0,
+        ),
         workspaceName: workspace.name,
-        workspaceKey: `${session.serverId}:${workspace.id}`,
+        workspaceKey,
       });
     }
   }
@@ -109,7 +124,7 @@ export function buildWorkspaceStructureProjects(input: {
       iconWorkingDir: draft.iconWorkingDir,
       hosts: Array.from(draft.hosts.values()),
       workspaceKeys: draft.workspaces
-        .sort(input.workspaceSort ? compareWorkspaceTimes : compareWorkspaceStructureItems)
+        .sort(workspaceSortComparator(input.workspaceSort))
         .map((workspace) => workspace.workspaceKey),
     }))
     .sort(
@@ -214,16 +229,56 @@ function compareWorkspaceStructureItems(left: WorkspaceSortItem, right: Workspac
   );
 }
 
+function workspaceSortComparator(
+  sort: WorkspaceSort | undefined,
+): (left: WorkspaceSortItem, right: WorkspaceSortItem) => number {
+  if (!sort || sort === "title") return compareWorkspaceStructureItems;
+  return compareWorkspaceTimes;
+}
+
+export function indexWorkspaceActivityAt(input: {
+  serverId: string;
+  agents: Iterable<WorkspaceActivityAgent>;
+  liveActivity?: ReadonlyMap<string, Date>;
+}): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const agent of input.agents) {
+    const workspaceId = agent.workspaceId;
+    if (!workspaceId) continue;
+    const key = `${input.serverId}:${workspaceId}`;
+    const at = latestMs(
+      input.liveActivity?.get(agent.id),
+      agent.lastActivityAt,
+      agent.updatedAt,
+      agent.lastUserMessageAt,
+    );
+    const previous = index.get(key) ?? 0;
+    if (at > previous) index.set(key, at);
+  }
+  return index;
+}
+
+function latestMs(...stamps: Array<Date | number | null | undefined>): number {
+  let max = 0;
+  for (const stamp of stamps) {
+    const ms = typeof stamp === "number" ? stamp : (stamp?.getTime() ?? 0);
+    if (ms > max) max = ms;
+  }
+  return max;
+}
+
 function workspaceSortTime(
   workspace: WorkspaceDescriptor,
   sort: WorkspaceSort | undefined,
+  activityAt: number,
 ): number {
-  if (!sort) return 0;
-  const time =
-    sort === "lastPrompt"
-      ? (workspace.lastUserMessageAt ?? workspace.createdAt)
-      : workspace.createdAt;
-  return time?.getTime() ?? 0;
+  if (sort === "lastPrompt") {
+    return workspace.lastUserMessageAt?.getTime() ?? workspace.createdAt?.getTime() ?? 0;
+  }
+  if (sort === "updated") {
+    return latestMs(activityAt, workspace.lastUserMessageAt, workspace.createdAt);
+  }
+  return workspace.createdAt?.getTime() ?? 0;
 }
 
 function compareWorkspaceTimes(left: WorkspaceSortItem, right: WorkspaceSortItem): number {

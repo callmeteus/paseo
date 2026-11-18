@@ -317,6 +317,11 @@ it("retains the manual sorting preference on reload", () => {
   expect(migrateSidebarViewState({ workspaceSort: "manual" }).workspaceSort).toBe("manual");
 });
 
+it("retains title and last-update sorting on reload", () => {
+  expect(migrateSidebarViewState({ workspaceSort: "title" }).workspaceSort).toBe("title");
+  expect(migrateSidebarViewState({ workspaceSort: "updated" }).workspaceSort).toBe("updated");
+});
+
 it("persists the optional host grouping mode", () => {
   expect(migrateSidebarViewState({ groupMode: "host" }).groupMode).toBe("host");
 });

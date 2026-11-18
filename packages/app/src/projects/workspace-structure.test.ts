@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { ProjectDescriptor, WorkspaceDescriptor } from "@/stores/session-store";
-import { buildWorkspaceStructureProjects, createProjectViewKey } from "./workspace-structure";
+import {
+  buildWorkspaceStructureProjects,
+  createProjectViewKey,
+  indexWorkspaceActivityAt,
+} from "./workspace-structure";
 
 function project(input: {
   id: string;
@@ -207,6 +211,70 @@ test("sorts by creation or human prompt without changing picker name order", () 
     "host:old",
     "host:fresh",
   ]);
+});
+
+test("sorts titles alphabetically and last update by the newest activity clock", () => {
+  const zed = {
+    ...workspace("zed", "p", "/p"),
+    name: "Zed",
+    createdAt: new Date("2026-01-01"),
+    lastUserMessageAt: null,
+    statusEnteredAt: new Date("2026-12-01"),
+  };
+  const alpha = {
+    ...workspace("alpha", "p", "/p"),
+    name: "Alpha",
+    createdAt: new Date("2026-02-01"),
+    lastUserMessageAt: null,
+    statusEnteredAt: new Date("2026-01-01"),
+  };
+  const sessions = [
+    {
+      serverId: "host",
+      projects: [project({ id: "p", key: "p", root: "/p" })],
+      workspaces: [zed, alpha],
+    },
+  ];
+  expect(
+    buildWorkspaceStructureProjects({ sessions, workspaceSort: "title" })[0].workspaceKeys,
+  ).toEqual(["host:alpha", "host:zed"]);
+  expect(
+    buildWorkspaceStructureProjects({ sessions, workspaceSort: "updated" })[0].workspaceKeys,
+  ).toEqual(["host:alpha", "host:zed"]);
+
+  const activityAtByWorkspaceKey = indexWorkspaceActivityAt({
+    serverId: "host",
+    agents: [
+      {
+        id: "quiet",
+        workspaceId: "zed",
+        updatedAt: new Date("2026-02-01"),
+        lastActivityAt: new Date("2026-02-01"),
+        lastUserMessageAt: null,
+      },
+      {
+        id: "busy",
+        workspaceId: "alpha",
+        updatedAt: new Date("2026-03-01"),
+        lastActivityAt: new Date("2026-03-01"),
+        lastUserMessageAt: new Date("2026-05-01"),
+      },
+      {
+        id: "unplaced",
+        updatedAt: new Date("2026-07-01"),
+        lastActivityAt: new Date("2026-07-01"),
+        lastUserMessageAt: null,
+      },
+    ],
+    liveActivity: new Map([["quiet", new Date("2026-08-01")]]),
+  });
+  expect(
+    buildWorkspaceStructureProjects({
+      sessions,
+      workspaceSort: "updated",
+      activityAtByWorkspaceKey,
+    })[0].workspaceKeys,
+  ).toEqual(["host:zed", "host:alpha"]);
 });
 
 test("time ties use workspace identity so renaming cannot move Created rows", () => {

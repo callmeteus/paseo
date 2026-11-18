@@ -39,6 +39,7 @@ import {
   ArrowUp,
   Square,
   Pencil,
+  Trash2,
   AudioLines,
   CircleDot,
   FileText,
@@ -90,6 +91,7 @@ import {
   cancelComposerAgent,
   dispatchComposerAgentMessage,
   editQueuedComposerMessage,
+  removeQueuedComposerMessage,
   findForgeItemByOption,
   isAttachmentSelectedForForgeItem,
   openComposerAttachment,
@@ -524,9 +526,12 @@ interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
   skillNames: readonly string[];
   handleEditQueuedMessage: (id: string) => void;
+  handleDeleteQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
+  handleOpenAttachment: (attachment: ComposerAttachment) => void;
   handleReorderQueuedMessages: (items: QueuedMessage[]) => void;
   editLabel: string;
+  deleteLabel: string;
   sendNowLabel: string;
   reorderLabel: string;
 }
@@ -541,9 +546,12 @@ const QueueTrack = memo(function QueueTrack({
   queuedMessages,
   skillNames,
   handleEditQueuedMessage,
+  handleDeleteQueuedMessage,
   handleSendQueuedNow,
+  handleOpenAttachment,
   handleReorderQueuedMessages,
   editLabel,
+  deleteLabel,
   sendNowLabel,
   reorderLabel,
 }: RenderQueueTrackArgs) {
@@ -554,8 +562,11 @@ const QueueTrack = memo(function QueueTrack({
         item={item}
         skillNames={skillNames}
         onEdit={handleEditQueuedMessage}
+        onDelete={handleDeleteQueuedMessage}
         onSendNow={handleSendQueuedNow}
+        onOpenAttachment={handleOpenAttachment}
         editLabel={editLabel}
+        deleteLabel={deleteLabel}
         sendNowLabel={sendNowLabel}
         reorderLabel={reorderLabel}
         drag={drag}
@@ -563,8 +574,11 @@ const QueueTrack = memo(function QueueTrack({
       />
     ),
     [
+      deleteLabel,
       editLabel,
+      handleDeleteQueuedMessage,
       handleEditQueuedMessage,
+      handleOpenAttachment,
       handleSendQueuedNow,
       reorderLabel,
       sendNowLabel,
@@ -864,8 +878,11 @@ interface QueuedMessageRowProps {
   item: QueuedMessage;
   skillNames: readonly string[];
   onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
   onSendNow: (id: string) => void;
+  onOpenAttachment: (attachment: ComposerAttachment) => void;
   editLabel: string;
+  deleteLabel: string;
   sendNowLabel: string;
   reorderLabel: string;
   drag: () => void;
@@ -876,8 +893,11 @@ function QueuedMessageRow({
   item,
   skillNames,
   onEdit,
+  onDelete,
   onSendNow,
+  onOpenAttachment,
   editLabel,
+  deleteLabel,
   sendNowLabel,
   reorderLabel,
   drag,
@@ -886,6 +906,9 @@ function QueuedMessageRow({
   const handleEdit = useCallback(() => {
     onEdit(item.id);
   }, [onEdit, item.id]);
+  const handleDelete = useCallback(() => {
+    onDelete(item.id);
+  }, [onDelete, item.id]);
   const handleSendNow = useCallback(() => {
     onSendNow(item.id);
   }, [onSendNow, item.id]);
@@ -896,6 +919,7 @@ function QueuedMessageRow({
     <QueuedMessageContent
       text={item.text}
       attachments={item.attachments}
+      onOpenAttachment={onOpenAttachment}
       skillNames={skillNames}
       numberOfLines={2}
       style={styles.queueText}
@@ -931,6 +955,14 @@ function QueuedMessageRow({
           accessibilityRole="button"
         >
           <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+        </Pressable>
+        <Pressable
+          onPress={handleDelete}
+          style={styles.queueActionButton}
+          accessibilityLabel={deleteLabel}
+          accessibilityRole="button"
+        >
+          <ThemedTrash size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
         </Pressable>
         <Pressable
           onPress={handleSendNow}
@@ -2539,6 +2571,17 @@ function ComposerContentImpl({
     });
   }, [agentId, hasAgent, isConnected, serverId, voice]);
 
+  const handleDeleteQueuedMessage = useCallback(
+    (id: string) => {
+      removeQueuedComposerMessage({
+        agentId,
+        messageId: id,
+        queue: queueWriter,
+      });
+    },
+    [agentId, queueWriter],
+  );
+
   const handleEditQueuedMessage = useCallback(
     (id: string) => {
       const result = editQueuedComposerMessage({
@@ -3132,9 +3175,12 @@ function ComposerContentImpl({
                 queuedMessages={queuedMessages}
                 skillNames={skillNames}
                 handleEditQueuedMessage={handleEditQueuedMessage}
+                handleDeleteQueuedMessage={handleDeleteQueuedMessage}
                 handleSendQueuedNow={handleSendQueuedNow}
+                handleOpenAttachment={handleOpenAttachment}
                 handleReorderQueuedMessages={handleReorderQueuedMessages}
                 editLabel={t("composer.attachments.editQueuedMessage")}
+                deleteLabel={t("composer.attachments.deleteQueuedMessage")}
                 sendNowLabel={t("composer.attachments.sendQueuedMessageNow")}
                 reorderLabel={t("composer.attachments.reorderQueuedMessage")}
               />
@@ -3511,6 +3557,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
 
 const ThemedAttachmentSpinner = withUnistyles(LoadingSpinner);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedTrash = withUnistyles(Trash2);
 const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);
 const ThemedCircleDot = withUnistyles(CircleDot);

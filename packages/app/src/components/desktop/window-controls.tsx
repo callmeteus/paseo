@@ -9,9 +9,13 @@ import {
   toggleDesktopMaximize,
 } from "@/desktop/electron/window";
 import {
+  desktopWindowControlsHeight,
   getDesktopWindowControlsPresentation,
   type DesktopWindowControlsPresentation,
 } from "@/desktop/window-chrome-presentation";
+import { isHostTabsRailVisible } from "@/components/hosts/host-tabs-rail";
+import { useHosts } from "@/runtime/host-runtime";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { useCustomDesktopWindowControls } from "@/utils/desktop-window";
 import type { Theme } from "@/styles/theme";
 
@@ -135,17 +139,22 @@ function WindowControl({
 export function DesktopWindowControls() {
   const { t } = useTranslation();
   const { visible, mode, isMaximized } = useCustomDesktopWindowControls();
+  const hostTabsRailVisible = isHostTabsRailVisible({
+    groupMode: useSidebarViewStore((state) => state.groupMode),
+    hostCount: useHosts().length,
+  });
   const minimize = useCallback(() => void minimizeDesktopWindow(), []);
   const toggleMaximize = useCallback(() => void toggleDesktopMaximize(), []);
   const close = useCallback(() => void closeDesktopWindow(), []);
   if (!visible || !mode) return null;
   const presentation = getDesktopWindowControlsPresentation(mode);
+  const controlsHeight = desktopWindowControlsHeight({
+    controlHeight: presentation.controlHeight,
+    hostTabsRailVisible,
+  });
 
   return (
-    <View
-      style={[styles.controls, { height: presentation.controlHeight }]}
-      testID="desktop-window-controls"
-    >
+    <View style={[styles.controls, { height: controlsHeight }]} testID="desktop-window-controls">
       <WindowControl
         kind="minimize"
         label={t("desktop.windowControls.minimize")}

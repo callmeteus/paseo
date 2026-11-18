@@ -2,18 +2,20 @@ import equal from "fast-deep-equal";
 import { applyStoredOrdering } from "@/hooks/sidebar-workspaces-view-model";
 import {
   buildWorkspaceStructureProjects,
+  indexWorkspaceActivityAt,
   type WorkspaceSort,
   type WorkspaceStructure,
   type WorkspaceStructureProject,
 } from "@/projects/workspace-structure";
 import type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
-import type { ProjectDescriptor, WorkspaceDescriptor } from "../session-store";
+import type { Agent, ProjectDescriptor, WorkspaceDescriptor } from "../session-store";
 
 export type { DesktopBadgeWorkspaceStatus } from "@/utils/desktop-badge-state";
 export type { WorkspaceStructure, WorkspaceStructureProject } from "@/projects/workspace-structure";
 
 export interface SessionsSnapshot {
+  agentLastActivity?: ReadonlyMap<string, Date>;
   sessions: Record<
     string,
     {
@@ -21,6 +23,7 @@ export interface SessionsSnapshot {
       hasWorkspaceDirectorySnapshot?: boolean;
       workspaces: Map<string, WorkspaceDescriptor>;
       projects?: Map<string, ProjectDescriptor>;
+      agents?: ReadonlyMap<string, Agent>;
     }
   >;
 }
@@ -134,7 +137,32 @@ export function selectWorkspaceStructureProjects(
     return EMPTY_WORKSPACE_STRUCTURE.projects;
   }
 
-  return buildWorkspaceStructureProjects({ sessions, workspaceSort });
+  return buildWorkspaceStructureProjects({
+    sessions,
+    workspaceSort,
+    activityAtByWorkspaceKey:
+      workspaceSort === "updated" ? activityAtByWorkspaceKey(state, serverIds) : undefined,
+  });
+}
+
+function activityAtByWorkspaceKey(
+  state: SessionsSnapshot,
+  serverIds: readonly string[],
+): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const serverId of serverIds) {
+    const agents = state.sessions[serverId]?.agents;
+    if (!agents) continue;
+    const serverActivity = indexWorkspaceActivityAt({
+      serverId,
+      agents: agents.values(),
+      liveActivity: state.agentLastActivity,
+    });
+    for (const [key, at] of serverActivity) {
+      index.set(key, at);
+    }
+  }
+  return index;
 }
 
 export function createWorkspaceStructureProjectsSelector(
@@ -145,26 +173,41 @@ export function createWorkspaceStructureProjectsSelector(
     workspaces: Map<string, WorkspaceDescriptor> | undefined;
     projects: Map<string, ProjectDescriptor> | undefined;
   }> | null = null;
+  let previousAgentMaps: Array<ReadonlyMap<string, Agent> | undefined> | null = null;
+  let previousLiveActivity: ReadonlyMap<string, Date> | undefined;
   let previousProjects: WorkspaceStructureProject[] | null = null;
 
   return (state) => {
+    const tracksActivity = workspaceSort === "updated";
     const inputs = serverIds.map((serverId) => ({
       workspaces: state.sessions[serverId]?.workspaces,
       projects: state.sessions[serverId]?.projects,
     }));
+    const agentMaps = tracksActivity
+      ? serverIds.map((serverId) => state.sessions[serverId]?.agents)
+      : null;
+    const liveActivity = tracksActivity ? state.agentLastActivity : undefined;
     const priorInputs = previousInputs;
-    const unchanged =
+    const directoriesUnchanged =
       priorInputs !== null &&
       inputs.every(
         (input, index) =>
           input.workspaces === priorInputs[index]?.workspaces &&
           input.projects === priorInputs[index]?.projects,
       );
-    if (unchanged && previousProjects) {
+    const activityUnchanged =
+      !tracksActivity ||
+      (liveActivity === previousLiveActivity &&
+        agentMaps !== null &&
+        previousAgentMaps !== null &&
+        agentMaps.every((agents, index) => agents === previousAgentMaps?.[index]));
+    if (directoriesUnchanged && activityUnchanged && previousProjects) {
       return previousProjects;
     }
 
     previousInputs = inputs;
+    previousAgentMaps = agentMaps;
+    previousLiveActivity = liveActivity;
     const next = selectWorkspaceStructureProjects(state, serverIds, workspaceSort);
     const previousByKey = new Map(previousProjects?.map((project) => [project.viewKey, project]));
     previousProjects = next.map((project) => {

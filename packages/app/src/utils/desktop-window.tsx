@@ -113,6 +113,29 @@ export function resolveWindowChromeObstruction(input: {
   };
 }
 
+/**
+ * A strip that sits on the window's top edge, such as the host tab rail, covers
+ * the controls that are only as tall as that strip. Rows under the strip must
+ * not keep reserving that width, or their actions stop short of the right edge.
+ */
+export function windowChromeObstructionBelowCover(input: {
+  obstruction: WindowChromeObstruction;
+  coverHeight: number;
+}): WindowChromeObstruction {
+  return {
+    topLeft: obstructionEdgeBelowCover(input.obstruction.topLeft, input.coverHeight),
+    topRight: obstructionEdgeBelowCover(input.obstruction.topRight, input.coverHeight),
+  };
+}
+
+function obstructionEdgeBelowCover(
+  edge: WindowChromeCornerObstruction | null,
+  coverHeight: number,
+): WindowChromeCornerObstruction | null {
+  if (!edge || edge.height <= coverHeight) return null;
+  return edge;
+}
+
 export function resolveWindowChromeSafeArea(input: {
   obstruction: WindowChromeObstruction;
   corners: WindowChromeCorners;
@@ -126,6 +149,21 @@ export function resolveWindowChromeSafeArea(input: {
     return { height: Math.max(topLeft?.height ?? 0, topRight?.height ?? 0) };
   }
   return { paddingLeft: topLeft?.width ?? 0, paddingRight: topRight?.width ?? 0 };
+}
+
+export function WindowChromeBelowCover({
+  coverHeight,
+  children,
+}: {
+  coverHeight: number;
+  children: ReactNode;
+}) {
+  const obstruction = useContext(WindowChromeContext);
+  const covered = useMemo(
+    () => windowChromeObstructionBelowCover({ obstruction, coverHeight }),
+    [coverHeight, obstruction],
+  );
+  return <WindowChromeContext.Provider value={covered}>{children}</WindowChromeContext.Provider>;
 }
 
 export function WindowChromeProvider({ children }: { children: ReactNode }) {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SortableInlineList } from "@/components/sortable-inline-list";
 import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -15,6 +16,7 @@ import { identityForeground } from "@/styles/identity-colors";
 import type { Theme } from "@/styles/theme";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { isWeb } from "@/constants/platform";
+import { WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useHostAgentSummary } from "@/hooks/use-host-agent-summary";
 import type { HostProfile } from "@/types/host-connection";
 import { normalizeHostLabel, orderHostsLocalFirst } from "@/types/host-connection";
@@ -26,6 +28,9 @@ const ThemedServer = withUnistyles(Server);
 // A row tab's glyph is the same 14px the workspace tab rail uses. The 12px badge
 // glyph is too small here: the status overlay covers the host icon completely.
 const HOST_TAB_ICON_SIZE = 14;
+
+/** Matches the desktop window-control rail, so the controls sit on this strip and not on the row below. */
+export const HOST_TAB_RAIL_HEIGHT = 36;
 
 const hostTabKeyExtractor = (host: HostProfile): string => host.serverId;
 
@@ -114,21 +119,25 @@ export function HostTabsRow({
   }
 
   return (
-    <ScrollView
-      horizontal
-      testID="host-tabs-row"
-      style={styles.scrollView}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.row}
-      keyboardShouldPersistTaps="handled"
-    >
-      <SortableInlineList
-        data={orderedHosts}
-        keyExtractor={hostTabKeyExtractor}
-        onDragEnd={handleDragEnd}
-        renderItem={renderHostTab}
-      />
-    </ScrollView>
+    <WindowChromeSafeArea placement="inline" style={styles.rail}>
+      {/* This strip is the top edge of the window, so its empty space is the drag region. */}
+      <TitlebarDragRegion />
+      <ScrollView
+        horizontal
+        testID="host-tabs-row"
+        style={styles.scrollView}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+        keyboardShouldPersistTaps="handled"
+      >
+        <SortableInlineList
+          data={orderedHosts}
+          keyExtractor={hostTabKeyExtractor}
+          onDragEnd={handleDragEnd}
+          renderItem={renderHostTab}
+        />
+      </ScrollView>
+    </WindowChromeSafeArea>
   );
 }
 
@@ -232,13 +241,17 @@ function countTextStyle(bucket: SidebarStateBucket | null): {
 
 const styles = StyleSheet.create((theme) => ({
   // A fixed height keeps the rail from stretching to fill the column it sits in.
-  scrollView: {
-    height: 36,
+  rail: {
+    position: "relative",
+    height: HOST_TAB_RAIL_HEIGHT,
     flexGrow: 0,
     flexShrink: 0,
     borderBottomWidth: theme.borderWidth[1],
     borderBottomColor: theme.colors.border,
     backgroundColor: theme.colors.surface0,
+  },
+  scrollView: {
+    flex: 1,
   },
   row: {
     flexDirection: "row",

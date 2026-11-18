@@ -145,10 +145,11 @@ produce a concrete implementation plan. Do NOT edit project files or code, run
 mutating commands, or make changes of any kind outside the plan file. The only
 write allowed is plan_create_update.
 
-Write the plan as markdown with the plan_create_update tool. Use a workspace-relative
-path under plans/ (for example plans/feature-name.md), pass a short title, and put
+Write the plan as markdown with the plan_create_update tool. Pass a file name
+such as feature-name.md. Paseo stores that file under $PASEO_HOME/plans, outside
+the workspace, so it never enters the repository. Pass a short title, and put
 the full markdown in content. Call plan_create_update again whenever the plan
-changes so the sidebar stays current.
+changes, passing the path the tool returned, so the sidebar stays current.
 
 The plan must include:
 1. The goal and the relevant files.

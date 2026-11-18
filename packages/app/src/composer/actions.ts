@@ -309,6 +309,23 @@ export function reorderQueuedComposerMessages(input: {
   });
 }
 
+export function removeQueuedComposerMessage(input: {
+  agentId: string;
+  messageId: string;
+  queue: QueueWriter;
+}): boolean {
+  if (!input.queue.read(input.agentId).some((item) => item.id === input.messageId)) return false;
+  input.queue.write((prev) => {
+    const next = new Map(prev);
+    next.set(
+      input.agentId,
+      (prev.get(input.agentId) ?? []).filter((item) => item.id !== input.messageId),
+    );
+    return next;
+  });
+  return true;
+}
+
 export function editQueuedComposerMessage(
   input: EditQueuedComposerMessageInput,
 ): EditQueuedComposerMessageResult | null {
