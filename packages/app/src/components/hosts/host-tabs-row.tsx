@@ -2,8 +2,8 @@ import { useCallback, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { PressHighlight } from "@/components/ui/press-highlight";
 import { SortableInlineList } from "@/components/sortable-inline-list";
+import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHostTabOrderStore } from "@/stores/host-tab-order-store";
 import { connectionLabelKey, HostStatusDot } from "@/components/host-status-dot";
@@ -151,8 +151,12 @@ function HostTabChip({
 
   return (
     <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
-      <TooltipTrigger asChild>
-        <PressHighlight
+      <TooltipTrigger asChild triggerRefProp="triggerRef">
+        <SidebarHostContextMenu
+          serverId={host.serverId}
+          label={label}
+          color={host.appearance.color}
+          enabledOnMobile={false}
           testID={`host-tab-${host.serverId}`}
           accessibilityRole="tab"
           accessibilityLabel={accessibilityLabel}
@@ -182,7 +186,7 @@ function HostTabChip({
           <View style={[styles.countBadge, statusTextStyle.badge]}>
             <Text style={[styles.countText, statusTextStyle.text]}>{runningCount}</Text>
           </View>
-        </PressHighlight>
+        </SidebarHostContextMenu>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="center" offset={8}>
         <Text style={styles.tooltipText}>{label}</Text>
