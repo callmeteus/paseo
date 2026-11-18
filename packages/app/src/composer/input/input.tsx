@@ -1840,9 +1840,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       ),
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (appliedTextReplacementKeyRef.current === textReplacement.key) return;
       appliedTextReplacementKeyRef.current = textReplacement.key;
+      // Add to chat writes the chip into the draft. The plain textarea would
+      // draw that stored record. Switch to the chip editor before paint.
+      syncChipEditor(textReplacement.text);
       updateComposerHeightForText?.(valueRef.current, textReplacement.text);
       valueRef.current = textReplacement.text;
       updateLiveTextPresence(textReplacement.text);
@@ -1858,7 +1861,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       } else {
         textInputRef.current?.replaceText(textReplacement.text);
       }
-    }, [textReplacement, updateComposerHeightForText, updateLiveTextPresence]);
+    }, [syncChipEditor, textReplacement, updateComposerHeightForText, updateLiveTextPresence]);
 
     useEffect(() => {
       return () => {
