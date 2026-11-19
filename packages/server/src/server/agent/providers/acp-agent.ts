@@ -19,7 +19,6 @@ import type {
   WritableStream as NodeWritableStream,
 } from "node:stream/web";
 import {
-  CLIENT_METHODS,
   ClientSideConnection,
   PROTOCOL_VERSION,
   RequestError,
@@ -3208,6 +3207,18 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    this.logger.info(
+      {
+        title: params.toolCall?.title,
+        options: params.options.map((option) => ({
+          id: option.optionId,
+          kind: option.kind,
+          name: option.name,
+        })),
+        meta: params._meta ?? null,
+      },
+      "provider.acp.permission_request",
+    );
     this.clearTurnFirstActivityTimeout();
     // Cursor asks over ACP. Allow once, so the user's Cursor allowlist is not
     // rewritten, and only when the title is one granted Hub tool.
@@ -3343,11 +3354,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     method: string,
     params: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    if (method !== CLIENT_METHODS.session_elicitation) {
+    this.logger.info(
+      { method, keys: Object.keys(params), sessionId: params.sessionId },
+      "provider.acp.ext_method",
+    );
+    // Agents differ on the exact method name they use for elicitation. Accept
+    // any of them rather than dropping the prompt as an unknown extension.
+    if (!method.toLowerCase().includes("elicit")) {
       throw RequestError.methodNotFound(method);
     }
     const form = readACPElicitation(params);
-    if (!form) throw RequestError.invalidParams();
+    if (!form) {
+      this.logger.info({ method, params }, "provider.acp.unmapped_elicitation");
+      throw RequestError.invalidParams();
+    }
     const message = typeof params.message === "string" ? params.message : "";
     const requestId = `elicit-${randomUUID()}`;
     const request: AgentPermissionRequest = {
