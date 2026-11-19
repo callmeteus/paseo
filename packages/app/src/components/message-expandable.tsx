@@ -1222,6 +1222,15 @@ interface ToolCallProps {
   secondaryLabelOverride?: string;
 }
 
+function readUnknownDetail(detail: ToolCallDetail | undefined): {
+  input: unknown;
+  result: unknown;
+} {
+  return detail?.type === "unknown"
+    ? { input: detail.input, result: detail.output }
+    : { input: null, result: null };
+}
+
 function readMcpAppHtml(metadata: Record<string, unknown> | undefined): string | null {
   const value = metadata?.mcpAppHtml;
   return typeof value === "string" && /<html[\s>]/i.test(value) ? value : null;
@@ -1230,14 +1239,22 @@ function readMcpAppHtml(metadata: Record<string, unknown> | undefined): string |
 function McpAppSheetIfOpen({
   open,
   html,
+  input,
+  result,
+  toolName,
   onClose,
 }: {
   open: boolean;
   html: string | null;
+  input: unknown;
+  result: unknown;
+  toolName: string;
   onClose: () => void;
 }) {
   if (!open || !html) return null;
-  return <McpAppSheet html={html} onClose={onClose} />;
+  return (
+    <McpAppSheet html={html} input={input} result={result} toolName={toolName} onClose={onClose} />
+  );
 }
 
 function McpAppOpenButton({ onPress }: { onPress: () => void }) {
@@ -1306,6 +1323,8 @@ export const ToolCall = memo(function ToolCall({
     }
     return undefined;
   }, [detail, args, result]);
+
+  const { input: mcpAppInput, result: mcpAppResult } = readUnknownDetail(effectiveDetail);
 
   const targetAgentTitle = useTargetAgentTitle({ serverId, toolName, detail: effectiveDetail });
   const presentation = useMemo(
@@ -1453,7 +1472,14 @@ export const ToolCall = memo(function ToolCall({
         quietDetails={thinkingBody !== null}
         onDetailHoverChange={onInlineDetailsHoverChange}
       />
-      <McpAppSheetIfOpen open={showMcpApp} html={mcpAppHtml} onClose={closeMcpApp} />
+      <McpAppSheetIfOpen
+        open={showMcpApp}
+        html={mcpAppHtml}
+        input={mcpAppInput}
+        result={mcpAppResult}
+        toolName={toolName}
+        onClose={closeMcpApp}
+      />
     </>
   );
 }, areToolCallPropsEqual);
