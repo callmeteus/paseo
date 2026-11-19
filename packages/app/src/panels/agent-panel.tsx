@@ -24,6 +24,7 @@ import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { useAddSelectionToSideChat } from "@/side-chat/use-add-selection";
 import { openSideChat } from "@/side-chat/open";
+import { runPaseoUpdate } from "@/paseo-update/run";
 import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { HostPasswordPrompt } from "@/components/host-password-prompt";
@@ -1609,6 +1610,9 @@ function ActiveAgentComposer({
   onComposerHeightChange: (height: number) => void;
   onMessageSent: () => void;
 }) {
+  const { t } = useTranslation();
+  const { api: toastApi } = useToastHost();
+  const runtimeClient = useHostRuntimeClient(serverId);
   const isCompactFormFactor = useIsCompactFormFactor();
   const { onLayout: onInputAreaLayout, isBelow: isCompactComposerLayout } = useContainerWidthBelow(
     COMPACT_FORM_FACTOR_WIDTH,
@@ -1644,6 +1648,26 @@ function ActiveAgentComposer({
     [isCompactFormFactor, openInSidePane, serverId, workspaceId],
   );
 
+  const handlePaseoUpdate = useCallback(async () => {
+    if (!runtimeClient) {
+      toastApi.error(t("common.errors.daemonClientUnavailable"));
+      return;
+    }
+    const dismissProgress = toastApi.show(t("composer.clientCommands.paseoUpdate"), {
+      durationMs: null,
+    });
+    try {
+      const result = await runPaseoUpdate(runtimeClient, cwd, ({ phase }) => {
+        toastApi.show(phase, { durationMs: null });
+      });
+      toastApi.show(result.message, { variant: result.success ? "success" : "error" });
+    } catch (error) {
+      toastApi.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      dismissProgress();
+    }
+  }, [cwd, runtimeClient, t, toastApi]);
+
   const handleClientSlashCommand = useCallback(
     async (command: ClientSlashCommand) => {
       const agent = resolveChatAgentFromSession(useSessionStore.getState(), serverId, agentId);
@@ -1658,6 +1682,11 @@ function ActiveAgentComposer({
           isCompact: isCompactFormFactor,
           draftText: command.argument?.trim(),
         });
+        return;
+      }
+
+      if (command.kind === "paseo-update") {
+        await handlePaseoUpdate();
         return;
       }
 
@@ -1700,6 +1729,7 @@ function ActiveAgentComposer({
       agentId,
       archiveAgent,
       closeWorkspaceTab,
+      handlePaseoUpdate,
       hideWorkspaceAgent,
       isCompactFormFactor,
       retargetCurrentTab,

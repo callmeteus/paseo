@@ -19,6 +19,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
 import { getHostName } from "./host-name.js";
+import { getPaseoCommitInfo } from "./version-info.js";
 import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { AgentManager, AgentMetricsSnapshot } from "./agent/agent-manager.js";
@@ -1996,12 +1997,16 @@ export class VoiceAssistantWebSocketServer {
   }
 
   private buildServerInfoStatusPayload(session: Session): ServerInfoStatusPayload {
+    const commits = getPaseoCommitInfo();
     return {
       status: "server_info",
       protocolVersion: WS_PROTOCOL_VERSION,
       serverId: this.serverId,
       hostname: this.connectedHosts.getSelfLabel(),
       version: this.daemonVersion,
+      // COMPAT(forkCommits): remove once the fork has a release name.
+      ...(commits.commit ? { commit: commits.commit } : {}),
+      ...(commits.mainCommit ? { mainCommit: commits.mainCommit } : {}),
       sourceId: session.getHostSourceId(),
       permissions: session.getPermissions(),
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.

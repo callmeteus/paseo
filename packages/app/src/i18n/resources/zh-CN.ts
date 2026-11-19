@@ -211,7 +211,8 @@ export const zhCN: TranslationResources = {
       archiveAgent: "归档当前 Agent",
       freshDraft: "归档此 Agent 并开始新的草稿",
       chatMode: "在此聊天 (OpenUI) 和智能体模式之间切换",
-      sideChat: "提问且不写入此对话",
+      sideChat: "在资源管理器侧边栏打开侧边聊天",
+      paseoUpdate: "在此主机上从 main 分支更新 Paseo 和 Hub",
     },
     goal: {
       active: "目标",
@@ -3517,6 +3518,7 @@ export const zhCN: TranslationResources = {
           desktopManagedHint: "此 Daemon 由 Paseo Desktop 管理。请在 Host 上更新 Paseo Desktop。",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
+          newMainCommit: "main 分支有新提交：{{commit}}",
           confirm: "Update",
           confirmTitle: "Update {{name}}",
           confirmMessage:

@@ -5,7 +5,8 @@ export type ClientSlashCommandKind =
   | "archive-agent"
   | "replace-agent-with-draft"
   | "toggle-chat-mode"
-  | "open-side-chat";
+  | "open-side-chat"
+  | "paseo-update";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
@@ -16,7 +17,8 @@ export interface ClientSlashCommand {
     | "composer.clientCommands.archiveAgent"
     | "composer.clientCommands.freshDraft"
     | "composer.clientCommands.chatMode"
-    | "composer.clientCommands.sideChat";
+    | "composer.clientCommands.sideChat"
+    | "composer.clientCommands.paseoUpdate";
   argumentHint: string;
   kind: ClientSlashCommandKind;
   execution: ClientSlashCommandExecution;
@@ -64,6 +66,15 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     kind: "open-side-chat",
     execution: "immediate",
     acceptsArgument: true,
+  },
+  {
+    name: "paseo-update",
+    aliases: [],
+    description: "Update Paseo and Hub from the main branch on this host",
+    descriptionKey: "composer.clientCommands.paseoUpdate",
+    argumentHint: "",
+    kind: "paseo-update",
+    execution: "immediate",
   },
 ];
 

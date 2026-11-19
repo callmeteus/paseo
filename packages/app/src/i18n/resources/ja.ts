@@ -214,7 +214,8 @@ export const ja: TranslationResources = {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",
       chatMode: "このチャットをチャット (OpenUI) とエージェントモードで切り替えます",
-      sideChat: "このチャットに残さず質問する",
+      sideChat: "エクスプローラーのサイドバーでサイドチャットを開く",
+      paseoUpdate: "このホストのmainブランチからPaseoとHubを更新",
     },
     goal: {
       active: "目標",
@@ -3592,6 +3593,7 @@ export const ja: TranslationResources = {
             "このデーモンはPaseo Desktopによって管理されています。ホスト上のPaseo Desktopを更新してください。",
           title: "デーモンを更新",
           hint: "デーモンを最新バージョンに更新して再起動します",
+          newMainCommit: "main の新しいコミット: {{commit}}",
           confirm: "更新",
           confirmTitle: "{{name}}を更新",
           confirmMessage:

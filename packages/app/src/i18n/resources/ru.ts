@@ -214,7 +214,8 @@ export const ru: TranslationResources = {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",
       chatMode: "Переключать этот чат между режимом чата (OpenUI) и агента",
-      sideChat: "Спросить, не добавляя в этот чат",
+      sideChat: "Открыть боковой чат в панели обозревателя",
+      paseoUpdate: "Обновить Paseo и Hub из ветки main на этом хосте",
     },
     goal: {
       active: "Цель",
@@ -3627,6 +3628,7 @@ export const ru: TranslationResources = {
             "Этот демон управляется Paseo Desktop. Обновите Paseo Desktop на хосте.",
           title: "Обновить демон",
           hint: "Обновить демон до последней версии и перезапустить его",
+          newMainCommit: "Доступен новый коммит main: {{commit}}",
           confirm: "Обновить",
           confirmTitle: "Обновить {{name}}",
           confirmMessage:

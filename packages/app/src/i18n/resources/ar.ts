@@ -211,7 +211,8 @@ export const ar: TranslationResources = {
       archiveAgent: "أرشفة الوكيل الحالي",
       freshDraft: "أرشفة هذا الوكيل وابدأ مسودة جديدة",
       chatMode: "تبديل هذه الدردشة بين وضع الدردشة (OpenUI) والوكيل",
-      sideChat: "اسأل دون إضافته إلى هذه المحادثة",
+      sideChat: "فتح محادثة جانبية في الشريط الجانبي للمستكشف",
+      paseoUpdate: "تحديث Paseo و Hub من الفرع main على هذا المضيف",
     },
     goal: {
       active: "الهدف",
@@ -3589,6 +3590,7 @@ export const ar: TranslationResources = {
             "يدير Paseo Desktop هذا البرنامج الخفي. حدّث Paseo Desktop على المضيف.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
+          newMainCommit: "إصدار main جديد متاح: {{commit}}",
           confirm: "Update",
           confirmTitle: "Update {{name}}",
           confirmMessage:

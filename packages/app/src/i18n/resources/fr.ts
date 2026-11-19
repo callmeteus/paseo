@@ -215,7 +215,8 @@ export const fr: TranslationResources = {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",
       chatMode: "Basculer ce chat entre le mode Chat (OpenUI) et Agent",
-      sideChat: "Demander sans l'ajouter à ce chat",
+      sideChat: "Ouvrir un chat latéral dans le panneau Explorateur",
+      paseoUpdate: "Mettre à jour Paseo et Hub depuis la branche main sur cet hôte",
     },
     goal: {
       active: "Objectif",
@@ -3631,6 +3632,7 @@ export const fr: TranslationResources = {
             "Ce daemon est géré par Paseo Desktop. Mettez à jour Paseo Desktop sur l’hôte.",
           title: "Mettre à jour le daemon",
           hint: "Met à jour le daemon vers la dernière version puis le redémarre",
+          newMainCommit: "Nouveau commit main disponible : {{commit}}",
           confirm: "Mettre à jour",
           confirmTitle: "Mettre à jour {{name}}",
           confirmMessage:

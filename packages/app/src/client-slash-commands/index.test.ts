@@ -70,6 +70,7 @@ describe("resolveClientSlashCommand", () => {
       ["clear", ["new"], "immediate"],
       ["mode", [], "immediate"],
       ["side", ["btw"], "immediate"],
+      ["paseo-update", [], "immediate"],
     ]);
   });
 

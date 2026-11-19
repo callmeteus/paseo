@@ -61,7 +61,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { isVersionMismatch } from "@/desktop/updates/desktop-updates";
+import { hasNewerMainCommit, isVersionMismatch } from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
 import { formatConnectionStatus, getConnectionStatusTone } from "@/utils/daemons";
 import { formatLatency } from "@/utils/latency";
@@ -731,6 +731,12 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
+  const daemonCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.commit ?? null,
+  );
+  const daemonMainCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.mainCommit ?? null,
+  );
   const supportsSelfUpdate = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.features?.daemonSelfUpdate === true,
   );
@@ -852,24 +858,35 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
       });
   }, [daemonClient, host.label, host.serverId, isHostConnected, t]);
 
-  const shouldShowUpdate = hasVersionMismatch && (supportsSelfUpdate || desktopManaged);
+  const newerMainCommit =
+    daemonMainCommit &&
+    hasNewerMainCommit({
+      commit: daemonCommit,
+      mainCommit: daemonMainCommit,
+    });
+  const shouldShowUpdate =
+    (hasVersionMismatch || newerMainCommit) && (supportsSelfUpdate || desktopManaged);
   if (!shouldShowUpdate && updateState.status !== "complete") {
     return null;
   }
 
   const isUpdating = updateState.status === "updating";
   const buttonLabel = isUpdating ? updateState.phase : t("settings.host.daemon.update.confirm");
+  let updateHint: string;
+  if (newerMainCommit && daemonMainCommit) {
+    updateHint = t("settings.host.daemon.update.newMainCommit", { commit: daemonMainCommit });
+  } else if (desktopManaged) {
+    updateHint = t("settings.host.daemon.update.desktopManagedHint");
+  } else {
+    updateHint = t("settings.host.daemon.update.hint");
+  }
 
   return (
     <View style={settingsStyles.card} testID="host-page-update-card">
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.host.daemon.update.title")}</Text>
-          <Text style={settingsStyles.rowHint}>
-            {desktopManaged
-              ? t("settings.host.daemon.update.desktopManagedHint")
-              : t("settings.host.daemon.update.hint")}
-          </Text>
+          <Text style={settingsStyles.rowHint}>{updateHint}</Text>
         </View>
         <Button
           variant="outline"

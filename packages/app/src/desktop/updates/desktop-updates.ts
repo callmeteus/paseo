@@ -188,6 +188,28 @@ export function formatVersionWithPrefix(version: string | null | undefined): str
   return value.startsWith("v") ? value : `v${value}`;
 }
 
+/**
+ * The fork has no release name yet, so source installs identify themselves by
+ * the main commit instead of a semantic version.
+ */
+export function formatDaemonVersionLabel(input: {
+  version?: string | null;
+  commit?: string | null;
+  mainCommit?: string | null;
+}): string {
+  if (input.commit?.trim()) {
+    return `main@${input.commit.trim()}`;
+  }
+  return formatVersionWithPrefix(input.version);
+}
+
+export function hasNewerMainCommit(input: {
+  commit?: string | null;
+  mainCommit?: string | null;
+}): boolean {
+  return Boolean(input.commit && input.mainCommit && input.commit !== input.mainCommit);
+}
+
 export function buildMacAppleSiliconDownloadUrl(version: string | null | undefined): string | null {
   const normalizedVersion = normalizeVersionForComparison(version);
   if (!normalizedVersion) {

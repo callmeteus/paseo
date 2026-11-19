@@ -4346,6 +4346,10 @@ export const ServerInfoStatusPayloadSchema = z
     serverId: z.string().trim().min(1),
     hostname: ServerInfoHostnameSchema.optional(),
     version: ServerInfoVersionSchema.optional(),
+    // COMPAT(forkCommits): added for the callmeteus fork; remove once the fork has a release name.
+    commit: z.string().trim().optional(),
+    // COMPAT(forkCommits): added for the callmeteus fork; remove once the fork has a release name.
+    mainCommit: z.string().trim().optional(),
     // Authenticated producer for host registration ownership, separate from admission authority.
     sourceId: z.string().optional(),
     // COMPAT(sessionPermissions): optional while clients support older daemons.

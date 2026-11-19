@@ -214,7 +214,8 @@ export const es: TranslationResources = {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",
       chatMode: "Alternar este chat entre modo Chat (OpenUI) y Agente",
-      sideChat: "Preguntar sin añadirlo a este chat",
+      sideChat: "Abrir un chat lateral en el panel del Explorador",
+      paseoUpdate: "Actualizar Paseo y Hub desde la rama main en este host",
     },
     goal: {
       active: "Objetivo",
@@ -3624,6 +3625,7 @@ export const es: TranslationResources = {
             "Este daemon está administrado por Paseo Desktop. Actualiza Paseo Desktop en el host.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
+          newMainCommit: "Nuevo commit de main disponible: {{commit}}",
           confirm: "Update",
           confirmTitle: "Update {{name}}",
           confirmMessage:

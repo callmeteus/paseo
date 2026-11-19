@@ -25,7 +25,10 @@ import { useSessionStore } from "@/stores/session-store";
 import { density } from "@/styles/density";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { HostProfile } from "@/types/host-connection";
-import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
+import {
+  formatDaemonVersionLabel,
+  formatVersionWithPrefix,
+} from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { openExternalUrl } from "@/utils/open-external-url";
@@ -62,9 +65,24 @@ function HostVersionHint({ host }: { host: HostProfile }) {
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
-  const version = isConnected
-    ? formatVersionWithPrefix(daemonVersion)
-    : t("settings.about.offline");
+  const daemonCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.commit ?? null,
+  );
+  const daemonMainCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.mainCommit ?? null,
+  );
+  let version: string;
+  if (!isConnected) {
+    version = t("settings.about.offline");
+  } else if (daemonCommit) {
+    version = formatDaemonVersionLabel({
+      commit: daemonCommit,
+      mainCommit: daemonMainCommit,
+      version: daemonVersion,
+    });
+  } else {
+    version = formatVersionWithPrefix(daemonVersion);
+  }
 
   return (
     <DropdownMenuHint

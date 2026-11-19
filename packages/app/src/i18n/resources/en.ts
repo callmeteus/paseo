@@ -207,7 +207,8 @@ export const en = {
       archiveAgent: "Archive the current agent",
       freshDraft: "Archive this agent and start a fresh draft",
       chatMode: "Switch this chat between Chat (OpenUI) and Agent mode",
-      sideChat: "Ask without adding it to this chat",
+      sideChat: "Open a side chat in the Explorer sidebar",
+      paseoUpdate: "Update Paseo and Hub from the main branch on this host",
     },
     goal: {
       active: "Goal",
@@ -3722,6 +3723,7 @@ export const en = {
             "This daemon is managed by Paseo Desktop. Update Paseo Desktop on the host.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
+          newMainCommit: "New main commit available: {{commit}}",
           confirm: "Update",
           confirmTitle: "Update {{name}}",
           confirmMessage:

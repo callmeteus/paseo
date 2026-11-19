@@ -212,7 +212,8 @@ export const ko: TranslationResources = {
       archiveAgent: "현재 에이전트 보관",
       freshDraft: "이 에이전트를 보관하고 새 초안을 시작합니다",
       chatMode: "이 채팅을 채팅(OpenUI)과 에이전트 모드 간에 전환합니다",
-      sideChat: "이 채팅에 남기지 않고 질문",
+      sideChat: "탐색기 사이드바에서 사이드 채팅 열기",
+      paseoUpdate: "이 호스트의 main 브랜치에서 Paseo와 Hub 업데이트",
     },
     goal: {
       active: "목표",
@@ -3573,6 +3574,7 @@ export const ko: TranslationResources = {
             "이 데몬은 Paseo Desktop에서 관리됩니다. 호스트에서 Paseo 데스크톱을 업데이트합니다.",
           title: "데몬 업데이트",
           hint: "데몬을 최신 버전으로 업데이트하고 다시 시작하세요.",
+          newMainCommit: "main 새 커밋 사용 가능: {{commit}}",
           confirm: "업데이트",
           confirmTitle: "{{name}} 업데이트",
           confirmMessage:
