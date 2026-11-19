@@ -1,0 +1,124 @@
+name: CI
+
+# Forgejo is a read-only mirror of GitHub, so push/PR events do not fire here.
+# CI runs through gitops-webhook dispatch or manually. merge_group and required
+# status checks are GitHub-only and are intentionally not reproduced.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to check"
+        required: false
+        default: "develop"
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  changes:
+    name: changes
+    runs-on: docker
+    outputs:
+      full: ${{ steps.filter.outputs.full }}
+      format: ${{ steps.filter.outputs.format }}
+      quality: ${{ steps.filter.outputs.quality }}
+      server: ${{ steps.filter.outputs.server }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      app: ${{ steps.filter.outputs.app }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      website: ${{ steps.filter.outputs.website }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Detect affected contracts
+        id: filter
+        shell: bash
+        run: |
+          git fetch origin develop:refs/remotes/origin/develop || true
+          node scripts/forgejo-ci-paths.mjs origin/develop >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: quality
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.format == 'true' || needs.changes.outputs.quality == 'true' }}
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: node scripts/npm-retry.mjs ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Validate CI contracts
+        run: node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs scripts/dev-launch-contract.test.mjs
+
+  typecheck:
+    name: typecheck
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.quality == 'true' }}
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: node scripts/npm-retry.mjs ci
+
+      - name: Build server stack
+        run: npm run build:server
+
+      - name: Typecheck all packages
+        run: npm run typecheck
+
+  tests:
+    name: tests (${{ matrix.suite }})
+    needs: changes
+    if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.server == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.app == 'true' || needs.changes.outputs.sdk == 'true' }}
+    runs-on: docker
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - server
+          - desktop
+          - app
+          - protocol
+          - client
+          - highlight
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: node scripts/npm-retry.mjs ci
+
+      - name: Build dependencies
+        run: npm run build:server-deps
+
+      - name: Run ${{ matrix.suite }} tests
+        run: npm run test --workspace=@getpaseo/${{ matrix.suite }}

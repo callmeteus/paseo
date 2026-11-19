@@ -713,6 +713,10 @@ npx expo-doctor
 
 Diagnoses version mismatches and native module issues.
 
+## CI
+
+CI runs as Forgejo Actions, not GitHub Actions. See [docs/forgejo-ci.md](forgejo-ci.md) for triggers, secrets, the runner, and the nightly.
+
 ## Typecheck
 
 Always run typecheck after changes:

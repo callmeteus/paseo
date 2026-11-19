@@ -26,9 +26,7 @@ concurrency:
 
 jobs:
   sync-release-notes:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    runs-on: docker
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,8 +34,8 @@ jobs:
 
       - name: Sync release body from changelog
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO: callmeteus/paseo
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
           INPUT_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.tag }}

@@ -1,0 +1,166 @@
+name: Nightly
+
+# Paseo's Forgejo repo is a read-only pull mirror of GitHub, so push events do
+# not trigger workflows here. This runs on a schedule against the mirrored
+# `develop` branch and publishes binaries to a rolling GitHub release.
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  # GitHub is the source of truth; GH_TOKEN is a Forgejo secret with release
+  # write access to callmeteus/paseo.
+  GH_REPO: callmeteus/paseo
+  NIGHTLY_TAG: nightly
+
+jobs:
+  desktop-linux:
+    name: Desktop (Linux x64)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Install packaging dependencies
+        run: apt-get update && apt-get install -y xvfb xauth rpm squashfs-tools
+
+      - name: Build Linux desktop artifacts
+        run: npm run build:desktop -- --publish never --linux --x64
+        env:
+          EP_GH_IGNORE_TIME: "true"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-nightly-desktop-linux-x64
+          path: |
+            packages/desktop/release/*.AppImage
+            packages/desktop/release/*.deb
+            packages/desktop/release/*.rpm
+            packages/desktop/release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  android-apk:
+    name: Android APK (EAS)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK on EAS
+        id: eas
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/app
+          build_json="$(npx eas build --platform android --profile production-apk --non-interactive --wait --json)"
+          build_id="$(printf '%s' "$build_json" | jq -r 'if type == "array" then .[0].id // empty else .id // empty end')"
+          test -n "$build_id"
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK artifact
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/app
+          view="$(npx eas build:view '${{ steps.eas.outputs.build_id }}' --json)"
+          url="$(printf '%s' "$view" | jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty')"
+          test -n "$url"
+          mkdir -p "$RUNNER_TEMP/nightly"
+          curl --fail --location --output "$RUNNER_TEMP/nightly/paseo-nightly-android.apk" "$url"
+          echo "path=$RUNNER_TEMP/nightly/paseo-nightly-android.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-nightly-android
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish nightly release
+    needs: [desktop-linux, android-apk]
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          sparse-checkout: scripts
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install GitHub CLI
+        run: apt-get update && apt-get install -y gh
+
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: paseo-nightly-desktop-linux-x64
+          path: nightly-artifacts
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: paseo-nightly-android
+          path: nightly-artifacts
+
+      - name: Refresh rolling nightly release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GH_REPO"
+          tag="$NIGHTLY_TAG"
+
+          # The nightly tag is deleted and recreated so the rolling release
+          # always points at the latest successful develop build.
+          gh release delete "$tag" --repo "$repo" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" \
+            --repo "$repo" \
+            --title "Paseo nightly" \
+            --notes "Nightly build from \`develop\` at $(date -u +%Y-%m-%dT%H:%M:%SZ). Not a stable release." \
+            --prerelease \
+            nightly-artifacts/*
+
+          echo "Published nightly: https://github.com/$repo/releases/tag/$tag"

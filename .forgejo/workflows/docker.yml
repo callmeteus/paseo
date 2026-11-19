@@ -38,7 +38,7 @@ env:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: docker
     outputs:
       image: ${{ steps.values.outputs.image }}
       install_version: ${{ steps.values.outputs.install_version }}
@@ -113,9 +113,7 @@ jobs:
   build:
     needs: setup
     if: needs.setup.outputs.publish != 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    runs-on: docker
     steps:
       - uses: actions/checkout@v6
 
@@ -132,16 +130,11 @@ jobs:
           tags: ${{ needs.setup.outputs.check_tag }}
           push: false
           provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max
 
   publish:
     needs: setup
     if: needs.setup.outputs.publish == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    runs-on: docker
     steps:
       - uses: actions/checkout@v6
 
@@ -152,8 +145,8 @@ jobs:
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: callmeteus
+          password: ${{ secrets.GH_TOKEN }}
 
       - uses: docker/build-push-action@v7
         with:
@@ -165,5 +158,3 @@ jobs:
           tags: ${{ needs.setup.outputs.publish_tags }}
           push: true
           provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max

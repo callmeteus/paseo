@@ -21,9 +21,7 @@ env:
 
 jobs:
   ensure-release:
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,18 +34,18 @@ jobs:
 
       - name: Ensure GitHub release exists
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
+          if node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
             exit 0
           fi
 
           release_args=(
             release create "$RELEASE_TAG"
-            --repo "${{ github.repository }}"
+            --repo "callmeteus/paseo"
             --title "Paseo $RELEASE_TAG"
             --notes ""
             --draft
@@ -59,15 +57,12 @@ jobs:
 
           if ! gh "${release_args[@]}"; then
             echo "Release creation raced with another workflow; continuing."
-            node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG" >/dev/null
+            node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null
           fi
 
   publish-android-apk:
     needs: [ensure-release]
-    permissions:
-      contents: write
-      packages: read
-    runs-on: ubuntu-latest
+    runs-on: docker
 
     steps:
       - uses: actions/checkout@v4
@@ -90,7 +85,7 @@ jobs:
       - name: Install JS dependencies
         run: node scripts/npm-retry.mjs ci
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -144,7 +139,7 @@ jobs:
 
       - name: Upload APK to GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          release_lookup="$(node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG")"
-          gh release upload "$release_lookup" "${{ steps.artifact.outputs.asset_path }}" --clobber --repo "${{ github.repository }}"
+          release_lookup="$(node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG")"
+          gh release upload "$release_lookup" "${{ steps.artifact.outputs.asset_path }}" --clobber --repo "callmeteus/paseo"
