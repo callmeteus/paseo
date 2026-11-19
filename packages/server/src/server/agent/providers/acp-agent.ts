@@ -3240,20 +3240,21 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   private async loadMcpAppHtml(
     toolCallId: string,
-    params: RequestPermissionRequest,
+    hint: { title?: string; rawInput?: unknown },
   ): Promise<void> {
     const servers = readProjectMcpConfigs(this.config.cwd);
-    const raw = params.toolCall?.rawInput;
+    const raw = hint.rawInput;
     const rawServer =
       typeof raw === "object" && raw !== null
         ? (raw as Record<string, unknown>).providerIdentifier
         : null;
-    const title = params.toolCall?.title ?? "";
+    const title = hint.title ?? "";
     const name =
       typeof rawServer === "string" && servers[rawServer]
         ? rawServer
         : Object.keys(servers).find((server) => title.startsWith(`${server}-`));
     if (!name) return;
+    this.logger.info({ name }, "provider.acp.mcp_app_loading");
 
     if (!this.mcpAppRegistry) {
       this.mcpAppRegistry = new UpstreamMcpRegistry({
@@ -3269,9 +3270,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       });
     }
     const html = await this.mcpAppRegistry.readMcpAppHtml(name);
+    this.logger.info({ name, length: html?.length ?? 0 }, "provider.acp.mcp_app_loaded");
     if (!html) return;
     this.mcpAppHtmlByTool.set(toolCallId, html);
     const snapshot = this.toolCalls.get(toolCallId);
+    this.logger.info(
+      { toolCallId, hasSnapshot: Boolean(snapshot), keys: [...this.toolCalls.keys()] },
+      "provider.acp.mcp_app_attach",
+    );
     if (!snapshot) return;
     const updated = { ...snapshot, mcpAppHtml: html };
     this.toolCalls.set(toolCallId, updated);
@@ -3280,7 +3286,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     const rawInput = params.toolCall?.rawInput;
-    void this.loadMcpAppHtml(params.toolCall.toolCallId, params).catch((error) => {
+    void this.loadMcpAppHtml(params.toolCall.toolCallId, {
+      title: params.toolCall.title ?? undefined,
+      rawInput: params.toolCall.rawInput,
+    }).catch((error) => {
       this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
     });
     this.logger.info(
@@ -3402,6 +3411,21 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     this.touchTurnIdleTimeout();
+    const toolUpdate = params.update;
+    if (
+      (toolUpdate.sessionUpdate === "tool_call" ||
+        toolUpdate.sessionUpdate === "tool_call_update") &&
+      toolUpdate.toolCallId
+    ) {
+      // Fetch before projecting the tool call so the first card already has
+      // the HTML; a later event with the same callId can be ignored by clients.
+      await this.loadMcpAppHtml(toolUpdate.toolCallId, {
+        title: toolUpdate.title ?? this.toolCalls.get(toolUpdate.toolCallId)?.title ?? undefined,
+        rawInput: toolUpdate.rawInput ?? this.toolCalls.get(toolUpdate.toolCallId)?.rawInput,
+      }).catch((error) => {
+        this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
+      });
+    }
     const events = this.translateSessionUpdate(params.update);
     this.logger.trace(
       {
@@ -3994,6 +4018,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       snapshot = this.toolSnapshotTransformer(snapshot);
     }
     this.toolCalls.set(toolCallId, snapshot);
+    this.logger.info({ toolCallId, size: this.toolCalls.size }, "provider.acp.tool_snapshot_set");
     return [this.wrapTimeline(mapToolSnapshotToTimeline(snapshot, this.terminalEntries))];
   }
 
