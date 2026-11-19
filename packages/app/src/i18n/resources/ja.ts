@@ -196,9 +196,6 @@ export const ja: TranslationResources = {
       removeReview: "レビュー添付ファイルを削除",
     },
     inlineChip: {
-      pastedWord: "貼り付け",
-      line_one: "行",
-      line_other: "行",
       mentionLoading: "このチャットを読み込み中…",
     },
     errors: {

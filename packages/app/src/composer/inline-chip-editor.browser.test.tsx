@@ -10,8 +10,8 @@ import { InlineChipEditor, type InlineChipEditSnapshot } from "./inline-chip-edi
 const chip: InlineChip = {
   id: "paste:1",
   kind: "paste",
-  label: "[Colado ~3 linhas]",
-  body: 'say "hi"\nsecond\nthird',
+  label: '"linha um"',
+  body: "linha um\nsegunda\nterceira",
 };
 const chipText = serializeInlineChip(chip);
 const chipSelection = { start: chipText.length, end: chipText.length };
@@ -153,8 +153,8 @@ describe("inline chip editor", () => {
     const mountedEditor = mountEditor(helloBaseline);
     const chipNode = mountedEditor.editor.querySelector("[data-inline-chip]");
     if (!(chipNode instanceof HTMLElement)) throw new Error("Paste chip is missing");
-    expect(chipNode.textContent).toBe("[Colado ~3 linhas]");
-    expect(chipNode.getAttribute("data-chip-body")).toBe('say "hi"\nsecond\nthird');
+    expect(chipNode.textContent).toBe('"linha um"');
+    expect(chipNode.getAttribute("data-chip-body")).toBe("linha um\nsegunda\nterceira");
 
     act(() => {
       undo(mountedEditor.editor);

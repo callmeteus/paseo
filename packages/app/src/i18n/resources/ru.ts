@@ -196,9 +196,6 @@ export const ru: TranslationResources = {
       removeReview: "Удалить вложение проверки",
     },
     inlineChip: {
-      pastedWord: "Вставлено",
-      line_one: "строка",
-      line_other: "строк",
       mentionLoading: "Загрузка этого чата…",
     },
     errors: {

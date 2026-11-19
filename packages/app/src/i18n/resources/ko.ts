@@ -195,9 +195,6 @@ export const ko: TranslationResources = {
       removeReview: "리뷰 첨부 제거",
     },
     inlineChip: {
-      pastedWord: "붙여넣음",
-      line_one: "줄",
-      line_other: "줄",
       mentionLoading: "이 채팅을 불러오는 중…",
     },
     errors: {

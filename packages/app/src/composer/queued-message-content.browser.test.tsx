@@ -7,7 +7,7 @@ import { QueuedMessageContent } from "./queued-message-content";
 const chip: InlineChip = {
   id: "paste:queue-1",
   kind: "paste",
-  label: "[Colado ~3 linhas]",
+  label: '"one"',
   body: "one\ntwo\nthree",
 };
 const TEXT = `Veja ${serializeInlineChip(chip)} e depois:\n- item\n\`code\``;
@@ -49,7 +49,7 @@ describe("queued message content", () => {
   it("renders the chip as a hoverable span, not the raw marker", () => {
     const container = mount();
     const chipNode = container.querySelector("[data-testid='queued-inline-chip']");
-    expect(chipNode?.textContent).toBe("[Colado ~3 linhas]");
+    expect(chipNode?.textContent).toBe('"one"');
     expect(container.textContent).not.toContain("\u001E");
   });
 

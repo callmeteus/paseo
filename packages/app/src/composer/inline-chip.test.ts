@@ -23,11 +23,12 @@ import {
   type InlineChip,
 } from "@getpaseo/protocol/inline-chip";
 
+const pasteBody = "x".repeat(PASTE_CHIP_MIN_CHARS);
 const paste: InlineChip = {
   id: "paste:1",
   kind: "paste",
-  label: "[Pasted ~1 lines]",
-  body: "x".repeat(PASTE_CHIP_MIN_CHARS),
+  label: formatPasteChipLabel({ body: pasteBody }),
+  body: pasteBody,
 };
 
 describe("paste chips", () => {
@@ -42,23 +43,28 @@ describe("paste chips", () => {
     expect(countPasteLines("x".repeat(PASTE_CHIP_MIN_CHARS))).toBe(1);
   });
 
-  it("labels a paste in the OpenCode shape, in the composer language", () => {
-    expect(formatPasteChipLabel({ count: 1, pastedWord: "Pasted", lineWord: "lines" })).toBe(
-      "[Pasted ~1 lines]",
+  it("labels a paste with a quoted preview of its first line", () => {
+    expect(formatPasteChipLabel({ body: "Não consigo descriptografar o token." })).toBe(
+      '"Não consigo descriptografar o token."',
     );
-    expect(formatPasteChipLabel({ count: 1, pastedWord: "Colado", lineWord: "linha" })).toBe(
-      "[Colado ~1 linha]",
+    expect(formatPasteChipLabel({ body: "primeira linha\nsegunda\nterceira" })).toBe(
+      '"primeira linha"',
     );
-    expect(formatPasteChipLabel({ count: 3, pastedWord: "Colado", lineWord: "linhas" })).toBe(
-      "[Colado ~3 linhas]",
-    );
+    expect(formatPasteChipLabel({ body: "  com espaços  \nsegunda" })).toBe('"com espaços"');
+    expect(formatPasteChipLabel({ body: "x".repeat(50) })).toBe(`"${"x".repeat(40)}..."`);
+    expect(formatPasteChipLabel({ body: "y".repeat(50), maxChars: 10 })).toBe('"yyyyyyyyyy..."');
   });
 
   it("sits in the middle of a sentence and round-trips the body", () => {
     const before = "eu posso colar ";
     const after = " no meio e continuar escrevendo";
     const body = `linha 1\n"aspas"\n\u001E\u001F café`;
-    const chip: InlineChip = { id: "paste:mid", kind: "paste", label: "[Colado ~3 linhas]", body };
+    const chip: InlineChip = {
+      id: "paste:mid",
+      kind: "paste",
+      label: formatPasteChipLabel({ body }),
+      body,
+    };
     const inserted = insertInlineChip({
       text: `${before}${after}`,
       selection: { start: before.length, end: before.length },
@@ -70,7 +76,7 @@ describe("paste chips", () => {
       start: before.length + serializeInlineChip(chip).length,
       end: before.length + serializeInlineChip(chip).length,
     });
-    expect(inlineChipDisplayText(inserted.text)).toBe(`${before}[Colado ~3 linhas]${after}`);
+    expect(inlineChipDisplayText(inserted.text)).toBe(`${before}"linha 1"${after}`);
     const parts = parseInlineParts(inserted.text);
     expect(parts).toEqual([
       { kind: "text", text: before },

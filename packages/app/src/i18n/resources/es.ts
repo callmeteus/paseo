@@ -196,9 +196,6 @@ export const es: TranslationResources = {
       removeReview: "Eliminar archivo adjunto de reseña",
     },
     inlineChip: {
-      pastedWord: "Pegado",
-      line_one: "línea",
-      line_other: "líneas",
       mentionLoading: "Cargando este chat…",
     },
     errors: {

@@ -1219,15 +1219,10 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       const next = insertSelectionAsInlineChip({
         currentText: textSource.getSnapshot(),
         selectionText: selection,
-        labels: {
-          pastedWord: t("composer.inlineChip.pastedWord"),
-          lineOne: t("composer.inlineChip.line_one"),
-          lineOther: t("composer.inlineChip.line_other"),
-        },
       });
       replaceText(next.text);
     },
-    [textSource, replaceText, t],
+    [textSource, replaceText],
   );
   const handleAddSelectionToSideChat = useCallback(
     (selection: string) => {

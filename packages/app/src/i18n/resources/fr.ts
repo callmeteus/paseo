@@ -197,9 +197,6 @@ export const fr: TranslationResources = {
       removeReview: "Retirer la revue jointe",
     },
     inlineChip: {
-      pastedWord: "Collé",
-      line_one: "ligne",
-      line_other: "lignes",
       mentionLoading: "Chargement de cette conversation…",
     },
     errors: {

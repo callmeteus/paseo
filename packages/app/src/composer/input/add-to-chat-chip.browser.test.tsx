@@ -3,11 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
-import { serializeInlineChip, type InlineChip } from "@getpaseo/protocol/inline-chip";
+import {
+  formatPasteChipLabel,
+  serializeInlineChip,
+  type InlineChip,
+} from "@getpaseo/protocol/inline-chip";
 import { ToastApiProvider } from "@/contexts/toast-api-context";
 import { i18n } from "@/i18n/i18next";
 import { KeyboardActionDispatcherProvider } from "@/keyboard/keyboard-action-dispatcher-context";
-import { MessageInput } from "./input";
+import { MessageInput, type MessageInputRef } from "./input";
 import type { TextReplacement } from "../types";
 
 vi.mock("@/components/toast-host", () => ({
@@ -18,11 +22,12 @@ vi.mock("@/components/toast-host", () => ({
   }),
 }));
 
+const chipBody = "O daemon escuta em 100.66.222.98:6767 e o app já reconectou.";
 const chip: InlineChip = {
   id: "paste:1af8685f-cdd7-4a3f-a913-7e01f05c10dc",
   kind: "paste",
-  label: "[Pasted ~1 line]",
-  body: "O daemon escuta em 100.66.222.98:6767 e o app já reconectou.",
+  label: formatPasteChipLabel({ body: chipBody }),
+  body: chipBody,
 };
 const chipText = serializeInlineChip(chip);
 const toastApi = {
@@ -37,13 +42,18 @@ function ignoreText(): void {}
 
 function ignoreSubmit(): void {}
 
-function Harness(props: { replacement: TextReplacement; client: QueryClient }) {
+function Harness(props: {
+  replacement: TextReplacement;
+  client: QueryClient;
+  inputRef?: React.Ref<MessageInputRef>;
+}) {
   return (
     <QueryClientProvider client={props.client}>
       <I18nextProvider i18n={i18n}>
         <ToastApiProvider api={toastApi}>
           <KeyboardActionDispatcherProvider>
             <MessageInput
+              ref={props.inputRef}
               value=""
               onChangeText={ignoreText}
               onSubmit={ignoreSubmit}
@@ -86,7 +96,28 @@ describe("add to chat", () => {
     });
 
     const chipNode = container.querySelector("[data-inline-chip]");
-    expect(chipNode?.textContent).toBe("[Pasted ~1 line]");
+    expect(chipNode?.textContent).toBe(chip.label);
     expect(container.textContent).not.toContain('"kind":"paste"');
+  });
+
+  it("leaves the caret after the chip, not before it", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ root, container });
+    const inputRef = React.createRef<MessageInputRef>();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    act(() => {
+      root.render(<Harness client={client} replacement={initialReplacement} inputRef={inputRef} />);
+    });
+
+    act(() => {
+      root.render(<Harness client={client} replacement={chipReplacement} inputRef={inputRef} />);
+    });
+
+    expect(inputRef.current?.getInputSnapshot().selection).toEqual({
+      start: chipText.length,
+      end: chipText.length,
+    });
   });
 });

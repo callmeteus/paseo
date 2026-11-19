@@ -194,9 +194,6 @@ export const zhCN: TranslationResources = {
       removeReview: "移除 review 附件",
     },
     inlineChip: {
-      pastedWord: "已粘贴",
-      line_one: "行",
-      line_other: "行",
       mentionLoading: "正在加载此对话…",
     },
     errors: {

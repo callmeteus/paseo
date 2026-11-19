@@ -75,7 +75,6 @@ import {
   type EditingTextInputProps,
 } from "@/components/ui/text-input";
 import {
-  countPasteLines,
   formatPasteChipLabel,
   hasInlineChip,
   inlineChipDisplayText,
@@ -1853,13 +1852,19 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         textReplacement.kind === "hydrated" ? retainedSelectionRef.current : null;
       retainedSelectionRef.current = null;
       if (textReplacement.text === "") {
+        selectionRef.current = { start: 0, end: 0 };
         textInputRef.current?.reset();
       } else if (retainedSelection) {
         const selection = resolveRetainedSelection(retainedSelection, textReplacement.text.length);
         selectionRef.current = selection;
         textInputRef.current?.replaceText(textReplacement.text, selection);
       } else {
-        textInputRef.current?.replaceText(textReplacement.text);
+        // A replace (e.g. add to chat) puts the caret after the new text. Keep
+        // the editor's selection ref in sync: mounting the chip editor restores
+        // the caret from it, and CodeMirror parks it before a leading chip.
+        const selection = { start: textReplacement.text.length, end: textReplacement.text.length };
+        selectionRef.current = selection;
+        textInputRef.current?.replaceText(textReplacement.text, selection);
       }
     }, [syncChipEditor, textReplacement, updateComposerHeightForText, updateLiveTextPresence]);
 
@@ -2151,7 +2156,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             selection: { start: selection.start, end: selection.end },
           };
         }
-        const count = countPasteLines(input.text);
         const next = input.chip
           ? insertInlineChip({
               text: current,
@@ -2159,20 +2163,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               chip: {
                 id: `paste:${crypto.randomUUID()}`,
                 kind: "paste",
-                label: formatPasteChipLabel({
-                  count,
-                  pastedWord: t("composer.inlineChip.pastedWord"),
-                  lineWord: t(
-                    count === 1 ? "composer.inlineChip.line_one" : "composer.inlineChip.line_other",
-                  ),
-                }),
+                label: formatPasteChipLabel({ body: input.text }),
                 body: input.text,
               },
             })
           : insertTextAtSelection({ text: current, selection, insert: input.text });
         replaceText(next.text, next.selection);
       },
-      [replaceText, t],
+      [replaceText],
     );
 
     usePasteImagesEffect({

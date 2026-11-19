@@ -196,9 +196,6 @@ export const ptBR: TranslationResources = {
       removeReview: "Remover anexo de revisão",
     },
     inlineChip: {
-      pastedWord: "Colado",
-      line_one: "linha",
-      line_other: "linhas",
       mentionLoading: "Carregando esta conversa…",
     },
     errors: {

@@ -190,9 +190,6 @@ export const en = {
       removeReview: "Remove review attachment",
     },
     inlineChip: {
-      pastedWord: "Pasted",
-      line_one: "line",
-      line_other: "lines",
       mentionLoading: "Loading this chat…",
     },
     errors: {

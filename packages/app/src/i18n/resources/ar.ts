@@ -194,9 +194,6 @@ export const ar: TranslationResources = {
       removeReview: "إزالة مرفق المراجعة",
     },
     inlineChip: {
-      pastedWord: "تم اللصق",
-      line_one: "سطر",
-      line_other: "أسطر",
       mentionLoading: "جارٍ تحميل هذه المحادثة…",
     },
     errors: {

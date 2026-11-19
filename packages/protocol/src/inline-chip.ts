@@ -6,13 +6,15 @@
  * JSON record between two control characters that `JSON.stringify` escapes if
  * they appear inside the pasted body, so a paste cannot close its own marker.
  *
- * OpenCode collapses a paste at 3 lines or 150 characters and labels it
- * `[Pasted ~N lines]`. `shouldChipPaste` uses those same thresholds. A shorter
- * paste stays ordinary text.
+ * OpenCode collapses a paste at 3 lines or 150 characters. `shouldChipPaste`
+ * uses those same thresholds; a shorter paste stays ordinary text. The chip
+ * label is a quoted preview of the pasted text, like Cursor's paste chips, and
+ * the full body still reaches the model unchanged.
  */
 
 export const PASTE_CHIP_MIN_LINES = 3;
 export const PASTE_CHIP_MIN_CHARS = 150;
+export const PASTE_CHIP_SNIPPET_MAX_CHARS = 40;
 
 const MARKER_START = "\u001E";
 const MARKER_END = "\u001F";
@@ -62,15 +64,15 @@ export function shouldChipPaste(text: string): boolean {
 }
 
 /**
- * The OpenCode label shape: brackets, a tilde, then the count.
- * `pastedWord` and `lineWord` come from the composer locale (`Colado` / `linha`).
+ * A paste chip shows a quoted preview of the first line, clipped with an
+ * ellipsis. The full text stays in the body, so what the model receives never
+ * depends on how much fits in the label.
  */
-export function formatPasteChipLabel(input: {
-  count: number;
-  pastedWord: string;
-  lineWord: string;
-}): string {
-  return `[${input.pastedWord} ~${input.count} ${input.lineWord}]`;
+export function formatPasteChipLabel(input: { body: string; maxChars?: number }): string {
+  const max = input.maxChars ?? PASTE_CHIP_SNIPPET_MAX_CHARS;
+  const firstLine = input.body.split(/\r\n|\n|\r/)[0]?.trim() ?? "";
+  const clipped = firstLine.length > max ? `${firstLine.slice(0, max).trimEnd()}...` : firstLine;
+  return `"${clipped}"`;
 }
 
 /** Chat title, then workspace name, then the agent id. Never empty. */

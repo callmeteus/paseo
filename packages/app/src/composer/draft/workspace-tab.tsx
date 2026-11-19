@@ -806,16 +806,11 @@ export function WorkspaceDraftAgentTab({
       const next = insertSelectionAsInlineChip({
         currentText: draftInput.textSource.getSnapshot(),
         selectionText: selection,
-        labels: {
-          pastedWord: t("composer.inlineChip.pastedWord"),
-          lineOne: t("composer.inlineChip.line_one"),
-          lineOther: t("composer.inlineChip.line_other"),
-        },
       });
       replaceDraftText(next.text);
       focusInputRef.current?.();
     },
-    [draftInput, replaceDraftText, t],
+    [draftInput, replaceDraftText],
   );
   const onAddSelectionToSideChat = useDraftAgentSideSelection(serverId, sideAgentId(draftAgent));
 
