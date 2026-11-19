@@ -1818,6 +1818,40 @@ describe("ACPAgentSession Zed parity", () => {
     });
   });
 
+  test("MCP tool permissions stay visible even when auto-accept is on", async () => {
+    const session = createSessionWithConfig({ featureValues: { auto_accept: true } });
+    const events: Array<{ type: string; request?: { id: string } }> = [];
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    session.subscribe((event) => events.push(event as { type: string; request?: { id: string } }));
+
+    const permission = session.requestPermission({
+      sessionId: "session-1",
+      toolCall: {
+        toolCallId: "tool-1",
+        title: "luckymaker-prod-lm_prod_ssh_grant: lm_prod_ssh_grant",
+        kind: "other",
+        status: "pending",
+        rawInput: {
+          providerIdentifier: "luckymaker-prod",
+          toolName: "lm_prod_ssh_grant",
+          args: { action: "grant" },
+        },
+      },
+      options: [
+        { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+        { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+      ],
+    } satisfies RequestPermissionRequest);
+    await Promise.resolve();
+
+    const requested = events.find((event) => event.type === "permission_requested");
+    expect(requested?.request?.id).toEqual(expect.any(String));
+    await session.respondToPermission(requested!.request!.id, { behavior: "deny" });
+    await expect(permission).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "reject-once" },
+    });
+  });
+
   test("surfaces an ACP permission when auto-accept has no allow option", async () => {
     const session = createSessionWithConfig({ featureValues: { auto_accept: true } });
     const events: Array<{ type: string; request?: { id: string } }> = [];

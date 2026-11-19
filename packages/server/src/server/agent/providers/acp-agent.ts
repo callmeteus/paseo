@@ -3206,6 +3206,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.activeForegroundTurnId = null;
   }
 
+  private isMcpToolPermission(params: RequestPermissionRequest): boolean {
+    const raw = params.toolCall?.rawInput;
+    if (typeof raw === "object" && raw !== null) {
+      const input = raw as Record<string, unknown>;
+      if (typeof input.providerIdentifier === "string" && typeof input.toolName === "string") {
+        return true;
+      }
+    }
+    const title = params.toolCall?.title ?? "";
+    return this.acpMcpServers().some(
+      (server) => title === server.name || title.startsWith(`${server.name}-`),
+    );
+  }
+
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     this.logger.info(
       {
@@ -3239,8 +3253,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       };
     }
 
+    // An MCP server can be user-installed and untrusted. Auto-accept applies to
+    // the agent's own tools, never to a tool that came from an MCP server.
     const canAutoAccept =
-      isACPAutoAcceptEnabled(this.config) && !isACPChooserRequest(params.options);
+      isACPAutoAcceptEnabled(this.config) &&
+      !isACPChooserRequest(params.options) &&
+      !this.isMcpToolPermission(params);
     if (canAutoAccept) {
       const allowOption = selectPermissionOption(params.options, { behavior: "allow" });
       if (allowOption) {
