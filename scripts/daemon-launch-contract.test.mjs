@@ -80,3 +80,18 @@ test("every executable daemon entrypoint enters the supervisor", async () => {
   assert.doesNotMatch(nixModule, /\bNODE_ENV\b\s*=/);
   assert.doesNotMatch(nixModule, /\bPASEO_NODE_ENV\b/);
 });
+
+test("build:lib copies every runtime asset of the OpenCode v2 provider", async () => {
+  const [serverPackageSource, buildScript] = await Promise.all([
+    readFile(join(repoRoot, "packages/server/package.json"), "utf8"),
+    readFile(join(repoRoot, "packages/server/scripts/build-opencode-bridge-plugin.mjs"), "utf8"),
+  ]);
+  const buildLib = JSON.parse(serverPackageSource).scripts["build:lib"];
+
+  assert.match(buildLib, /node scripts\/build-opencode-bridge-plugin\.mjs/);
+  // A named copy leaves the next .mjs import broken in the packaged daemon.
+  assert.doesNotMatch(buildLib, /cursor-rules\.mjs/);
+  assert.match(buildScript, /readdir\(/);
+  assert.match(buildScript, /copyFile\(/);
+  assert.match(buildScript, /\.mjs/);
+});

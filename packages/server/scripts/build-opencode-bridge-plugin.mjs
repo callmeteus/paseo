@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,4 +28,20 @@ for (const directory of ["", "v2/"]) {
     external: ["node:fs", "node:path"],
     outfile: outputPath,
   });
+}
+
+// tsc emits only .js. The compiled agent-manager imports cursor-rules.mjs at
+// runtime, so the .mjs assets have to be copied alongside it. Copy every one in
+// this directory: a fixed list leaves the next .mjs import broken in the
+// packaged daemon, where the failure appears as a daemon that never opens its
+// port.
+const v2Source = fileURLToPath(
+  new URL("../src/server/agent/providers/opencode/v2/", import.meta.url),
+);
+const v2Dist = fileURLToPath(
+  new URL("../dist/server/server/agent/providers/opencode/v2/", import.meta.url),
+);
+for (const entry of await readdir(v2Source, { withFileTypes: true })) {
+  if (!entry.isFile() || !/\.(?:mjs|d\.mts)$/.test(entry.name)) continue;
+  await copyFile(path.join(v2Source, entry.name), path.join(v2Dist, entry.name));
 }
