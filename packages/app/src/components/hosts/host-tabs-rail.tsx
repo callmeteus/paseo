@@ -1,11 +1,9 @@
 import { useCallback, type ReactElement } from "react";
-import { usePathname } from "expo-router";
 import { HostTabsRow } from "@/components/hosts/host-tabs-row";
+import { useActiveHostServerId } from "@/hooks/use-active-host-server-id";
 import { selectHostFromTab } from "@/navigation/host-tab-navigation";
 import { useHosts } from "@/runtime/host-runtime";
-import { useLastWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useSidebarViewStore, type SidebarGroupMode } from "@/stores/sidebar-view-store";
-import { parseServerIdFromPathname } from "@/utils/host-routes";
 
 export function isHostTabsRailVisible(input: {
   groupMode: SidebarGroupMode;
@@ -28,11 +26,8 @@ export function HostTabsRail(): ReactElement | null {
   const hostCount = useHosts().length;
   const hostFilters = useSidebarViewStore((state) => state.hostFilters);
   const setHostFilter = useSidebarViewStore((state) => state.setHostFilter);
-  const pathname = usePathname();
-  const lastSelection = useLastWorkspaceSelection();
   const filteredHostId = hostFilters.length === 1 ? hostFilters[0] : null;
-  const activeServerId =
-    filteredHostId ?? parseServerIdFromPathname(pathname) ?? lastSelection?.serverId ?? null;
+  const activeServerId = useActiveHostServerId();
 
   const handleSelectHost = useCallback(
     (serverId: string) => {
