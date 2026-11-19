@@ -63,6 +63,60 @@ describe("readACPElicitation", () => {
     expect(form?.urlMode).toBe("elicit-1");
   });
 
+  it("maps an operator confirmation into checkboxes and a duration choice", () => {
+    const form = readACPElicitation({
+      mode: "form",
+      sessionId: "session-1",
+      message: "Executar comando SSH em produção?",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          duration: {
+            type: "string",
+            title: "Tempo",
+            description: "Por quanto tempo as próximas ações pulam a confirmação.",
+            oneOf: [
+              { const: "8h", title: "8 horas" },
+              { const: "24h", title: "24 horas" },
+            ],
+            default: "8h",
+          },
+          grant_tool: {
+            type: "boolean",
+            title: "Grant do SSH de produção por 8 horas",
+            description: "As próximas ações do SSH de produção não pedem confirmação por 8 horas.",
+            default: false,
+          },
+          grant_any: {
+            type: "boolean",
+            title: "Auto-accept de qualquer comando por 8 horas",
+            description: "Infisical, E7 e o SSH de produção não pedem confirmação por 8 horas.",
+            default: false,
+          },
+        },
+        required: ["duration"],
+      },
+    });
+    expect(form?.questions).toEqual([
+      expect.objectContaining({
+        header: "Tempo",
+        type: "text",
+        options: [{ label: "8 horas" }, { label: "24 horas" }],
+        allowEmpty: false,
+      }),
+      expect.objectContaining({
+        header: "Grant do SSH de produção por 8 horas",
+        type: "boolean",
+        options: [],
+      }),
+      expect.objectContaining({
+        header: "Auto-accept de qualquer comando por 8 horas",
+        type: "boolean",
+        options: [],
+      }),
+    ]);
+  });
+
   it("rejects a request with no message", () => {
     expect(readACPElicitation({ mode: "form", sessionId: "s" })).toBeNull();
   });

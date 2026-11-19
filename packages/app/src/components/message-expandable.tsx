@@ -1240,6 +1240,10 @@ function readMcpAppHtml(metadata: Record<string, unknown> | undefined): string |
   return typeof value === "string" && /<html[\s>]/i.test(value) ? value : null;
 }
 
+function readMcpAppResult(metadata: Record<string, unknown> | undefined): unknown {
+  return metadata?.mcpAppResult;
+}
+
 export const ToolCall = memo(function ToolCall({
   agentMessage,
   serverId,
@@ -1291,7 +1295,8 @@ export const ToolCall = memo(function ToolCall({
     return undefined;
   }, [detail, args, result]);
 
-  const { input: mcpAppInput, result: mcpAppResult } = readUnknownDetail(effectiveDetail);
+  const { input: mcpAppInput } = readUnknownDetail(effectiveDetail);
+  const mcpAppResult = readMcpAppResult(metadata) ?? readUnknownDetail(effectiveDetail).result;
 
   const targetAgentTitle = useTargetAgentTitle({ serverId, toolName, detail: effectiveDetail });
   const presentation = useMemo(

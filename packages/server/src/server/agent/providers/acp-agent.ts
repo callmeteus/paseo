@@ -4787,6 +4787,7 @@ function mapToolSnapshotToTimeline(
       kind: snapshot.kind ?? undefined,
       title: snapshot.title,
       ...(snapshot.mcpAppHtml ? { mcpAppHtml: snapshot.mcpAppHtml } : {}),
+      ...(snapshot.rawOutput !== undefined ? { mcpAppResult: snapshot.rawOutput } : {}),
     },
   };
   if (status === "failed") {
