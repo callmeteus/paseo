@@ -7,8 +7,19 @@ function ownsMessage(sessionID, message) {
   return typeof owner !== "string" || owner.length === 0 || owner === sessionID;
 }
 
+// OpenCode's LLM media sanitizer calls `content.map` without guarding the type.
+// A string here crashes the turn with "i.content.map is not a function", so
+// every synthesized message must carry content as an array of text parts.
+function asTextParts(text) {
+  return [{ type: "text", text }];
+}
+
 function asModelMessage(message) {
-  if (message.role && message.content !== undefined) return message;
+  if (message.role && message.content !== undefined) {
+    return typeof message.content === "string"
+      ? { ...message, content: asTextParts(message.content) }
+      : message;
+  }
   let text = "";
   if (typeof message.text === "string") {
     text = message.text;
@@ -17,7 +28,7 @@ function asModelMessage(message) {
   }
   if (!text) return null;
   const role = message.type === "assistant" ? "assistant" : "user";
-  return { id: message.id, role, content: text };
+  return { id: message.id, role, content: asTextParts(text) };
 }
 
 function asModelMessages(messages) {

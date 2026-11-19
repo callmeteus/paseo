@@ -29,6 +29,22 @@ async function writeRule(file: string, body: string): Promise<void> {
 }
 
 describe("OpenCode cursor rules", () => {
+  test("the injected rules message uses text parts so OpenCode can map its content", async () => {
+    const root = await project();
+    await writeRule(
+      join(root, ".cursor", "rules", "root.mdc"),
+      "---\nalwaysApply: true\n---\nTEXT_PARTS\n",
+    );
+
+    const messages: unknown[] = [];
+    applyCursorRules(messages, root);
+
+    expect(messages).toHaveLength(1);
+    const injected = messages[0] as { role: string; content: unknown; text: string };
+    expect(injected.role).toBe("system");
+    expect(injected.content).toEqual([{ type: "text", text: injected.text }]);
+  });
+
   test("includes root always-on rules and leaves a nested rule until a tool path enters it", async () => {
     const root = await project();
     await writeRule(

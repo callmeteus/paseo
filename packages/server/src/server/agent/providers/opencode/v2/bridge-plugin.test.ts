@@ -32,6 +32,17 @@ describe("OpenCode compaction scope", () => {
     ).toEqual(scopedA);
   });
 
+  test("replacement messages carry content as text parts, not a raw string", () => {
+    const scoped = scopeCompactionMessages("ses_A", [], historyA);
+    expect(scoped).toEqual([
+      {
+        id: "a1",
+        role: "user",
+        content: [{ type: "text", text: phraseA }],
+      },
+    ]);
+  });
+
   test("the compaction hook reads the canonical history for the session being compacted", async () => {
     const hooks = new Map<string, (input: { sessionID: string; messages: unknown[] }) => unknown>();
     const dispose = await plugin.setup({

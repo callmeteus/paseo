@@ -548,7 +548,9 @@ function upsertCursorRulesMessage(messages, block) {
     if (index >= 0) messages.splice(index, 1);
     return;
   }
-  const message = { role: "system", content: block, text: block };
+  // OpenCode's LLM media sanitizer calls `content.map` without guarding the
+  // type. Keep content as an array of text parts so the request cannot crash.
+  const message = { role: "system", content: [{ type: "text", text: block }], text: block };
   if (index >= 0) messages[index] = message;
   else messages.unshift(message);
 }
