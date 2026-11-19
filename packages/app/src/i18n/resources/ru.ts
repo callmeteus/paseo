@@ -321,6 +321,7 @@ export const ru: TranslationResources = {
   agentStream: {
     addSelectionToChat: "Добавить в чат",
     addSelectionToSideChat: "Добавить в боковой чат",
+    viewMcpApp: "Показать интерфейс MCP",
     empty: "Начните общаться с этим агентом...",
     scrollToBottom: "Прокрутить вниз",
     historyLoadFailed: "Не удалось загрузить историю агента",

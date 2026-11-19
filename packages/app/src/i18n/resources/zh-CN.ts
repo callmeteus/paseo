@@ -318,6 +318,7 @@ export const zhCN: TranslationResources = {
   agentStream: {
     addSelectionToChat: "添加到对话",
     addSelectionToSideChat: "添加到侧边对话",
+    viewMcpApp: "查看 MCP 界面",
     empty: "开始和这个 Agent 对话...",
     scrollToBottom: "滚动到底部",
     historyLoadFailed: "无法加载智能体历史记录",

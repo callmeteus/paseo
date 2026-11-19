@@ -61,6 +61,27 @@ export class UpstreamMcpRegistry {
     }
   }
 
+  /** HTML for an MCP App resource exposed by this server, or null when it has none. */
+  async readMcpAppHtml(serverName: string): Promise<string | null> {
+    const upstream = await this.getUpstream(serverName);
+    let cursor: string | undefined;
+    do {
+      const page = await upstream.client.listResources(cursor ? { cursor } : undefined);
+      for (const resource of page.resources) {
+        const mime = resource.mimeType?.toLowerCase() ?? "";
+        if (!resource.uri.startsWith("ui://") && !mime.includes("mcp-app")) continue;
+        const read = await upstream.client.readResource({ uri: resource.uri });
+        const html = read.contents.find(
+          (entry) => "text" in entry && typeof entry.text === "string",
+        );
+        const text = html && "text" in html ? html.text : null;
+        if (text && /<html[\s>]/i.test(text)) return text;
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    return null;
+  }
+
   invalidate(serverName: string): void {
     const upstream = this.upstreams.get(serverName);
     this.upstreams.delete(serverName);

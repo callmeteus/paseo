@@ -71,6 +71,8 @@ import {
   readACPElicitation,
   type ACPElicitationForm,
 } from "./acp-elicitation.js";
+import { UpstreamMcpRegistry } from "../../mcp/upstream.js";
+import { readProjectMcpConfigs } from "../../mcp/project-mcp-config.js";
 import type { Logger } from "pino";
 
 import {
@@ -868,6 +870,8 @@ export interface ACPToolSnapshot {
   locations?: ToolCallLocation[] | null;
   rawInput?: unknown;
   rawOutput?: unknown;
+  /** HTML from an MCP App resource, shown by the client instead of raw output. */
+  mcpAppHtml?: string;
 }
 
 interface PendingPermission {
@@ -2044,6 +2048,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly pendingElicitations = new Map<string, PendingElicitation>();
+  private readonly mcpAppHtmlByTool = new Map<string, string>();
+  private mcpAppRegistry: UpstreamMcpRegistry | null = null;
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
   private readonly toolCalls = new Map<string, ACPToolSnapshot>();
@@ -3225,13 +3231,58 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     this.subscribers.clear();
+    void this.mcpAppRegistry?.close();
+    this.mcpAppRegistry = null;
     this.connection = null;
     this.child = null;
     this.activeForegroundTurnId = null;
   }
 
+  private async loadMcpAppHtml(
+    toolCallId: string,
+    params: RequestPermissionRequest,
+  ): Promise<void> {
+    const servers = readProjectMcpConfigs(this.config.cwd);
+    const raw = params.toolCall?.rawInput;
+    const rawServer =
+      typeof raw === "object" && raw !== null
+        ? (raw as Record<string, unknown>).providerIdentifier
+        : null;
+    const title = params.toolCall?.title ?? "";
+    const name =
+      typeof rawServer === "string" && servers[rawServer]
+        ? rawServer
+        : Object.keys(servers).find((server) => title.startsWith(`${server}-`));
+    if (!name) return;
+
+    if (!this.mcpAppRegistry) {
+      this.mcpAppRegistry = new UpstreamMcpRegistry({
+        getServers: () => servers,
+        logger: {
+          warn: (...args: unknown[]) => {
+            this.logger.warn(args);
+          },
+          info: (...args: unknown[]) => {
+            this.logger.info(args);
+          },
+        },
+      });
+    }
+    const html = await this.mcpAppRegistry.readMcpAppHtml(name);
+    if (!html) return;
+    this.mcpAppHtmlByTool.set(toolCallId, html);
+    const snapshot = this.toolCalls.get(toolCallId);
+    if (!snapshot) return;
+    const updated = { ...snapshot, mcpAppHtml: html };
+    this.toolCalls.set(toolCallId, updated);
+    this.pushEvent(this.wrapTimeline(mapToolSnapshotToTimeline(updated, this.terminalEntries)));
+  }
+
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     const rawInput = params.toolCall?.rawInput;
+    void this.loadMcpAppHtml(params.toolCall.toolCallId, params).catch((error) => {
+      this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
+    });
     this.logger.info(
       {
         title: params.toolCall?.title,
@@ -3937,6 +3988,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     previous: ACPToolSnapshot | undefined,
   ): AgentStreamEvent[] {
     let snapshot = mergeToolSnapshot(toolCallId, update, previous);
+    const cachedHtml = this.mcpAppHtmlByTool.get(toolCallId);
+    if (cachedHtml) snapshot = { ...snapshot, mcpAppHtml: cachedHtml };
     if (this.toolSnapshotTransformer) {
       snapshot = this.toolSnapshotTransformer(snapshot);
     }
@@ -4708,6 +4761,7 @@ function mapToolSnapshotToTimeline(
     metadata: {
       kind: snapshot.kind ?? undefined,
       title: snapshot.title,
+      ...(snapshot.mcpAppHtml ? { mcpAppHtml: snapshot.mcpAppHtml } : {}),
     },
   };
   if (status === "failed") {

@@ -321,6 +321,7 @@ export const ja: TranslationResources = {
   agentStream: {
     addSelectionToChat: "チャットに追加",
     addSelectionToSideChat: "サイドチャットに追加",
+    viewMcpApp: "MCP インターフェースを表示",
     empty: "このエージェントとチャットを始めましょう...",
     scrollToBottom: "下にスクロール",
     historyLoadFailed: "エージェントの履歴を読み込めませんでした",

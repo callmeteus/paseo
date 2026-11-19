@@ -322,6 +322,7 @@ export const ptBR: TranslationResources = {
   agentStream: {
     addSelectionToChat: "Adicionar ao chat",
     addSelectionToSideChat: "Adicionar ao side chat",
+    viewMcpApp: "Ver interface do MCP",
     empty: "Comece a conversar com este agente...",
     scrollToBottom: "Rolar para o fim",
     historyLoadFailed: "Não foi possível carregar o histórico do agente",

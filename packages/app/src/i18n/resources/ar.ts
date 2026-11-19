@@ -318,6 +318,7 @@ export const ar: TranslationResources = {
   agentStream: {
     addSelectionToChat: "أضف إلى المحادثة",
     addSelectionToSideChat: "أضف إلى المحادثة الجانبية",
+    viewMcpApp: "عرض واجهة MCP",
     empty: "ابدأ الدردشة مع هذا الوكيل...",
     scrollToBottom: "قم بالتمرير إلى الأسفل",
     historyLoadFailed: "تعذر تحميل سجل الوكيل",

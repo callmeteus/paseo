@@ -322,6 +322,7 @@ export const es: TranslationResources = {
   agentStream: {
     addSelectionToChat: "Añadir al chat",
     addSelectionToSideChat: "Añadir al chat lateral",
+    viewMcpApp: "Ver interfaz MCP",
     empty: "Comience a chatear con este agente...",
     scrollToBottom: "Desplazarse hacia abajo",
     historyLoadFailed: "No se pudo cargar el historial del agente",
