@@ -323,6 +323,9 @@ A cursorless local prompt with a positioned canonical twin of the same text is d
 even when their ids differ: the canonical copy can reach the tail before the live presentation is
 reconciled, and the two would otherwise render as one prompt at the bottom and one in place. A
 canonical row carrying a different client id is another client's prompt and is never matched by text.
+A matching `clientMessageId` also identifies an echo. The view repeats the drop as a render-time
+safety net (`dropLocalPromptEchoesFromHead`) because a cached paint or a late handoff can put the
+echo in the head after every reducer path has run.
 
 ## Relevant code
 

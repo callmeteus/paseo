@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyStreamEvent,
   createUserMessage,
+  dropLocalPromptEchoesFromHead,
   handoffCreatedAgentUserMessageToStream,
   hydrateStreamState,
   mergeToolCallDetail,
@@ -2681,5 +2682,50 @@ describe("settleInterruptedStreamItems", () => {
   it("returns the same array when there is nothing to settle", () => {
     const rows = [toolCall("current", "running", "turn-1")];
     expect(settleInterruptedStreamItems(rows, { activeTurnId: "turn-1" })).toBe(rows);
+  });
+});
+
+describe("dropLocalPromptEchoesFromHead", () => {
+  const timestamp = new Date("2026-11-19T17:19:00.000Z");
+
+  function positionedPrompt(clientMessageId: string): StreamItem {
+    return createUserMessage({
+      id: "canonical",
+      text: "Faça com que todos os ingressos não fiquem disponíveis",
+      timestamp,
+      clientMessageId,
+      timelineCursor: { epoch: "epoch-1", seq: 1 },
+    });
+  }
+
+  function localEcho(clientMessageId: string): StreamItem {
+    return createUserMessage({
+      id: "local",
+      text: "Faça com que todos os ingressos não fiquem disponíveis",
+      timestamp,
+      clientMessageId,
+    });
+  }
+
+  it("drops a local echo whose canonical copy is already positioned in the tail", () => {
+    const head = [localEcho("client-1")];
+    const result = dropLocalPromptEchoesFromHead([positionedPrompt("client-1")], head);
+    expect(result).toEqual([]);
+  });
+
+  it("drops the echo even when only the text and timestamp identify the pair", () => {
+    const head = [localEcho("client-1")];
+    const canonical = { ...positionedPrompt("provider-id"), clientMessageId: undefined };
+    expect(dropLocalPromptEchoesFromHead([canonical], head)).toEqual([]);
+  });
+
+  it("keeps a head row when no positioned canonical copy exists", () => {
+    const head = [localEcho("client-1")];
+    expect(dropLocalPromptEchoesFromHead([], head)).toBe(head);
+  });
+
+  it("keeps prompts from different clients that happen to share text", () => {
+    const head = [localEcho("client-2")];
+    expect(dropLocalPromptEchoesFromHead([positionedPrompt("client-1")], head)).toBe(head);
   });
 });

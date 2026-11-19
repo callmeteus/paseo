@@ -51,6 +51,7 @@ import { collapseRepeatedFailures } from "@/agent-stream/repeated-failures";
 import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
 import { ProviderErrorRetry } from "@/agent-stream/provider-error-retry";
 import {
+  dropLocalPromptEchoesFromHead,
   getStreamItemMessageId,
   type StreamItem,
   type UserMessageItem,
@@ -652,7 +653,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const dedupedStream = useMemo(
       () => ({
         tail: collapseRepeatedFailures(effectiveStreamItems),
-        head: collapseRepeatedFailures(effectiveStreamHead ?? EMPTY_STREAM_HEAD),
+        head: collapseRepeatedFailures(
+          dropLocalPromptEchoesFromHead(
+            effectiveStreamItems,
+            effectiveStreamHead ?? EMPTY_STREAM_HEAD,
+          ),
+        ),
       }),
       [effectiveStreamHead, effectiveStreamItems],
     );

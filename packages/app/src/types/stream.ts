@@ -543,6 +543,33 @@ export function isLocalCopyOfPositionedUserMessage(
   );
 }
 
+/**
+ * Render-time safety net: a local prompt echo can reach the head after every
+ * reducer path has run (cached chat paint, handoff, late submission). On web the
+ * head paints below the positioned tail, so the same prompt shows up once in its
+ * place and once at the bottom. Drop the echo whenever a positioned copy exists.
+ */
+export function dropLocalPromptEchoesFromHead(
+  tail: readonly StreamItem[],
+  head: readonly StreamItem[],
+): StreamItem[] {
+  if (head.length === 0) return head as StreamItem[];
+  const positioned = tail.filter(
+    (item) => item.kind === "user_message" && item.timelineCursor !== undefined,
+  );
+  if (positioned.length === 0) return head as StreamItem[];
+  const next = head.filter((item) => {
+    if (item.kind !== "user_message") return true;
+    if (isLocalCopyOfPositionedUserMessage(item, tail)) return false;
+    if (item.clientMessageId === undefined) return true;
+    return !positioned.some(
+      (candidate) =>
+        candidate.kind === "user_message" && candidate.clientMessageId === item.clientMessageId,
+    );
+  });
+  return next.length === head.length ? (head as StreamItem[]) : next;
+}
+
 function reconcileReplacementHeadAgainstTail(
   tail: StreamItem[],
   retainedHead: StreamItem[],
