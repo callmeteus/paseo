@@ -229,7 +229,6 @@ interface BuildAutocompleteOptionsInput {
   activeFileMention: FileMentionRange | null;
   fileSuggestions: DirectorySuggestionEntry[];
   chatSuggestions: ChatMentionCandidate[];
-  sideChatEnabled: boolean;
   t: TFunction;
 }
 
@@ -244,9 +243,7 @@ function buildCommandAutocompleteOptions(input: BuildAutocompleteOptionsInput) {
       command,
     }));
     const rootCommands: AvailableCommand[] = mergeSlashCommandSources({
-      builtIn: input.sideChatEnabled
-        ? CLIENT_SLASH_COMMANDS
-        : CLIENT_SLASH_COMMANDS.filter((command) => command.kind !== "open-side-chat"),
+      builtIn: CLIENT_SLASH_COMMANDS,
       plugins: input.pluginCommands,
       provider: input.commands,
       onPluginCollision(command, winner) {
@@ -503,7 +500,6 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
 
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const sideChatEnabled = useHostFeature(serverId, "agentSideQuestion");
   const supportsChatMention = resolveChatMentionSupport({
     chatSearch: useHostFeature(serverId, "chatSearch"),
     agentForkContext: useHostFeature(serverId, "agentForkContext"),
@@ -588,12 +584,10 @@ export function useAgentAutocomplete(input: UseAgentAutocompleteInput): AgentAut
         isDraftContext,
         isVisible,
         mode,
-        sideChatEnabled,
         t,
       }),
     [
       fileMention,
-      sideChatEnabled,
       activeSlashCommand,
       commandFilterQuery,
       commands,

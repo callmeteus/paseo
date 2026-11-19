@@ -22,11 +22,8 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useAgentStreamTail } from "@/agent-stream/use-agent-stream-tail";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
-import { SideChatPanel } from "@/side-chat/panel";
-import { useSideChatStore } from "@/side-chat/store";
-import { sideChatDraftKey } from "@/side-chat/draft-key";
-import { useDraftStore } from "@/stores/draft-store";
-import { hostSupportsFeature, useHostFeature } from "@/runtime/host-features";
+import { useAddSelectionToSideChat } from "@/side-chat/use-add-selection";
+import { openSideChat } from "@/side-chat/open";
 import { usePortingActivity } from "@/composer/agent-controls/porting-activity";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
 import { HostPasswordPrompt } from "@/components/host-password-prompt";
@@ -411,6 +408,7 @@ export function useDraftPanelDescriptor(
   return buildDraftPanelDescriptor({
     ...createDescriptorState,
     icon: SquarePen,
+    draftId: target.draftId,
   });
 }
 
@@ -1213,7 +1211,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       composerState,
     ],
   );
-  const sideChatEnabled = useHostFeature(serverId, "agentSideQuestion");
   const handleAddSelectionToChat = useCallback(
     (selection: string) => {
       const next = insertSelectionAsInlineChip({
@@ -1224,17 +1221,10 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     },
     [textSource, replaceText],
   );
-  const handleAddSelectionToSideChat = useCallback(
-    (selection: string) => {
-      if (!agentId || !sideChatEnabled) return;
-      void useDraftStore.getState().attachQuote({
-        draftKey: sideChatDraftKey(serverId, agentId),
-        text: selection,
-      });
-      useSideChatStore.getState().requestFocus(agentId);
-    },
-    [agentId, serverId, sideChatEnabled],
-  );
+  const { addSelection: handleAddSelectionToSideChat } = useAddSelectionToSideChat({
+    serverId,
+    workspaceId,
+  });
   const parentCallout = parentAgentId ? (
     <ParentAgentCallout serverId={serverId} parentAgentId={parentAgentId} />
   ) : null;
@@ -1276,9 +1266,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           toast={toastApi}
           onOpenWorkspaceFile={onOpenWorkspaceFile}
           onAddSelectionToChat={agentId ? handleAddSelectionToChat : undefined}
-          onAddSelectionToSideChat={
-            agentId && sideChatEnabled ? handleAddSelectionToSideChat : undefined
-          }
+          onAddSelectionToSideChat={handleAddSelectionToSideChat}
         />
       </RenderProfile>
       {hasActiveComposer ? (
@@ -1337,7 +1325,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     >
       <View style={styles.root}>
         {dock}
-        <SideChatPanel serverId={serverId} agentId={agentId} />
 
         {isArchivingCurrentAgent ? (
           <View style={styles.archivingOverlay} testID="agent-archiving-overlay">
@@ -1665,12 +1652,12 @@ function ActiveAgentComposer({
       }
 
       if (command.kind === "open-side-chat") {
-        useSideChatStore.getState().requestFocus(agentId);
-        const argument = command.argument?.trim();
-        const serverInfo = useSessionStore.getState().sessions[serverId]?.serverInfo;
-        if (argument && hostSupportsFeature(serverInfo, "agentSideQuestion")) {
-          await useSideChatStore.getState().send(serverId, agentId, argument);
-        }
+        openSideChat({
+          serverId,
+          workspaceId,
+          isCompact: isCompactFormFactor,
+          draftText: command.argument?.trim(),
+        });
         return;
       }
 
@@ -1714,6 +1701,7 @@ function ActiveAgentComposer({
       archiveAgent,
       closeWorkspaceTab,
       hideWorkspaceAgent,
+      isCompactFormFactor,
       retargetCurrentTab,
       serverId,
       tabId,

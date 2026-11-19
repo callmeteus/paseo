@@ -44,6 +44,16 @@ describe("buildDraftPanelDescriptor", () => {
     });
   });
 
+  it("labels workspace side chats with the side chat title", () => {
+    const descriptor = buildDraftPanelDescriptor({
+      isCreating: false,
+      draftId: "side:workspace-1",
+      icon: TestIcon,
+    });
+
+    expect(descriptor.label).toBe("Side chat");
+  });
+
   it("uses the active language for draft descriptor chrome", async () => {
     await i18n.changeLanguage("zh-CN");
     const idleDescriptor = buildDraftPanelDescriptor({

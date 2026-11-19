@@ -1,5 +1,14 @@
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 
-export function sideChatDraftKey(serverId: string, agentId: string): string {
-  return buildDraftStoreKey({ serverId, agentId, draftId: `side:${agentId}` });
+/** One side chat per workspace, so it survives across the agents you visit. */
+export function sideChatDraftId(workspaceId: string): string {
+  return `side:${workspaceId}`;
+}
+
+export function sideChatDraftKey(serverId: string, workspaceId: string): string {
+  return buildDraftStoreKey({
+    serverId,
+    agentId: "side-chat",
+    draftId: sideChatDraftId(workspaceId),
+  });
 }
