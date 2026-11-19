@@ -55,8 +55,10 @@ jobs:
           retention-days: 14
 
   android-apk:
-    name: Android APK (EAS)
+    name: Android APK (local build)
     runs-on: docker
+    container:
+      image: mingc/android-build-box:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,41 +77,14 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GH_TOKEN }}
 
-      - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Build Android APK on EAS
-        id: eas
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd packages/app
-          build_json="$(npx eas build --platform android --profile production-apk --non-interactive --wait --json)"
-          build_id="$(printf '%s' "$build_json" | jq -r 'if type == "array" then .[0].id // empty else .id // empty end')"
-          test -n "$build_id"
-          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
-
-      - name: Download APK artifact
-        id: apk
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd packages/app
-          view="$(npx eas build:view '${{ steps.eas.outputs.build_id }}' --json)"
-          url="$(printf '%s' "$view" | jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty')"
-          test -n "$url"
-          mkdir -p "$RUNNER_TEMP/nightly"
-          curl --fail --location --output "$RUNNER_TEMP/nightly/paseo-nightly-android.apk" "$url"
-          echo "path=$RUNNER_TEMP/nightly/paseo-nightly-android.apk" >> "$GITHUB_OUTPUT"
+      - name: Build Android APK (arm64)
+        run: npm run build:apk:arm64
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: paseo-nightly-android
-          path: ${{ steps.apk.outputs.path }}
+          path: artifacts/paseo-dogfood-arm64.apk
           if-no-files-found: error
           retention-days: 14
 

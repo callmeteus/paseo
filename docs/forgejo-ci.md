@@ -24,7 +24,6 @@ These Forgejo repo secrets are required:
 | Secret                  | Used for                                                            |
 | ----------------------- | ------------------------------------------------------------------- |
 | `GH_TOKEN`              | GitHub release creation, asset upload, GHCR login, package registry |
-| `EXPO_TOKEN`            | EAS builds (nightly APK and Android release)                        |
 | `CLOUDFLARE_API_TOKEN`  | Web/website/relay deploys                                           |
 | `CLOUDFLARE_ACCOUNT_ID` | Web/website/relay deploys                                           |
 
@@ -36,15 +35,16 @@ environment through the `gh` CLI.
 
 Workflows use `runs-on: docker`, the `gti-actions:latest` image. It is Linux
 only, so the Forgejo workflows do not build macOS or Windows desktop packages.
-They need signed native runners and stay out of scope here. The nightly ships a
-Linux desktop build and an Android APK.
+They need signed native runners and stay out of scope here. APK jobs use a
+`mingc/android-build-box` container for the Android SDK and Gradle.
 
 ## Nightly
 
 `.forgejo/workflows/nightly.yml` runs daily at 02:00 UTC and can be dispatched
-manually. It builds the Linux desktop packages, builds an Android APK through
-EAS, then deletes and recreates the `nightly` GitHub release with the latest
-artifacts. The release is marked prerelease and is not a stable channel.
+manually. It builds the Linux desktop packages, builds an Android APK with
+`npm run build:apk:arm64` inside an Android container, then deletes and recreates
+the `nightly` GitHub release with the latest artifacts. The release is marked
+prerelease and is not a stable channel.
 
 ## Change gating
 

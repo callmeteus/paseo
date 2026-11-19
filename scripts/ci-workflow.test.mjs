@@ -64,7 +64,8 @@ test("nightly builds desktop and APK from develop and publishes a rolling releas
   assert.match(source, /cron:/);
   assert.match(source, /ref: develop/);
   assert.match(source, /npm run build:desktop/);
-  assert.match(source, /eas build --platform android/);
+  assert.match(source, /npm run build:apk:arm64/);
+  assert.match(source, /mingc\/android-build-box/);
   assert.match(source, /gh release delete/);
   assert.match(source, /gh release create/);
   assert.match(source, /--prerelease/);
@@ -75,6 +76,7 @@ test("GitHub Releases use a Forgejo secret, never the implicit GITHUB_TOKEN", ()
   for (const name of files) {
     const source = workflow(name);
     assert.doesNotMatch(source, /secrets\.GITHUB_TOKEN/, `${name} uses GH_TOKEN`);
+    assert.doesNotMatch(source, /EXPO_TOKEN|secrets\.EXPO_TOKEN/, `${name} does not use Expo/EAS`);
   }
   assert.match(workflow("desktop-release.yml"), /secrets\.GH_TOKEN/);
   assert.match(workflow("nightly.yml"), /secrets\.GH_TOKEN/);
