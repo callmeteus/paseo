@@ -1831,11 +1831,6 @@ describe("ACPAgentSession Zed parity", () => {
         title: "luckymaker-prod-lm_prod_ssh_grant: lm_prod_ssh_grant",
         kind: "other",
         status: "pending",
-        rawInput: {
-          providerIdentifier: "luckymaker-prod",
-          toolName: "lm_prod_ssh_grant",
-          args: { action: "grant" },
-        },
       },
       options: [
         { optionId: "allow-once", name: "Allow once", kind: "allow_once" },

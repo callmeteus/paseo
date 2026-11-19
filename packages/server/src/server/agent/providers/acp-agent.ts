@@ -1139,6 +1139,30 @@ function isACPAutoAcceptEnabled(config: AgentSessionConfig): boolean {
   return config.featureValues?.[ACP_AUTO_ACCEPT_FEATURE_ID] === true;
 }
 
+/**
+ * Auto-accept covers the agent's own known tools. An MCP server can be
+ * user-installed and untrusted, and ACP reports its tools as kind "other" and
+ * often omits their input here, so those prompts always reach the user.
+ */
+function canAutoAcceptAcpPermission(
+  params: RequestPermissionRequest,
+  config: AgentSessionConfig,
+  mcpServerNames: readonly string[],
+): boolean {
+  if (!isACPAutoAcceptEnabled(config) || isACPChooserRequest(params.options)) return false;
+  const toolKind = params.toolCall?.kind;
+  if (typeof toolKind === "string" && toolKind.toLowerCase() === "other") return false;
+  const raw = params.toolCall?.rawInput;
+  if (typeof raw === "object" && raw !== null) {
+    const input = raw as Record<string, unknown>;
+    if (typeof input.providerIdentifier === "string" && typeof input.toolName === "string") {
+      return false;
+    }
+  }
+  const title = params.toolCall?.title ?? "";
+  return !mcpServerNames.some((name) => title === name || title.startsWith(`${name}-`));
+}
+
 function buildACPAutoAcceptFeature(config: AgentSessionConfig): AgentFeature {
   return {
     type: "toggle",
@@ -3206,24 +3230,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.activeForegroundTurnId = null;
   }
 
-  private isMcpToolPermission(params: RequestPermissionRequest): boolean {
-    const raw = params.toolCall?.rawInput;
-    if (typeof raw === "object" && raw !== null) {
-      const input = raw as Record<string, unknown>;
-      if (typeof input.providerIdentifier === "string" && typeof input.toolName === "string") {
-        return true;
-      }
-    }
-    const title = params.toolCall?.title ?? "";
-    return this.acpMcpServers().some(
-      (server) => title === server.name || title.startsWith(`${server.name}-`),
-    );
-  }
-
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    const rawInput = params.toolCall?.rawInput;
     this.logger.info(
       {
         title: params.toolCall?.title,
+        toolKind: params.toolCall?.kind,
+        rawInputKeys:
+          typeof rawInput === "object" && rawInput !== null ? Object.keys(rawInput) : [],
         options: params.options.map((option) => ({
           id: option.optionId,
           kind: option.kind,
@@ -3253,12 +3267,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       };
     }
 
-    // An MCP server can be user-installed and untrusted. Auto-accept applies to
-    // the agent's own tools, never to a tool that came from an MCP server.
-    const canAutoAccept =
-      isACPAutoAcceptEnabled(this.config) &&
-      !isACPChooserRequest(params.options) &&
-      !this.isMcpToolPermission(params);
+    const canAutoAccept = canAutoAcceptAcpPermission(
+      params,
+      this.config,
+      this.acpMcpServers().map((server) => server.name),
+    );
     if (canAutoAccept) {
       const allowOption = selectPermissionOption(params.options, { behavior: "allow" });
       if (allowOption) {
