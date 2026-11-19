@@ -3242,6 +3242,8 @@ export const ProjectCreateDirectoryRequestSchema = z.object({
   parentPath: z.string(),
   name: z.string(),
   requestId: z.string(),
+  // Create missing parent directories as well. Older daemons ignore this field.
+  recursive: z.boolean().optional(),
 });
 
 export const GithubRepositorySchema = z.object({
@@ -4517,6 +4519,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceGithubRepositorySearch: z.boolean().optional(),
         // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
         projectCreateDirectory: z.boolean().optional(),
+        // COMPAT(projectCreateDirectoryRecursive): remove the gate when the version floor supports it.
+        projectCreateDirectoryRecursive: z.boolean().optional(),
         // COMPAT(projectList): added in v0.2.4, drop the gate when floor >= v0.2.4.
         projectList: z.boolean().optional(),
         // COMPAT(commitsList): added in v0.1.110, remove gate after 2027-01-16.

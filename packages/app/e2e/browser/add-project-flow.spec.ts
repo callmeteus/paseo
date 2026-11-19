@@ -372,6 +372,44 @@ test.describe("Add Project command-center flow", () => {
     await expect(addProjectFlowInput(page)).toHaveValue(remote);
   });
 
+  test("suggests creating a missing parent directory before giving up", async ({ page }) => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-e2e-missing-parent-"));
+    const missingParent = path.join(root, "projects");
+    const directoryName = `created-${randomUUID().slice(0, 8)}`;
+    const directoryPath = path.join(missingParent, directoryName);
+    let projectId: string | null = null;
+
+    try {
+      await gotoAppShell(page);
+      await openAddProjectFlow(page);
+      await chooseAddProjectMethod(page, "new-directory");
+
+      await addProjectFlowInput(page).fill(missingParent);
+      await page.keyboard.press("Enter");
+      await expectAddProjectPage(page, "new-directory-name");
+      await addProjectFlowInput(page).fill(directoryName);
+      await page.keyboard.press("Enter");
+
+      const error = page.getByTestId("add-project-flow-error");
+      await expect(error).toContainText("Parent directory not found");
+      const suggestion = page.getByTestId("add-project-flow-create-parents");
+      await expect(suggestion).toBeVisible();
+      await suggestion.click();
+
+      projectId = await expectOpenedProject(page, directoryName);
+      await expectNewWorkspaceForAddedProject(page, {
+        serverId: getServerId(),
+        projectId,
+        projectName: directoryName,
+        projectPath: directoryPath,
+      });
+      await expectProjectDirectory(directoryPath);
+    } finally {
+      await removeCreatedProject(directoryPath, projectId).catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("New directory validates the name, restores parent and name state, then creates a Project", async ({
     page,
   }) => {

@@ -6,6 +6,7 @@ export interface AddProjectHost {
   canCloneGithubRepositories: boolean;
   canSearchGithubRepositories: boolean;
   canCreateDirectory: boolean;
+  canCreateParentDirectories: boolean;
 }
 
 export interface GithubRepositoryChoice {
@@ -45,6 +46,7 @@ export type AddProjectPage =
       name: string;
       activeIndex: number;
       error: string | null;
+      errorCode: string | null;
       isSubmitting: boolean;
     };
 
@@ -201,6 +203,7 @@ export function openNewDirectoryNamePage(
     name: state.newDirectoryNameDrafts[draftKey] ?? "",
     activeIndex: 0,
     error: null,
+    errorCode: null,
     isSubmitting: false,
   });
 }
@@ -212,7 +215,7 @@ export function setAddProjectPageInput(
   const page = currentAddProjectPage(state);
   const updated = updateCurrentAddProjectPage(state, (current) => {
     if (current.kind === "new-directory-name") {
-      return { ...current, name: value, activeIndex: 0, error: null };
+      return { ...current, name: value, activeIndex: 0, error: null, errorCode: null };
     }
     if (current.kind === "method") return current;
     return { ...current, query: value, activeIndex: 0, error: null };

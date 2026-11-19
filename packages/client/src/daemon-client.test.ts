@@ -3920,6 +3920,55 @@ test("searches GitHub repositories through the dotted RPC", async () => {
   });
 });
 
+test("forwards the recursive option when creating a project directory", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const createPromise = client.createProjectDirectory(
+    { parentPath: "/tmp/projects", name: "new-project", recursive: true },
+    "req-create-project-directory-recursive",
+  );
+  expect(parseSentFrame(mock.sent[0])).toEqual({
+    type: "project.create_directory.request",
+    parentPath: "/tmp/projects",
+    name: "new-project",
+    recursive: true,
+    requestId: "req-create-project-directory-recursive",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "project.create_directory.response",
+      payload: {
+        requestId: "req-create-project-directory-recursive",
+        directoryPath: "/tmp/projects/new-project",
+        project: {
+          projectId: "directory:/tmp/projects/new-project",
+          projectDisplayName: "new-project",
+          projectCustomName: null,
+          projectRootPath: "/tmp/projects/new-project",
+          projectKind: "non_git",
+        },
+        error: null,
+        errorCode: null,
+      },
+    }),
+  );
+  await expect(createPromise).resolves.toMatchObject({ error: null });
+});
+
 test("creates and registers a project directory through the dotted RPC", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

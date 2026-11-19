@@ -13,6 +13,7 @@ import {
   setAddProjectActiveIndex,
   setAddProjectPageInput,
   setNewDirectoryName,
+  updateCurrentAddProjectPage,
   type AddProjectHost,
 } from "./model";
 import {
@@ -30,6 +31,7 @@ const HOST: AddProjectHost = {
   canCloneGithubRepositories: true,
   canSearchGithubRepositories: true,
   canCreateDirectory: true,
+  canCreateParentDirectories: true,
 };
 
 describe("Add Project navigation", () => {
@@ -83,6 +85,29 @@ describe("Add Project navigation", () => {
       kind: "new-directory-name",
       parentPath: "~/dev",
       name: "command-center",
+    });
+  });
+
+  it("clears the create-directory error when the name changes", () => {
+    let state = openAddProjectFlow({ hosts: [HOST] });
+    state = openNewDirectoryParentPage(state, HOST.serverId);
+    state = openNewDirectoryNamePage(state, HOST.serverId, "/projects");
+    state = updateCurrentAddProjectPage(state, (page) =>
+      page.kind === "new-directory-name"
+        ? {
+            ...page,
+            error: "Parent directory not found: /projects",
+            errorCode: "parent_directory_not_found",
+          }
+        : page,
+    );
+
+    state = setNewDirectoryName(state, "remote-app-control");
+
+    expect(currentAddProjectPage(state)).toMatchObject({
+      kind: "new-directory-name",
+      error: null,
+      errorCode: null,
     });
   });
 

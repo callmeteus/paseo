@@ -97,6 +97,86 @@ describe("project directory creation", () => {
     await expect(access(directoryPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("creates missing parent directories when recursive is requested", async () => {
+    const root = await createRoot();
+    const parentPath = join(root, "one", "two");
+    const directoryPath = join(parentPath, "project");
+    const project = {
+      projectId: `directory:${directoryPath}`,
+      rootPath: directoryPath,
+      kind: "non_git" as const,
+      displayName: "project",
+      customName: null,
+      createdAt: "2026-07-15T10:00:00Z",
+      updatedAt: "2026-07-15T10:00:00Z",
+      archivedAt: null,
+    };
+
+    await expect(
+      createProjectDirectory(
+        { parentPath, name: "project", recursive: true },
+        { registerProject: async () => project },
+      ),
+    ).resolves.toEqual({ directoryPath, project });
+    await expect(access(join(root, "one"))).resolves.toBeUndefined();
+    await expect(access(join(root, "one", "two"))).resolves.toBeUndefined();
+    await expect(access(directoryPath)).resolves.toBeUndefined();
+  });
+
+  it("still rejects an existing leaf directory in recursive mode", async () => {
+    const root = await createRoot();
+    const existing = join(root, "existing");
+    await mkdir(existing);
+
+    await expect(
+      createProjectDirectory(
+        { parentPath: root, name: "existing", recursive: true },
+        {
+          registerProject: async () => {
+            throw new Error("registration should not be attempted");
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "directory_exists", directoryPath: existing });
+  });
+
+  it("removes parents it created when registration fails", async () => {
+    const root = await createRoot();
+    const parentPath = join(root, "created-parent");
+    const directoryPath = join(parentPath, "project");
+
+    await expect(
+      createProjectDirectory(
+        { parentPath, name: "project", recursive: true },
+        {
+          registerProject: async () => {
+            throw new Error("registry unavailable");
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "registration_failed", directoryPath });
+    await expect(access(directoryPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(parentPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps parents that already existed when registration fails", async () => {
+    const root = await createRoot();
+    const parentPath = join(root, "existing-parent");
+    await mkdir(parentPath);
+
+    await expect(
+      createProjectDirectory(
+        { parentPath, name: "project", recursive: true },
+        {
+          registerProject: async () => {
+            throw new Error("registry unavailable");
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "registration_failed" });
+    await expect(access(parentPath)).resolves.toBeUndefined();
+  });
+
   it("returns the registered project and created path together", async () => {
     const root = await createRoot();
     const directoryPath = join(root, "new-project");

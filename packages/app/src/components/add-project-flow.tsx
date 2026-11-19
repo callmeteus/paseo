@@ -328,6 +328,15 @@ function setPageStatus(
   );
 }
 
+function setNewDirectoryStatus(
+  state: AddProjectFlowState,
+  input: { isSubmitting?: boolean; error?: string | null; errorCode?: string | null },
+): AddProjectFlowState {
+  return updateCurrentAddProjectPage(state, (page) =>
+    page.kind === "new-directory-name" ? { ...page, ...input } : page,
+  );
+}
+
 // The product flow is intentionally one cohesive page-stack state machine.
 // eslint-disable-next-line complexity
 export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
@@ -343,6 +352,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const githubSearchByHost = useHostFeatureMap(hostIds, "workspaceGithubRepositorySearch");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
+  // COMPAT(projectCreateDirectoryRecursive): remove the gate when the version floor supports it.
+  const createParentDirectoriesByHost = useHostFeatureMap(
+    hostIds,
+    "projectCreateDirectoryRecursive",
+  );
   const localServerId = useLocalDaemonServerId();
   const availableHosts = useMemo<AddProjectHost[]>(
     () =>
@@ -360,12 +374,14 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             canCloneGithubRepositories: githubCloneByHost.get(host.serverId) === true,
             canSearchGithubRepositories: githubSearchByHost.get(host.serverId) === true,
             canCreateDirectory: createDirectoryByHost.get(host.serverId) === true,
+            canCreateParentDirectories: createParentDirectoriesByHost.get(host.serverId) === true,
           },
         ];
       }),
     [
       connectionStatuses,
       createDirectoryByHost,
+      createParentDirectoriesByHost,
       githubCloneByHost,
       githubSearchByHost,
       hosts,
@@ -602,6 +618,63 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     },
     [cloneGithubProject, openNewWorkspaceForProject],
   );
+  const createDirectory = useCallback(
+    async (options?: { recursive?: boolean }) => {
+      if (page.kind !== "new-directory-name" || !client) return;
+      const name = page.name.trim();
+      if (!name || name === "." || name === ".." || /[\\/]/.test(name)) {
+        setState((current) =>
+          setNewDirectoryStatus(current, { error: "Enter a directory name", errorCode: null }),
+        );
+        return;
+      }
+      if (submissionInFlightRef.current) return;
+      submissionInFlightRef.current = true;
+      setState((current) =>
+        setNewDirectoryStatus(current, { isSubmitting: true, error: null, errorCode: null }),
+      );
+      try {
+        const payload = await client.createProjectDirectory({
+          parentPath: page.parentPath,
+          name,
+          ...(options?.recursive ? { recursive: true } : {}),
+        });
+        if (payload.error || !payload.project) {
+          setState((current) =>
+            setNewDirectoryStatus(current, {
+              isSubmitting: false,
+              error: payload.error ?? "Unable to create directory",
+              errorCode: payload.errorCode ?? null,
+            }),
+          );
+          return;
+        }
+        registerProjectDescriptor({
+          serverId: page.hostId,
+          project: payload.project,
+          upsertProject,
+          setHasHydratedWorkspaces,
+        });
+        openNewWorkspaceForProject(page.hostId, payload.project);
+      } catch {
+        setState((current) =>
+          setNewDirectoryStatus(current, {
+            isSubmitting: false,
+            error: "Unable to create directory",
+            errorCode: null,
+          }),
+        );
+      } finally {
+        submissionInFlightRef.current = false;
+      }
+    },
+    [client, openNewWorkspaceForProject, page, setHasHydratedWorkspaces, upsertProject],
+  );
+  const canSuggestParentDirectories =
+    page.kind === "new-directory-name" &&
+    page.errorCode === "parent_directory_not_found" &&
+    host?.canCreateParentDirectories === true &&
+    !page.isSubmitting;
   const rows = useMemo<FlowRowOption[]>(() => {
     if (page.kind === "host") {
       const choices = filterAddProjectHosts(state.hosts, page.query).map<FlowRowOption>(
@@ -717,9 +790,23 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           setState((current) => openNewDirectoryNamePage(current, page.hostId, option.path)),
       }));
     }
+    if (page.kind === "new-directory-name" && canSuggestParentDirectories) {
+      return [
+        {
+          id: "create-parent-directories",
+          title: "Create parent directories",
+          subtitle: `Also create ${shortenPath(page.parentPath)}`,
+          icon: FolderPlus,
+          testID: "add-project-flow-create-parents",
+          select: () => void createDirectory({ recursive: true }),
+        },
+      ];
+    }
     return [];
   }, [
+    canSuggestParentDirectories,
     cloneRepository,
+    createDirectory,
     directoryPaths,
     githubQuery.data,
     host,
@@ -740,60 +827,15 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       listKey: rowListKey,
       scrollRef: resultsRef,
     });
-  const createDirectory = useCallback(async () => {
-    if (page.kind !== "new-directory-name" || !client) return;
-    const name = page.name.trim();
-    if (!name || name === "." || name === ".." || /[\\/]/.test(name)) {
-      setState((current) =>
-        setPageStatus(current, "new-directory-name", { error: "Enter a directory name" }),
-      );
+  const submitActive = useCallback(() => {
+    const option = rows[activeIndex];
+    if (option && !option.disabled) {
+      option.select();
       return;
     }
-    if (submissionInFlightRef.current) return;
-    submissionInFlightRef.current = true;
-    setState((current) =>
-      setPageStatus(current, "new-directory-name", { isSubmitting: true, error: null }),
-    );
-    try {
-      const payload = await client.createProjectDirectory({
-        parentPath: page.parentPath,
-        name,
-      });
-      if (payload.error || !payload.project) {
-        setState((current) =>
-          setPageStatus(current, "new-directory-name", {
-            isSubmitting: false,
-            error: payload.error ?? "Unable to create directory",
-          }),
-        );
-        return;
-      }
-      registerProjectDescriptor({
-        serverId: page.hostId,
-        project: payload.project,
-        upsertProject,
-        setHasHydratedWorkspaces,
-      });
-      openNewWorkspaceForProject(page.hostId, payload.project);
-    } catch {
-      setState((current) =>
-        setPageStatus(current, "new-directory-name", {
-          isSubmitting: false,
-          error: "Unable to create directory",
-        }),
-      );
-    } finally {
-      submissionInFlightRef.current = false;
-    }
-  }, [client, openNewWorkspaceForProject, page, setHasHydratedWorkspaces, upsertProject]);
-
-  const submitActive = useCallback(() => {
     if (page.kind === "new-directory-name") {
       void createDirectory();
-      return;
     }
-    const option = rows[activeIndex];
-    if (option && !option.disabled) option.select();
   }, [activeIndex, createDirectory, page.kind, rows]);
 
   const handleKey = useCallback(
@@ -991,7 +1033,10 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           </ScrollView>
           <View style={styles.footer} testID="add-project-flow-footer">
             <FlowHint keys={NAVIGATION_HINT_KEYS} action="Navigate" />
-            <FlowHint keys={SELECT_HINT_KEYS} action="Select" />
+            <FlowHint
+              keys={SELECT_HINT_KEYS}
+              action={canSuggestParentDirectories ? "Create parents" : "Select"}
+            />
             <FlowHint keys={ESCAPE_HINT_KEYS} action={state.pages.length > 1 ? "Back" : "Close"} />
           </View>
         </View>

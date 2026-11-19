@@ -8267,7 +8267,11 @@ export class Session {
   ): Promise<void> {
     try {
       const result = await createProjectDirectory(
-        { parentPath: request.parentPath, name: request.name },
+        {
+          parentPath: request.parentPath,
+          name: request.name,
+          recursive: request.recursive === true,
+        },
         {
           registerProject: (directoryPath) =>
             this.workspaceProvisioning.findOrCreateProjectForDirectory(directoryPath),
