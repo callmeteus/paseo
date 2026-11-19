@@ -41,7 +41,8 @@ export function useMoveWorkspaceToFolder(): MoveWorkspaceToFolderViewModel {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResetKey, setSearchResetKey] = useState(0);
-  const current = request && workspaces ? workspaces.get(request.workspaceId) : undefined;
+  const current =
+    request && workspaces instanceof Map ? workspaces.get(request.workspaceId) : undefined;
   const isLocalDaemon = useIsLocalDaemon(request?.serverId ?? "");
   const canPickDirectory = Boolean(getDesktopHost()?.dialog && isLocalDaemon);
   const visible = Boolean(request && client && current);

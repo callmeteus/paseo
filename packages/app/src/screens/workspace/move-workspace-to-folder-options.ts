@@ -28,7 +28,8 @@ export function buildOpenWorkspaceFolderRows(
   currentDirectory: string | undefined,
 ): WorkspaceFolderRowModel[] {
   const byDirectory = new Map<string, WorkspaceFolderRowModel>();
-  for (const workspace of workspaces?.values() ?? []) {
+  const entries = workspaces instanceof Map ? workspaces.values() : [];
+  for (const workspace of entries) {
     if (workspace.archivingAt || byDirectory.has(workspace.workspaceDirectory)) continue;
     byDirectory.set(workspace.workspaceDirectory, {
       directory: workspace.workspaceDirectory,

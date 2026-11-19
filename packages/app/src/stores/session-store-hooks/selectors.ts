@@ -299,9 +299,13 @@ export function selectRecommendedProjectPaths(
   if (!workspaces) {
     return EMPTY_WORKSPACE_KEYS;
   }
-  return Array.from(workspaces.values())
-    .map((workspace) => workspace.projectRootPath)
-    .filter((path) => path.length > 0);
+  return (
+    Array.from(workspaces.values())
+      .map((workspace) => workspace.projectRootPath)
+      // A stale or partially hydrated descriptor can omit the root path. Filtering
+      // here keeps a picker that reads recommended paths from crashing on open.
+      .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
+  );
 }
 
 export function selectHasWorkspaces(state: SessionsSnapshot, serverId: string | null): boolean {

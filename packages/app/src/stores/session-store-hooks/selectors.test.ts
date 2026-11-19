@@ -539,6 +539,19 @@ describe("selectWorkspaceKeys", () => {
 });
 
 describe("selectRecommendedProjectPaths", () => {
+  it("skips descriptors with a missing project root instead of throwing", () => {
+    const valid = createWorkspace({ id: "workspace-a", projectRootPath: "/repo/a" });
+    const malformed = {
+      ...createWorkspace({ id: "workspace-b" }),
+      projectRootPath: undefined,
+    } as unknown as WorkspaceDescriptor;
+    initializeWorkspaces([valid, malformed]);
+
+    expect(selectRecommendedProjectPaths(useSessionStore.getState(), SERVER_ID)).toEqual([
+      "/repo/a",
+    ]);
+  });
+
   it("updates when an existing workspace project root changes", () => {
     const workspace = createWorkspace({ id: "workspace-a", projectRootPath: "/repo/a" });
     initializeWorkspaces([workspace]);
