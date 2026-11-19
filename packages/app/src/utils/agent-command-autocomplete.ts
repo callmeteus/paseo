@@ -119,6 +119,27 @@ export function highlightedCommandNames(
   return names;
 }
 
+/**
+ * Combines every source of names the composer paints: provider commands,
+ * daemon commands, plugin slash commands and the host's installed skills.
+ * De-duplicates case-insensitively so a skill reported by more than one source
+ * is still painted once.
+ */
+export function mergeHighlightedCommandNames(groups: readonly (readonly string[])[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const group of groups) {
+    for (const rawName of group) {
+      const name = rawName.trim().replace(/^\//, "");
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+    }
+  }
+  return names.sort();
+}
+
 export function skillCommandNames(commands: readonly { name: string; kind?: string }[]): string[] {
   const names: string[] = [];
   for (const command of commands) {

@@ -7,8 +7,25 @@ import {
   findActiveSlashCommand,
   findSkillHighlightRanges,
   highlightedCommandNames,
+  mergeHighlightedCommandNames,
   skillCommandNames,
 } from "./agent-command-autocomplete";
+
+describe("mergeHighlightedCommandNames", () => {
+  it("keeps names from every source without case-insensitive duplicates", () => {
+    expect(
+      mergeHighlightedCommandNames([
+        ["goal", "improve-codebase-architecture"],
+        ["/Goal", "/untangle-codebase", "  "],
+        ["improve-codebase-architecture", "gti"],
+      ]),
+    ).toEqual(["goal", "gti", "improve-codebase-architecture", "untangle-codebase"]);
+  });
+
+  it("returns an empty list when no source reports a name", () => {
+    expect(mergeHighlightedCommandNames([[], [], []])).toEqual([]);
+  });
+});
 
 describe("filterAndRankCommandAutocompleteEntries", () => {
   const entries = [

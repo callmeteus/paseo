@@ -120,7 +120,11 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { AutocompletePopover } from "@/components/ui/autocomplete-popover";
 import type { AutocompleteOption } from "@/components/ui/autocomplete";
 import { resolveDraftQueryConfig, useAgentAutocomplete } from "@/hooks/use-agent-autocomplete";
-import { highlightedCommandNames } from "@/utils/agent-command-autocomplete";
+import {
+  highlightedCommandNames,
+  INLINE_DAEMON_COMMAND_NAMES,
+  mergeHighlightedCommandNames,
+} from "@/utils/agent-command-autocomplete";
 import { usePluginClientSlashCommands } from "@/plugins/client-slash-commands";
 import {
   executePluginClientSlashCommand,
@@ -131,6 +135,8 @@ import {
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
 } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
+import { useFetchQuery } from "@/data/query";
 import {
   deleteAttachments,
   persistAttachmentFromBlob,
@@ -172,7 +178,7 @@ import type {
   DraggableRenderItemInfo,
 } from "@/components/draggable-list.types";
 import { isWeb, isNative } from "@/constants/platform";
-import type { ForgeSearchItem } from "@getpaseo/protocol/messages";
+import type { AgentSkillsStatus, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
   AttachmentMetadata,
   ComposerAttachment,
@@ -1911,15 +1917,39 @@ function ComposerContentImpl({
     }),
     draftConfig: skillDraftConfig,
   });
-  const skillNames = useMemo(() => {
-    const names = highlightedCommandNames(skillCommandsQuery.commands);
-    for (const command of pluginClientSlashCommands) {
-      const name = command.name.trim().replace(/^\//, "");
-      if (name.length > 0) names.push(name);
-    }
-    names.sort();
-    return names;
-  }, [skillCommandsQuery.commands, pluginClientSlashCommands]);
+  // The provider command list is the historical source of highlighted names,
+  // but it is empty for agents that do not report skills and in a fresh draft.
+  // The host's skill catalogue keeps the highlighter working in both cases.
+  const skillManagementSupported = useHostFeature(serverId, "skillManagement");
+  const hostSkillsQuery = useFetchQuery<AgentSkillsStatus, Error>({
+    queryKey: ["host", serverId, "agent-skills"],
+    queryFn: () => {
+      if (!client) throw new Error(t("settings.host.skills.unavailable"));
+      return client.getAgentSkillsStatus();
+    },
+    enabled: skillManagementSupported && client !== null && isConnected,
+    retry: false,
+    dataShape: "value",
+    staleTimeMs: 60_000,
+  });
+  const hostSkillNames = useMemo(() => {
+    const status = hostSkillsQuery.data;
+    if (!status) return [];
+    const names = new Set<string>(status.available);
+    for (const name of status.installed) names.add(name);
+    for (const skill of status.global ?? []) names.add(skill.name);
+    return [...names];
+  }, [hostSkillsQuery.data]);
+  const skillNames = useMemo(
+    () =>
+      mergeHighlightedCommandNames([
+        highlightedCommandNames(skillCommandsQuery.commands),
+        INLINE_DAEMON_COMMAND_NAMES,
+        pluginClientSlashCommands.map((command) => command.name),
+        hostSkillNames,
+      ]),
+    [skillCommandsQuery.commands, pluginClientSlashCommands, hostSkillNames],
+  );
   const isComposerLocked = resolveIsComposerLocked(
     submitBehavior,
     isSubmitLoading && !isDraftCreating,
