@@ -247,6 +247,7 @@ export function WorkspaceSetupDialog() {
         navigateToAgent({
           serverId: pendingWorkspaceSetup.serverId,
           agentId: target.agentId,
+          pin: true,
         });
         return;
       }
@@ -255,6 +256,7 @@ export function WorkspaceSetupDialog() {
         serverId: pendingWorkspaceSetup.serverId,
         workspaceId,
         target,
+        pin: true,
       });
     },
     [clearWorkspaceSetup, pendingWorkspaceSetup],

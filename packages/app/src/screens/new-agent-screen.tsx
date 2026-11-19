@@ -36,6 +36,10 @@ export function NewAgentScreen({ serverId, workspaceId, draftId }: NewAgentScree
         serverId,
         workspaceId,
         target: { kind: "agent", agentId: snapshot.id },
+        // The directory may still list the old workspace when this tab opens.
+        // Pin it so a late hydration cannot prune it and fall back to the
+        // previous chat.
+        pin: true,
       });
     },
     [serverId, workspaceId],

@@ -760,6 +760,7 @@ function submitWorkspaceDraft(input: SubmitDraftInput): SubmitOutcome {
     serverId,
     workspaceId,
     target: submission.target,
+    pin: true,
   });
   return "navigated";
 }
@@ -1566,7 +1567,7 @@ export function NewWorkspaceScreen({
           }
           outcome = "navigated";
           leaveFullscreen();
-          navigateToWorkspace({ serverId: targetServerId, workspaceId, target });
+          navigateToWorkspace({ serverId: targetServerId, workspaceId, target, pin: true });
         },
       });
       if (outcome === "background") {

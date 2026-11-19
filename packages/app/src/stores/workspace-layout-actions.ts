@@ -2647,6 +2647,22 @@ export function reconcileWorkspaceTabs(
       }) ?? nextLayout;
   }
 
+  // A tab can be re-keyed or replaced while the agent directory hydrates. If the
+  // previously focused tab is gone, keep the focus on its target when a tab for
+  // it still exists instead of letting the pane fall back to the previous chat.
+  const focusedTarget = initialTabs.find((tab) => tab.tabId === originalFocusedTabId)?.target;
+  if (
+    focusedTarget &&
+    !collectAllTabs(nextLayout.root).some((tab) => tab.tabId === reconciledFocusedTabId)
+  ) {
+    const replacement = collectAllTabs(nextLayout.root).find((tab) =>
+      workspaceTabTargetsEqual(tab.target, focusedTarget),
+    );
+    if (replacement) {
+      nextLayout = focusTabInLayout({ layout: nextLayout, tabId: replacement.tabId }) ?? nextLayout;
+    }
+  }
+
   return {
     ...state,
     layout: nextLayout,

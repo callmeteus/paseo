@@ -90,6 +90,31 @@ describe("workspace navigation", () => {
     expect(revealed).toEqual(["root"]);
   });
 
+  it("forwards pin for an explicitly opened agent tab", () => {
+    const workspace = { id: "workspace" } as WorkspaceDescriptor;
+    const { deps, openedTabs } = createFakeDeps({
+      getSessionWorkspaces: () => new Map([[workspace.id, workspace]]),
+    });
+
+    navigateToWorkspace(
+      {
+        serverId: "server",
+        workspaceId: "workspace",
+        target: { kind: "agent", agentId: "new-chat" },
+        pin: true,
+      },
+      deps,
+    );
+
+    expect(openedTabs).toEqual([
+      {
+        workspaceKey: "server:workspace",
+        target: { kind: "agent", agentId: "new-chat" },
+        pin: true,
+      },
+    ]);
+  });
+
   it("reports when no last workspace is known", () => {
     const { deps } = createLastSelectionDeps(null);
 
