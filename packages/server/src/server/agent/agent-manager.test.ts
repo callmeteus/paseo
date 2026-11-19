@@ -12860,6 +12860,26 @@ class GoalWatchSession extends TestAgentSession {
   }
 }
 
+/** A session whose only answer is the Cursor billing line, printed as assistant text. */
+class GoalProviderFailureSession extends TestAgentSession {
+  readonly prompts: AgentPromptInput[] = [];
+
+  override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
+    this.prompts.push(prompt);
+    const turnId = "provider-failure-turn";
+    setTimeout(() => {
+      this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+      this.pushEvent({
+        type: "timeline",
+        provider: this.provider,
+        item: { type: "assistant_message", text: "Add a payment method to continue" },
+      });
+      this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+    }, 0);
+    return { turnId };
+  }
+}
+
 test("daemon-level /goal starts a turn and the timeline shows the typed text", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-start-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
@@ -12964,6 +12984,51 @@ test("daemon-level goal auto-continues after a completed turn and stops on the c
       .findLast((item) => item.type === "notification");
     expect(lastNotice && "message" in lastNotice ? lastNotice.message : "").toContain(
       "Goal complete: probe the network",
+    );
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await workdirStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("a provider failure pauses the goal instead of auto-continuing", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-goal-failure-"));
+  let session: GoalProviderFailureSession | null = null;
+  const client = new (class extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      session = new GoalProviderFailureSession(config);
+      return session;
+    }
+  })();
+  const workdirStorage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: workdirStorage,
+    logger,
+  });
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    await startAgentRun(manager, agent.id, "/goal ship the fix", logger);
+
+    await vi.waitFor(
+      () => {
+        expect(manager.getAgent(agent.id)?.goal?.status).toBe("paused");
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+
+    // Past the continuation delay: the watcher must not start another turn.
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
+    expect(session!.prompts).toHaveLength(1);
+
+    const items = manager.fetchTimeline(agent.id, { direction: "tail", limit: 10 }).rows;
+    const notice = items.map((row) => row.item).findLast((item) => item.type === "notification");
+    expect(notice && "message" in notice ? notice.message : "").toContain(
+      "Provider could not run: Add a payment method to continue",
     );
   } finally {
     await manager.flush().catch(() => undefined);

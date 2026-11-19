@@ -26,6 +26,7 @@ import {
   type AgentLifecycleStatus,
 } from "@getpaseo/protocol/agent-lifecycle";
 import { parseToolItemLimit } from "@getpaseo/protocol/model-router";
+import { readProviderErrorText } from "@getpaseo/protocol/provider-error";
 import {
   getParentAgentIdFromLabels,
   hasOpenAgentTab,
@@ -3705,6 +3706,24 @@ export class AgentManager {
   private static readonly MAX_GOAL_AUTO_CONTINUATIONS = 50;
   private static readonly GOAL_CONTINUATION_DELAY_MS = 1_500;
 
+  /**
+   * A completed turn is the goal watcher's cue to continue. A provider that
+   * cannot run (billing, auth, credits) answers every continuation with the
+   * same failure, so pause instead of burning through the continuation cap and
+   * painting one error card per attempt.
+   */
+  private async afterCompletedForegroundTurn(agent: ActiveManagedAgent): Promise<void> {
+    const goal = agent.goal;
+    if (!goal || goal.status !== "active") return;
+    const lastText = await this.getLastAssistantMessage(agent.id);
+    const failure = lastText ? readProviderErrorText(lastText) : null;
+    if (failure) {
+      this.pauseAgentGoal(agent.id, `Provider could not run: ${failure}`);
+      return;
+    }
+    this.scheduleGoalContinuation(agent);
+  }
+
   private scheduleGoalContinuation(agent: ActiveManagedAgent): void {
     const goal = agent.goal;
     if (!goal || goal.status !== "active") return;
@@ -6141,7 +6160,7 @@ export class AgentManager {
         if (isForegroundEvent) {
           this.finalizeForegroundTurn(agent, eventTurnId);
           if (event.type === "turn_completed") {
-            this.scheduleGoalContinuation(agent);
+            void this.afterCompletedForegroundTurn(agent);
           }
         }
       }
