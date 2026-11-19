@@ -39,7 +39,6 @@ import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
-import invariant from "tiny-invariant";
 import { SidebarMenuToggle } from "@/components/headers/sidebar-menu-toggle";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { MenuHeader } from "@/components/headers/menu-header";
@@ -223,7 +222,11 @@ import {
 import { findAdjacentPane } from "@/utils/split-navigation";
 import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { getIsElectron, isNative, isWeb } from "@/constants/platform";
-import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
+import {
+  buildHostRootRoute,
+  buildNewAgentRoute,
+  buildSettingsHostRoute,
+} from "@/utils/host-routes";
 import { useWorkspaceTerminals } from "@/screens/workspace/terminals/use-workspace-terminals";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
@@ -1052,6 +1055,7 @@ function WorkspaceScreenContent({
   isRouteFocused,
 }: WorkspaceScreenContentProps) {
   const { t } = useTranslation();
+  const router = useRouter();
   const _insets = useSafeAreaInsets();
   const toast = useToast();
   const isMobile = useIsCompactFormFactor();
@@ -1521,33 +1525,18 @@ function WorkspaceScreenContent({
     };
   }, [isRouteFocused, normalizedServerId, setFocusedAgentId, setFocusedTerminalId]);
 
-  const openWorkspaceDraftTab = useCallback(
-    function openWorkspaceDraftTab(input?: {
-      ambient?: boolean;
-      draftId?: string;
-      focus?: boolean;
-      paneId?: string | null;
-    }) {
-      if (!persistenceKey) {
-        return null;
-      }
-
-      const target = normalizeWorkspaceTabTarget({
-        kind: "draft",
-        draftId: trimNonEmpty(input?.draftId) ?? generateDraftId(),
-      });
-      invariant(target?.kind === "draft", "Draft tab target must be valid");
-      if (input?.ambient) {
-        return openWorkspaceTabFocused(persistenceKey, target);
-      }
-      const placement = paneLocalPlacement(input?.paneId);
-      if (input?.focus === false) {
-        return openWorkspaceTabInBackground(persistenceKey, target, placement);
-      }
-      return openWorkspaceTabFocused(persistenceKey, target, placement);
-    },
-    [openWorkspaceTabFocused, openWorkspaceTabInBackground, persistenceKey],
-  );
+  // New agents open as a full-screen setup route scoped to this workspace, so
+  // the user picks the provider and prompt before the agent exists. The tab is
+  // created on submit, with the agent already attached.
+  const openNewAgentScreen = useCallback(() => {
+    router.push(
+      buildNewAgentRoute({
+        serverId: normalizedServerId,
+        workspaceId: normalizedWorkspaceId,
+        draftId: generateDraftId(),
+      }) as Href,
+    );
+  }, [normalizedServerId, normalizedWorkspaceId, router]);
 
   useLayoutEffect(() => {
     if (!isRouteFocused) {
@@ -1826,13 +1815,6 @@ function WorkspaceScreenContent({
     : t("workspace.tabs.explorerSidebar.open");
 
   const activeTabKey = useMemo(() => activeTabId ?? "", [activeTabId]);
-  const handleCreateDraftTab = useCallback(
-    (input?: { paneId?: string }) => {
-      const tabId = openWorkspaceDraftTab({ paneId: input?.paneId });
-      if (tabId) guardTabActivation(tabId);
-    },
-    [openWorkspaceDraftTab],
-  );
 
   const handleCreateTerminal = useStableEvent((input?: { paneId?: string }) => {
     createTerminal({
@@ -1927,10 +1909,7 @@ function WorkspaceScreenContent({
         return;
       }
       if (selection.kind === "agent") {
-        openTarget({
-          kind: "draft",
-          draftId: generateDraftId(),
-        });
+        openNewAgentScreen();
         return;
       }
       if (selection.kind === "chat") {
@@ -1951,7 +1930,13 @@ function WorkspaceScreenContent({
       const { browserId } = createWorkspaceBrowser();
       openTarget({ kind: "browser", browserId });
     },
-    [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget],
+    [
+      createTerminal,
+      createWorkspaceTab,
+      openNewAgentScreen,
+      persistenceKey,
+      replaceWorkspaceTabTarget,
+    ],
   );
 
   const handleOpenUrlInBrowserTab = useCallback(
@@ -2679,7 +2664,7 @@ function WorkspaceScreenContent({
     (action: KeyboardActionDefinition): boolean => {
       switch (action.id) {
         case "workspace.agent.new":
-          handleCreateDraftTab();
+          openNewAgentScreen();
           return true;
         case "workspace.terminal.new":
           handleCreateTerminal();
@@ -2721,7 +2706,7 @@ function WorkspaceScreenContent({
     [
       activeTabId,
       handleCloseTabById,
-      handleCreateDraftTab,
+      openNewAgentScreen,
       handleCreateBrowserTab,
       handleCreateNewTab,
       handleCreateTerminal,
@@ -2736,7 +2721,7 @@ function WorkspaceScreenContent({
       const paneId = focusedPaneTabState.pane?.id;
       switch (action.id) {
         case "workspace.tab.target.agent":
-          handleCreateDraftTab({ paneId });
+          openNewAgentScreen();
           return true;
         case "workspace.tab.target.chat":
           launchWorkspaceTab({ kind: "chat" }, { kind: "open", paneId });
@@ -2769,7 +2754,7 @@ function WorkspaceScreenContent({
     [
       focusedPaneTabState.pane?.id,
       handleCreateBrowserTab,
-      handleCreateDraftTab,
+      openNewAgentScreen,
       isGitCheckout,
       isMobile,
       launchWorkspaceTab,
@@ -3523,7 +3508,7 @@ function WorkspaceScreenContent({
             normalizedWorkspaceId={normalizedWorkspaceId}
             onSelectSwitcherTab={handleSelectSwitcherTab}
             createTerminalDisabled={createTerminalDisabled}
-            onCreateDraftTab={handleCreateDraftTab}
+            onCreateDraftTab={openNewAgentScreen}
             onCreateTerminal={handleCreateTerminal}
             onCopyResumeCommand={handleCopyResumeCommand}
             onCopyAgentId={handleCopyAgentId}
@@ -3575,7 +3560,7 @@ function WorkspaceScreenContent({
       handleCopyTerminalId,
       handleCopyWorkspacePath,
       handleCreateBrowserTab,
-      handleCreateDraftTab,
+      openNewAgentScreen,
       handleCreateTerminal,
       handleCreateTerminalWithProfile,
       handleOpenSetupTab,

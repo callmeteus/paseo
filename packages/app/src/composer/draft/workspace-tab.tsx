@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Keyboard, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
@@ -11,7 +11,7 @@ import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
 import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
-import { sideAgentId, useDraftAgentSideSelection } from "@/side-chat/use-add-selection";
+import { useAddSelectionToSideChat } from "@/side-chat/use-add-selection";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { insertSelectionAsInlineChip } from "@/composer/selection-inline-chip";
@@ -468,6 +468,12 @@ interface WorkspaceDraftAgentTabProps {
   onCreated: (snapshot: AgentSnapshotPayload) => void;
   onOpenWorkspaceFile: (request: WorkspaceFileOpenRequest) => void;
   onOpenImportSheet?: () => void;
+  /**
+   * Full-screen setup presentation. Shows the same centered hero as New workspace
+   * and drops the workspace-specific fields (the workspace is already chosen).
+   */
+  setupPresentation?: boolean;
+  heroTitle?: string;
 }
 
 function resolveImportPillPress(
@@ -478,6 +484,62 @@ function resolveImportPillPress(
     return null;
   }
   return onOpenImportSheet ?? null;
+}
+
+function wrapDraftDockContent(setupPresentation: boolean, body: ReactNode): ReactNode {
+  if (setupPresentation) {
+    return body;
+  }
+  return <View style={styles.contentContainer}>{body}</View>;
+}
+
+function DraftSetupHeader({ heroTitle, isCompact }: { heroTitle?: string; isCompact: boolean }) {
+  if (isCompact) {
+    return <View style={styles.compactSetupSpace} pointerEvents="none" />;
+  }
+  if (!heroTitle) {
+    return null;
+  }
+  return (
+    <View style={styles.heroTitleContainer} pointerEvents="none">
+      <Text style={styles.heroTitle}>{heroTitle}</Text>
+    </View>
+  );
+}
+
+function DraftSetupContent({
+  centered,
+  isSubmitting,
+  hasDraftAgent,
+  formErrorMessage,
+  renderStream,
+}: {
+  centered: boolean;
+  isSubmitting: boolean;
+  hasDraftAgent: boolean;
+  formErrorMessage: string;
+  renderStream: () => ReactNode;
+}) {
+  if (isSubmitting && hasDraftAgent) {
+    return (
+      <View style={centered ? styles.setupStreamContainer : styles.streamContainer}>
+        {renderStream()}
+      </View>
+    );
+  }
+  const error = formErrorMessage ? (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorText}>{formErrorMessage}</Text>
+    </View>
+  ) : null;
+  if (centered) {
+    return <View style={styles.configSection}>{error}</View>;
+  }
+  return (
+    <ScrollView style={styles.scrollView} contentContainerStyle={styles.configScrollContent}>
+      <View style={styles.configSection}>{error}</View>
+    </ScrollView>
+  );
 }
 
 export function WorkspaceDraftAgentTab({
@@ -491,6 +553,8 @@ export function WorkspaceDraftAgentTab({
   onCreated,
   onOpenWorkspaceFile,
   onOpenImportSheet,
+  setupPresentation = false,
+  heroTitle,
 }: WorkspaceDraftAgentTabProps) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(serverId);
@@ -812,42 +876,62 @@ export function WorkspaceDraftAgentTab({
     },
     [draftInput, replaceDraftText],
   );
-  const onAddSelectionToSideChat = useDraftAgentSideSelection(serverId, sideAgentId(draftAgent));
+  const { addSelection: onAddSelectionToSideChat } = useAddSelectionToSideChat({
+    serverId,
+    workspaceId,
+  });
 
-  const dockContent = (
-    <View style={styles.contentContainer}>
-      {isSubmitting && draftAgent ? (
-        <View style={styles.streamContainer}>
-          <AgentStreamView
-            agentId={tabId}
-            serverId={serverId}
-            context={draftAgent}
-            streamItems={submittedStreamItems}
-            pendingMessageSubmissions={pendingMessageSubmissions}
-            turnPresentation={turnPresentation}
-            pendingPermissions={EMPTY_PENDING_PERMISSIONS}
-            onOpenWorkspaceFile={onOpenWorkspaceFile}
-            onAddSelectionToChat={handleAddSelectionToChat}
-            onAddSelectionToSideChat={onAddSelectionToSideChat}
-          />
-        </View>
-      ) : (
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.configScrollContent}>
-          <View style={styles.configSection}>
-            {formErrorMessage ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{formErrorMessage}</Text>
-              </View>
-            ) : null}
-          </View>
-        </ScrollView>
-      )}
-    </View>
+  // New workspace centers its setup on wide layouts and leaves the composer near
+  // the thumb on compact ones. Mirror that when this tab is used as a full screen.
+  const centeredSetup = setupPresentation && !isCompactFormFactor;
+  const renderDraftStream = useCallback(() => {
+    if (!draftAgent) {
+      return null;
+    }
+    return (
+      <AgentStreamView
+        agentId={tabId}
+        serverId={serverId}
+        context={draftAgent}
+        streamItems={submittedStreamItems}
+        pendingMessageSubmissions={pendingMessageSubmissions}
+        turnPresentation={turnPresentation}
+        pendingPermissions={EMPTY_PENDING_PERMISSIONS}
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
+        onAddSelectionToChat={handleAddSelectionToChat}
+        onAddSelectionToSideChat={onAddSelectionToSideChat}
+      />
+    );
+  }, [
+    draftAgent,
+    handleAddSelectionToChat,
+    onAddSelectionToSideChat,
+    onOpenWorkspaceFile,
+    pendingMessageSubmissions,
+    serverId,
+    submittedStreamItems,
+    tabId,
+    turnPresentation,
+  ]);
+  const setupBody = (
+    <>
+      {setupPresentation ? (
+        <DraftSetupHeader heroTitle={heroTitle} isCompact={isCompactFormFactor} />
+      ) : null}
+      <DraftSetupContent
+        centered={centeredSetup}
+        isSubmitting={isSubmitting}
+        hasDraftAgent={Boolean(draftAgent)}
+        formErrorMessage={formErrorMessage}
+        renderStream={renderDraftStream}
+      />
+    </>
   );
+  const dockContent = wrapDraftDockContent(setupPresentation, setupBody);
 
   return (
     <FileDropZone style={styles.container}>
-      <ComposerDock fullscreen={isComposerFullscreen}>
+      <ComposerDock fullscreen={isComposerFullscreen} centered={centeredSetup}>
         {dockContent}
         <View style={animatedStaticStyles.inputAreaWrapper} onLayout={onInputAreaLayout}>
           {importPillPress && !isComposerFullscreen ? (
@@ -906,6 +990,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   contentContainer: {
     flex: 1,
+  },
+  compactSetupSpace: {
+    flex: 1,
+  },
+  heroTitleContainer: {
+    marginBottom: theme.spacing[8],
+    paddingLeft: theme.spacing[6],
+    paddingRight: theme.spacing[4],
+  },
+  heroTitle: {
+    fontSize: theme.fontSize["2xl"],
+    fontWeight: theme.fontWeight.normal,
+    color: theme.colors.foreground,
+  },
+  setupStreamContainer: {
+    minHeight: 200,
   },
   streamContainer: {
     flex: 1,

@@ -4,6 +4,7 @@ import {
   buildHostRootRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
+  buildNewAgentRoute,
   buildNewWorkspaceRoute,
   buildOpenProjectRoute,
   resolveKnownHostRoute,
@@ -219,6 +220,16 @@ describe("global routes", () => {
 
   it("buildNewWorkspaceRoute accepts an initial host", () => {
     expect(buildNewWorkspaceRoute({ serverId: "local" })).toBe("/new?serverId=local");
+  });
+
+  it("buildNewAgentRoute scopes the setup to a workspace", () => {
+    expect(buildNewAgentRoute()).toBe("/new-agent");
+    expect(buildNewAgentRoute({ serverId: "local", workspaceId: "workspace-1" })).toBe(
+      "/new-agent?serverId=local&workspaceId=workspace-1",
+    );
+    expect(
+      buildNewAgentRoute({ serverId: "local", workspaceId: "workspace-1", draftId: "draft-1" }),
+    ).toBe("/new-agent?serverId=local&workspaceId=workspace-1&draftId=draft-1");
   });
 
   it("buildNewWorkspaceRoute accepts initial project context", () => {

@@ -133,9 +133,10 @@ pane, so callers never check whether splits render.
 
 Removing a pane clears its remembered id; a later side open creates a new pane. The last visible
 ordinary pane stays when its final tab closes and shows the New launcher. An empty workspace does
-not automatically create an agent draft tab; choosing Agent opens one. Explorer cannot replace the
-workspace canvas, even when visible. Restoring a saved layout enforces the same rule while preserving Explorer and saved
-tab content. There is no hidden side-pane lifecycle.
+not automatically create an agent draft tab; choosing Agent opens the full-screen setup route
+(`/new-agent`). Explorer cannot replace the workspace canvas, even when visible. Restoring a saved
+layout enforces the same rule while preserving Explorer and saved tab content. There is no hidden
+side-pane lifecycle.
 
 Placement intent still controls existing tabs:
 

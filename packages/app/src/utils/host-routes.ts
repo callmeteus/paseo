@@ -473,6 +473,34 @@ export function buildNewWorkspaceRoute(options: NewWorkspaceRouteOptions = {}) {
   return `/new?${query}` as const;
 }
 
+interface NewAgentRouteOptions {
+  serverId?: string;
+  workspaceId?: string;
+  draftId?: string;
+}
+
+/** Full-screen agent setup, scoped to the workspace the user came from. */
+export function buildNewAgentRoute(options: NewAgentRouteOptions = {}) {
+  const params = new URLSearchParams();
+  const serverId = trimNonEmpty(options.serverId);
+  const workspaceId = trimNonEmpty(options.workspaceId);
+  if (serverId) {
+    params.set("serverId", serverId);
+  }
+  if (workspaceId) {
+    params.set("workspaceId", workspaceId);
+  }
+  const draftId = trimNonEmpty(options.draftId);
+  if (draftId) {
+    params.set("draftId", draftId);
+  }
+  const query = params.toString();
+  if (!query) {
+    return "/new-agent" as const;
+  }
+  return `/new-agent?${query}` as const;
+}
+
 export type KnownHostRouteResolution =
   | { kind: "render" }
   | { kind: "redirect"; href: ReturnType<typeof buildOpenProjectRoute> | "/welcome" };

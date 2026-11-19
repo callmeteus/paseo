@@ -2,6 +2,8 @@ import { generateMessageId } from "@/types/stream";
 
 export const NEW_WORKSPACE_DRAFT_KEY = "new-workspace";
 const NEW_WORKSPACE_FORK_DRAFT_PREFIX = `${NEW_WORKSPACE_DRAFT_KEY}:draft:`;
+export const NEW_AGENT_DRAFT_KEY = "new-agent";
+const NEW_AGENT_FORK_DRAFT_PREFIX = `${NEW_AGENT_DRAFT_KEY}:draft:`;
 
 export function generateDraftId(): string {
   return `draft_${generateMessageId()}`;
@@ -13,6 +15,14 @@ export function buildNewWorkspaceDraftKey(draftId?: string): string {
     return `${NEW_WORKSPACE_FORK_DRAFT_PREFIX}${explicitDraftId}`;
   }
   return NEW_WORKSPACE_DRAFT_KEY;
+}
+
+export function buildNewAgentDraftKey(draftId?: string): string {
+  const explicitDraftId = draftId?.trim();
+  if (explicitDraftId) {
+    return `${NEW_AGENT_FORK_DRAFT_PREFIX}${explicitDraftId}`;
+  }
+  return NEW_AGENT_DRAFT_KEY;
 }
 
 export function isLegacyNewWorkspaceDraftKey(draftKey: string): boolean {
