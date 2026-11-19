@@ -252,6 +252,32 @@ export function insertInlineChip(input: {
   });
 }
 
+/**
+ * Insert a content chip (pasted text or "add to chat") with a separating space
+ * on each side. The caret lands after the trailing space so typing continues
+ * outside the chip instead of gluing the next word to its quoted body.
+ * Mention chips keep using `insertInlineChip`: they replace a token inside a
+ * sentence and must not add padding.
+ */
+export function insertInlineChipWithSpacing(input: {
+  text: string;
+  selection: TextSelection;
+  chip: InlineChip;
+}): { text: string; selection: TextSelection } {
+  const start = clamp(input.selection.start, 0, input.text.length);
+  const end = clamp(input.selection.end, start, input.text.length);
+  const before = input.text.slice(0, start);
+  const after = input.text.slice(end);
+  const leading = before.length > 0 && !/\s$/.test(before) ? " " : "";
+  const trailing = after.length === 0 || !/^\s/.test(after) ? " " : "";
+  const insert = `${leading}${serializeInlineChip(input.chip)}${trailing}`;
+  const cursor = start + insert.length;
+  return {
+    text: before + insert + after,
+    selection: { start: cursor, end: cursor },
+  };
+}
+
 /** Fill in a mention once its history has loaded, without moving the surrounding sentence. */
 export function updateInlineChipBody(text: string, id: string, body: string): string {
   const parts = parseInlineParts(text);

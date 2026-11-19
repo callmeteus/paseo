@@ -1,6 +1,6 @@
 import {
   formatPasteChipLabel,
-  insertInlineChip,
+  insertInlineChipWithSpacing,
   type TextSelection,
 } from "@getpaseo/protocol/inline-chip";
 
@@ -19,12 +19,13 @@ export function insertSelectionAsInlineChip(input: {
     return { text: input.currentText, selection: { start: end, end: end } };
   }
 
-  const needsSpace = input.currentText.length > 0 && !/\s$/.test(input.currentText);
-  const base = needsSpace ? `${input.currentText} ` : input.currentText;
-  const selection: TextSelection = { start: base.length, end: base.length };
+  const selection: TextSelection = {
+    start: input.currentText.length,
+    end: input.currentText.length,
+  };
 
-  return insertInlineChip({
-    text: base,
+  return insertInlineChipWithSpacing({
+    text: input.currentText,
     selection,
     chip: {
       id: `paste:${crypto.randomUUID()}`,

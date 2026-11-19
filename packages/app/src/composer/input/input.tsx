@@ -78,7 +78,7 @@ import {
   formatPasteChipLabel,
   hasInlineChip,
   inlineChipDisplayText,
-  insertInlineChip,
+  insertInlineChipWithSpacing,
   insertTextAtSelection,
 } from "@getpaseo/protocol/inline-chip";
 import { InlineChipEditor, type InlineChipEditSnapshot } from "@/composer/inline-chip-editor";
@@ -2157,7 +2157,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           };
         }
         const next = input.chip
-          ? insertInlineChip({
+          ? insertInlineChipWithSpacing({
               text: current,
               selection,
               chip: {
