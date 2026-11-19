@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyProviderError,
   isBackgroundProviderNotice,
+  isBillingNoticeText,
   isSystemErrorText,
   looksLikeProviderFailureText,
   readProviderErrorText,
@@ -38,6 +39,23 @@ describe("provider error classification", () => {
       "capacity",
     );
     expect(classifyProviderError("RetriableError: [resource exhausted] Error")).toBe("capacity");
+  });
+
+  it("reads Cursor's billing line as a usage limit, not as a reply", () => {
+    const billing = "Add a payment method to continue";
+    expect(readProviderErrorText(billing)).toBe(billing);
+    expect(classifyProviderError(billing)).toBe("usage_limit");
+    expect(isBillingNoticeText(billing)).toBe(true);
+    expect(
+      isBillingNoticeText(
+        "You've reached your free trial limit. Add a payment method to continue.",
+      ),
+    ).toBe(true);
+    expect(isBillingNoticeText("I fixed the flaky test. Add a payment method to continue.")).toBe(
+      false,
+    );
+    expect(isBillingNoticeText("Add a payment method to continue.\n\nThen restart.")).toBe(false);
+    expect(readProviderErrorText("Implemented the endpoint.")).toBeNull();
   });
 
   it("detects authentication and model failures", () => {

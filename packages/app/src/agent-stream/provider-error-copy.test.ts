@@ -24,6 +24,19 @@ describe("resolveProviderErrorCopy", () => {
     });
     expect(copy.title).toBe("agentStream.providerError.providers.opencode.goUsageLimit.title");
   });
+
+  it("uses Cursor copy for Cursor's account limit", () => {
+    const copy = resolveProviderErrorCopy({
+      provider: "cursor",
+      kind: "usage_limit",
+      message: "Add a payment method to continue",
+      modelId: "composer-1",
+    });
+    expect(copy.title).toBe("agentStream.providerError.providers.cursor.usageLimit.title");
+    expect(copy.description).toBe(
+      "agentStream.providerError.providers.cursor.usageLimit.description",
+    );
+  });
 });
 
 describe("isOpencodeGoModel", () => {

@@ -47,6 +47,7 @@ import { ProviderErrorCard } from "@/components/provider-error-card";
 import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
 import { readSessionLimitNotice } from "@/agent-stream/session-limit";
+import { collapseRepeatedFailures } from "@/agent-stream/repeated-failures";
 import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
 import { ProviderErrorRetry } from "@/agent-stream/provider-error-retry";
 import {
@@ -646,24 +647,34 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       },
     );
 
+    // A provider that retries inside one turn repaints the same failure line on
+    // every attempt. Keep one card per run, and offer the resume box on that card.
+    const dedupedStream = useMemo(
+      () => ({
+        tail: collapseRepeatedFailures(effectiveStreamItems),
+        head: collapseRepeatedFailures(effectiveStreamHead ?? EMPTY_STREAM_HEAD),
+      }),
+      [effectiveStreamHead, effectiveStreamItems],
+    );
     const limitResumeItemId = useMemo(
       () =>
         latestLimitResumeItemId(
-          [...effectiveStreamItems, ...(effectiveStreamHead ?? [])].map((item) => ({
+          [...dedupedStream.tail, ...dedupedStream.head].map((item) => ({
             id: item.id,
             text: limitResumeItemText(item),
           })),
         ),
-      [effectiveStreamHead, effectiveStreamItems],
+      [dedupedStream],
     );
+
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
     const isTurnActive = effectiveTurnPresentation.isActive;
     const presentStream = useMemo(() => createStreamPresentation(), []);
     const presentation = useMemo(
       () =>
         presentStream({
-          tail: effectiveStreamItems,
-          head: effectiveStreamHead ?? EMPTY_STREAM_HEAD,
+          tail: dedupedStream.tail,
+          head: dedupedStream.head,
           transform: transformTimelineItem,
           display: chatDisplay,
           expandedTurnHostIds,
@@ -673,9 +684,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           groupReasoning: !autoExpandReasoning,
         }),
       [
+        dedupedStream,
         presentStream,
-        effectiveStreamItems,
-        effectiveStreamHead,
         transformTimelineItem,
         chatDisplay,
         expandedTurnHostIds,

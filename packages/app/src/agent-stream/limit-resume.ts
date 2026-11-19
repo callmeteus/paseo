@@ -1,4 +1,8 @@
-import { classifyProviderError, readProviderErrorText } from "@getpaseo/protocol/provider-error";
+import {
+  classifyProviderError,
+  isBillingNoticeText,
+  readProviderErrorText,
+} from "@getpaseo/protocol/provider-error";
 import {
   readSessionLimitClock,
   readSessionLimitNotice,
@@ -86,15 +90,14 @@ export function resolveLimitResumeAt(input: {
   windows: readonly UsageResetWindow[];
   now: number;
 }): number | null {
-  const notice = readSessionLimitNotice(input.text);
   // The billing line waits on a payment method, so no reset brings this chat back.
-  if (notice?.kind === "billing") return null;
+  if (isBillingNoticeText(input.text)) return null;
   const clock = readSessionLimitClock(input.text);
   if (clock) {
     const at = nextZonedClock(clock, input.now);
     if (at != null) return at;
   }
-  if (!notice && !isUsageLimitText(input.text)) return null;
+  if (!readSessionLimitNotice(input.text) && !isUsageLimitText(input.text)) return null;
   return soonestUsageReset(input.windows, input.now);
 }
 
@@ -125,9 +128,9 @@ export function limitResumeAction(input: {
 
 /** Session-limit text, or a usage-limit failure. Ordinary replies are not notices. */
 export function isLimitResumeNotice(text: string): boolean {
-  const notice = readSessionLimitNotice(text);
   // Cursor's billing line needs a payment method, not a reset, so it never grows a checkbox.
-  if (notice) return notice.kind !== "billing";
+  if (isBillingNoticeText(text)) return false;
+  if (readSessionLimitNotice(text)) return true;
   return isUsageLimitText(text);
 }
 

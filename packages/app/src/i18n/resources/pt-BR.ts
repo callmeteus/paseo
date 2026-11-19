@@ -331,7 +331,6 @@ export const ptBR: TranslationResources = {
     messageCapped: "Esta mensagem foi truncada ({{bytes}} bytes).",
     sessionLimit: {
       reached: "A sessão deste modelo chegou no limite.",
-      billing: "O limite do Cursor foi atingido. Adicione um método de pagamento para continuar.",
       resetsAt:
         "A sessão deste modelo chegou no limite e volta às {{time}} no horário de {{place}}.",
       resetsRaw: "A sessão deste modelo chegou no limite e volta em {{when}}.",
@@ -390,6 +389,13 @@ export const ptBR: TranslationResources = {
             title: "Limite do OpenCode Go atingido",
             description:
               "Seu plano do OpenCode Go atingiu o limite. Troque de modelo ou aguarde a cota renovar.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Limite do Cursor atingido",
+            description:
+              "Esta conta do Cursor está sem forma de pagamento ou atingiu o limite do plano. Troque de modelo, adicione um método de pagamento ou ajuste seu plano.",
           },
         },
         cline: {
@@ -1644,6 +1650,7 @@ export const ptBR: TranslationResources = {
         copyPath: "Copiar caminho",
         copyBranchName: "Copiar nome da branch",
         rename: "Renomear workspace",
+        edit: "Editar workspace",
         pin: "Fixar no topo",
         unpin: "Desafixar",
         moveToFolder: "Mover workspace para pasta…",

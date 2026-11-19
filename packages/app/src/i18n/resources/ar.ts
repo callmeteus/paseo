@@ -327,7 +327,6 @@ export const ar: TranslationResources = {
     messageCapped: "تم اقتطاع هذه الرسالة ({{bytes}} بايت).",
     sessionLimit: {
       reached: "بلغت جلسة هذا النموذج حدها.",
-      billing: "وصل Cursor إلى حد الخطّة. أضف طريقة دفع للمتابعة.",
       resetsAt: "بلغت جلسة هذا النموذج حدها وتعود عند {{time}} بتوقيت {{place}}.",
       resetsRaw: "بلغت جلسة هذا النموذج حدها وتعود عند {{when}}.",
       resume: "استئناف هذه المحادثة عند انتهاء الحد",
@@ -383,6 +382,13 @@ export const ar: TranslationResources = {
           goUsageLimit: {
             title: "تم الوصول إلى حد OpenCode Go",
             description: "وصلت خطة OpenCode Go إلى حدها. بدّل النموذج أو انتظر تجديد الحصة.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "تم الوصول إلى حد Cursor",
+            description:
+              "لا يملك حساب Cursor هذا طريقة دفع أو وصل إلى حد الخطّة. بدّل النموذج أو أضف طريقة دفع أو عدّل خطّتك.",
           },
         },
         cline: {
@@ -1609,6 +1615,7 @@ export const ar: TranslationResources = {
         copyPath: "نسخ المسار",
         copyBranchName: "انسخ اسم الفرع",
         rename: "إعادة تسمية مساحة العمل",
+        edit: "تعديل مساحة العمل",
         pin: "تثبيت في الأعلى",
         unpin: "إلغاء التثبيت",
         moveToFolder: "نقل مساحة العمل إلى مجلد…",

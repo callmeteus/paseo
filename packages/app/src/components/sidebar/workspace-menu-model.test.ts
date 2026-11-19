@@ -9,12 +9,13 @@ const labels = {
 } as const;
 
 describe("workspace chat menu", () => {
-  it("puts archive first, then pin, then rename and read state, then move and copy", () => {
+  it("puts archive first, then pin, then rename and edit, then move and copy", () => {
     expect(
       workspaceMenuRows({
         archive: true,
         pin: true,
         rename: true,
+        edit: true,
         labels: true,
         "mark-as-unread": true,
         move: true,
@@ -29,6 +30,7 @@ describe("workspace chat menu", () => {
       "pin",
       "separator-before-rename",
       "rename",
+      "edit",
       "labels",
       "mark-as-unread",
       "separator-before-move",

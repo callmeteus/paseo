@@ -328,7 +328,6 @@ export const ko: TranslationResources = {
     messageCapped: "이 메시지는 길이 제한으로 잘렸습니다({{bytes}}바이트).",
     sessionLimit: {
       reached: "이 모델의 세션이 한도에 도달했습니다.",
-      billing: "Cursor의 플랜 한도에 도달했습니다. 계속하려면 결제 수단을 추가하세요.",
       resetsAt: "이 모델의 세션이 한도에 도달했고 {{place}} 시간 {{time}}에 돌아옵니다.",
       resetsRaw: "이 모델의 세션이 한도에 도달했고 {{when}}에 돌아옵니다.",
       resume: "한도가 끝나면 이 채팅을 다시 시작",
@@ -387,6 +386,13 @@ export const ko: TranslationResources = {
             title: "OpenCode Go 한도에 도달했습니다",
             description:
               "OpenCode Go 요금제 한도에 도달했습니다. 모델을 전환하거나 할당량이 초기화되기를 기다리세요.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Cursor 한도에 도달했습니다",
+            description:
+              "이 Cursor 계정에는 결제 수단이 없거나 플랜 한도에 도달했습니다. 모델을 전환하거나, 결제 수단을 추가하거나, 플랜을 조정하세요.",
           },
         },
         cline: {
@@ -1621,6 +1627,7 @@ export const ko: TranslationResources = {
         copyPath: "경로 복사",
         copyBranchName: "브랜치 이름 복사",
         rename: "워크스페이스 이름 변경",
+        edit: "워크스페이스 편집",
         pin: "상단에 고정",
         unpin: "고정 해제",
         moveToFolder: "워크스페이스를 폴더로 이동…",

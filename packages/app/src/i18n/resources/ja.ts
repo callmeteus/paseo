@@ -330,7 +330,6 @@ export const ja: TranslationResources = {
     messageCapped: "このメッセージは上限で切り詰められました（{{bytes}}バイト）。",
     sessionLimit: {
       reached: "このモデルのセッションは上限に達しました。",
-      billing: "Cursor のプランの上限に達しました。続けるには支払い方法を追加してください。",
       resetsAt: "このモデルのセッションは上限に達しました。{{place}}時間の{{time}}に戻ります。",
       resetsRaw: "このモデルのセッションは上限に達しました。戻りは {{when}} です。",
       resume: "制限が終わったらこのチャットを再開する",
@@ -390,6 +389,13 @@ export const ja: TranslationResources = {
             title: "OpenCode Go の上限に達しました",
             description:
               "OpenCode Go プランの上限に達しました。モデルを切り替えるか、クォータの更新を待ってください。",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Cursor の上限に達しました",
+            description:
+              "この Cursor アカウントは支払い方法がないか、プランの上限に達しています。モデルを切り替えるか、支払い方法を追加するか、プランを調整してください。",
           },
         },
         cline: {
@@ -1632,6 +1638,7 @@ export const ja: TranslationResources = {
         copyPath: "パスをコピー",
         copyBranchName: "ブランチ名をコピー",
         rename: "ワークスペースの名前を変更",
+        edit: "ワークスペースを編集",
         pin: "上部に固定",
         unpin: "固定解除",
         moveToFolder: "ワークスペースをフォルダーへ移動…",

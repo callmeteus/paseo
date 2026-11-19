@@ -327,7 +327,6 @@ export const zhCN: TranslationResources = {
     messageCapped: "此消息已被截断（{{bytes}} 字节）。",
     sessionLimit: {
       reached: "这个模型的会话已达到上限。",
-      billing: "Cursor 已达到套餐上限。添加付款方式即可继续。",
       resetsAt: "这个模型的会话已达到上限，{{place}}时间 {{time}} 恢复。",
       resetsRaw: "这个模型的会话已达到上限，恢复时间是 {{when}}。",
       resume: "额度结束后自动继续这个聊天",
@@ -383,6 +382,13 @@ export const zhCN: TranslationResources = {
           goUsageLimit: {
             title: "已达到 OpenCode Go 上限",
             description: "你的 OpenCode Go 套餐已达到上限。请切换模型或等待配额刷新。",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Cursor 已达到上限",
+            description:
+              "此 Cursor 账户没有付款方式或已达到套餐上限。请切换模型、添加付款方式或调整套餐。",
           },
         },
         cline: {
@@ -1598,6 +1604,7 @@ export const zhCN: TranslationResources = {
         copyPath: "复制路径",
         copyBranchName: "复制分支名称",
         rename: "重命名 workspace",
+        edit: "编辑工作区",
         pin: "置顶",
         unpin: "取消置顶",
         moveToFolder: "将工作区移动到文件夹…",

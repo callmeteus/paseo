@@ -332,8 +332,6 @@ export const fr: TranslationResources = {
     messageCapped: "Ce message a été tronqué ({{bytes}} octets).",
     sessionLimit: {
       reached: "La session de ce modèle a atteint sa limite.",
-      billing:
-        "Cursor a atteint la limite de son forfait. Ajoute un moyen de paiement pour continuer.",
       resetsAt:
         "La session de ce modèle a atteint sa limite et revient à {{time}}, heure de {{place}}.",
       resetsRaw: "La session de ce modèle a atteint sa limite et revient à {{when}}.",
@@ -394,6 +392,13 @@ export const fr: TranslationResources = {
             title: "Limite OpenCode Go atteinte",
             description:
               "Votre offre OpenCode Go a atteint sa limite. Changez de modèle ou attendez le renouvellement du quota.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Limite de Cursor atteinte",
+            description:
+              "Ce compte Cursor n’a pas de moyen de paiement ou a atteint la limite de son forfait. Change de modèle, ajoute un moyen de paiement ou ajuste ton forfait.",
           },
         },
         cline: {
@@ -1651,6 +1656,7 @@ export const fr: TranslationResources = {
         copyPath: "Copier le chemin",
         copyBranchName: "Copier le nom de la branche",
         rename: "Renommer l’espace de travail",
+        edit: "Modifier l’espace de travail",
         pin: "Épingler en haut",
         unpin: "Désépingler",
         moveToFolder: "Déplacer l'espace de travail vers un dossier…",

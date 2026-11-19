@@ -331,7 +331,6 @@ export const es: TranslationResources = {
     messageCapped: "Este mensaje fue truncado ({{bytes}} bytes).",
     sessionLimit: {
       reached: "La sesión de este modelo llegó al límite.",
-      billing: "Cursor alcanzó el límite de su plan. Añade un método de pago para continuar.",
       resetsAt:
         "La sesión de este modelo llegó al límite y vuelve a las {{time}}, horario de {{place}}.",
       resetsRaw: "La sesión de este modelo llegó al límite y vuelve a las {{when}}.",
@@ -389,6 +388,13 @@ export const es: TranslationResources = {
             title: "Límite de OpenCode Go alcanzado",
             description:
               "Tu plan de OpenCode Go alcanzó el límite. Cambia de modelo o espera a que se renueve la cuota.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Límite de Cursor alcanzado",
+            description:
+              "Esta cuenta de Cursor no tiene método de pago o alcanzó el límite del plan. Cambia de modelo, añade un método de pago o ajusta tu plan.",
           },
         },
         cline: {
@@ -1652,6 +1658,7 @@ export const es: TranslationResources = {
         copyPath: "Copiar ruta",
         copyBranchName: "Copiar nombre de sucursal",
         rename: "Cambiar nombre del espacio de trabajo",
+        edit: "Editar espacio de trabajo",
         pin: "Anclar arriba",
         unpin: "Desanclar",
         moveToFolder: "Mover espacio de trabajo a carpeta…",

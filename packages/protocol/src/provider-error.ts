@@ -34,6 +34,14 @@ const AUTH_PATTERN =
 const MODEL_PATTERN =
   /(model.*(?:not found|not available|unavailable|invalid)|invalid model|unknown model)/i;
 /**
+ * Cursor answers a prompt with its billing line instead of a reply when the
+ * account has no payment method. It opens with a verb the failure list below
+ * does not carry, so it needs its own entry. The whole line has to match, so a
+ * model quoting it in prose keeps its reply.
+ */
+const CURSOR_BILLING_LINE =
+  /^(?:(?:you['\u2019]ve|you have) reached your (?:free )?(?:plan|trial) limit\.\s*)?(?:please\s+)?add a payment method(?: to continue(?: using (?:cursor|an api key))?)?\.?$/i;
+/**
  * A dead helper or a dropped transport. The error card and the model router
  * both use this pattern, so the nine terms cannot drift apart.
  */
@@ -53,6 +61,11 @@ const STRUCTURED_TEXT_PATTERN = /^(?:#{1,6}\s|[-*]\s|\d+\.\s|```|\|)/m;
 const SENTENCE_BREAK_PATTERN =
   /[.!?]\s+(?!(?:please|run|try|check|retry|re-?run|then|make|update|upgrade|restart|log)\b)[A-Z]/;
 const MAX_FAILURE_CHARS = 220;
+
+/** Cursor's account-level billing line, printed where the reply should be. */
+export function isBillingNoticeText(text: string): boolean {
+  return CURSOR_BILLING_LINE.test(text.trim());
+}
 
 export function classifyProviderError(message: string): ProviderErrorKind {
   if (CRASH_PATTERN.test(message)) return "crash";
@@ -138,6 +151,12 @@ export function looksLikeProviderFailureText(text: string): boolean {
   }
   if (STRUCTURED_TEXT_PATTERN.test(trimmed) || trimmed.includes("\n\n")) {
     return false;
+  }
+  // The billing line names a payment method, not a failure verb, and it may open
+  // with a sentence ("You've reached your free trial limit.") that the sentence
+  // break below would read as prose.
+  if (CURSOR_BILLING_LINE.test(trimmed)) {
+    return true;
   }
   if (SENTENCE_BREAK_PATTERN.test(trimmed)) {
     return false;

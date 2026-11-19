@@ -6,7 +6,7 @@
 export const WORKSPACE_MENU_GROUPS = [
   ["archive"],
   ["pin"],
-  ["rename", "labels", "mark-as-read", "mark-as-unread"],
+  ["rename", "edit", "labels", "mark-as-read", "mark-as-unread"],
   ["move", "copy-path", "copy-branch", "open-folder"],
   ["delete"],
 ] as const;

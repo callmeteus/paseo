@@ -1046,6 +1046,7 @@ function StatusWorkspaceActionSlot({
               workspaceKey={workspace.workspaceKey}
               serverId={workspace.serverId}
               workspaceId={workspace.workspaceId}
+              projectViewKey={workspace.projectViewKey}
               workspaceLabels={workspace.labels}
               onCopyPath={onCopyPath}
               onCopyBranchName={onCopyBranchName}

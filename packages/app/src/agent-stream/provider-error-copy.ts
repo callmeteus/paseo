@@ -48,6 +48,15 @@ const CLINE_USAGE_LIMIT: ProviderErrorCopy = {
   description: "agentStream.providerError.providers.cline.usageLimit.description",
 };
 
+/**
+ * Cursor prints an account-level billing line where the reply should be, so the
+ * limit is about the account, not the model in use.
+ */
+const CURSOR_USAGE_LIMIT: ProviderErrorCopy = {
+  title: "agentStream.providerError.providers.cursor.usageLimit.title",
+  description: "agentStream.providerError.providers.cursor.usageLimit.description",
+};
+
 const OPENCODE_PLAN_USAGE_LIMIT: ProviderErrorCopy = {
   title: "agentStream.providerError.providers.opencode.usageLimit.title",
   description: "agentStream.providerError.providers.opencode.usageLimit.description",
@@ -76,6 +85,9 @@ export function resolveProviderErrorCopy(input: {
 }): ProviderErrorCopy {
   if (input.provider === "cline" && input.kind === "usage_limit") {
     return CLINE_USAGE_LIMIT;
+  }
+  if (input.provider === "cursor" && input.kind === "usage_limit") {
+    return CURSOR_USAGE_LIMIT;
   }
   if (input.provider === "opencode" && input.kind === "usage_limit") {
     const onGoModel = isOpencodeGoModel(input.modelId);

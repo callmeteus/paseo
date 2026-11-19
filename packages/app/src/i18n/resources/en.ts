@@ -323,7 +323,6 @@ export const en = {
     messageCapped: "This message was capped ({{bytes}} bytes).",
     sessionLimit: {
       reached: "This model's session has hit its limit.",
-      billing: "Cursor reached its plan limit. Add a payment method to continue.",
       resetsAt:
         "This model's session has hit its limit and comes back at {{time}}, {{place}} time.",
       resetsRaw: "This model's session has hit its limit and comes back at {{when}}.",
@@ -381,6 +380,13 @@ export const en = {
             title: "OpenCode Go usage limit reached",
             description:
               "Your OpenCode Go plan reached its limit. Switch models or wait for the quota to reset.",
+          },
+        },
+        cursor: {
+          usageLimit: {
+            title: "Cursor limit reached",
+            description:
+              "This Cursor account has no payment method or hit its plan limit. Switch models, add a payment method, or adjust your plan.",
           },
         },
         cline: {
@@ -1621,6 +1627,7 @@ export const en = {
         copyPath: "Copy path",
         copyBranchName: "Copy branch name",
         rename: "Rename workspace",
+        edit: "Edit workspace",
         pin: "Pin to top",
         unpin: "Unpin",
         moveToFolder: "Move workspace to folder…",

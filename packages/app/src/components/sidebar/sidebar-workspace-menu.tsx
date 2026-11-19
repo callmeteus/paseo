@@ -18,6 +18,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Settings2,
   Tag,
   Trash2,
 } from "lucide-react-native";
@@ -29,6 +30,7 @@ import {
   type WorkspaceMenuAction,
 } from "@/components/sidebar/workspace-menu-model";
 import { openMoveWorkspaceToFolder } from "@/screens/workspace/move-workspace-to-folder-store";
+import { openEditWorkspace } from "@/projects/edit-workspace-store";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -75,6 +77,7 @@ const ThemedArchive = withUnistyles(Archive);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedCircle = withUnistyles(Circle);
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedSettings2 = withUnistyles(Settings2);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
 const ThemedPin = withUnistyles(Pin);
 const ThemedPinOff = withUnistyles(PinOff);
@@ -84,6 +87,9 @@ const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapp
 const renameLeadingIcon = <ThemedPencil size={14} uniProps={foregroundMutedColorMapping} />;
 const moveToFolderLeadingIcon = (
   <ThemedFolderInput size={14} uniProps={foregroundMutedColorMapping} />
+);
+const editWorkspaceLeadingIcon = (
+  <ThemedSettings2 size={14} uniProps={foregroundMutedColorMapping} />
 );
 const markAsReadLeadingIcon = (
   <ThemedCircleCheck size={14} uniProps={foregroundMutedColorMapping} />
@@ -179,6 +185,8 @@ export interface SidebarWorkspaceMenuProps {
   workspaceKey: string;
   serverId?: string;
   workspaceId?: string;
+  /** The project this workspace belongs to. The edit row needs it to find the project. */
+  projectViewKey?: string;
   workspaceLabels?: readonly string[];
   onCopyPath?: () => void;
   onCopyBranchName?: () => void;
@@ -256,11 +264,40 @@ function WorkspaceMenuSeparator({ surface }: { surface: MenuSurface }): ReactNod
   return surface === "context" ? <ContextMenuSeparator /> : <DropdownMenuSeparator />;
 }
 
+function EditWorkspaceMenuItem({
+  surface,
+  workspaceKey,
+  serverId,
+  projectViewKey,
+}: {
+  surface: MenuSurface;
+  workspaceKey: string;
+  serverId: string;
+  projectViewKey: string;
+}): ReactNode {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => {
+    openEditWorkspace({ serverId, projectViewKey });
+  }, [serverId, projectViewKey]);
+
+  return (
+    <WorkspaceMenuItem
+      surface={surface}
+      testID={`sidebar-workspace-menu-edit-${workspaceKey}`}
+      leading={editWorkspaceLeadingIcon}
+      onSelect={handleSelect}
+    >
+      {t("sidebar.workspace.actions.edit")}
+    </WorkspaceMenuItem>
+  );
+}
+
 function SidebarWorkspaceMenuItems({
   surface,
   workspaceKey,
   serverId,
   workspaceId,
+  projectViewKey,
   onCopyPath,
   onCopyBranchName,
   onRename,
@@ -290,6 +327,7 @@ function SidebarWorkspaceMenuItems({
     archive: Boolean(onArchive),
     pin: Boolean(onTogglePin),
     rename: Boolean(onRename),
+    edit: Boolean(serverId && projectViewKey),
     labels: Boolean(serverId && workspaceId),
     "mark-as-read": Boolean(onMarkAsRead),
     "mark-as-unread": Boolean(onMarkAsUnread),
@@ -340,6 +378,16 @@ function SidebarWorkspaceMenuItems({
           >
             {t("sidebar.workspace.actions.rename")}
           </WorkspaceMenuItem>
+        ) : null;
+      case "edit":
+        return serverId && projectViewKey ? (
+          <EditWorkspaceMenuItem
+            key={action}
+            surface={surface}
+            workspaceKey={workspaceKey}
+            serverId={serverId}
+            projectViewKey={projectViewKey}
+          />
         ) : null;
       case "labels":
         return serverId && workspaceId ? (
@@ -474,6 +522,7 @@ export function SidebarWorkspaceMenu({
   workspaceKey,
   serverId,
   workspaceId,
+  projectViewKey,
   workspaceLabels,
   onCopyPath,
   onCopyBranchName,
@@ -521,6 +570,7 @@ export function SidebarWorkspaceMenu({
           workspaceKey={workspaceKey}
           serverId={serverId}
           workspaceId={workspaceId}
+          projectViewKey={projectViewKey}
           workspaceLabels={workspaceLabels}
           onCopyPath={onCopyPath}
           onCopyBranchName={onCopyBranchName}
@@ -637,6 +687,7 @@ export function SidebarWorkspaceContextMenu({
           workspaceKey={workspaceKey}
           serverId={workspaceTarget.serverId}
           workspaceId={workspaceTarget.workspaceId}
+          projectViewKey={workspace.projectViewKey}
           workspaceLabels={workspaceTarget.labels}
           onCopyPath={onCopyPath}
           onCopyBranchName={onCopyBranchName}
