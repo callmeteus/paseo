@@ -930,6 +930,7 @@ export interface UpdateScheduleNewAgentConfig {
   model?: string | null;
   modeId?: string | null;
   thinkingOptionId?: string | null;
+  modelRouterId?: string | null;
   archiveOnFinish?: boolean;
   isolation?: "local" | "worktree";
   cwd?: string;

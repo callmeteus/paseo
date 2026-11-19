@@ -116,7 +116,7 @@ function resolveScheduleTarget(args: {
   if (hasExplicitNewAgentOption) {
     throw {
       code: "INVALID_TARGET",
-      message: "--provider/--mode/--thinking can only be used with a new-agent target",
+      message: "--provider/--mode/--thinking/--router can only be used with a new-agent target",
       details: "Use --target new-agent or omit --target to create a new agent schedule",
     } satisfies CommandError;
   }
@@ -147,6 +147,7 @@ export function parseScheduleCreateInput(options: {
   provider?: string;
   mode?: string;
   thinking?: string;
+  router?: string;
   cwd?: string;
   host?: string;
   daemonTarget: import("../../utils/daemon-target.js").DaemonTarget;
@@ -183,15 +184,19 @@ export function parseScheduleCreateInput(options: {
 
   const targetValue = options.target?.trim();
   const modeId = options.mode?.trim();
-  const thinkingOptionId = options.thinking?.trim();
-  if (options.thinking !== undefined && !thinkingOptionId) {
-    throw {
-      code: "INVALID_THINKING_OPTION",
-      message: "--thinking cannot be empty",
-    } satisfies CommandError;
-  }
+  const thinkingOptionId = resolveTrimmedOption(options.thinking, {
+    code: "INVALID_THINKING_OPTION",
+    message: "--thinking cannot be empty",
+  });
+  const routerId = resolveTrimmedOption(options.router, {
+    code: "INVALID_ROUTER",
+    message: "--router cannot be empty",
+  });
   const hasExplicitNewAgentOption =
-    options.provider !== undefined || options.mode !== undefined || options.thinking !== undefined;
+    options.provider !== undefined ||
+    options.mode !== undefined ||
+    options.thinking !== undefined ||
+    options.router !== undefined;
   const createNewAgentTarget = (): ScheduleTarget => {
     const resolvedProviderModel = resolveProviderAndModel({
       provider: options.provider,
@@ -204,6 +209,7 @@ export function parseScheduleCreateInput(options: {
         ...(resolvedProviderModel.model ? { model: resolvedProviderModel.model } : {}),
         ...(modeId ? { modeId } : {}),
         ...(thinkingOptionId ? { thinkingOptionId } : {}),
+        ...(routerId ? { modelRouterId: routerId } : {}),
       },
     };
   };
@@ -231,6 +237,17 @@ export function parseScheduleCreateInput(options: {
   };
 }
 
+function resolveTrimmedOption(
+  value: string | undefined,
+  error: { code: string; message: string },
+): string | undefined {
+  const trimmed = value?.trim();
+  if (value !== undefined && !trimmed) {
+    throw error;
+  }
+  return trimmed;
+}
+
 function resolveRunOnCreate(
   runNow: boolean | undefined,
   _cadenceType: ScheduleCadence["type"],
@@ -248,6 +265,7 @@ export interface ScheduleUpdateOptionsInput {
   provider?: string;
   model?: string;
   mode?: string;
+  router?: string;
   cwd?: string;
   maxRuns?: string;
   expiresIn?: string;
@@ -426,6 +444,10 @@ function buildNewAgentConfigPatch(
   if (options.mode !== undefined) {
     const trimmed = options.mode.trim();
     patch.modeId = trimmed.length > 0 ? trimmed : null;
+  }
+  if (options.router !== undefined) {
+    const trimmed = options.router.trim();
+    patch.modelRouterId = trimmed.length > 0 ? trimmed : null;
   }
   if (options.cwd !== undefined) {
     const trimmed = options.cwd.trim();

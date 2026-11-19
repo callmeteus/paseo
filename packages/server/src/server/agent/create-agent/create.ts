@@ -71,6 +71,8 @@ export interface CreateAgentFromMcpInput {
   title: string;
   initialPrompt?: string;
   config?: Partial<AgentSessionConfig>;
+  /** Model router bound to the new chat; null/undefined means no fallback. */
+  modelRouterId?: string | null;
   cwd?: string;
   workspaceId?: string;
   thinking?: string;
@@ -337,6 +339,7 @@ async function resolveMcpCreateAgent(
       workspaceId: intent.workspaceId,
       owner: input.owner,
       env: input.env,
+      modelRouterId: input.modelRouterId ?? null,
     },
     prompt: trimmedPrompt ? trimmedPrompt : undefined,
     source: input.callerAgentId

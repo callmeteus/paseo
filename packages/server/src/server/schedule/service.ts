@@ -130,6 +130,14 @@ function applyNewAgentConfig(
       delete config.thinkingOptionId;
     }
   }
+  if (patch.modelRouterId !== undefined) {
+    const trimmed = patch.modelRouterId?.trim();
+    if (trimmed) {
+      config.modelRouterId = trimmed;
+    } else {
+      delete config.modelRouterId;
+    }
+  }
   if (patch.archiveOnFinish !== undefined) {
     config.archiveOnFinish = patch.archiveOnFinish;
   }
@@ -988,24 +996,12 @@ export class ScheduleService {
         workspaceId: workspace.workspaceId,
         agentId: null,
       });
-      const runConfig = { ...config, cwd: workspace.cwd };
-      const created = await this.createAgent({
-        kind: "mcp",
-        provider: formatScheduleProviderModel(runConfig),
-        config: buildScheduleAgentConfig(runConfig),
-        cwd: workspace.cwd,
-        workspaceId: workspace.workspaceId,
-        title: resolveScheduleAgentTitle(config, schedule.prompt),
-        labels: {
-          "paseo.schedule-id": schedule.id,
-          "paseo.schedule-run": runId,
-        },
-        mode: config.modeId,
-        thinking: config.thinkingOptionId,
-        features: config.featureValues,
-        unattended: true,
-        promptFailure: "return-error",
-        notifyOnFinish: false,
+      const created = await this.createScheduledAgent({
+        config,
+        workspace,
+        schedulePrompt: schedule.prompt,
+        scheduleId: schedule.id,
+        runId,
       });
       const agent = created.snapshot;
       agentId = agent.id;
@@ -1061,6 +1057,36 @@ export class ScheduleService {
         }
       }
     }
+  }
+
+  private createScheduledAgent(input: {
+    config: Extract<ScheduleTarget, { type: "new-agent" }>["config"];
+    workspace: PersistedWorkspaceRecord;
+    schedulePrompt: string;
+    scheduleId: string;
+    runId: string;
+  }) {
+    const { config, workspace, schedulePrompt, scheduleId, runId } = input;
+    const runConfig = { ...config, cwd: workspace.cwd };
+    return this.createAgent({
+      kind: "mcp",
+      provider: formatScheduleProviderModel(runConfig),
+      config: buildScheduleAgentConfig(runConfig),
+      modelRouterId: config.modelRouterId ?? null,
+      cwd: workspace.cwd,
+      workspaceId: workspace.workspaceId,
+      title: resolveScheduleAgentTitle(config, schedulePrompt),
+      labels: {
+        "paseo.schedule-id": scheduleId,
+        "paseo.schedule-run": runId,
+      },
+      mode: config.modeId,
+      thinking: config.thinkingOptionId,
+      features: config.featureValues,
+      unattended: true,
+      promptFailure: "return-error",
+      notifyOnFinish: false,
+    });
   }
 
   private async createScheduleRunWorkspace(
