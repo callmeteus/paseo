@@ -194,8 +194,21 @@ export function workspaceAgentVisibilityEqual(
     (setsEqual(a.activeAgentIds, b.activeAgentIds) &&
       setsEqual(a.autoOpenAgentIds, b.autoOpenAgentIds) &&
       setsEqual(a.hiddenAgentIds, b.hiddenAgentIds) &&
-      setsEqual(a.openedAgentIds, b.openedAgentIds))
+      setsEqual(a.openedAgentIds, b.openedAgentIds) &&
+      mapsEqual(a.hiddenAgentUpdatedAtById, b.hiddenAgentUpdatedAtById))
   );
+}
+
+function mapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {

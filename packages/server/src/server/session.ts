@@ -4675,6 +4675,17 @@ export class Session {
         type: "update_agent_response",
         payload: { requestId, agentId, accepted: true, error: null },
       });
+
+      // A live agent broadcasts its labels through the agent_state dispatch.
+      // A stored-only agent has no such dispatch, so without this publish the
+      // shared close-tab marker reaches disk but never reaches the other
+      // clients connected to this host.
+      if (!this.agentManager.getAgent(agentId) && this.agentUpdates.hasSubscription()) {
+        const record = await this.agentStorage.get(agentId);
+        if (record) {
+          await this.agentUpdates.emitStoredRecord(record);
+        }
+      }
     } catch (error) {
       this.sessionLogger.error(
         { err: error, agentId, requestId },

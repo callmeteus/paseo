@@ -18,7 +18,7 @@ import {
   assertPullRequestAutoMergeDisableReady,
   assertPullRequestAutoMergeEnableReady,
 } from "../services/github-service.js";
-import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { OPEN_AGENT_TAB_LABEL, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import type { WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
 import {
@@ -1624,6 +1624,89 @@ describe("agent detach RPC", () => {
         accepted: true,
         error: null,
       },
+    });
+  });
+});
+
+describe("agent update RPC", () => {
+  test("publishes a stored agent's close-tab label to subscribed clients", async () => {
+    const messages: unknown[] = [];
+    const labels = { [OPEN_AGENT_TAB_LABEL]: "false" };
+    const storedAgent = createStoredAgentRecord({
+      id: "stored-agent",
+      cwd: "/tmp/stored",
+      workspaceId: "workspace-stored",
+      title: "Stored",
+      labels,
+    });
+    const workspace = {
+      workspaceId: "workspace-stored",
+      projectId: "project-stored",
+      cwd: "/tmp/stored",
+      kind: "worktree" as const,
+      displayName: "Stored workspace",
+      title: null,
+      branch: "stored",
+      baseBranch: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+    };
+    const project = {
+      projectId: "project-stored",
+      rootPath: "/tmp/stored",
+      kind: "git" as const,
+      displayName: "Project",
+      customName: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+    };
+    const session = createSessionForTest({
+      messages,
+      agentManager: {
+        getAgent: vi.fn(() => null),
+        updateAgentMetadata: vi.fn().mockResolvedValue(undefined),
+      },
+      agentStorage: {
+        list: vi.fn().mockResolvedValue([]),
+        get: vi.fn().mockResolvedValue(storedAgent),
+      },
+      workspaceRegistry: {
+        get: vi.fn().mockResolvedValue(workspace),
+        list: vi.fn().mockResolvedValue([workspace]),
+      },
+      projectRegistry: {
+        get: vi.fn().mockResolvedValue(project),
+        list: vi.fn().mockResolvedValue([project]),
+      },
+    });
+
+    await session.handleMessage({
+      type: "fetch_agents_request",
+      requestId: "subscribe-agents",
+      subscribe: { subscriptionId: "agents-sub" },
+    });
+    messages.splice(0);
+
+    await session.handleMessage({
+      type: "update_agent_request",
+      agentId: storedAgent.id,
+      requestId: "update-1",
+      labels,
+    });
+
+    expect(messages).toContainEqual({
+      type: "agent_update",
+      payload: {
+        kind: "upsert",
+        agent: expect.objectContaining({ id: storedAgent.id, labels }),
+        project: expect.objectContaining({ projectKey: "project-stored" }),
+      },
+    });
+    expect(messages).toContainEqual({
+      type: "update_agent_response",
+      payload: { requestId: "update-1", agentId: storedAgent.id, accepted: true, error: null },
     });
   });
 });
