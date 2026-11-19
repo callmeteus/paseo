@@ -79,6 +79,7 @@ describe("buildACPClientCapabilities", () => {
         writeTextFile: false,
       },
       terminal: true,
+      elicitation: { form: {}, url: {} },
     });
   });
 
@@ -99,9 +100,54 @@ describe("buildACPClientCapabilities", () => {
         writeTextFile: false,
       },
       terminal: false,
+      elicitation: { form: {}, url: {} },
       _meta: { source: "provider" },
     });
   });
+});
+
+test("session/elicitation reaches the app as a question card and maps the answer back", async () => {
+  const session = createSession({ provider: "cursor" });
+  const events: AgentStreamEvent[] = [];
+  const unsubscribe = session.subscribe((event) => events.push(event));
+  try {
+    const pending = session.extMethod("session/elicitation", {
+      mode: "form",
+      sessionId: "session-1",
+      message: "Grant production SSH for 30 minutes?",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          confirm: { type: "boolean", title: "Confirm" },
+          duration: {
+            type: "string",
+            title: "Duration",
+            enum: ["30m", "1h"],
+            oneOf: [{ const: "30m", title: "30 minutes" }],
+          },
+        },
+        required: ["confirm", "duration"],
+      },
+    });
+
+    const asked = events.find((event) => event.type === "permission_requested");
+    expect(asked && asked.type === "permission_requested" && asked.request.kind).toBe("question");
+    if (!asked || asked.type !== "permission_requested") throw new Error("No elicitation card");
+    expect(asked.request.input).toMatchObject({
+      questions: [{ header: "Confirm", type: "boolean" }, { header: "Duration" }],
+    });
+
+    await session.respondToPermission(asked.request.id, {
+      behavior: "allow",
+      updatedInput: { answers: { Confirm: "true", Duration: "30 minutes" } },
+    });
+    await expect(pending).resolves.toEqual({
+      action: "accept",
+      content: { confirm: true, duration: "30m" },
+    });
+  } finally {
+    unsubscribe();
+  }
 });
 
 interface ACPSessionInternals {

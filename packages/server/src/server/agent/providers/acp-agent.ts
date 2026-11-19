@@ -19,8 +19,10 @@ import type {
   WritableStream as NodeWritableStream,
 } from "node:stream/web";
 import {
+  CLIENT_METHODS,
   ClientSideConnection,
   PROTOCOL_VERSION,
+  RequestError,
   type AgentCapabilities as ACPAgentCapabilities,
   type Error as ACPError,
   type AnyMessage,
@@ -65,6 +67,11 @@ import {
   type WriteTextFileRequest,
   type Stream as ACPStream,
 } from "@agentclientprotocol/sdk";
+import {
+  acpElicitationContent,
+  readACPElicitation,
+  type ACPElicitationForm,
+} from "./acp-elicitation.js";
 import type { Logger } from "pino";
 
 import {
@@ -338,6 +345,9 @@ const BASE_ACP_CLIENT_CAPABILITIES: ACPClientCapabilities = {
     writeTextFile: false,
   },
   terminal: true,
+  // Without this the agent never sends `session/elicitation`: its MCP tools
+  // auto-decline, so grants and other prompts never reach the user.
+  elicitation: { form: {}, url: {} },
 };
 
 export type ACPClientCapabilityMeta = Record<string, unknown>;
@@ -866,6 +876,13 @@ interface PendingPermission {
   options: PermissionOption[];
   resolve: (response: RequestPermissionResponse) => void;
   reject: (error: Error) => void;
+  turnId: string | null;
+}
+
+interface PendingElicitation {
+  request: AgentPermissionRequest;
+  form: ACPElicitationForm;
+  resolve: (response: Record<string, unknown>) => void;
   turnId: string | null;
 }
 
@@ -2003,6 +2020,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly harnessEnvironment: Record<string, string>;
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
+  private readonly pendingElicitations = new Map<string, PendingElicitation>();
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
   private readonly toolCalls = new Map<string, ACPToolSnapshot>();
@@ -3019,10 +3037,35 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   getPendingPermissions(): AgentPermissionRequest[] {
-    return Array.from(this.pendingPermissions.values(), (entry) => entry.request);
+    return [
+      ...Array.from(this.pendingPermissions.values(), (entry) => entry.request),
+      ...Array.from(this.pendingElicitations.values(), (entry) => entry.request),
+    ];
   }
 
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+    const elicitation = this.pendingElicitations.get(requestId);
+    if (elicitation) {
+      this.pendingElicitations.delete(requestId);
+      elicitation.resolve(
+        response.behavior === "allow"
+          ? {
+              action: "accept",
+              content: acpElicitationContent(elicitation.form, response.updatedInput?.answers),
+            }
+          : { action: "decline" },
+      );
+      this.touchTurnIdleTimeout();
+      this.pushEvent({
+        type: "permission_resolved",
+        provider: this.provider,
+        requestId,
+        resolution: response,
+        turnId: elicitation.turnId ?? undefined,
+      });
+      return;
+    }
+
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
       throw new Error(`No pending permission request with id '${requestId}'`);
@@ -3294,6 +3337,44 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     for (const event of events) {
       this.pushEvent(event);
     }
+  }
+
+  async extMethod(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (method !== CLIENT_METHODS.session_elicitation) {
+      throw RequestError.methodNotFound(method);
+    }
+    const form = readACPElicitation(params);
+    if (!form) throw RequestError.invalidParams();
+    const message = typeof params.message === "string" ? params.message : "";
+    const requestId = `elicit-${randomUUID()}`;
+    const request: AgentPermissionRequest = {
+      id: requestId,
+      provider: this.provider,
+      name: "question",
+      kind: "question",
+      title: message,
+      description: message,
+      input: { questions: form.questions },
+    };
+    const promise = new Promise<Record<string, unknown>>((resolve) => {
+      this.pendingElicitations.set(requestId, {
+        request,
+        form,
+        resolve,
+        turnId: this.activeForegroundTurnId,
+      });
+    });
+    this.pushEvent({
+      type: "permission_requested",
+      provider: this.provider,
+      request,
+      turnId: this.activeForegroundTurnId ?? undefined,
+    });
+    this.touchTurnIdleTimeout();
+    return promise;
   }
 
   async extNotification(method: string, params: Record<string, unknown>): Promise<void> {
@@ -4193,6 +4274,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       pending.resolve({ outcome: { outcome: "cancelled" } });
     }
     this.pendingPermissions.clear();
+    for (const pending of this.pendingElicitations.values()) {
+      pending.resolve({ action: "cancel" });
+    }
+    this.pendingElicitations.clear();
   }
 
   private emitBootstrapThreadEvent(): void {
