@@ -35,7 +35,7 @@ import Svg, { Defs, Rect, Stop, LinearGradient as SvgLinearGradient } from "reac
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { PlanCard } from "./plan-card";
 import { ToolCallDetailsContent } from "./tool-call-details";
-import { McpAppSheet } from "./mcp-app-sheet";
+import { McpAppFrame } from "./mcp-app-frame";
 import { useToolCallSheet } from "./tool-call-sheet";
 import {
   ensureWebToolCallShimmerKeyframes,
@@ -52,13 +52,13 @@ import {
 } from "@/components/message-shared";
 const ThemedSquareIcon = withUnistyles(Square);
 const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
-  mcpAppButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 8,
+  mcpAppFrame: {
+    width: "100%",
+    height: 280,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    overflow: "hidden",
   },
   container: {
     marginHorizontal: -13,
@@ -1231,43 +1231,13 @@ function readUnknownDetail(detail: ToolCallDetail | undefined): {
     : { input: null, result: null };
 }
 
+function isToolCallExpanded(hasMcpApp: boolean, inline: boolean, expanded: boolean): boolean {
+  return hasMcpApp ? inline : inline && expanded;
+}
+
 function readMcpAppHtml(metadata: Record<string, unknown> | undefined): string | null {
   const value = metadata?.mcpAppHtml;
   return typeof value === "string" && /<html[\s>]/i.test(value) ? value : null;
-}
-
-function McpAppSheetIfOpen({
-  open,
-  html,
-  input,
-  result,
-  toolName,
-  onClose,
-}: {
-  open: boolean;
-  html: string | null;
-  input: unknown;
-  result: unknown;
-  toolName: string;
-  onClose: () => void;
-}) {
-  if (!open || !html) return null;
-  return (
-    <McpAppSheet html={html} input={input} result={result} toolName={toolName} onClose={onClose} />
-  );
-}
-
-function McpAppOpenButton({ onPress }: { onPress: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <Pressable
-      testID="mcp-app-open"
-      onPress={onPress}
-      style={expandableBadgeStylesheet.mcpAppButton}
-    >
-      <Text>{t("agentStream.viewMcpApp")}</Text>
-    </Pressable>
-  );
 }
 
 export const ToolCall = memo(function ToolCall({
@@ -1295,9 +1265,6 @@ export const ToolCall = memo(function ToolCall({
 }: ToolCallProps) {
   const { openToolCall } = useToolCallSheet();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
-  const [showMcpApp, setShowMcpApp] = useState(false);
-  const openMcpApp = useCallback(() => setShowMcpApp(true), []);
-  const closeMcpApp = useCallback(() => setShowMcpApp(false), []);
   const mcpAppHtml = readMcpAppHtml(metadata);
 
   const isMobile = useIsCompactFormFactor();
@@ -1416,23 +1383,33 @@ export const ToolCall = memo(function ToolCall({
         </Text>
       );
     }
+    if (mcpAppHtml) {
+      return (
+        <View style={expandableBadgeStylesheet.mcpAppFrame}>
+          <McpAppFrame
+            html={mcpAppHtml}
+            input={mcpAppInput}
+            result={mcpAppResult}
+            toolName={toolName}
+          />
+        </View>
+      );
+    }
     return (
-      <View>
-        {mcpAppHtml ? <McpAppOpenButton onPress={openMcpApp} /> : null}
-        <ToolCallDetailsContent
-          toolName={toolName}
-          detail={presentation.detail}
-          errorText={presentation.errorText}
-          maxHeight={maxDetailHeight}
-          showLoadingSkeleton={presentation.isLoadingDetails}
-        />
-      </View>
+      <ToolCallDetailsContent
+        toolName={toolName}
+        detail={presentation.detail}
+        errorText={presentation.errorText}
+        maxHeight={maxDetailHeight}
+        showLoadingSkeleton={presentation.isLoadingDetails}
+      />
     );
   }, [
     shouldRenderInline,
     thinkingBody,
     mcpAppHtml,
-    openMcpApp,
+    mcpAppInput,
+    mcpAppResult,
     toolName,
     presentation.detail,
     presentation.errorText,
@@ -1452,35 +1429,27 @@ export const ToolCall = memo(function ToolCall({
   }
 
   return (
-    <>
-      <ExpandableBadge
-        testID="tool-call-badge"
-        label={labelOverride ?? presentation.displayName}
-        secondaryLabel={secondaryLabelOverride ?? presentation.summary}
-        icon={presentation.icon}
-        isExpanded={shouldRenderInline && isExpanded}
-        onToggle={presentation.canOpenDetails ? handleToggle : undefined}
-        onOpenFile={handleOpenFile}
-        onStop={onStop}
-        renderDetails={
-          presentation.canOpenDetails && shouldRenderInline ? renderDetails : undefined
-        }
-        isLoading={status === "running" || status === "executing"}
-        isError={status === "failed"}
-        isLastInSequence={isLastInSequence}
-        disableOuterSpacing={disableOuterSpacing}
-        quietDetails={thinkingBody !== null}
-        onDetailHoverChange={onInlineDetailsHoverChange}
-      />
-      <McpAppSheetIfOpen
-        open={showMcpApp}
-        html={mcpAppHtml}
-        input={mcpAppInput}
-        result={mcpAppResult}
-        toolName={toolName}
-        onClose={closeMcpApp}
-      />
-    </>
+    <ExpandableBadge
+      testID="tool-call-badge"
+      label={labelOverride ?? presentation.displayName}
+      secondaryLabel={secondaryLabelOverride ?? presentation.summary}
+      icon={presentation.icon}
+      isExpanded={isToolCallExpanded(Boolean(mcpAppHtml), shouldRenderInline, isExpanded)}
+      onToggle={!mcpAppHtml && presentation.canOpenDetails ? handleToggle : undefined}
+      onOpenFile={handleOpenFile}
+      onStop={onStop}
+      renderDetails={
+        mcpAppHtml || (presentation.canOpenDetails && shouldRenderInline)
+          ? renderDetails
+          : undefined
+      }
+      isLoading={status === "running" || status === "executing"}
+      isError={status === "failed"}
+      isLastInSequence={isLastInSequence}
+      disableOuterSpacing={disableOuterSpacing}
+      quietDetails={thinkingBody !== null}
+      onDetailHoverChange={onInlineDetailsHoverChange}
+    />
   );
 }, areToolCallPropsEqual);
 
