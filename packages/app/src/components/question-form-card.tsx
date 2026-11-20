@@ -390,9 +390,10 @@ function QuestionFormMessage({ title, message }: QuestionFormMessageProps) {
   const text = message?.trim();
   if (!text) return null;
   const heading = title?.trim();
+  const showHeading = heading && !text.toLowerCase().startsWith(heading.toLowerCase());
   return (
     <View style={styles.messageBlock} testID="question-form-message">
-      {heading ? <Text style={styles.messageTitle}>{heading}</Text> : null}
+      {showHeading ? <Text style={styles.messageTitle}>{heading}</Text> : null}
       <MarkdownRenderer text={text} compact />
     </View>
   );
@@ -466,7 +467,7 @@ function QuestionField({
     <View key={question.header} style={styles.questionBlock}>
       {question.type === "fact" ? (
         <View style={styles.factBlock} testID="question-form-fact">
-          <Text>{question.question}</Text>
+          <Text style={styles.factText}>{question.question}</Text>
         </View>
       ) : null}
       {question.type === "text" ? (
@@ -910,8 +911,9 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   messageTitle: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foreground,
+    fontWeight: "600",
   },
   questionHeader: {
     flexDirection: "row",
@@ -923,7 +925,12 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   factBlock: {
-    paddingVertical: 6,
+    paddingVertical: 4,
+  },
+  factText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 20,
   },
   optionsWrap: {
     gap: theme.spacing[1],

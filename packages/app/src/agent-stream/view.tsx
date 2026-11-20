@@ -662,15 +662,39 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       }),
       [effectiveStreamHead, effectiveStreamItems],
     );
+    // When the harness's grant attempt is replaced by an elicitation form, its
+    // "recusado" narration describes a call the user is about to approve. Hide
+    // it while the question card is pending so the form is the first thing seen.
+    const hasQuestionPermission = useMemo(
+      () =>
+        Array.from(pendingPermissions.values()).some(
+          (permission) => permission.agentId === agentId && permission.request.kind === "question",
+        ),
+      [agentId, pendingPermissions],
+    );
+    const visibleStream = useMemo(() => {
+      if (!hasQuestionPermission) return dedupedStream;
+      const withoutRefusal = (items: StreamItem[]) =>
+        items.filter(
+          (item) =>
+            item.kind !== "assistant_message" ||
+            !/recusad|declined|refused|nã[oã] suporta elicitation/i.test(item.text),
+        );
+      return {
+        tail: withoutRefusal(dedupedStream.tail),
+        head: withoutRefusal(dedupedStream.head),
+      };
+    }, [dedupedStream, hasQuestionPermission]);
+
     const limitResumeItemId = useMemo(
       () =>
         latestLimitResumeItemId(
-          [...dedupedStream.tail, ...dedupedStream.head].map((item) => ({
+          [...visibleStream.tail, ...visibleStream.head].map((item) => ({
             id: item.id,
             text: limitResumeItemText(item),
           })),
         ),
-      [dedupedStream],
+      [visibleStream],
     );
 
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
@@ -679,8 +703,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const presentation = useMemo(
       () =>
         presentStream({
-          tail: dedupedStream.tail,
-          head: dedupedStream.head,
+          tail: visibleStream.tail,
+          head: visibleStream.head,
           transform: transformTimelineItem,
           display: chatDisplay,
           expandedTurnHostIds,
@@ -690,7 +714,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           groupReasoning: !autoExpandReasoning,
         }),
       [
-        dedupedStream,
+        visibleStream,
         presentStream,
         transformTimelineItem,
         chatDisplay,
