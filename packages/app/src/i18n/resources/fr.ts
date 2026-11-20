@@ -2284,6 +2284,11 @@ export const fr: TranslationResources = {
     externalBrowser: "Navigateur externe",
     dontAskAgain: "Ne plus demander",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "Impossible d’obtenir le token de téléchargement.",
     hostUnavailable: "L’hôte de téléchargement est indisponible.",

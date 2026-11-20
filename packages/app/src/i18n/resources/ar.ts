@@ -2226,6 +2226,11 @@ export const ar: TranslationResources = {
     externalBrowser: "متصفح خارجي",
     dontAskAgain: "لا تسأل مرة أخرى",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "فشل طلب رمز التنزيل.",
     hostUnavailable: "مضيف التنزيل غير متاح.",

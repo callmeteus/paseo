@@ -2241,6 +2241,11 @@ export const ko: TranslationResources = {
     externalBrowser: "외부 브라우저",
     dontAskAgain: "다시 묻지 않기",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "다운로드 토큰을 요청하지 못했습니다.",
     hostUnavailable: "다운로드 호스트를 사용할 수 없습니다.",

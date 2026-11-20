@@ -2256,6 +2256,11 @@ export const en = {
     externalBrowser: "External browser",
     dontAskAgain: "Don't ask again",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "Failed to request download token.",
     hostUnavailable: "Download host is unavailable.",

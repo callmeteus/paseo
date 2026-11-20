@@ -2282,6 +2282,11 @@ export const es: TranslationResources = {
     externalBrowser: "Navegador externo",
     dontAskAgain: "no vuelvas a preguntar",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "No se pudo solicitar el token de descarga.",
     hostUnavailable: "El host de descarga no está disponible.",

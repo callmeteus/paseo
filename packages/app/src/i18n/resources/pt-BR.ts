@@ -2269,6 +2269,11 @@ export const ptBR: TranslationResources = {
     externalBrowser: "Navegador externo",
     dontAskAgain: "Não perguntar novamente",
   },
+  linkMenu: {
+    inPaseo: "Abrir no Paseo",
+    external: "Abrir no navegador externo",
+    copy: "Copiar link",
+  },
   downloads: {
     requestTokenFailed: "Falha ao solicitar token de download.",
     hostUnavailable: "Host de download indisponível.",

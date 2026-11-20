@@ -14,6 +14,7 @@ import { MarkdownBlockStack } from "./block-stack";
 import { WEB_RENDERERS } from "./renderers";
 import { createMarkdownStyles } from "./styles";
 import { PENDING_MARKDOWN_IMAGE } from "./source";
+import { normalizeMarkdownLinkHref } from "./file-link-href";
 import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
 
@@ -105,8 +106,9 @@ const MarkdownPart = memo(function MarkdownPart({
   });
   const [image, setImage] = useState<ImageLightboxSource | null>(null);
   const pressLink = useStableEvent(({ url, sourceType }: LinkPressEvent) => {
-    const source = linkSource(url, sourceType);
-    if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(url);
+    const href = normalizeMarkdownLinkHref(url);
+    const source = linkSource(href, sourceType);
+    if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(href);
     else actions.open(source, "preferred");
   });
   const pressImage = useStableEvent(({ url }: { url: string }) => {

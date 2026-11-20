@@ -50,6 +50,7 @@ import { ProviderSettingsHost } from "@/components/provider-settings-host";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
+import { LinkContextMenu } from "@/components/markdown/link-context-menu";
 import { HostTabsRail, isHostTabsRailVisible } from "@/components/hosts/host-tabs-rail";
 import { HOST_TAB_RAIL_HEIGHT } from "@/components/hosts/host-tabs-row";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
@@ -510,6 +511,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         ) : null}
         <DesktopWindowControls />
         <FloatingPanelPortalHost />
+        <LinkContextMenu />
       </AppearanceStyleBoundary>
       {isCompactLayout ? themedSidebarChrome : null}
       <AppearanceStyleBoundary>

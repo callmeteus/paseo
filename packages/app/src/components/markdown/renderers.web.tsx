@@ -1,5 +1,12 @@
 import { Text } from "react-native";
-import { forwardRef, useCallback, useMemo, useState, type ComponentProps } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useMemo,
+  useState,
+  type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type {
   CodeBlockRendererProps,
   LinkRendererProps,
@@ -11,7 +18,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import type { Theme } from "@/styles/theme";
 import { MermaidFence } from "./fence/mermaid";
-import { localFileLinkHref } from "./file-link-href";
+import { localFileLinkHref, normalizeMarkdownLinkHref } from "./file-link-href";
+import { openLinkContextMenu } from "./link-context-menu-store";
 import { markdownLinkSource } from "./source";
 
 const ThemedCodeBlock = withUnistyles(HighlightedCodeBlock);
@@ -39,6 +47,17 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
   const preventFileLinkNavigation = useCallback((event: { preventDefault: () => void }) => {
     event.preventDefault();
   }, []);
+  const href = normalizeMarkdownLinkHref(
+    typeof anchorProps.href === "string" ? anchorProps.href : "",
+  );
+  const showLinkMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openLinkContextMenu({ url: href, x: event.clientX, y: event.clientY });
+    },
+    [href],
+  );
   const anchorStyle = useMemo(
     () => ({
       ...anchorProps.style,
@@ -47,18 +66,18 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
     }),
     [anchorProps.style, hovered],
   );
-  const href = typeof anchorProps.href === "string" ? anchorProps.href : "";
   const fileHref = localFileLinkHref(href);
   const anchor = (
     <a
       {...anchorProps}
-      href={fileHref ?? anchorProps.href}
+      href={fileHref ?? href}
       // A file address must not open a blank window. Click still goes through onLinkPress.
       target={fileHref ? undefined : anchorProps.target}
       style={anchorStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onAuxClick={fileHref ? preventFileLinkNavigation : undefined}
+      onContextMenu={showLinkMenu}
     >
       {children}
     </a>

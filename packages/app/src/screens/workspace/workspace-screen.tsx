@@ -153,6 +153,7 @@ import { TabDropToWorkspaceSheet } from "@/screens/workspace/tab-drop-to-workspa
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
 import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
+import { setOpenLinkInPaseoHandler } from "@/components/markdown/link-context-menu-store";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
   resolveWorkspaceExplorerToggleOwner,
@@ -1959,6 +1960,11 @@ function WorkspaceScreenContent({
     workspaceLayout,
     openUrl: handleOpenUrlInBrowserTab,
   });
+
+  useEffect(() => {
+    setOpenLinkInPaseoHandler(() => handleOpenUrlInBrowserTab);
+    return () => setOpenLinkInPaseoHandler(null);
+  }, [handleOpenUrlInBrowserTab]);
 
   const handleSelectSwitcherTab = useCallback(
     (key: string) => {

@@ -2254,6 +2254,11 @@ export const ja: TranslationResources = {
     externalBrowser: "外部ブラウザ",
     dontAskAgain: "次回から確認しない",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "ダウンロードトークンのリクエストに失敗しました。",
     hostUnavailable: "ダウンロードホストが利用できません。",

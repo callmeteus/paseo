@@ -2265,6 +2265,11 @@ export const ru: TranslationResources = {
     externalBrowser: "Внешний браузер",
     dontAskAgain: "Больше не спрашивать",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "Не удалось запросить токен загрузки.",
     hostUnavailable: "Хост загрузки недоступен.",

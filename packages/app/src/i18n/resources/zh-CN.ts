@@ -2203,6 +2203,11 @@ export const zhCN: TranslationResources = {
     externalBrowser: "外部浏览器",
     dontAskAgain: "不再询问",
   },
+  linkMenu: {
+    inPaseo: "Open in Paseo",
+    external: "Open in External Browser",
+    copy: "Copy Link",
+  },
   downloads: {
     requestTokenFailed: "请求下载 token 失败。",
     hostUnavailable: "下载 Host 不可用。",
