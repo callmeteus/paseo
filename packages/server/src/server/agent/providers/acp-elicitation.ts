@@ -15,7 +15,7 @@ export interface ACPCardQuestion {
   multiSelect: boolean;
   allowOther: boolean;
   allowEmpty: boolean;
-  type?: "text" | "boolean" | "link";
+  type?: "text" | "boolean" | "link" | "fact";
   url?: string;
   placeholder?: string;
   defaultChecked?: boolean;
@@ -123,6 +123,21 @@ function fieldFromProperty(
   }
 
   const options = enumOptions(property);
+  // Old MCP dialogs ship facts as string fields with a default and no choices.
+  // They are not answers to collect: show them as text, not as inputs.
+  if (options.length === 0 && typeof property.default === "string") {
+    return {
+      question: {
+        ...base,
+        question: `${header}: ${property.default}`,
+        options: [],
+        multiSelect: false,
+        type: "fact",
+        allowEmpty: true,
+      },
+      field: { key, header, type },
+    };
+  }
   return {
     question: {
       ...base,

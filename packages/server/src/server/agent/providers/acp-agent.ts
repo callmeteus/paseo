@@ -2053,6 +2053,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly mcpElicitationRetries = new Set<string>();
   private lastMcpToolCall: ACPToolSnapshot | null = null;
   private refusalTextBuffer = "";
+  private suppressRefusalText = false;
   private mcpAppRegistry: UpstreamMcpRegistry | null = null;
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
@@ -3415,6 +3416,39 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return promise;
   }
 
+  /** Returns true while the harness's failed attempt is being replaced by our form. */
+  private trackRefusalText(
+    update: Extract<SessionUpdate, { sessionUpdate: "agent_message_chunk" }>,
+  ): boolean {
+    const text = contentBlockToText(update.content) ?? "";
+    this.refusalTextBuffer = `${this.refusalTextBuffer}${text}`.slice(-2_000);
+    if (
+      !/recusad|declined|refused|não suporta elicitation|does not support elicitation/i.test(
+        this.refusalTextBuffer,
+      )
+    ) {
+      return this.suppressRefusalText;
+    }
+    this.refusalTextBuffer = "";
+    const last =
+      this.lastMcpToolCall ??
+      [...this.toolCalls.values()].findLast(
+        (snapshot) =>
+          typeof snapshot.rawInput === "object" &&
+          snapshot.rawInput !== null &&
+          "providerIdentifier" in snapshot.rawInput,
+      ) ??
+      null;
+    if (last && !this.mcpElicitationRetries.has(last.toolCallId)) {
+      this.mcpElicitationRetries.add(last.toolCallId);
+      this.suppressRefusalText = true;
+      void this.retryMcpToolWithElicitation(last).catch((error) => {
+        this.logger.info({ error }, "provider.acp.mcp_elicitation_retry_failed");
+      });
+    }
+    return this.suppressRefusalText;
+  }
+
   async sessionUpdate(params: SessionNotification): Promise<void> {
     this.clearTurnFirstActivityTimeout();
     this.logger.trace(
@@ -3437,6 +3471,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.touchTurnIdleTimeout();
     if (params.update.sessionUpdate === "user_message_chunk") {
       this.refusalTextBuffer = "";
+      this.suppressRefusalText = false;
     }
     const toolUpdate = params.update;
     if (
@@ -3453,31 +3488,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
       });
     }
-    if (params.update.sessionUpdate === "agent_message_chunk") {
-      const text = contentBlockToText(params.update.content) ?? "";
-      this.refusalTextBuffer = `${this.refusalTextBuffer}${text}`.slice(-2_000);
-      if (
-        /recusad|declined|refused|não suporta elicitation|does not support elicitation/i.test(
-          this.refusalTextBuffer,
-        )
-      ) {
-        this.refusalTextBuffer = "";
-        const last =
-          this.lastMcpToolCall ??
-          [...this.toolCalls.values()].findLast(
-            (snapshot) =>
-              typeof snapshot.rawInput === "object" &&
-              snapshot.rawInput !== null &&
-              "providerIdentifier" in snapshot.rawInput,
-          ) ??
-          null;
-        if (last && !this.mcpElicitationRetries.has(last.toolCallId)) {
-          this.mcpElicitationRetries.add(last.toolCallId);
-          void this.retryMcpToolWithElicitation(last).catch((error) => {
-            this.logger.info({ error }, "provider.acp.mcp_elicitation_retry_failed");
-          });
-        }
-      }
+    if (
+      params.update.sessionUpdate === "agent_message_chunk" &&
+      this.trackRefusalText(params.update)
+    ) {
+      return;
     }
     const events = this.translateSessionUpdate(params.update);
     this.logger.trace(

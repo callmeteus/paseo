@@ -117,6 +117,33 @@ describe("readACPElicitation", () => {
     ]);
   });
 
+  it("shows detail defaults as text, not as inputs", () => {
+    const form = readACPElicitation({
+      mode: "form",
+      sessionId: "session-1",
+      message:
+        "Conceder grant prod_ssh\nChat: operator\nAviso: confirme só se este chat é o operador",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          v0: { type: "string", title: "Chat", default: "operator" },
+          v1: {
+            type: "string",
+            title: "Aviso",
+            default: "confirme só se este chat é o operador",
+          },
+        },
+      },
+    });
+    expect(form?.questions).toEqual([
+      expect.objectContaining({ type: "fact", question: "Chat: operator" }),
+      expect.objectContaining({
+        type: "fact",
+        question: "Aviso: confirme só se este chat é o operador",
+      }),
+    ]);
+  });
+
   it("rejects a request with no message", () => {
     expect(readACPElicitation({ mode: "form", sessionId: "s" })).toBeNull();
   });

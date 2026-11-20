@@ -464,6 +464,11 @@ function QuestionField({
   if (!question) return null;
   return (
     <View key={question.header} style={styles.questionBlock}>
+      {question.type === "fact" ? (
+        <View style={styles.factBlock} testID="question-form-fact">
+          <Text>{question.question}</Text>
+        </View>
+      ) : null}
       {question.type === "text" ? (
         <View style={styles.questionHeader}>
           <View testID="question-form-current-question" style={styles.questionText}>
@@ -916,6 +921,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   questionText: {
     flex: 1,
+  },
+  factBlock: {
+    paddingVertical: 6,
   },
   optionsWrap: {
     gap: theme.spacing[1],
