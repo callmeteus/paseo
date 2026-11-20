@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MenuHeader } from "@/components/headers/menu-header";
+import { NewAgentTabsRow } from "@/screens/workspace/new-agent-tabs-row";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { useImportSession } from "@/hooks/use-import-session";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
@@ -26,6 +28,7 @@ export function NewAgentScreen({ serverId, workspaceId, draftId }: NewAgentScree
   const { t } = useTranslation();
   const [creationDraftId] = useState(() => draftId?.trim() || generateDraftId());
   const importSession = useImportSession({ serverId, workspaceId });
+  const isCompact = useIsCompactFormFactor();
 
   const handleCreated = useCallback(
     (snapshot: AgentSnapshotPayload) => {
@@ -58,6 +61,7 @@ export function NewAgentScreen({ serverId, workspaceId, draftId }: NewAgentScree
 
   return (
     <>
+      {isCompact ? null : <NewAgentTabsRow serverId={serverId} workspaceId={workspaceId} />}
       <MenuHeader borderless />
       <WorkspaceDraftAgentTab
         serverId={serverId}
