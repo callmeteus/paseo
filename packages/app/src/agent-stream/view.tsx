@@ -47,7 +47,10 @@ import { ProviderErrorCard } from "@/components/provider-error-card";
 import { readProviderErrorText } from "@/agent-stream/provider-error";
 import { latestLimitResumeItemId } from "@/agent-stream/limit-resume";
 import { readSessionLimitNotice } from "@/agent-stream/session-limit";
-import { collapseRepeatedFailures } from "@/agent-stream/repeated-failures";
+import {
+  collapseRepeatedFailures,
+  hidePendingQuestionRefusals,
+} from "@/agent-stream/repeated-failures";
 import { LimitResumeOffer, SessionLimitNotice } from "@/agent-stream/limit-resume-notice";
 import { ProviderErrorRetry } from "@/agent-stream/provider-error-retry";
 import {
@@ -674,15 +677,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     const visibleStream = useMemo(() => {
       if (!hasQuestionPermission) return dedupedStream;
-      const withoutRefusal = (items: StreamItem[]) =>
-        items.filter(
-          (item) =>
-            item.kind !== "assistant_message" ||
-            !/recusad|declined|refused|nã[oã] suporta elicitation/i.test(item.text),
-        );
       return {
-        tail: withoutRefusal(dedupedStream.tail),
-        head: withoutRefusal(dedupedStream.head),
+        tail: hidePendingQuestionRefusals(dedupedStream.tail, true),
+        head: hidePendingQuestionRefusals(dedupedStream.head, true),
       };
     }, [dedupedStream, hasQuestionPermission]);
 

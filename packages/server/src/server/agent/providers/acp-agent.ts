@@ -3418,7 +3418,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
 
   /** Returns true while the harness's failed attempt is being replaced by our form. */
   private trackRefusalText(
-    update: Extract<SessionUpdate, { sessionUpdate: "agent_message_chunk" }>,
+    update: Extract<
+      SessionUpdate,
+      { sessionUpdate: "agent_message_chunk" | "agent_thought_chunk" }
+    >,
   ): boolean {
     const text = contentBlockToText(update.content) ?? "";
     this.refusalTextBuffer = `${this.refusalTextBuffer}${text}`.slice(-2_000);
@@ -3489,7 +3492,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       });
     }
     if (
-      params.update.sessionUpdate === "agent_message_chunk" &&
+      (params.update.sessionUpdate === "agent_message_chunk" ||
+        params.update.sessionUpdate === "agent_thought_chunk") &&
       this.trackRefusalText(params.update)
     ) {
       return;

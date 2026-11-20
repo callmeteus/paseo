@@ -1,5 +1,18 @@
 import { readProviderErrorText } from "./provider-error";
 
+/** While an elicitation form is pending, hide the harness's failed-attempt narration. */
+export function hidePendingQuestionRefusals<T extends { kind: string; text?: string }>(
+  items: readonly T[],
+  hasQuestion: boolean,
+): T[] {
+  if (!hasQuestion) return [...items];
+  return items.filter(
+    (item) =>
+      item.kind !== "assistant_message" ||
+      !/recusad|declined|refused|nã[oã] suporta elicitation/i.test(item.text ?? ""),
+  );
+}
+
 interface FailedTextItem {
   kind: string;
   text?: string | null;
