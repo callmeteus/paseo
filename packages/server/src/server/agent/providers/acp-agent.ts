@@ -4045,7 +4045,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     const raw = snapshot.rawInput;
     if (typeof raw === "object" && raw !== null) {
       const serverName = (raw as Record<string, unknown>).providerIdentifier;
-      if (typeof serverName === "string" && this.mcpToolResults.has(serverName)) {
+      const completed = snapshot.status === "completed" || snapshot.status === "failed";
+      if (typeof serverName === "string" && completed && this.mcpToolResults.has(serverName)) {
         snapshot = { ...snapshot, mcpAppResult: this.mcpToolResults.get(serverName) };
         this.mcpToolResults.delete(serverName);
       }
