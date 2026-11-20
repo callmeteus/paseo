@@ -3268,7 +3268,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         ? hint
         : Object.keys(servers).find((name) => (snapshot.title ?? "").startsWith(`${name}-`));
     if (!serverName) return;
-    await callMcpToolWithElicitation({
+    const result = await callMcpToolWithElicitation({
       config: servers[serverName]!,
       toolName,
       args: args as Record<string, unknown>,
@@ -3283,6 +3283,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         };
       },
     });
+    const failed =
+      typeof result === "object" &&
+      result !== null &&
+      (result as Record<string, unknown>).isError === true;
+    this.pushEvent(
+      this.wrapTimeline({
+        type: "notification",
+        level: failed ? "warning" : "info",
+        message: failed
+          ? `O MCP ${serverName} recusou ${toolName} após a confirmação.`
+          : `Confirmado: ${toolName} concluído pelo MCP ${serverName}.`,
+      }),
+    );
   }
 
   private async loadMcpAppHtml(
