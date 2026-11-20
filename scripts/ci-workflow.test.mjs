@@ -72,15 +72,21 @@ test("nightly builds desktop and APK from develop and publishes a rolling releas
   assert.match(source, /--prerelease/);
 });
 
-test("GitHub Releases use a Forgejo secret, never the implicit GITHUB_TOKEN", () => {
+test("GitHub access uses the gti-ci App, never a personal PAT", () => {
   const files = readdirSync(forgejoWorkflows).filter((name) => name.endsWith(".yml"));
   for (const name of files) {
     const source = workflow(name);
-    assert.doesNotMatch(source, /secrets\.GITHUB_TOKEN/, `${name} uses GH_TOKEN`);
+    assert.doesNotMatch(source, /secrets\.GITHUB_TOKEN/, `${name} uses the App token`);
+    assert.doesNotMatch(source, /secrets\.GH_TOKEN/, `${name} does not use a PAT`);
     assert.doesNotMatch(source, /EXPO_TOKEN|secrets\.EXPO_TOKEN/, `${name} does not use Expo/EAS`);
+    if (source.includes("steps.app-token.outputs.token")) {
+      assert.match(source, /actions\/create-github-app-token/, `${name} generates the App token`);
+      assert.match(source, /secrets\.GTI_CI_APP_ID/);
+      assert.match(source, /secrets\.GTI_CI_APP_PRIVATE_KEY/);
+    }
   }
-  assert.match(workflow("desktop-release.yml"), /secrets\.GH_TOKEN/);
-  assert.match(workflow("nightly.yml"), /secrets\.GH_TOKEN/);
+  assert.match(workflow("desktop-release.yml"), /actions\/create-github-app-token/);
+  assert.match(workflow("nightly.yml"), /actions\/create-github-app-token/);
 });
 
 test("CI contracts stay with the GitHub source of truth", () => {

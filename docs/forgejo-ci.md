@@ -21,15 +21,19 @@ equivalent. Do not reintroduce them.
 
 These Forgejo repo secrets are required:
 
-| Secret                  | Used for                                                            |
-| ----------------------- | ------------------------------------------------------------------- |
-| `GH_TOKEN`              | GitHub release creation, asset upload, GHCR login, package registry |
-| `CLOUDFLARE_API_TOKEN`  | Web/website/relay deploys                                           |
-| `CLOUDFLARE_ACCOUNT_ID` | Web/website/relay deploys                                           |
+| Secret                   | Used for                                                            |
+| ------------------------ | ------------------------------------------------------------------- |
+| `GTI_CI_APP_ID`          | GitHub App ID (`gti-ci`, stored in Vault `secret/gti-infra/gti-ci`) |
+| `GTI_CI_APP_PRIVATE_KEY` | GitHub App private key (same Vault path)                            |
+| `CLOUDFLARE_API_TOKEN`   | Web/website/relay deploys                                           |
+| `CLOUDFLARE_ACCOUNT_ID`  | Web/website/relay deploys                                           |
 
-`GH_TOKEN` replaces the implicit `secrets.GITHUB_TOKEN`: Forgejo does not issue
-a GitHub token. Scripts such as `scripts/github-release.mjs` read it from the
-environment through the `gh` CLI.
+Each job that talks to GitHub starts with `actions/create-github-app-token`,
+which exchanges the two App secrets for a short-lived installation token. The
+token is exposed as `GH_TOKEN` to the step that runs `gh` or publishes to GHCR.
+Forgejo does not issue an implicit `secrets.GITHUB_TOKEN`. The App must be
+installed on `callmeteus/paseo` with Contents read/write, Packages read/write,
+and Metadata read-only.
 
 ## Runner
 
