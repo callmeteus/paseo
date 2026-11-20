@@ -2286,6 +2286,7 @@ export const es: TranslationResources = {
     inPaseo: "Open in Paseo",
     external: "Open in External Browser",
     copy: "Copy Link",
+    copyPath: "Copy Path",
   },
   downloads: {
     requestTokenFailed: "No se pudo solicitar el token de descarga.",

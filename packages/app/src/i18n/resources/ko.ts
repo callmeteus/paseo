@@ -2245,6 +2245,7 @@ export const ko: TranslationResources = {
     inPaseo: "Open in Paseo",
     external: "Open in External Browser",
     copy: "Copy Link",
+    copyPath: "Copy Path",
   },
   downloads: {
     requestTokenFailed: "다운로드 토큰을 요청하지 못했습니다.",

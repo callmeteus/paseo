@@ -2273,6 +2273,7 @@ export const ptBR: TranslationResources = {
     inPaseo: "Abrir no Paseo",
     external: "Abrir no navegador externo",
     copy: "Copiar link",
+    copyPath: "Copiar caminho",
   },
   downloads: {
     requestTokenFailed: "Falha ao solicitar token de download.",

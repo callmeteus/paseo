@@ -6,6 +6,7 @@ import * as Clipboard from "expo-clipboard";
 import type { Theme } from "@/styles/theme";
 import { MenuItem, MenuRoot, MenuSurface, useMenuContext } from "@/components/ui/menu";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { isLocalFileHref, localFileHrefToPath } from "./file-link-href";
 import {
   canOpenLinkInPaseo,
   closeLinkContextMenu,
@@ -57,9 +58,19 @@ function LinkMenuAnchor({ request }: { request: LinkContextMenuRequest | null })
 
 function LinkMenuItems({ url }: { url: string }): ReactElement {
   const { t } = useTranslation();
+  const isFile = isLocalFileHref(url);
+  const copyValue = isFile ? localFileHrefToPath(url) : url;
   const openInPaseo = useCallback(() => openLinkInPaseo(url), [url]);
   const openExternal = useCallback(() => void openExternalUrl(url), [url]);
-  const copyLink = useCallback(() => void Clipboard.setStringAsync(url), [url]);
+  const copy = useCallback(() => void Clipboard.setStringAsync(copyValue), [copyValue]);
+
+  if (isFile) {
+    return (
+      <MenuItem leading={linkIcon} onSelect={copy} testID="link-context-menu-copy">
+        {t("linkMenu.copyPath")}
+      </MenuItem>
+    );
+  }
 
   return (
     <>
@@ -71,7 +82,7 @@ function LinkMenuItems({ url }: { url: string }): ReactElement {
       <MenuItem leading={externalIcon} onSelect={openExternal} testID="link-context-menu-external">
         {t("linkMenu.external")}
       </MenuItem>
-      <MenuItem leading={linkIcon} onSelect={copyLink} testID="link-context-menu-copy">
+      <MenuItem leading={linkIcon} onSelect={copy} testID="link-context-menu-copy">
         {t("linkMenu.copy")}
       </MenuItem>
     </>

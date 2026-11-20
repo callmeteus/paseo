@@ -9,6 +9,7 @@ import {
   nativeTheme,
   shell,
 } from "electron";
+import { fileURLToPath } from "node:url";
 
 import {
   MIN_WINDOW_HEIGHT,
@@ -392,8 +393,9 @@ export function buildStandardContextMenuItems(
       });
     }
     items.push({
-      label: "Copy Link Address",
-      click: () => clipboard.writeText(copyAddress),
+      label: /^file:/i.test(copyAddress) ? "Copy Path" : "Copy Link Address",
+      click: () =>
+        clipboard.writeText(/^file:/i.test(copyAddress) ? fileURLToPath(copyAddress) : copyAddress),
     });
     items.push({ type: "separator" });
   }

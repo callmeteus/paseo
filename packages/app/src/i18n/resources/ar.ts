@@ -2230,6 +2230,7 @@ export const ar: TranslationResources = {
     inPaseo: "Open in Paseo",
     external: "Open in External Browser",
     copy: "Copy Link",
+    copyPath: "Copy Path",
   },
   downloads: {
     requestTokenFailed: "فشل طلب رمز التنزيل.",

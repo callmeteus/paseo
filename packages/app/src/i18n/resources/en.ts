@@ -2260,6 +2260,7 @@ export const en = {
     inPaseo: "Open in Paseo",
     external: "Open in External Browser",
     copy: "Copy Link",
+    copyPath: "Copy Path",
   },
   downloads: {
     requestTokenFailed: "Failed to request download token.",
