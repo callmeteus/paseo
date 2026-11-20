@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { formatPasteChipLabel, serializeInlineChip } from "@getpaseo/protocol/inline-chip";
 
 import {
   applyGeneratedChatTitle,
@@ -16,6 +17,19 @@ describe("resolveCreateAgentTitles", () => {
 
     expect(resolved.explicitTitle).toBeNull();
     expect(resolved.provisionalTitle).toBe("Implement auth retries with backoff");
+  });
+
+  test("names a leading paste chip from its body, not the serialized atom", () => {
+    const body = "Investigate the failed deployment on the staging host";
+    const chip = serializeInlineChip({
+      id: "paste:ff538e0-72ac",
+      kind: "paste",
+      label: formatPasteChipLabel({ body }),
+      body,
+    });
+
+    expect(deriveInitialAgentTitle(chip)).toBe(body);
+    expect(deriveInitialAgentTitle(`${chip}\n\nand fix it`)).toBe(body);
   });
 
   test("preserves explicit title and does not treat it as provisional", () => {

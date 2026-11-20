@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatPasteChipLabel, serializeInlineChip } from "@getpaseo/protocol/inline-chip";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import { buildTimelinePromptIndex } from "./timeline-prompt-index.js";
 
@@ -29,6 +30,28 @@ describe("buildTimelinePromptIndex", () => {
         { seq: 8, timestamp: "2026-01-01T00:00:02.000Z", preview: "Second prompt" },
       ],
     });
+  });
+
+  it("shows a paste chip's label in the preview instead of its serialized atom", () => {
+    const body = "Investigate the failed deployment on the staging host";
+    const label = formatPasteChipLabel({ body });
+    const chip = serializeInlineChip({
+      id: "paste:ff538e0-72ac",
+      kind: "paste",
+      label,
+      body,
+    });
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-01-01T00:00:00.000Z",
+        item: { type: "user_message", text: chip },
+      },
+    ];
+
+    const result = buildTimelinePromptIndex("epoch-1", rows);
+
+    expect(result.prompts[0]?.preview).toBe(label);
   });
 
   it("bounds previews without indexing assistant rows", () => {

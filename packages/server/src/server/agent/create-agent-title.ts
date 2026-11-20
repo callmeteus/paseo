@@ -1,4 +1,5 @@
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@getpaseo/protocol/agent-title-limits";
+import { expandInlineChips } from "@getpaseo/protocol/inline-chip";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 import { goalInstructionCorpus, parseGoalCommand } from "./agent-goal.js";
 import { workflowInstructionCorpus } from "./workflow-modes.js";
@@ -43,7 +44,10 @@ function goalObjective(body: string): string | null {
  */
 export function promptTextForTitle(prompt: string): string {
   const objectives: string[] = [];
-  const withoutWorkflow = prompt.replace(WORKFLOW_BLOCK, "");
+  // Chips are stored as serialized atoms in the submitted text. Decode them so
+  // a leading paste chip names the chat from its body instead of its JSON.
+  const decoded = expandInlineChips(prompt, "prompt");
+  const withoutWorkflow = decoded.replace(WORKFLOW_BLOCK, "");
   const withoutGoal = withoutWorkflow.replace(GOAL_BLOCK, (_match, body: string) => {
     const objective = goalObjective(body);
     if (objective) objectives.push(objective);

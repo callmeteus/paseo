@@ -1,3 +1,4 @@
+import { inlineChipDisplayText } from "@getpaseo/protocol/inline-chip";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 
 const PROMPT_PREVIEW_MAX_LENGTH = 120;
@@ -14,7 +15,7 @@ export interface TimelinePromptIndex {
 }
 
 function promptPreview(text: string): string {
-  const collapsed = text.replace(/\s+/g, " ").trim();
+  const collapsed = inlineChipDisplayText(text).replace(/\s+/g, " ").trim();
   if (collapsed.length <= PROMPT_PREVIEW_MAX_LENGTH) {
     return collapsed;
   }
