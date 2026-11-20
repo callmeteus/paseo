@@ -1231,6 +1231,10 @@ function readUnknownDetail(detail: ToolCallDetail | undefined): {
     : { input: null, result: null };
 }
 
+function readMcpToolName(metadata: Record<string, unknown> | undefined, fallback: string): string {
+  return typeof metadata?.mcpToolName === "string" ? metadata.mcpToolName : fallback;
+}
+
 function isToolCallExpanded(hasMcpApp: boolean, inline: boolean, expanded: boolean): boolean {
   return hasMcpApp ? inline : inline && expanded;
 }
@@ -1270,6 +1274,7 @@ export const ToolCall = memo(function ToolCall({
   const { openToolCall } = useToolCallSheet();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const mcpAppHtml = readMcpAppHtml(metadata);
+  const mcpToolName = readMcpToolName(metadata, toolName);
 
   const isMobile = useIsCompactFormFactor();
   const shouldRenderInline = !isMobile || forceInline;
@@ -1395,7 +1400,7 @@ export const ToolCall = memo(function ToolCall({
             html={mcpAppHtml}
             input={mcpAppInput}
             result={mcpAppResult}
-            toolName={toolName}
+            toolName={mcpToolName}
           />
         </View>
       );
@@ -1415,6 +1420,7 @@ export const ToolCall = memo(function ToolCall({
     mcpAppHtml,
     mcpAppInput,
     mcpAppResult,
+    mcpToolName,
     toolName,
     presentation.detail,
     presentation.errorText,

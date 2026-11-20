@@ -4828,6 +4828,11 @@ function mapToolSnapshotToTimeline(
       ...(snapshot.mcpAppHtml ? { mcpAppHtml: snapshot.mcpAppHtml } : {}),
       ...(snapshot.mcpAppResult !== undefined ? { mcpAppResult: snapshot.mcpAppResult } : {}),
       ...(snapshot.rawOutput !== undefined ? { mcpAppResult: snapshot.rawOutput } : {}),
+      ...(typeof (snapshot.rawInput as Record<string, unknown> | undefined)?.toolName === "string"
+        ? {
+            mcpToolName: (snapshot.rawInput as Record<string, unknown>).toolName,
+          }
+        : {}),
     },
   };
   if (status === "failed") {
