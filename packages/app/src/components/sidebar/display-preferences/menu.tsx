@@ -452,9 +452,7 @@ function SortPage({
             {t("sidebar.display.sort.lastPrompt")}
           </MenuItem>
         </>
-      ) : (
-        <MenuItem disabled>{t("sidebar.display.sort.updateHost")}</MenuItem>
-      )}
+      ) : null}
     </>
   );
 }
