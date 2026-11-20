@@ -2191,7 +2191,16 @@ function createToolCatalog(
       if (!options.ensureWorkspaceForCreate) {
         throw new Error("Workspace creation is not configured");
       }
-      const cwd = process.cwd();
+      // The daemon process cwd is often a temp directory when it runs as a
+      // service. Never mint a workspace from it: use a real active workspace,
+      // otherwise ask the caller to create/name one explicitly.
+      const active = options.listActiveWorkspaces ? await options.listActiveWorkspaces() : [];
+      const cwd = active[0]?.cwd;
+      if (!cwd) {
+        throw new PaseoToolInputError(
+          "No active workspace on this host. Open a project or pass workspaceId/path first.",
+        );
+      }
       return {
         cwd,
         workspaceId: await options.ensureWorkspaceForCreate(cwd, firstAgentContext, {

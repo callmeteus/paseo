@@ -356,26 +356,35 @@ export function createHostResolver(input: {
             return result({ query, chats: payload.chats });
           },
           async createWorkspace(args) {
-            const isolation = z.enum(["local", "worktree"]).parse(args.isolation);
-            const path = z.string().min(1).parse(args.path);
+            const isolation = z.enum(["local", "worktree", "virtual"]).parse(args.isolation);
+            const path = typeof args.path === "string" ? z.string().min(1).parse(args.path) : "";
+            if (isolation !== "virtual" && !path) {
+              throw new Error("path is required to create a local or worktree workspace");
+            }
+            const projectId = args.projectId as string | undefined;
+            let source: Parameters<typeof client.createWorkspace>[0]["source"];
+            if (isolation === "virtual") {
+              source = { kind: "virtual" };
+            } else if (isolation === "local") {
+              source = { kind: "directory", path, projectId };
+            } else {
+              source = {
+                kind: "worktree",
+                cwd: path,
+                projectId,
+                action:
+                  args.mode === "checkout-branch" || args.mode === "checkout-pr"
+                    ? "checkout"
+                    : "branch-off",
+                baseBranch: args.baseBranch as string | undefined,
+                branchName: args.branchName as string | undefined,
+                refName: args.branch as string | undefined,
+                githubPrNumber: args.prNumber as number | undefined,
+                worktreeSlug: args.worktreeSlug as string | undefined,
+              };
+            }
             const response = await client.createWorkspace({
-              source:
-                isolation === "local"
-                  ? { kind: "directory", path, projectId: args.projectId as string | undefined }
-                  : {
-                      kind: "worktree",
-                      cwd: path,
-                      projectId: args.projectId as string | undefined,
-                      action:
-                        args.mode === "checkout-branch" || args.mode === "checkout-pr"
-                          ? "checkout"
-                          : "branch-off",
-                      baseBranch: args.baseBranch as string | undefined,
-                      branchName: args.branchName as string | undefined,
-                      refName: args.branch as string | undefined,
-                      githubPrNumber: args.prNumber as number | undefined,
-                      worktreeSlug: args.worktreeSlug as string | undefined,
-                    },
+              source,
               title: args.title as string | undefined,
               background: args.background as boolean | undefined,
             });

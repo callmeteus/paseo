@@ -355,7 +355,10 @@ function resolveMcpInitialCwd(
   parentAgent: ManagedAgent | null,
 ): string {
   if (!parentAgent) {
-    return expandUserPath(input.cwd ?? process.cwd());
+    if (!input.cwd) {
+      throw new Error("cwd is required to create an agent without a caller agent");
+    }
+    return expandUserPath(input.cwd);
   }
   return resolveChildAgentCwd({
     parentCwd: parentAgent.cwd,
