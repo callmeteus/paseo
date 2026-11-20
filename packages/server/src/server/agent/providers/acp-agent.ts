@@ -2053,7 +2053,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly mcpElicitationRetries = new Set<string>();
   private lastMcpToolCall: ACPToolSnapshot | null = null;
   private refusalTextBuffer = "";
-  private suppressRefusalText = false;
   private mcpAppRegistry: UpstreamMcpRegistry | null = null;
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
@@ -3443,7 +3442,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.refusalTextBuffer,
       )
     ) {
-      return this.suppressRefusalText;
+      return false;
     }
     this.refusalTextBuffer = "";
     const last =
@@ -3457,12 +3456,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       null;
     if (last && !this.mcpElicitationRetries.has(last.toolCallId)) {
       this.mcpElicitationRetries.add(last.toolCallId);
-      this.suppressRefusalText = true;
       void this.retryMcpToolWithElicitation(last).catch((error) => {
         this.logger.info({ error }, "provider.acp.mcp_elicitation_retry_failed");
       });
     }
-    return this.suppressRefusalText;
+    return false;
   }
 
   async sessionUpdate(params: SessionNotification): Promise<void> {
@@ -3487,7 +3485,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.touchTurnIdleTimeout();
     if (params.update.sessionUpdate === "user_message_chunk") {
       this.refusalTextBuffer = "";
-      this.suppressRefusalText = false;
     }
     const toolUpdate = params.update;
     if (
