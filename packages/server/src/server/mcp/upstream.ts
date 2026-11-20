@@ -166,7 +166,7 @@ export class UpstreamMcpRegistry {
   }
 }
 
-function createTransport(config: McpServerConfig) {
+export function createTransport(config: McpServerConfig) {
   if (config.type === "stdio") {
     return new StdioClientTransport({
       command: config.command,

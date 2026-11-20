@@ -175,7 +175,8 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
     };
   }
 
-  if (request.mode !== "form") return null;
+  // MCP's `elicitation/create` omits `mode` for form requests; ACP sends it explicitly.
+  if (request.mode !== undefined && request.mode !== "form") return null;
   const schema = record(request.requestedSchema);
   const properties = record(schema?.properties);
   const required = Array.isArray(schema?.required)

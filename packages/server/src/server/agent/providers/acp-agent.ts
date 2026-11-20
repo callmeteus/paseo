@@ -73,6 +73,7 @@ import {
 } from "./acp-elicitation.js";
 import { UpstreamMcpRegistry } from "../../mcp/upstream.js";
 import { readProjectMcpConfigs } from "../../mcp/project-mcp-config.js";
+import { callMcpToolWithElicitation } from "../../mcp/elicitation-client.js";
 import type { Logger } from "pino";
 
 import {
@@ -2049,6 +2050,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly pendingElicitations = new Map<string, PendingElicitation>();
   private readonly mcpAppHtmlByTool = new Map<string, string>();
+  private readonly mcpElicitationRetries = new Set<string>();
+  private lastMcpToolCall: ACPToolSnapshot | null = null;
+  private refusalTextBuffer = "";
   private mcpAppRegistry: UpstreamMcpRegistry | null = null;
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
@@ -3238,6 +3242,42 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.activeForegroundTurnId = null;
   }
 
+  /**
+   * A harness that drops MCP elicitation leaves the tool erroring out with a
+   * refusal. Retry that tool through a Paseo MCP client that does support
+   * elicitation, so the server's real form can collect the user's answer.
+   */
+  private async retryMcpToolWithElicitation(snapshot: ACPToolSnapshot): Promise<void> {
+    const raw = snapshot.rawInput;
+    if (typeof raw !== "object" || raw === null) return;
+    const input = raw as Record<string, unknown>;
+    const toolName = input.toolName;
+    const args = input.args;
+    if (typeof toolName !== "string" || typeof args !== "object" || args === null) return;
+    const servers = readProjectMcpConfigs(this.config.cwd);
+    const hint = input.providerIdentifier;
+    const serverName =
+      typeof hint === "string" && servers[hint]
+        ? hint
+        : Object.keys(servers).find((name) => (snapshot.title ?? "").startsWith(`${name}-`));
+    if (!serverName) return;
+    await callMcpToolWithElicitation({
+      config: servers[serverName]!,
+      toolName,
+      args: args as Record<string, unknown>,
+      ask: async (request) => {
+        const form = readACPElicitation(request);
+        if (!form) return { action: "decline" };
+        const params = request as { message?: unknown };
+        const message = typeof params.message === "string" ? params.message : `Confirm ${toolName}`;
+        return (await this.askElicitation(message, form)) as {
+          action: "accept" | "decline" | "cancel";
+          content?: Record<string, unknown>;
+        };
+      },
+    });
+  }
+
   private async loadMcpAppHtml(
     toolCallId: string,
     hint: { title?: string; rawInput?: unknown },
@@ -3254,7 +3294,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         ? rawServer
         : Object.keys(servers).find((server) => title.startsWith(`${server}-`));
     if (!name) return;
-    this.logger.info({ name }, "provider.acp.mcp_app_loading");
 
     if (!this.mcpAppRegistry) {
       this.mcpAppRegistry = new UpstreamMcpRegistry({
@@ -3270,14 +3309,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       });
     }
     const html = await this.mcpAppRegistry.readMcpAppHtml(name);
-    this.logger.info({ name, length: html?.length ?? 0 }, "provider.acp.mcp_app_loaded");
     if (!html) return;
     this.mcpAppHtmlByTool.set(toolCallId, html);
     const snapshot = this.toolCalls.get(toolCallId);
-    this.logger.info(
-      { toolCallId, hasSnapshot: Boolean(snapshot), keys: [...this.toolCalls.keys()] },
-      "provider.acp.mcp_app_attach",
-    );
     if (!snapshot) return;
     const updated = { ...snapshot, mcpAppHtml: html };
     this.toolCalls.set(toolCallId, updated);
@@ -3285,28 +3319,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   }
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    const rawInput = params.toolCall?.rawInput;
     void this.loadMcpAppHtml(params.toolCall.toolCallId, {
       title: params.toolCall.title ?? undefined,
       rawInput: params.toolCall.rawInput,
     }).catch((error) => {
       this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
     });
-    this.logger.info(
-      {
-        title: params.toolCall?.title,
-        toolKind: params.toolCall?.kind,
-        rawInputKeys:
-          typeof rawInput === "object" && rawInput !== null ? Object.keys(rawInput) : [],
-        options: params.options.map((option) => ({
-          id: option.optionId,
-          kind: option.kind,
-          name: option.name,
-        })),
-        meta: params._meta ?? null,
-      },
-      "provider.acp.permission_request",
-    );
     this.clearTurnFirstActivityTimeout();
     // Cursor asks over ACP. Allow once, so the user's Cursor allowlist is not
     // rewritten, and only when the title is one granted Hub tool.
@@ -3411,6 +3429,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     this.touchTurnIdleTimeout();
+    if (params.update.sessionUpdate === "user_message_chunk") {
+      this.refusalTextBuffer = "";
+    }
     const toolUpdate = params.update;
     if (
       (toolUpdate.sessionUpdate === "tool_call" ||
@@ -3425,6 +3446,32 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }).catch((error) => {
         this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
       });
+    }
+    if (params.update.sessionUpdate === "agent_message_chunk") {
+      const text = contentBlockToText(params.update.content) ?? "";
+      this.refusalTextBuffer = `${this.refusalTextBuffer}${text}`.slice(-2_000);
+      if (
+        /recusad|declined|refused|não suporta elicitation|does not support elicitation/i.test(
+          this.refusalTextBuffer,
+        )
+      ) {
+        this.refusalTextBuffer = "";
+        const last =
+          this.lastMcpToolCall ??
+          [...this.toolCalls.values()].findLast(
+            (snapshot) =>
+              typeof snapshot.rawInput === "object" &&
+              snapshot.rawInput !== null &&
+              "providerIdentifier" in snapshot.rawInput,
+          ) ??
+          null;
+        if (last && !this.mcpElicitationRetries.has(last.toolCallId)) {
+          this.mcpElicitationRetries.add(last.toolCallId);
+          void this.retryMcpToolWithElicitation(last).catch((error) => {
+            this.logger.info({ error }, "provider.acp.mcp_elicitation_retry_failed");
+          });
+        }
+      }
     }
     const events = this.translateSessionUpdate(params.update);
     this.logger.trace(
@@ -3456,25 +3503,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  async extMethod(
-    method: string,
-    params: Record<string, unknown>,
+  private askElicitation(
+    message: string,
+    form: ACPElicitationForm,
   ): Promise<Record<string, unknown>> {
-    this.logger.info(
-      { method, keys: Object.keys(params), sessionId: params.sessionId },
-      "provider.acp.ext_method",
-    );
-    // Agents differ on the exact method name they use for elicitation. Accept
-    // any of them rather than dropping the prompt as an unknown extension.
-    if (!method.toLowerCase().includes("elicit")) {
-      throw RequestError.methodNotFound(method);
-    }
-    const form = readACPElicitation(params);
-    if (!form) {
-      this.logger.info({ method, params }, "provider.acp.unmapped_elicitation");
-      throw RequestError.invalidParams();
-    }
-    const message = typeof params.message === "string" ? params.message : "";
     const requestId = `elicit-${randomUUID()}`;
     const request: AgentPermissionRequest = {
       id: requestId,
@@ -3501,6 +3533,23 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
     this.touchTurnIdleTimeout();
     return promise;
+  }
+
+  async extMethod(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    // Agents differ on the exact method name they use for elicitation. Accept
+    // any of them rather than dropping the prompt as an unknown extension.
+    if (!method.toLowerCase().includes("elicit")) {
+      throw RequestError.methodNotFound(method);
+    }
+    const form = readACPElicitation(params);
+    if (!form) {
+      throw RequestError.invalidParams();
+    }
+    const message = typeof params.message === "string" ? params.message : "";
+    return this.askElicitation(message, form);
   }
 
   async extNotification(method: string, params: Record<string, unknown>): Promise<void> {
@@ -4012,13 +4061,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     previous: ACPToolSnapshot | undefined,
   ): AgentStreamEvent[] {
     let snapshot = mergeToolSnapshot(toolCallId, update, previous);
+    if (
+      snapshot.rawInput &&
+      typeof snapshot.rawInput === "object" &&
+      "providerIdentifier" in snapshot.rawInput
+    ) {
+      this.lastMcpToolCall = snapshot;
+    }
     const cachedHtml = this.mcpAppHtmlByTool.get(toolCallId);
     if (cachedHtml) snapshot = { ...snapshot, mcpAppHtml: cachedHtml };
     if (this.toolSnapshotTransformer) {
       snapshot = this.toolSnapshotTransformer(snapshot);
     }
     this.toolCalls.set(toolCallId, snapshot);
-    this.logger.info({ toolCallId, size: this.toolCalls.size }, "provider.acp.tool_snapshot_set");
     return [this.wrapTimeline(mapToolSnapshotToTimeline(snapshot, this.terminalEntries))];
   }
 
