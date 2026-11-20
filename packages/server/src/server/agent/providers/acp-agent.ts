@@ -875,6 +875,7 @@ export interface ACPToolSnapshot {
   rawOutput?: unknown;
   /** HTML from an MCP App resource, shown by the client instead of raw output. */
   mcpAppHtml?: string;
+  mcpAppResult?: unknown;
 }
 
 interface PendingPermission {
@@ -2042,6 +2043,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly mcpAppHtmlByTool = new Map<string, string>();
   private mcpAppRegistry: UpstreamMcpRegistry | null = null;
   private elicitationBridge: ElicitationBridge | null = null;
+  private mcpToolResults = new Map<string, unknown>();
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
   private readonly toolCalls = new Map<string, ACPToolSnapshot>();
@@ -3745,6 +3747,10 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.elicitationBridge = await startElicitationBridge();
       for (const name of Object.keys(configured)) {
         const token = `${this.agentId}:${name}`;
+        this.elicitationBridge.register(`result:${token}`, async (result) => {
+          this.mcpToolResults.set(name, result);
+          return null;
+        });
         this.elicitationBridge.register(token, async (request) => {
           const envelope = request as { params?: unknown };
           const params = envelope.params ?? request;
@@ -4036,6 +4042,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     let snapshot = mergeToolSnapshot(toolCallId, update, previous);
     const cachedHtml = this.mcpAppHtmlByTool.get(toolCallId);
     if (cachedHtml) snapshot = { ...snapshot, mcpAppHtml: cachedHtml };
+    const raw = snapshot.rawInput;
+    if (typeof raw === "object" && raw !== null) {
+      const serverName = (raw as Record<string, unknown>).providerIdentifier;
+      if (typeof serverName === "string" && this.mcpToolResults.has(serverName)) {
+        snapshot = { ...snapshot, mcpAppResult: this.mcpToolResults.get(serverName) };
+        this.mcpToolResults.delete(serverName);
+      }
+    }
     if (this.toolSnapshotTransformer) {
       snapshot = this.toolSnapshotTransformer(snapshot);
     }
@@ -4811,6 +4825,7 @@ function mapToolSnapshotToTimeline(
       kind: snapshot.kind ?? undefined,
       title: snapshot.title,
       ...(snapshot.mcpAppHtml ? { mcpAppHtml: snapshot.mcpAppHtml } : {}),
+      ...(snapshot.mcpAppResult !== undefined ? { mcpAppResult: snapshot.mcpAppResult } : {}),
       ...(snapshot.rawOutput !== undefined ? { mcpAppResult: snapshot.rawOutput } : {}),
     },
   };

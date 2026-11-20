@@ -79,9 +79,20 @@ proxy.setRequestHandler(PingRequestSchema, async () => ({}));
 proxy.setRequestHandler(ListToolsRequestSchema, async (request) =>
   upstream.listTools(request.params),
 );
-proxy.setRequestHandler(CallToolRequestSchema, async (request) =>
-  upstream.callTool(request.params),
-);
+proxy.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const result = await upstream.callTool(request.params);
+  try {
+    await fetch(callback.replace(/\/elicit$/, "/tool-result"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, result }),
+    });
+  } catch (error) {
+    log("[paseo-proxy] tool-result error", String(error));
+    /* bridge may be closed */
+  }
+  return result;
+});
 proxy.setRequestHandler(ListResourcesRequestSchema, async (request) =>
   upstream.listResources(request.params),
 );
