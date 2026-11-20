@@ -5,6 +5,7 @@ import {
   ComposerEditingScope,
   WorkspaceComposerEditingSessionsProvider,
 } from "@/composer/editing-session";
+import { createPaneFocusContextValue, PaneFocusProvider } from "@/panels/pane-context";
 import { NewAgentScreen } from "@/screens/new-agent-screen";
 import { buildNewAgentDraftKey } from "@/stores/draft-keys";
 
@@ -22,6 +23,10 @@ export default function NewAgentRoute() {
   const draftId = typeof params.draftId === "string" ? params.draftId : undefined;
   const draftKey = buildNewAgentDraftKey(draftId);
   const sessionTabIds = useMemo(() => [draftKey], [draftKey]);
+  const paneFocusValue = useMemo(
+    () => createPaneFocusContextValue({ isWorkspaceFocused: true, isPaneFocused: true }),
+    [],
+  );
 
   return (
     <HostRouteBootstrapBoundary>
@@ -30,7 +35,9 @@ export default function NewAgentRoute() {
         tabIds={sessionTabIds}
       >
         <ComposerEditingScope tabId={draftKey} targetKey={draftKey}>
-          <NewAgentScreen serverId={serverId} workspaceId={workspaceId} draftId={draftId} />
+          <PaneFocusProvider value={paneFocusValue}>
+            <NewAgentScreen serverId={serverId} workspaceId={workspaceId} draftId={draftId} />
+          </PaneFocusProvider>
         </ComposerEditingScope>
       </WorkspaceComposerEditingSessionsProvider>
     </HostRouteBootstrapBoundary>

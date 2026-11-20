@@ -17,9 +17,12 @@ import {
   fillComposerDraft,
   expectComposerDraft,
   expectComposerFocused,
+  submitMessage,
 } from "../support/helpers/composer";
 
 import { openCommandCenter, closeCommandCenter } from "../support/helpers/command-center";
+import { getServerId } from "../support/helpers/server-id";
+import { seedWorkspace } from "../support/helpers/seed-client";
 import {
   expectPromptsDrawnByPlugin,
   withPromptTimelinePlugin,
@@ -615,3 +618,28 @@ async function expectCommandCenterOwnsFindShortcut(page: Page, shortcut: string)
   await expect(query(page)).toHaveCount(0);
   await closeCommandCenter(page);
 }
+
+// The full-screen /new-agent route mounts the draft stream outside the workspace
+// pane. ChatFind used PaneFocusContext unconditionally there, which crashed with
+// "Invariant failed" as soon as the first prompt rendered a response.
+test("ChatFind works on the full-screen new-agent route", async ({ page }) => {
+  const seeded = await seedWorkspace({ repoPrefix: "chat-find-new-agent-" });
+  try {
+    const serverId = getServerId();
+    await page.goto(
+      `/new-agent?serverId=${encodeURIComponent(serverId)}&workspaceId=${encodeURIComponent(seeded.workspaceId)}`,
+      { waitUntil: "commit" },
+    );
+    await submitMessage(page, "Render the response");
+    await expect(page.getByTestId("assistant-message").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("root-error-boundary")).toHaveCount(0);
+
+    await openChatFind(page);
+    await expect(query(page)).toBeFocused();
+    await closeFind(page);
+  } finally {
+    await seeded.cleanup();
+  }
+});

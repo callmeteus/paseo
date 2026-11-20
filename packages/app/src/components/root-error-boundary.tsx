@@ -27,10 +27,14 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
   }
 
   componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
-    console.error("[RootErrorBoundary] Unhandled render error", {
-      error: formatCaughtValue(error),
-      componentStack: errorInfo.componentStack,
-    });
+    // Electron's console-message event flattens extra arguments to "[object Object]",
+    // so serialize the details into the message itself to keep them in main.log.
+    console.error(
+      `[RootErrorBoundary] Unhandled render error ${JSON.stringify({
+        error: formatCaughtValue(error),
+        componentStack: errorInfo.componentStack ?? null,
+      })}`,
+    );
   }
 
   render() {
