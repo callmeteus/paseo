@@ -370,6 +370,14 @@ function QuestionOtherInput({
 
 const NO_GROUP_PROPS = {} as const;
 
+function isElicitationInput(input: unknown): boolean {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    (input as Record<string, unknown>).elicitation === true
+  );
+}
+
 interface QuestionFormMessageProps {
   title?: string;
   message?: string;
@@ -712,7 +720,9 @@ export function QuestionFormCard({
   // An MCP elicitation is a form, not a conversation: show every field at once
   // and submit once, the way the IDE renders it.
   const isForm =
-    questions?.some((question) => question.type === "boolean" || question.type === "link") ?? false;
+    isElicitationInput(permission.request.input) ||
+    (questions?.some((question) => question.type === "boolean" || question.type === "link") ??
+      false);
   const isLastQuestion =
     isForm || (questions ? resolvedActiveQuestionIndex === questions.length - 1 : true);
 

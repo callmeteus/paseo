@@ -2386,7 +2386,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.submittedUserMessageTurnId = null;
     this.emitBootstrapThreadEvent();
     this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
-    this.emitSubmittedUserMessage(effectivePrompt, messageId, turnId, options?.clientMessageId);
+    this.emitSubmittedUserMessage(
+      effectivePrompt,
+      messageId,
+      turnId,
+      options?.clientMessageId,
+      options?.submittedPromptText,
+    );
     this.armTurnIdleTimeout(turnId);
     this.armTurnFirstActivityTimeout(turnId);
 
@@ -3515,7 +3521,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       kind: "question",
       title: message,
       description: message,
-      input: { questions: form.questions },
+      input: { questions: form.questions, elicitation: true },
     };
     const promise = new Promise<Record<string, unknown>>((resolve) => {
       this.pendingElicitations.set(requestId, {
@@ -4305,8 +4311,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     messageId: string,
     turnId: string,
     clientMessageId?: string,
+    submittedText?: string,
   ): void {
-    const text = extractPromptText(prompt);
+    // Injected workflow/rule text goes to the provider but never into the chat:
+    // the chat shows what the user actually typed.
+    const text = submittedText ?? extractPromptText(prompt);
     if (text.trim().length === 0) {
       return;
     }
