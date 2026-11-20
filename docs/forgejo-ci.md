@@ -33,9 +33,12 @@ environment through the `gh` CLI.
 
 ## Runner
 
-Workflows use `runs-on: docker`, the `gti-actions:latest` image. It is Linux
-only, so the Forgejo workflows do not build macOS or Windows desktop packages.
-They need signed native runners and stay out of scope here. APK jobs use a
+Workflows use `runs-on: docker`, the `gti-actions:latest` image, which already
+provides Node. Do not use `actions/setup-node` in these workflows: it installs
+Node under `/opt/hostedtoolcache` on the runner host, while action steps execute
+inside a container that cannot see that path, so every subsequent Node-based
+step fails with `node: no such file or directory`. The Forgejo runner is Linux
+only, so it does not build macOS or Windows desktop packages. APK jobs use a
 `mingc/android-build-box` container for the Android SDK and Gradle.
 
 ## Nightly

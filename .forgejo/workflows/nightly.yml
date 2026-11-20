@@ -25,12 +25,6 @@ jobs:
         with:
           ref: develop
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
       - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
 
@@ -66,12 +60,6 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
       - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
         env:
@@ -98,11 +86,6 @@ jobs:
         with:
           ref: develop
           sparse-checkout: scripts
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - name: Install GitHub CLI
         run: apt-get update && apt-get install -y gh

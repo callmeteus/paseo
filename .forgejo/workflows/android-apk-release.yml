@@ -76,14 +76,6 @@ jobs:
         shell: bash
         run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-          registry-url: "https://npm.pkg.github.com"
-          scope: "@boudra"
-
       - name: Install JS dependencies
         run: node scripts/npm-retry.mjs ci
         env:

@@ -55,6 +55,7 @@ test("every Forgejo workflow is dispatchable and uses the Linux runner", () => {
       `${name} uses the docker runner`,
     );
     assert.doesNotMatch(source, /permissions:/, `${name} has no GitHub-only permissions block`);
+    assert.doesNotMatch(source, /actions\/setup-node/, `${name} relies on the runner image's Node`);
   }
 });
 
