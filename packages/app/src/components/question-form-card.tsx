@@ -368,6 +368,8 @@ function QuestionOtherInput({
   );
 }
 
+const NO_GROUP_PROPS = {} as const;
+
 interface QuestionFormMessageProps {
   title?: string;
   message?: string;
@@ -707,7 +709,12 @@ export function QuestionFormCard({
   const activeQuestionAnswered = activeQuestion
     ? isQuestionAnswered(activeQuestion, resolvedActiveQuestionIndex, selections, otherTexts)
     : false;
-  const isLastQuestion = questions ? resolvedActiveQuestionIndex === questions.length - 1 : true;
+  // An MCP elicitation is a form, not a conversation: show every field at once
+  // and submit once, the way the IDE renders it.
+  const isForm =
+    questions?.some((question) => question.type === "boolean" || question.type === "link") ?? false;
+  const isLastQuestion =
+    isForm || (questions ? resolvedActiveQuestionIndex === questions.length - 1 : true);
 
   const handleSubmit = useCallback(() => {
     if (!questions || !allAnswered || isResponding) return;
@@ -810,27 +817,49 @@ export function QuestionFormCard({
           title={permission.request.title}
           message={permission.request.description}
         />
-        <QuestionNav
-          questions={questions}
-          activeIndex={resolvedActiveQuestionIndex}
-          isAnswered={navIsAnswered}
-          isResponding={isResponding}
-          onSelect={handleSelectQuestion}
-        />
-        <QuestionField
-          question={activeQuestion}
-          qIndex={resolvedActiveQuestionIndex}
-          selected={selected}
-          otherText={otherText}
-          isResponding={isResponding}
-          inputRef={otherInputRef}
-          groupProps={optionsGroupAccessibility}
-          answerPlaceholder={t("message.question.answerPlaceholder")}
-          otherPlaceholder={t("message.question.otherPlaceholder")}
-          onToggle={toggleOption}
-          onChangeOther={setOtherText}
-          onSubmit={handlePrimaryAction}
-        />
+        {isForm ? null : (
+          <QuestionNav
+            questions={questions}
+            activeIndex={resolvedActiveQuestionIndex}
+            isAnswered={navIsAnswered}
+            isResponding={isResponding}
+            onSelect={handleSelectQuestion}
+          />
+        )}
+        {isForm ? (
+          questions.map((question, qIndex) => (
+            <QuestionField
+              key={question.header}
+              question={question}
+              qIndex={qIndex}
+              selected={selections[qIndex] ?? new Set<number>()}
+              otherText={otherTexts[qIndex] ?? ""}
+              isResponding={isResponding}
+              inputRef={otherInputRef}
+              groupProps={NO_GROUP_PROPS}
+              answerPlaceholder={t("message.question.answerPlaceholder")}
+              otherPlaceholder={t("message.question.otherPlaceholder")}
+              onToggle={toggleOption}
+              onChangeOther={setOtherText}
+              onSubmit={handlePrimaryAction}
+            />
+          ))
+        ) : (
+          <QuestionField
+            question={activeQuestion}
+            qIndex={resolvedActiveQuestionIndex}
+            selected={selected}
+            otherText={otherText}
+            isResponding={isResponding}
+            inputRef={otherInputRef}
+            groupProps={optionsGroupAccessibility}
+            answerPlaceholder={t("message.question.answerPlaceholder")}
+            otherPlaceholder={t("message.question.otherPlaceholder")}
+            onToggle={toggleOption}
+            onChangeOther={setOtherText}
+            onSubmit={handlePrimaryAction}
+          />
+        )}
       </View>
 
       {responseError ? <Alert variant="error" description={responseError} size="sm" /> : null}
