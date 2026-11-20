@@ -12,6 +12,9 @@ import {
   stripBackgroundProviderNotice,
 } from "@getpaseo/protocol/provider-error";
 
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { startElicitationBridge, type ElicitationBridge } from "../../mcp/elicitation-callback.js";
 import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
 import type { ProcessTerminator } from "../../../utils/tree-kill.js";
 import type {
@@ -73,7 +76,6 @@ import {
 } from "./acp-elicitation.js";
 import { UpstreamMcpRegistry } from "../../mcp/upstream.js";
 import { readProjectMcpConfigs } from "../../mcp/project-mcp-config.js";
-import { callMcpToolWithElicitation } from "../../mcp/elicitation-client.js";
 import type { Logger } from "pino";
 
 import {
@@ -1152,20 +1154,8 @@ function isACPAutoAcceptEnabled(config: AgentSessionConfig): boolean {
 function canAutoAcceptAcpPermission(
   params: RequestPermissionRequest,
   config: AgentSessionConfig,
-  mcpServerNames: readonly string[],
 ): boolean {
-  if (!isACPAutoAcceptEnabled(config) || isACPChooserRequest(params.options)) return false;
-  const toolKind = params.toolCall?.kind;
-  if (typeof toolKind === "string" && toolKind.toLowerCase() === "other") return false;
-  const raw = params.toolCall?.rawInput;
-  if (typeof raw === "object" && raw !== null) {
-    const input = raw as Record<string, unknown>;
-    if (typeof input.providerIdentifier === "string" && typeof input.toolName === "string") {
-      return false;
-    }
-  }
-  const title = params.toolCall?.title ?? "";
-  return !mcpServerNames.some((name) => title === name || title.startsWith(`${name}-`));
+  return isACPAutoAcceptEnabled(config) && !isACPChooserRequest(params.options);
 }
 
 function buildACPAutoAcceptFeature(config: AgentSessionConfig): AgentFeature {
@@ -2050,10 +2040,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly pendingElicitations = new Map<string, PendingElicitation>();
   private readonly mcpAppHtmlByTool = new Map<string, string>();
-  private readonly mcpElicitationRetries = new Set<string>();
-  private lastMcpToolCall: ACPToolSnapshot | null = null;
-  private refusalTextBuffer = "";
   private mcpAppRegistry: UpstreamMcpRegistry | null = null;
+  private elicitationBridge: ElicitationBridge | null = null;
   private pendingUserMessage: PendingUserMessage | null = null;
   private submittedUserMessageTurnId: string | null = null;
   private readonly toolCalls = new Map<string, ACPToolSnapshot>();
@@ -2185,11 +2173,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       this.connection = spawned.connection;
       this.agentCapabilities = spawned.initialize.agentCapabilities ?? null;
 
-      const response = await this.runACPRequest(() =>
-        this.connection!.newSession({
-          cwd: this.config.cwd,
-          mcpServers: this.acpMcpServers(),
-        }),
+      const response = await this.runACPRequest(
+        async () =>
+          await this.connection!.newSession({
+            cwd: this.config.cwd,
+            mcpServers: await this.acpMcpServers(),
+          }),
       );
       this.sessionId = response.sessionId;
       this.bootstrapThreadEventPending = true;
@@ -2228,18 +2217,18 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       const sessionCapabilities = this.agentCapabilities?.sessionCapabilities;
       let resumeRequest: (() => Promise<SessionStateResponse>) | null = null;
       if (this.agentCapabilities?.loadSession) {
-        resumeRequest = () =>
-          this.connection!.loadSession({
+        resumeRequest = async () =>
+          await this.connection!.loadSession({
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
-            mcpServers: this.acpMcpServers(),
+            mcpServers: await this.acpMcpServers(),
           });
       } else if (sessionCapabilities?.resume) {
-        resumeRequest = () =>
-          this.connection!.unstable_resumeSession({
+        resumeRequest = async () =>
+          await this.connection!.unstable_resumeSession({
             sessionId: handle.sessionId,
             cwd: this.config.cwd,
-            mcpServers: this.acpMcpServers(),
+            mcpServers: await this.acpMcpServers(),
           });
       }
       if (!resumeRequest) {
@@ -2268,11 +2257,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
 
       if (!resumed) {
-        const response = await this.runACPRequest(() =>
-          this.connection!.newSession({
-            cwd: this.config.cwd,
-            mcpServers: this.acpMcpServers(),
-          }),
+        const response = await this.runACPRequest(
+          async () =>
+            await this.connection!.newSession({
+              cwd: this.config.cwd,
+              mcpServers: await this.acpMcpServers(),
+            }),
         );
         this.sessionId = response.sessionId;
         this.resumedSessionRecreated = true;
@@ -3243,58 +3233,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.subscribers.clear();
     void this.mcpAppRegistry?.close();
     this.mcpAppRegistry = null;
+    void this.elicitationBridge?.close();
+    this.elicitationBridge = null;
     this.connection = null;
     this.child = null;
     this.activeForegroundTurnId = null;
-  }
-
-  /**
-   * A harness that drops MCP elicitation leaves the tool erroring out with a
-   * refusal. Retry that tool through a Paseo MCP client that does support
-   * elicitation, so the server's real form can collect the user's answer.
-   */
-  private async retryMcpToolWithElicitation(snapshot: ACPToolSnapshot): Promise<void> {
-    const raw = snapshot.rawInput;
-    if (typeof raw !== "object" || raw === null) return;
-    const input = raw as Record<string, unknown>;
-    const toolName = input.toolName;
-    const args = input.args;
-    if (typeof toolName !== "string" || typeof args !== "object" || args === null) return;
-    const servers = readProjectMcpConfigs(this.config.cwd);
-    const hint = input.providerIdentifier;
-    const serverName =
-      typeof hint === "string" && servers[hint]
-        ? hint
-        : Object.keys(servers).find((name) => (snapshot.title ?? "").startsWith(`${name}-`));
-    if (!serverName) return;
-    const result = await callMcpToolWithElicitation({
-      config: servers[serverName]!,
-      toolName,
-      args: args as Record<string, unknown>,
-      ask: async (request) => {
-        const form = readACPElicitation(request);
-        if (!form) return { action: "decline" };
-        const params = request as { message?: unknown };
-        const message = typeof params.message === "string" ? params.message : `Confirm ${toolName}`;
-        return (await this.askElicitation(message, form)) as {
-          action: "accept" | "decline" | "cancel";
-          content?: Record<string, unknown>;
-        };
-      },
-    });
-    const failed =
-      typeof result === "object" &&
-      result !== null &&
-      (result as Record<string, unknown>).isError === true;
-    this.pushEvent(
-      this.wrapTimeline({
-        type: "notification",
-        level: failed ? "warning" : "info",
-        message: failed
-          ? `O MCP ${serverName} recusou ${toolName} após a confirmação.`
-          : `Confirmado: ${toolName} concluído pelo MCP ${serverName}.`,
-      }),
-    );
   }
 
   private async loadMcpAppHtml(
@@ -3364,11 +3307,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       };
     }
 
-    const canAutoAccept = canAutoAcceptAcpPermission(
-      params,
-      this.config,
-      this.acpMcpServers().map((server) => server.name),
-    );
+    const canAutoAccept = canAutoAcceptAcpPermission(params, this.config);
     if (canAutoAccept) {
       const allowOption = selectPermissionOption(params.options, { behavior: "allow" });
       if (allowOption) {
@@ -3428,41 +3367,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return promise;
   }
 
-  /** Returns true while the harness's failed attempt is being replaced by our form. */
-  private trackRefusalText(
-    update: Extract<
-      SessionUpdate,
-      { sessionUpdate: "agent_message_chunk" | "agent_thought_chunk" }
-    >,
-  ): boolean {
-    const text = contentBlockToText(update.content) ?? "";
-    this.refusalTextBuffer = `${this.refusalTextBuffer}${text}`.slice(-2_000);
-    if (
-      !/recusad|declined|refused|não suporta elicitation|does not support elicitation/i.test(
-        this.refusalTextBuffer,
-      )
-    ) {
-      return false;
-    }
-    this.refusalTextBuffer = "";
-    const last =
-      this.lastMcpToolCall ??
-      [...this.toolCalls.values()].findLast(
-        (snapshot) =>
-          typeof snapshot.rawInput === "object" &&
-          snapshot.rawInput !== null &&
-          "providerIdentifier" in snapshot.rawInput,
-      ) ??
-      null;
-    if (last && !this.mcpElicitationRetries.has(last.toolCallId)) {
-      this.mcpElicitationRetries.add(last.toolCallId);
-      void this.retryMcpToolWithElicitation(last).catch((error) => {
-        this.logger.info({ error }, "provider.acp.mcp_elicitation_retry_failed");
-      });
-    }
-    return false;
-  }
-
   async sessionUpdate(params: SessionNotification): Promise<void> {
     this.clearTurnFirstActivityTimeout();
     this.logger.trace(
@@ -3483,9 +3387,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     this.touchTurnIdleTimeout();
-    if (params.update.sessionUpdate === "user_message_chunk") {
-      this.refusalTextBuffer = "";
-    }
     const toolUpdate = params.update;
     if (
       (toolUpdate.sessionUpdate === "tool_call" ||
@@ -3500,13 +3401,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }).catch((error) => {
         this.logger.debug({ error }, "provider.acp.mcp_app_unavailable");
       });
-    }
-    if (
-      (params.update.sessionUpdate === "agent_message_chunk" ||
-        params.update.sessionUpdate === "agent_thought_chunk") &&
-      this.trackRefusalText(params.update)
-    ) {
-      return;
     }
     const events = this.translateSessionUpdate(params.update);
     this.logger.trace(
@@ -3839,9 +3733,53 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  private acpMcpServers(): McpServer[] {
+  private async acpMcpServers(): Promise<McpServer[]> {
     if (this.sideQuestion) return [];
-    return this.capabilities.supportsMcpServers ? normalizeMcpServers(this.config.mcpServers) : [];
+    const configured = this.capabilities.supportsMcpServers
+      ? { ...readProjectMcpConfigs(this.config.cwd), ...this.config.mcpServers }
+      : {};
+    const names = Object.keys(configured);
+    if (names.length === 0) return [];
+
+    if (!this.elicitationBridge) {
+      this.elicitationBridge = await startElicitationBridge();
+      for (const name of Object.keys(configured)) {
+        const token = `${this.agentId}:${name}`;
+        this.elicitationBridge.register(token, async (request) => {
+          const envelope = request as { params?: unknown };
+          const params = envelope.params ?? request;
+          const form = readACPElicitation(params);
+          if (!form) return { action: "decline" };
+          const messageValue = (params as { message?: unknown }).message;
+          const message = typeof messageValue === "string" ? messageValue : `Confirm ${name}`;
+          return await this.askElicitation(message, form);
+        });
+      }
+    }
+
+    const shim = [
+      fileURLToPath(new URL("../../../../scripts/mcp-proxy-shim.mjs", import.meta.url)),
+      fileURLToPath(new URL("../../../../../scripts/mcp-proxy-shim.mjs", import.meta.url)),
+    ].find((candidate) => existsSync(candidate));
+    if (!shim) return normalizeMcpServers(configured);
+
+    const node = process.execPath;
+    return names.map((name) => {
+      const serverConfig = configured[name]!;
+      const env = Object.entries(process.env)
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+        .map(([key, value]) => ({ name: key, value }));
+      env.push(
+        {
+          name: "PASEO_MCP_PROXY_CONFIG",
+          value: Buffer.from(JSON.stringify({ ...serverConfig, name })).toString("base64"),
+        },
+        { name: "PASEO_MCP_PROXY_CALLBACK", value: `${this.elicitationBridge!.origin}/elicit` },
+        { name: "PASEO_MCP_PROXY_TOKEN", value: `${this.agentId}:${name}` },
+        { name: "PASEO_MCP_PROXY_LOG", value: `/tmp/opencode/mcp-proxy-${this.agentId}.log` },
+      );
+      return { name, command: node, args: [shim], env };
+    });
   }
 
   private applySessionState(response: SessionStateResponse): void {
@@ -4096,13 +4034,6 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     previous: ACPToolSnapshot | undefined,
   ): AgentStreamEvent[] {
     let snapshot = mergeToolSnapshot(toolCallId, update, previous);
-    if (
-      snapshot.rawInput &&
-      typeof snapshot.rawInput === "object" &&
-      "providerIdentifier" in snapshot.rawInput
-    ) {
-      this.lastMcpToolCall = snapshot;
-    }
     const cachedHtml = this.mcpAppHtmlByTool.get(toolCallId);
     if (cachedHtml) snapshot = { ...snapshot, mcpAppHtml: cachedHtml };
     if (this.toolSnapshotTransformer) {

@@ -1818,33 +1818,25 @@ describe("ACPAgentSession Zed parity", () => {
     });
   });
 
-  test("MCP tool permissions stay visible even when auto-accept is on", async () => {
+  test("auto-accept covers MCP tool permissions", async () => {
     const session = createSessionWithConfig({ featureValues: { auto_accept: true } });
-    const events: Array<{ type: string; request?: { id: string } }> = [];
+    session.subscribe(() => {});
     asInternals<ACPSessionInternals>(session).sessionId = "session-1";
-    session.subscribe((event) => events.push(event as { type: string; request?: { id: string } }));
-
-    const permission = session.requestPermission({
-      sessionId: "session-1",
-      toolCall: {
-        toolCallId: "tool-1",
-        title: "luckymaker-prod-lm_prod_ssh_grant: lm_prod_ssh_grant",
-        kind: "other",
-        status: "pending",
-      },
-      options: [
-        { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
-        { optionId: "reject-once", name: "Reject", kind: "reject_once" },
-      ],
-    } satisfies RequestPermissionRequest);
-    await Promise.resolve();
-
-    const requested = events.find((event) => event.type === "permission_requested");
-    expect(requested?.request?.id).toEqual(expect.any(String));
-    await session.respondToPermission(requested!.request!.id, { behavior: "deny" });
-    await expect(permission).resolves.toEqual({
-      outcome: { outcome: "selected", optionId: "reject-once" },
-    });
+    await expect(
+      session.requestPermission({
+        sessionId: "session-1",
+        toolCall: {
+          toolCallId: "tool-1",
+          title: "luckymaker-prod-lm_prod_ssh_grant: lm_prod_ssh_grant",
+          kind: "other",
+          status: "pending",
+        },
+        options: [
+          { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+          { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+        ],
+      } satisfies RequestPermissionRequest),
+    ).resolves.toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
   });
 
   test("surfaces an ACP permission when auto-accept has no allow option", async () => {
@@ -2968,7 +2960,7 @@ describe("ACPAgentSession slash commands", () => {
 });
 
 describe("ACPAgentSession", () => {
-  test("drops MCP servers from ACP requests when the provider does not support MCP", () => {
+  test("drops MCP servers from ACP requests when the provider does not support MCP", async () => {
     const session = new ACPAgentSession(
       {
         provider: "no-mcp-acp",
@@ -2996,7 +2988,7 @@ describe("ACPAgentSession", () => {
       },
     );
 
-    expect(asInternals<ACPSessionInternals>(session).acpMcpServers()).toEqual([]);
+    await expect(asInternals<ACPSessionInternals>(session).acpMcpServers()).resolves.toEqual([]);
   });
 
   test("summarizes JSON-RPC error details without stringifying objects", () => {
