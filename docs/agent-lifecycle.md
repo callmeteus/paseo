@@ -12,6 +12,19 @@ initializing → idle → running → idle (or error → closed)
 
 Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idle`, `running`, or `error`. `closed` is the persisted, resumable state for an agent record that has no live provider runtime. State transitions persist to disk and stream to subscribed clients via WebSocket.
 
+## Daemon restart recovery
+
+Agents recorded as `running` are continuation candidates. A graceful stop saves intent before
+closing runtimes; boot chooses candidates before repairing status and sends `resumePrompt` in the
+background after connections open. `agents.resumeOnStartup` (default true) turns this off, and
+`agents.resumePrompt` changes the prompt. Archived, private, owned, and archived-workspace agents
+are excluded. This is best-effort continuation: provider resume owns conversation restoration and
+there is no exactly-once turn guarantee.
+
+Reconciling provider history on resume keeps the stored attention reason. For the full list of
+durable and runtime-only state across a restart, see
+[daemon-restart-continuity.md](daemon-restart-continuity.md).
+
 ## Runtime residency
 
 An unarchived agent may be `closed` without being deleted or archived. Closing releases its provider

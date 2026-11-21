@@ -62,6 +62,8 @@ const STORED_AGENT_SCHEMA = z.object({
   title: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
   lastStatus: AgentStatusSchema.default("closed"),
+  /** Pending intent to resume this agent's interrupted turn after a daemon restart. */
+  resumeOnStartup: z.boolean().optional(),
   lastModeId: z.string().nullable().optional(),
   config: SERIALIZABLE_CONFIG_SCHEMA,
   runtimeInfo: z
@@ -341,6 +343,10 @@ export class AgentStorage {
       if (existing?.migratedTo !== undefined) {
         record.migratedTo = existing.migratedTo;
       }
+      // A running agent carries resume intent across its closed snapshot on shutdown.
+      // Settled states consume it.
+      record.resumeOnStartup =
+        existing?.resumeOnStartup && agent.lifecycle !== "idle" && agent.lifecycle !== "error";
       return record;
     });
   }

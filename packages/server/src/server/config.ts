@@ -554,6 +554,13 @@ function resolveIdleRuntimeCleanupAfter(persisted: ReturnType<typeof loadPersist
   return persisted.agents?.idleRuntimeCleanupAfter ?? "1h";
 }
 
+function resolveRestartRecoveryConfig(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return {
+    resumeOnStartup: persisted.agents?.resumeOnStartup ?? true,
+    resumePrompt: persisted.agents?.resumePrompt ?? "Resume working.",
+  };
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -594,6 +601,7 @@ function resolveStaticLoadConfigSettings(
     ]),
     trustedProxies: resolveTrustedProxiesConfig(env, persisted),
     appBaseUrl: env.PASEO_APP_BASE_URL ?? persisted.app?.baseUrl ?? DEFAULT_APP_BASE_URL,
+    ...resolveRestartRecoveryConfig(persisted),
   };
 }
 
@@ -630,6 +638,8 @@ export function resolveConfigFromPersisted(
     hostnames,
     trustedProxies,
     appBaseUrl,
+    resumeOnStartup,
+    resumePrompt,
   } = resolveStaticLoadConfigSettings(env, cli, persisted);
 
   const relay = resolveRelayConfig({
@@ -707,6 +717,8 @@ export function resolveConfigFromPersisted(
     agentProviderSettings: extractAgentProviderSettings(providerOverrides),
     idleRuntimeCleanup: persisted.agents?.idleRuntimeCleanup ?? true,
     idleRuntimeCleanupAfter: resolveIdleRuntimeCleanupAfter(persisted),
+    resumeOnStartup,
+    resumePrompt,
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
     modelRouters: persisted.agents?.modelRouters,

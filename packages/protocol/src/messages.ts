@@ -416,6 +416,9 @@ export const MutableDaemonConfigSchema = z
     idleRuntimeCleanup: z.boolean().optional(),
     // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, keep optional while old daemons are supported.
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    // COMPAT(restartRecovery): added in v0.13.2, keep optional while old daemons are supported.
+    resumeOnStartup: z.boolean().optional(),
+    resumePrompt: z.string().optional(),
     // COMPAT(hubAllowHttpSetting): added in v0.13.1, keep optional while old daemons are supported.
     hubAllowHttp: z.boolean().optional(),
     // COMPAT(hubPublicOriginSetting): added in v0.13.3, keep optional while old daemons are supported.
@@ -456,6 +459,9 @@ export const MutableDaemonConfigPatchSchema = z
     remoteAccess: RemoteAccessConfigSchema.partial().optional(),
     idleRuntimeCleanup: z.boolean().optional(),
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    // COMPAT(restartRecovery): added in v0.13.2, optional for older daemons.
+    resumeOnStartup: z.boolean().optional(),
+    resumePrompt: z.string().optional(),
     hubAllowHttp: z.boolean().optional(),
     // COMPAT(hubPublicOriginSetting): added in v0.13.3, optional for older daemons.
     hubPublicOrigin: z.string().optional(),
