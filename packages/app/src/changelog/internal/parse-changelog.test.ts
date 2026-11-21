@@ -282,14 +282,18 @@ describe("the repository's own CHANGELOG.md", () => {
   it("parses every release heading", () => {
     expect(releases.length).toBeGreaterThan(50);
     for (const release of releases) {
-      expect(release.version).toMatch(/^\d+\.\d+\.\d+/);
-      expect(release.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      if (release.version === "Unreleased") {
+        expect(release.date).toBe("");
+      } else {
+        expect(release.version).toMatch(/^\d+\.\d+\.\d+/);
+        expect(release.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
       expect(release.sections.length).toBeGreaterThan(0);
     }
   });
 
   it("keeps every authored line inside a release", () => {
-    const documentLines = markdown.split("\n");
+    const documentLines = markdown.split(/\r?\n/);
     const fromFirstRelease = documentLines.slice(
       documentLines.findIndex((line) => line.startsWith("## ")),
     );

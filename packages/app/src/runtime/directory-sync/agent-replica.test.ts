@@ -116,7 +116,19 @@ describe("AgentDirectoryReplica", () => {
       turn: { turnId: "turn-live", startedAt: null },
     });
 
-    replica.commitCached(new Map([["agent", normalizeAgentSnapshot(payload("cached"), serverId)]]));
+    // A late cache read carries the directory state written before the live
+    // turn opened, so its updatedAt is older than the live agent's.
+    replica.commitCached(
+      new Map([
+        [
+          "agent",
+          normalizeAgentSnapshot(
+            { ...payload("cached"), updatedAt: "2026-07-17T00:00:00.000Z" },
+            serverId,
+          ),
+        ],
+      ]),
+    );
 
     expect(selectAgentTurnPresentation(store.getSession(serverId), "agent").turnId).toBe(
       "turn-live",

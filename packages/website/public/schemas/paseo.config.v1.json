@@ -101,6 +101,192 @@
         "enableTerminalAgentHooks": {
           "type": "boolean"
         },
+        "remoteAccess": {
+          "type": "object",
+          "properties": {
+            "outbound": {
+              "default": {
+                "enabled": false,
+                "peers": [],
+                "chats": false,
+                "agents": false,
+                "files": "off",
+                "commands": {
+                  "mode": "any",
+                  "allowlist": [],
+                  "timeoutMs": 120000,
+                  "maxOutputBytes": 1048576
+                },
+                "restrictToWorkspaces": true
+              },
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "peers": {
+                  "default": [],
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "chats": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "agents": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "files": {
+                  "default": "off",
+                  "type": "string",
+                  "enum": ["off", "read", "write"]
+                },
+                "commands": {
+                  "default": {
+                    "mode": "any",
+                    "allowlist": [],
+                    "timeoutMs": 120000,
+                    "maxOutputBytes": 1048576
+                  },
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "default": "any",
+                      "type": "string",
+                      "enum": ["off", "allowlist", "any"]
+                    },
+                    "allowlist": {
+                      "default": [],
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "timeoutMs": {
+                      "default": 120000,
+                      "type": "integer",
+                      "minimum": 1000,
+                      "maximum": 600000
+                    },
+                    "maxOutputBytes": {
+                      "default": 1048576,
+                      "type": "integer",
+                      "minimum": 1024,
+                      "maximum": 16777216
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "restrictToWorkspaces": {
+                  "default": true,
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "inbound": {
+              "default": {
+                "enabled": false,
+                "peers": [],
+                "chats": false,
+                "agents": false,
+                "files": "off",
+                "commands": {
+                  "mode": "any",
+                  "allowlist": [],
+                  "timeoutMs": 120000,
+                  "maxOutputBytes": 1048576
+                },
+                "restrictToWorkspaces": true
+              },
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "peers": {
+                  "default": [],
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                },
+                "chats": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "agents": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "files": {
+                  "default": "off",
+                  "type": "string",
+                  "enum": ["off", "read", "write"]
+                },
+                "commands": {
+                  "default": {
+                    "mode": "any",
+                    "allowlist": [],
+                    "timeoutMs": 120000,
+                    "maxOutputBytes": 1048576
+                  },
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "default": "any",
+                      "type": "string",
+                      "enum": ["off", "allowlist", "any"]
+                    },
+                    "allowlist": {
+                      "default": [],
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      }
+                    },
+                    "timeoutMs": {
+                      "default": 120000,
+                      "type": "integer",
+                      "minimum": 1000,
+                      "maximum": 600000
+                    },
+                    "maxOutputBytes": {
+                      "default": 1048576,
+                      "type": "integer",
+                      "minimum": 1024,
+                      "maximum": 16777216
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "restrictToWorkspaces": {
+                  "default": true,
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "appendSystemPrompt": {
           "type": "string"
         },
@@ -176,6 +362,152 @@
             "additionalProperties": {}
           }
         },
+        "mcpServers": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "stdio"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "env": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "command"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "http"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "url"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "sse"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "alwaysLoad": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "url"]
+              }
+            ]
+          }
+        },
+        "mcpShares": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": ["hosts"],
+            "additionalProperties": false
+          }
+        },
+        "mcpBridges": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "minLength": 1
+              },
+              "via": {
+                "type": "string",
+                "minLength": 1
+              },
+              "server": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["host", "server"],
+            "additionalProperties": false
+          }
+        },
         "cors": {
           "type": "object",
           "properties": {
@@ -249,6 +581,20 @@
       "type": "object",
       "properties": {
         "baseUrl": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "hub": {
+      "type": "object",
+      "properties": {
+        "allowHttp": {
+          "description": "Accept cleartext HTTP Hub origins that are not loopback. Off unless set. CLI credentials then travel without TLS.",
+          "type": "boolean"
+        },
+        "publicOrigin": {
+          "description": "Origin this computer's local Hub is reachable on from other machines, for example http://100.66.222.98:25000. The Hub process still listens on its own port; this is the address the app and other daemons open.",
           "type": "string"
         }
       },
@@ -523,6 +869,14 @@
           "description": "How long a resumable agent stays idle before its process is released. One of 15m, 30m, 1h, 2h, 4h, 8h, 24h. Defaults to 1h.",
           "type": "string",
           "enum": ["15m", "30m", "1h", "2h", "4h", "8h", "24h"]
+        },
+        "resumeOnStartup": {
+          "description": "Resume agents interrupted by a daemon restart. Defaults to true.",
+          "type": "boolean"
+        },
+        "resumePrompt": {
+          "description": "Prompt sent to an interrupted agent when it resumes. Defaults to 'Resume working.'",
+          "type": "string"
         },
         "catalogRefreshTimeoutMs": {
           "type": "integer",

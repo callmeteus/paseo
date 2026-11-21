@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,18 @@ function sleep(ms: number): Promise<void> {
 function isProcessRunning(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
+  }
+
+  // In containers whose PID 1 does not reap orphans, a killed descendant stays
+  // as a zombie: kill(pid, 0) still succeeds even though it is no longer alive.
+  if (process.platform === "linux") {
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const state = stat.slice(stat.lastIndexOf(")") + 2).trimStart()[0];
+      if (state === "Z") return false;
+    } catch {
+      // No proc entry means the process is gone; fall through to the signal probe.
+    }
   }
 
   try {

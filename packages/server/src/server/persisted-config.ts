@@ -19,7 +19,7 @@ import {
   McpBridgeSchema,
   McpServerConfigSchema,
   McpShareSchema,
-} from "@getpaseo/protocol/messages";
+} from "@getpaseo/protocol/daemon-config-schemas";
 import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 

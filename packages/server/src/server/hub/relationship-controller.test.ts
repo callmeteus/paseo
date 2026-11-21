@@ -894,7 +894,7 @@ describe("Hub relationship", () => {
     expect(relationship.relationshipFile()).toBeNull();
   });
 
-  test("startup removes a legacy persisted disconnecting relationship", async () => {
+  test("startup finishes a legacy persisted disconnecting relationship", async () => {
     relationship = await HubRelationshipHarness.start();
     await relationship.beginConnect().result;
     const active = relationship.relationshipFile();
@@ -906,11 +906,15 @@ describe("Hub relationship", () => {
 
     expect(await relationship.status()).toMatchObject({ state: "not_connected", hubOrigin: null });
     expect(relationship.relationshipFile()).toBeNull();
-    expect(relationship.revocationAttempts()).toBe(0);
-    expect(relationship.pendingRelationshipRetries()).toBe(0);
-    expect(relationship.loggableValues(await relationship.status())).toContain(
-      "Removed legacy disconnecting Hub relationship during startup",
+    expect(relationship.revocationAttempts()).toBe(1);
+    expect(relationship.latestRevocation()).toEqual(
+      expect.objectContaining({
+        daemonId: active!.relationship.daemonId,
+        hubOrigin: active!.relationship.hubOrigin,
+        credential: active!.credential.secret,
+      }),
     );
+    expect(relationship.pendingRelationshipRetries()).toBe(0);
   });
 
   test("disconnect leaves no intent artifacts and shutdown closes the owned agent", async () => {

@@ -640,7 +640,7 @@ describe("OpenCodeBridge", () => {
       },
     ];
     const tools = new Map<string, V2TestTool>();
-    let hook!: (input: V2TestContext) => Promise<void>;
+    const hooks: Array<(input: V2TestContext) => Promise<void>> = [];
     const dispose = await module.default.setup({
       options: { baseUrl: "", token: "" },
       tool: {
@@ -657,7 +657,7 @@ describe("OpenCodeBridge", () => {
         context: async () => history,
         get: async () => ({ parentID: "parent" }),
         hook: async (_name, callback) => {
-          hook = callback;
+          hooks.push(callback);
           return { dispose: async () => undefined };
         },
       },
@@ -668,7 +668,7 @@ describe("OpenCodeBridge", () => {
         tools: { paseo_structured_output: {} },
         system: [],
       };
-      await hook(context);
+      for (const hook of hooks) await hook(context);
       expect(context.tools.paseo_structured_output.input).toMatchObject({
         properties: { value: schema },
       });
@@ -680,7 +680,7 @@ describe("OpenCodeBridge", () => {
         tool.execute({ value: { answer: 42 } }, { sessionID: "session" }),
       ).resolves.toMatchObject({ metadata: { paseoStructuredOutput: { answer: 42 } } });
       history.push({ id: "next", type: "user", text: "ordinary", time: { created: 2 } });
-      await hook(context);
+      for (const hook of hooks) await hook(context);
       expect(context.tools).toEqual({});
       await expect(
         tool.execute({ value: { answer: 42 } }, { sessionID: "session" }),

@@ -2209,8 +2209,12 @@ export function applyStreamEvent(params: {
   const { tail, event, timestamp } = params;
   // A cached canonical copy of a local prompt can reach the tail before its live
   // presentation is reconciled. Dropping the stale local row here keeps every path
-  // (stream, catch-up, replacement) from rendering one prompt twice.
-  const head = params.head.filter((item) => !isLocalCopyOfPositionedUserMessage(item, tail));
+  // (stream, catch-up, replacement) from rendering one prompt twice. Keep the
+  // original array when nothing is dropped so no-op events preserve identity.
+  const filteredHead = params.head.filter(
+    (item) => !isLocalCopyOfPositionedUserMessage(item, tail),
+  );
+  const head = filteredHead.length === params.head.length ? params.head : filteredHead;
   const canonicalUserResult = applyCanonicalUserMessageEvent({
     tail,
     head,

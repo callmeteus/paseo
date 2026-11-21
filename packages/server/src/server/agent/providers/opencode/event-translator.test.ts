@@ -1407,6 +1407,7 @@ describe("translateOpenCodeEvent", () => {
       {
         type: "timeline",
         provider: "opencode",
+        transient: true,
         item: { type: "error", message: "Provider retry (attempt 3): Internal server error" },
       },
     ]);
@@ -1439,6 +1440,7 @@ describe("translateOpenCodeEvent", () => {
       {
         type: "timeline",
         provider: "opencode",
+        transient: true,
         item: { type: "error", message: "Provider retry (attempt 1)" },
       },
     ]);

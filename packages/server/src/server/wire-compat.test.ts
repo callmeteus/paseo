@@ -118,6 +118,10 @@ class InMemoryAgentManager {
     return this.timeline.fetch("agent-1", options);
   }
 
+  async syncTimelineFromProvider() {
+    return { appended: 0, diverged: false };
+  }
+
   listAgents() {
     return [];
   }

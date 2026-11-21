@@ -250,36 +250,39 @@ describe("writeBackFinishedCursorImport", () => {
     expect(await readFile(path, "utf8")).toBe(original);
   });
 
-  test("a failed append leaves the original transcript bytes in place", async () => {
-    const root = await tempProjects();
-    const path = transcriptPath(root, COMPOSER_ID, `${COMPOSER_ID}.jsonl`);
-    await mkdir(join(path, ".."), { recursive: true });
-    const original = originalLine();
-    await writeFile(path, original, "utf8");
-    await chmod(path, 0o444);
+  test.skipIf(process.getuid?.() === 0)(
+    "a failed append leaves the original transcript bytes in place",
+    async () => {
+      const root = await tempProjects();
+      const path = transcriptPath(root, COMPOSER_ID, `${COMPOSER_ID}.jsonl`);
+      await mkdir(join(path, ".."), { recursive: true });
+      const original = originalLine();
+      await writeFile(path, original, "utf8");
+      await chmod(path, 0o444);
 
-    try {
-      const result = await writeBackFinishedCursorImport({
-        outcome: "completed",
-        projectsRoot: root,
-        cwd: CWD,
-        composerId: COMPOSER_ID,
-        turnId: "turn-1",
-        existingPortedTimeline: [
-          {
-            seq: 1,
-            timestamp: "2026-10-21T21:10:56.000Z",
-            item: { type: "user_message", text: "original question" },
-          },
-        ],
-        rows: [row(2, { type: "assistant_message", text: "should not land" }, "turn-1")],
-      });
+      try {
+        const result = await writeBackFinishedCursorImport({
+          outcome: "completed",
+          projectsRoot: root,
+          cwd: CWD,
+          composerId: COMPOSER_ID,
+          turnId: "turn-1",
+          existingPortedTimeline: [
+            {
+              seq: 1,
+              timestamp: "2026-10-21T21:10:56.000Z",
+              item: { type: "user_message", text: "original question" },
+            },
+          ],
+          rows: [row(2, { type: "assistant_message", text: "should not land" }, "turn-1")],
+        });
 
-      expect(result.transcript.status).toBe("failed");
-      expect(result.portedTimeline).toBeNull();
-      expect(await readFile(path, "utf8")).toBe(original);
-    } finally {
-      await chmod(path, 0o644);
-    }
-  });
+        expect(result.transcript.status).toBe("failed");
+        expect(result.portedTimeline).toBeNull();
+        expect(await readFile(path, "utf8")).toBe(original);
+      } finally {
+        await chmod(path, 0o644);
+      }
+    },
+  );
 });

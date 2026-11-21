@@ -77,7 +77,10 @@ describe("checkForAppUpdate", () => {
     consoleError.mockRestore();
   });
 
-  it("keeps genuine updater failures visible", async () => {
+  // This fork installs desktop builds by hand, so auto-updates are disabled and
+  // no updater failure reaches the UI. Re-enable this assertion when the gate in
+  // auto-updater.ts is removed.
+  it("does not surface updater failures while auto-updates are disabled", async () => {
     const error = new Error("network down");
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     autoUpdaterMock.checkForUpdates.mockImplementationOnce(async () => {
@@ -92,8 +95,9 @@ describe("checkForAppUpdate", () => {
       intent: "manual",
     });
 
-    expect(result.errorMessage).toBe("network down");
-    expect(consoleError).toHaveBeenCalled();
+    expect(result.errorMessage).toBeNull();
+    expect(result.hasUpdate).toBe(false);
+    expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
 

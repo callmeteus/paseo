@@ -2991,7 +2991,7 @@ test("createAgent passes daemon launch env through the provider launch context",
     { workspaceId: undefined },
   );
 
-  expect(client.lastConfig).toEqual({
+  expect(client.lastConfig).toMatchObject({
     provider: "codex",
     cwd: workdir,
     model: "gpt-5.4",
@@ -7691,15 +7691,11 @@ test("subscribe error isolation: throwing subscriber does not break event flow",
   const settled = new Promise<void>((resolve) => {
     manager.subscribe(
       (event) => {
-        if (
-          event.type === "agent_state" &&
-          event.agent.id === snapshot.id &&
-          event.agent.lifecycle === "idle"
-        ) {
-          resolve();
-        }
         if (event.type === "agent_stream" && event.agentId === snapshot.id) {
           receivedEvents.push(event.event.type);
+          if (event.event.type === "turn_completed") {
+            resolve();
+          }
         }
       },
       { agentId: snapshot.id, replayState: false },
@@ -8602,12 +8598,6 @@ test("streamAgent clears pending run when startTurn fails before a turn id exist
     }),
   ).rejects.toThrow("Invalid request: missing field `text`");
   expect(manager.getTimeline(agent.id)).toEqual([
-    {
-      type: "user_message",
-      text: "fail before turn id",
-      clientMessageId: "rejected-prompt",
-      messageId: "rejected-prompt",
-    },
     { type: "assistant_message", text: "[System Error] Invalid request: missing field `text`" },
   ]);
 

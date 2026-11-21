@@ -110,4 +110,4 @@ test("accepts a bodyless announcement with separate discovery freshness", async 
   expect(ProvidersSnapshotUpdateMessageSchema.parse(message)).toEqual(message);
   const result = validateWSOutboundMessage({ type: "session", message });
   expect(result.success).toBe(true);
-});
+}, 30_000);

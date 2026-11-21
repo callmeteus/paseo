@@ -50,9 +50,10 @@ const patchedPackages = [
     patchPrefix: "@gorhom+bottom-sheet+",
   },
   {
-    nodeModulesPath: "packages/app/node_modules/react-native-svg",
+    // npm hoists react-native-svg to the root node_modules. patch-package resolves the patch's
+    // node_modules/... paths relative to its cwd, so this entry must run from the root.
+    nodeModulesPath: "node_modules/react-native-svg",
     patchPrefix: "react-native-svg+",
-    cwd: "packages/app",
   },
   {
     nodeModulesPath: "node_modules/@mattermost/react-native-paste-input",

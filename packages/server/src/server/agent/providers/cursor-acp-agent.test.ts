@@ -179,29 +179,13 @@ describe("CursorACPAgentClient model discovery", () => {
         value: false,
       },
       {
-        type: "select",
+        type: "toggle",
         id: CURSOR_FAST_FEATURE_OPTION.id,
         label: "Fast",
         description: "Cursor fast mode",
-        tooltip: "Select Cursor fast mode",
+        tooltip: "Toggle Cursor fast mode",
         icon: "zap",
-        value: "false",
-        options: [
-          {
-            id: "false",
-            label: "Off",
-            isDefault: true,
-            description: undefined,
-            metadata: undefined,
-          },
-          {
-            id: "true",
-            label: "Fast",
-            isDefault: false,
-            description: undefined,
-            metadata: undefined,
-          },
-        ],
+        value: false,
       },
     ]);
   });

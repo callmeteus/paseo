@@ -30,6 +30,7 @@ import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { findFreePort } from "./service-proxy.js";
+import { isClaudeAvailable } from "../test-utils/claude-availability.js";
 import {
   configureGitProcessPolicy,
   snapshotGitCommandRuntimeMetrics,
@@ -298,6 +299,7 @@ describe("paseo daemon bootstrap", () => {
         requestId: "runtime-policies",
         appliedPaths: [
           "agents.catalogRefreshTimeoutMs",
+          "agents.modelRouters",
           "agents.providers",
           "app.baseUrl",
           "daemon.cors.allowedOrigins",
@@ -1196,7 +1198,7 @@ test("startup closes stale active records before serving status without resuming
   }
 }, 30_000);
 
-test.each(["reject", "stall"] as const)(
+test.skipIf(!isClaudeAvailable()).each(["reject", "stall"] as const)(
   "shutdown closes Claude and its process despite a %s peer and stalled SDK handshake",
   async (failure) => {
     let child: ChildProcess | undefined;
