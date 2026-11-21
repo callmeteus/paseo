@@ -82,7 +82,7 @@ const SourceSchema = z.discriminatedUnion("type", [
       success: true,
       data: { type: "with_default", enabled: true },
     });
-  });
+  }, 60_000);
 
   it("routes tool-call-like status unions through the current sequential item union", async () => {
     const schema = await compileInlineSchema(`

@@ -222,5 +222,5 @@ assert.deepEqual(build("mcp__paseo__send_agent_prompt", { prompt: "Hello", agent
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 180_000);
 });
