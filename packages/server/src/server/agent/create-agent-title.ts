@@ -176,6 +176,8 @@ export function applyGeneratedChatTitle(input: {
   previousTitle?: string | null;
   workspaceTitle: string | null;
   agentTitles: readonly ChatTitleTarget[];
+  /** Only this agent may adopt the generated title via the workspace-name fallback. */
+  reportingAgentId?: string | null;
 }): AppliedChatTitle {
   const generated = normalizeChatTitle(input.generatedTitle);
   const promptTitle = normalizeChatTitle(input.promptTitle);
@@ -204,7 +206,14 @@ export function applyGeneratedChatTitle(input: {
     tabTitle: nextWorkspace,
     wroteGeneratedTitle: nextWorkspace === generated,
     agents: agents.map((agent) => {
-      if (!followsGeneratedChatTitle(agent.title, promptTitle, previousTitle, workspaceTitle)) {
+      // The workspace-name fallback is scoped to the agent that reported this title.
+      // Other agents in the workspace can carry the same stamp (every new agent gets
+      // it), so matching them here would rename several tabs from one title event.
+      const agentWorkspaceTitle =
+        input.reportingAgentId && agent.id === input.reportingAgentId ? workspaceTitle : null;
+      if (
+        !followsGeneratedChatTitle(agent.title, promptTitle, previousTitle, agentWorkspaceTitle)
+      ) {
         return agent;
       }
       // An agent still carrying the workspace title follows this chat's own
@@ -213,7 +222,7 @@ export function applyGeneratedChatTitle(input: {
       // created after it, and after a daemon restart that stamp is the only
       // remaining link between the agent and the title the provider later emits.
       const next =
-        workspaceTitle !== null && agent.title === workspaceTitle
+        agentWorkspaceTitle !== null && agent.title === agentWorkspaceTitle
           ? generated
           : (nextWorkspace ?? generated);
       return { id: agent.id, title: next };

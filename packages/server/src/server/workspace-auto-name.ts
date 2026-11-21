@@ -261,6 +261,7 @@ export class WorkspaceAutoName {
       previousTitle,
       workspaceTitle: current?.title ?? null,
       agentTitles: agents,
+      reportingAgentId: input.agentId,
     });
     let nextAgents = preview.agents;
     const titleChanges = current !== null && (current.title ?? null) !== preview.workspaceTitle;
@@ -273,6 +274,7 @@ export class WorkspaceAutoName {
           previousTitle,
           workspaceTitle: record.title,
           agentTitles: agents,
+          reportingAgentId: input.agentId,
         });
         nextAgents = applied.agents;
         this.rememberWrittenTitle(workspaceId, applied);
