@@ -3,7 +3,11 @@ import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import { ptBR } from "@/i18n/resources/pt-BR";
 import { readProviderErrorText } from "./provider-error";
-import { sessionLimitWarning } from "./session-limit";
+import {
+  readSessionLimitClock,
+  readSessionLimitNotice,
+  sessionLimitWarning,
+} from "./session-limit";
 
 const PHRASE = "You've hit your session limit \u00b7 resets 12:40am (America/Sao_Paulo)";
 const copy = ptBR.agentStream.sessionLimit;
@@ -95,6 +99,23 @@ describe("sessionLimitWarning", () => {
     ).toBeNull();
     expect(sessionLimitWarning(`${PHRASE}\n\nWait until morning.`, t)).toBeNull();
     expect(sessionLimitWarning("You've reached your 5-hour usage limit", t)).toBeNull();
+  });
+
+  it("recognizes Claude's 5-hour limit with a bare-hour reset clock", () => {
+    const phrase = "You've hit your 5-hour limit - resets 3am (America/Sao_Paulo)";
+
+    expect(readSessionLimitNotice(phrase)).toEqual({
+      reset: "3am (America/Sao_Paulo)",
+    });
+    expect(readSessionLimitClock(phrase)).toEqual({
+      hour: 3,
+      minute: 0,
+      timeZone: "America/Sao_Paulo",
+    });
+    expect(sessionLimitWarning(phrase, t)).toBe(
+      "A sessão deste modelo chegou no limite e volta às 03:00 no horário de São Paulo.",
+    );
+    expect(readProviderErrorText(phrase)).toBe(phrase);
   });
 
   it("counts the sentence as a provider error so the timeline does not treat it as a reply", () => {
