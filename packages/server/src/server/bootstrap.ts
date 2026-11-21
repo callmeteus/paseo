@@ -1,3 +1,4 @@
+import { createRestartRecovery } from "./agent/restart-recovery/index.js";
 import { createIdleRuntimeCleanup } from "./agent/idle-runtime-cleanup/index.js";
 import {
   createCursorSkillCatalogMonitor,
@@ -498,6 +499,8 @@ export interface PaseoDaemonConfig {
   agentProviderSettings?: AgentProviderRuntimeSettingsMap;
   idleRuntimeCleanup?: boolean;
   idleRuntimeCleanupAfter?: IdleRuntimeCleanupAfter;
+  resumeOnStartup?: boolean;
+  resumePrompt?: string;
   providerCatalogRefreshTimeoutMs?: number;
   metadataGeneration?: {
     providers?: Array<{
@@ -607,6 +610,13 @@ function initialIdleRuntimeCleanupAfter(config: PaseoDaemonConfig) {
   return config.idleRuntimeCleanupAfter ?? "1h";
 }
 
+function initialRestartRecoveryConfig(config: PaseoDaemonConfig) {
+  return {
+    resumeOnStartup: config.resumeOnStartup !== false,
+    resumePrompt: config.resumePrompt ?? "Resume working.",
+  };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
 
@@ -637,6 +647,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     hubPublicOrigin: config.hubPublicOrigin,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
     idleRuntimeCleanupAfter: initialIdleRuntimeCleanupAfter(config),
+    ...initialRestartRecoveryConfig(config),
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
@@ -1162,7 +1173,30 @@ export async function createPaseoDaemon(
     agentStorage,
   );
   await agentStorage.initialize();
-  await closeStaleAgentRecords(agentStorage);
+  const restartRecovery = createRestartRecovery({
+    storage: agentStorage,
+    settings: () => ({
+      enabled: daemonConfigStore.get().resumeOnStartup !== false,
+      prompt: daemonConfigStore.get().resumePrompt ?? "Resume working.",
+    }),
+    eligible: async (record) => {
+      if (!record.workspaceId) return true;
+      const workspace = await workspaceRegistry?.get(record.workspaceId);
+      return !workspace?.archivedAt;
+    },
+    dispatch: (agentId, prompt) =>
+      sendPromptToAgent({
+        agentManager,
+        agentStorage,
+        agentId,
+        prompt,
+        unarchive: false,
+        logger,
+      }),
+    report: (agentId, error) =>
+      logger.error({ agentId, err: error }, "Agent restart recovery failed"),
+  });
+  await restartRecovery.prepareStartup();
   logger.info({ elapsed: elapsed() }, "Agent storage initialized");
   await bootstrapWorkspaceRegistries({
     serverId,
@@ -1618,6 +1652,8 @@ export async function createPaseoDaemon(
     ...createFinishObservation({
       agentManager,
       agentStorage,
+      // A child chosen for recovery reports its real outcome only after its resume was sent.
+      waitForResume: restartRecovery.waitForResume,
       serverId,
       logger,
       messages: () => {
@@ -1651,6 +1687,7 @@ export async function createPaseoDaemon(
     wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
   };
   const planBuilds = createPlanBuildTracker({
+    paseoHome: config.paseoHome,
     emit: emitPlanUpdate,
     subscribe: (listener) => agentManager.subscribe(listener, { replayState: false }),
     dispatchBuild: async (entry) => {
@@ -1666,6 +1703,9 @@ export async function createPaseoDaemon(
     },
     onDispatchError: (error, entry) => {
       logger.error({ err: error, entry }, "plan build dispatch failed");
+    },
+    onStoreError: (error) => {
+      logger.warn({ err: error }, "Failed to persist pending plan builds");
     },
   });
 
@@ -2141,10 +2181,16 @@ export async function createPaseoDaemon(
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
+            restartRecovery.resumePending();
             providerCatalogRefreshScheduler.start();
             openWeightRouterSync.start();
             await finishSubscriptions.start();
             wsServer.beginAcceptingConnections();
+            // Builds queued by the previous daemon never got their dispatch turn. Re-send
+            // them now so the plan does not sit half-done with a stale "building" marker.
+            void planBuilds.recoverPending().catch((error) => {
+              logger.warn({ err: error }, "Failed to recover pending plan builds");
+            });
             const relaySecurityLogger = logger.child({ module: "relay-security" });
             relayRuntime = createRelayRuntime({
               config: {
@@ -2201,6 +2247,9 @@ export async function createPaseoDaemon(
       speechService.start();
       scriptHealthMonitor.start();
     } catch (error) {
+      // A failed start must not leave the schedule ticker alive; it can create work
+      // against runtimes that are being torn down below.
+      await scheduleService.stop().catch(() => undefined);
       await cursorSkillCatalog?.stop().catch(() => undefined);
       cursorSkillCatalog = null;
       providerCatalogRefreshScheduler.stop();
@@ -2220,6 +2269,9 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    // Stop the ticker first: an in-flight schedule tick can otherwise claim and run a
+    // schedule after agents and provider runtimes have already been closed.
+    await scheduleService.stop().catch(() => undefined);
     await cursorSkillCatalog?.stop().catch((error) => {
       logger.warn({ err: error }, "Failed to stop Cursor skill catalog watch");
     });
@@ -2243,6 +2295,8 @@ export async function createPaseoDaemon(
     await finishSubscriptions.close();
     await wsServer?.agentMessages.close();
     agentManager.prepareForShutdown();
+    // Save intent before closing runtimes so the next daemon can continue running work.
+    await restartRecovery.captureRunningAgents();
     await closeAllAgents(logger, agentManager);
     await withTimeout({
       promise: pluginRuntime.drainEvents(),
@@ -2256,7 +2310,6 @@ export async function createPaseoDaemon(
     await pluginRuntime.stopAllPlugins();
     terminalManager.killAll();
     await speechService.stop();
-    await scheduleService.stop().catch(() => undefined);
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();
@@ -2292,16 +2345,6 @@ export async function createPaseoDaemon(
     getListenTarget: () => boundListenTarget,
     getServerId: () => serverId,
   };
-}
-
-async function closeStaleAgentRecords(agentStorage: AgentStorage): Promise<void> {
-  // No provider runtimes are loaded at startup. Repair interrupted
-  // shutdowns before any status consumer sees the persisted active states.
-  for (const record of await agentStorage.list()) {
-    if (record.lastStatus === "running" || record.lastStatus === "initializing") {
-      await agentStorage.upsert({ ...record, lastStatus: "closed" });
-    }
-  }
 }
 
 /**

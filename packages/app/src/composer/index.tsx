@@ -546,7 +546,10 @@ function queuedMessageKey(item: QueuedMessage): string {
   return item.id;
 }
 
-const webGrabCursor = isWeb ? RNStyleSheet.create({ handle: { cursor: "grab" } }).handle : null;
+// RN's CursorValue type only names "auto" and "pointer", but react-native-web accepts "grab".
+const webGrabCursor = isWeb
+  ? RNStyleSheet.create({ handle: { cursor: "grab" as "pointer" } }).handle
+  : null;
 
 const QueueTrack = memo(function QueueTrack({
   queuedMessages,

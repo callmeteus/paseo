@@ -167,6 +167,9 @@ export async function ensureAgentLoaded(
         const result = await deps.agentManager.reconcileTimelineFromProvider(agentId, {
           broadcast: pendingOptions.broadcastTimeline,
           markUnread: !record.archivedAt,
+          // Replaying history is not new user-visible activity. Keep the reason stored before
+          // the restart (permission, error, question) instead of flattening it to "finished".
+          preserveAttention: Boolean(record.requiresAttention && record.attentionReason),
         });
         if (result.appended > 0) {
           deps.logger.info(

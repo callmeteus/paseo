@@ -1,13 +1,25 @@
-import { describe, expect, test, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { createPlanBuildTracker, type PlanBuildUpdate } from "./plan-builds.js";
 import type { AgentManagerEvent } from "./agent/agent-manager.js";
 
+const homes: string[] = [];
+
+afterEach(() => {
+  while (homes.length) rmSync(homes.pop()!, { recursive: true, force: true });
+});
+
 function createHarness() {
+  const paseoHome = mkdtempSync(path.join(tmpdir(), "plan-builds-"));
+  homes.push(paseoHome);
   const updates: PlanBuildUpdate[] = [];
   const dispatchBuild = vi.fn(async () => undefined);
   const onDispatchError = vi.fn();
   let listener: ((event: AgentManagerEvent) => void) | null = null;
   const tracker = createPlanBuildTracker({
+    paseoHome,
     emit: (update) => updates.push(update),
     subscribe: (next) => {
       listener = next;
@@ -28,7 +40,7 @@ function createHarness() {
       agentId,
       event: { type: "turn_completed", provider: "claude" },
     });
-  return { tracker, updates, dispatchBuild, onDispatchError, turnEnded };
+  return { tracker, updates, dispatchBuild, onDispatchError, turnEnded, paseoHome };
 }
 
 const plan = {
@@ -119,5 +131,33 @@ describe("plan build tracker", () => {
 
     expect(harness.dispatchBuild).not.toHaveBeenCalled();
     expect(harness.updates).toEqual([]);
+  });
+
+  test("re-dispatches a build that was pending before a daemon restart", async () => {
+    const first = createHarness();
+    first.tracker.start(plan);
+    // Let the pending write land before simulating a fresh tracker in a new daemon.
+    await vi.waitFor(async () => {
+      const { readFile } = await import("node:fs/promises");
+      expect(await readFile(path.join(first.paseoHome, "plan-builds.json"), "utf8")).toContain(
+        plan.agentId,
+      );
+    });
+
+    // A restart keeps $PASEO_HOME but creates a new in-memory tracker.
+    const updates: PlanBuildUpdate[] = [];
+    const dispatchBuild = vi.fn(async () => undefined);
+    const restarted = createPlanBuildTracker({
+      paseoHome: first.paseoHome,
+      emit: (update) => updates.push(update),
+      subscribe: () => () => undefined,
+      dispatchBuild,
+      onDispatchError: vi.fn(),
+    });
+
+    await restarted.recoverPending();
+
+    expect(dispatchBuild).toHaveBeenCalledWith(plan);
+    expect(updates).toEqual([{ ...plan, building: true }]);
   });
 });

@@ -1149,6 +1149,7 @@ test("startup closes stale active records before serving status without resuming
   let sessionsCreated = 0;
   const handle = await createTestPaseoDaemon({
     paseoHomeRoot: root,
+    resumeOnStartup: false,
     agentClients: createTestAgentClients({
       beforeCreateSession: async () => {
         sessionsCreated++;
@@ -1157,13 +1158,14 @@ test("startup closes stale active records before serving status without resuming
   });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${handle.port}/ws` });
   try {
-    const expected = records.map((record) => ({
-      ...record,
-      lastStatus:
-        record.lastStatus === "running" || record.lastStatus === "initializing"
-          ? "closed"
-          : record.lastStatus,
-    }));
+    const expected = records.map((record) => {
+      const busy = record.lastStatus === "running" || record.lastStatus === "initializing";
+      return {
+        ...record,
+        ...(busy ? { resumeOnStartup: false } : {}),
+        lastStatus: busy ? "closed" : record.lastStatus,
+      };
+    });
     expect(
       (await handle.daemon.agentStorage.list()).sort((a, b) => a.id.localeCompare(b.id)),
     ).toEqual(expected.sort((a, b) => a.id.localeCompare(b.id)));

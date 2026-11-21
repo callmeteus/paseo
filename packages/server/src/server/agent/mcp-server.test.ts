@@ -882,6 +882,7 @@ async function createAgentMcpServer(
     logger: options.logger,
     ...createFinishObservation({
       ...options,
+      waitForResume: async () => undefined,
       messages: () => messages,
       serverId: options.serverId ?? "self",
       hosts: () => {
