@@ -391,10 +391,24 @@ function QuestionFormMessage({ title, message }: QuestionFormMessageProps) {
   if (!text) return null;
   const heading = title?.trim();
   const showHeading = heading && !text.toLowerCase().startsWith(heading.toLowerCase());
+  const lines = text.split("\n").filter((line) => line.trim().length > 0);
   return (
     <View style={styles.messageBlock} testID="question-form-message">
       {showHeading ? <Text style={styles.messageTitle}>{heading}</Text> : null}
-      <MarkdownRenderer text={text} compact />
+      {lines.map((line, index) => {
+        const separator = line.indexOf(":");
+        const label = separator > 0 ? line.slice(0, separator + 1) : null;
+        const value = label ? line.slice(separator + 1).trim() : line;
+        const isTitle = !showHeading && index === 0;
+        return (
+          <View key={line} style={styles.messageLine}>
+            {label ? (
+              <Text style={isTitle ? styles.messageTitle : styles.messageLabel}>{label}</Text>
+            ) : null}
+            <Text style={isTitle ? styles.messageTitle : styles.messageValue}>{value}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -914,6 +928,19 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     color: theme.colors.foreground,
     fontWeight: "600",
+  },
+  messageLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  messageLabel: {
+    color: theme.colors.foreground,
+    fontWeight: "600",
+  },
+  messageValue: {
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
   },
   questionHeader: {
     flexDirection: "row",

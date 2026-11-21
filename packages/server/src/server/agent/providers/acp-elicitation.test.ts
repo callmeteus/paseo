@@ -135,13 +135,11 @@ describe("readACPElicitation", () => {
         },
       },
     });
-    expect(form?.questions).toEqual([
+    // The facts are already in the message, so they are not repeated as fields.
+    expect(form?.questions).not.toContainEqual(
       expect.objectContaining({ type: "fact", question: "Chat: operator" }),
-      expect.objectContaining({
-        type: "fact",
-        question: "Aviso: confirme só se este chat é o operador",
-      }),
-    ]);
+    );
+    expect(form?.questions).toHaveLength(1);
   });
 
   it("rejects a request with no message", () => {

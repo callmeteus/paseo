@@ -205,9 +205,14 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
     questions.push(parsed.question);
     fields.push(parsed.field);
   }
-  if (questions.length === 0) {
-    // A schema with no fields is a confirmation: the card renders a button.
-    questions.push({
+  // The message already carries the fact lines. Don't print the same facts
+  // again as read-only questions below the form.
+  const visibleQuestions = questions.filter(
+    (question) => question.type !== "fact" || !message.includes(question.question),
+  );
+  if (visibleQuestions.length === 0) {
+    // A schema with no interactive fields is a confirmation: render a button.
+    visibleQuestions.push({
       header: message,
       question: message,
       options: [],
@@ -216,7 +221,7 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
       allowEmpty: true,
     });
   }
-  return { questions, fields, urlMode: null };
+  return { questions: visibleQuestions, fields, urlMode: null };
 }
 
 /** Map the card's string answers back to the schema values the agent expects. */
