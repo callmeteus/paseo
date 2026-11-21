@@ -25,13 +25,17 @@ export interface PinnedSidebarGroups {
 function projectWithoutPinnedWorkspaces(
   project: SidebarProjectEntry,
   pinnedWorkspaceKeys: ReadonlySet<string>,
-): SidebarProjectEntry {
+): SidebarProjectEntry | null {
   const workspaces = project.workspaces.filter(
     (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
   );
-  // Keep the project even when every chat moved to Pinned. The project row owns
-  // its settings and new-workspace actions; chats are not its ownership boundary.
-  return workspaces.length === project.workspaces.length ? project : { ...project, workspaces };
+  if (workspaces.length === project.workspaces.length) {
+    return project;
+  }
+  // Every chat moved to Pinned. Hide the shell so the only place this project appears
+  // is the pinned row at the top; an empty header would just expand to nothing.
+  // A project that started with no chats keeps its row for the new-workspace action.
+  return workspaces.length > 0 ? { ...project, workspaces } : null;
 }
 
 function buildPinnedSidebarKeys(
@@ -130,7 +134,10 @@ export function splitPinnedSidebarGroups(input: {
         pinnedChats.push(workspace);
       }
     }
-    unpinnedProjects.push(projectWithoutPinnedWorkspaces(project, pinnedWorkspaceKeySet));
+    const unpinned = projectWithoutPinnedWorkspaces(project, pinnedWorkspaceKeySet);
+    if (unpinned) {
+      unpinnedProjects.push(unpinned);
+    }
   }
 
   pinnedChats.sort((a, b) =>

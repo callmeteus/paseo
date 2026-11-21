@@ -30,7 +30,7 @@ function project(projectKey: string, workspaces: SidebarWorkspacePlacement[]): S
 }
 
 describe("splitPinnedSidebarGroups", () => {
-  it("keeps the project shell reachable when every chat is pinned", () => {
+  it("hides the project shell when every chat is pinned", () => {
     const only = placement("w1");
     const projects = [project("p1", [only])];
     const result = splitPinnedSidebarGroups({
@@ -42,7 +42,7 @@ describe("splitPinnedSidebarGroups", () => {
       pinnedWorkspaceOrder: [],
     });
     expect(result.pinnedChats).toHaveLength(1);
-    expect(result.unpinnedProjects).toEqual([{ ...projects[0], workspaces: [] }]);
+    expect(result.unpinnedProjects).toEqual([]);
   });
 
   it("keeps a genuinely empty project so its new-workspace row stays reachable", () => {
