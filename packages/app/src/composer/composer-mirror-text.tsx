@@ -89,6 +89,11 @@ function BulletMarker({ source }: { source: string }) {
 const styles = StyleSheet.create((theme) => ({
   marker: {
     color: theme.colors.foregroundMuted,
+    // The parent's typography is copied from the textarea onto the outer Text
+    // node only. A nested run without its own metrics gets react-native-web's
+    // defaults, which makes marker lines a different height than plain lines.
+    fontSize: theme.fontSize.content,
+    ...(isWeb ? { lineHeight: theme.fontSize.content * 1.4 } : null),
   },
   // The backticks stay in the layout, transparent, so the caret still lands on
   // them. Their width is the padding around the code.

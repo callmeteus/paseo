@@ -7,9 +7,49 @@ import {
   hasComposerInlineCode,
   hasComposerListMarker,
   indentComposerList,
+  normalizeComposerList,
 } from "./list-format";
 
 const SAMPLE = "Falta\n- Formatação\n1. Aqui no composer!";
+
+describe("normalizeComposerList", () => {
+  it("renumbers a list after the first item was deleted", () => {
+    const text = "2. Na aba prévia\n3. Não tem CTRL+F";
+    expect(normalizeComposerList(text, { start: 0, end: 0 }).text).toBe(
+      "1. Na aba prévia\n2. Não tem CTRL+F",
+    );
+  });
+
+  it("keeps an already sequential list untouched", () => {
+    const text = "1. primeiro\n2. segundo";
+    expect(normalizeComposerList(text, { start: 4, end: 4 })).toEqual({
+      text,
+      selection: { start: 4, end: 4 },
+    });
+  });
+
+  it("renumbers independent runs and nested lists separately", () => {
+    const text = "3. um\n4. dois\n   2. aninhado\n5. tres\n\n7. outro";
+    expect(normalizeComposerList(text, { start: 0, end: 0 }).text).toBe(
+      "1. um\n2. dois\n   1. aninhado\n3. tres\n\n1. outro",
+    );
+  });
+
+  it("maps the caret when a number grows from 9 to 10", () => {
+    const text = "9. um\n10. dois";
+    // First stays 1 after normalization; caret at the end of line 1 shifts.
+    const result = normalizeComposerList(text, { start: 13, end: 13 });
+    expect(result.text).toBe("1. um\n2. dois");
+    expect(result.selection.end).toBeLessThanOrEqual(result.text.length);
+  });
+
+  it("does not renumber markers inside a fenced code block", () => {
+    const text = "```\n2. code\n3. block\n```\n5. real";
+    expect(normalizeComposerList(text, { start: 0, end: 0 }).text).toBe(
+      "```\n2. code\n3. block\n```\n1. real",
+    );
+  });
+});
 
 describe("composer list markers", () => {
   it("finds a bullet and an ordered marker in a composer draft", () => {

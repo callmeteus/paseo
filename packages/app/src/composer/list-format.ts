@@ -148,6 +148,82 @@ export function indentComposerList(
 }
 
 /**
+ * Rewrites ordered markers so each list counts up from its first item. Used
+ * after an edit such as deleting the first item, which otherwise leaves 2., 3.
+ * Caret offsets are mapped through the edits because a number can change width
+ * (9. to 10.).
+ */
+export function normalizeComposerList(
+  text: string,
+  selection: ComposerCaret,
+): ComposerListContinuation {
+  const lines = text.split("\n");
+  // Stack of ordered runs keyed by indent depth, so nested lists count separately.
+  const runs: { indent: string; next: number }[] = [];
+  let offset = 0;
+  const carets = [selection.start, selection.end];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    let line = lines[index] ?? "";
+    const inFence = isInsideFence(text, offset);
+    const marker = inFence ? null : matchListMarker(line);
+    if (marker?.kind === "ordered") {
+      while (runs.length && marker.indent.length < runs[runs.length - 1]!.indent.length) {
+        runs.pop();
+      }
+      let run = runs[runs.length - 1];
+      if (!run || marker.indent.length > run.indent.length) {
+        run = { indent: marker.indent, next: 1 };
+        runs.push(run);
+      }
+      const token = `${run.next}.`;
+      run.next += 1;
+      if (token !== marker.token) {
+        // The token follows the indent inside this line.
+        const markerStartInLine = marker.indent.length;
+        const before = line.slice(0, markerStartInLine);
+        const markerEnd = markerStartInLine + marker.token.length;
+        line = `${before}${token}${line.slice(markerEnd)}`;
+        lines[index] = line;
+        for (let c = 0; c < carets.length; c += 1) {
+          carets[c] = mapCaretAfterToken(
+            carets[c]!,
+            offset + markerStartInLine,
+            marker.token.length,
+            token.length,
+          );
+        }
+      }
+    } else if (!inFence && line.trim().length === 0) {
+      runs.length = 0;
+    }
+    offset += line.length + 1;
+  }
+
+  const joined = lines.join("\n");
+  return {
+    text: joined,
+    selection: {
+      start: clamp(carets[0]!, 0, joined.length),
+      end: clamp(carets[1]!, 0, joined.length),
+    },
+  };
+}
+
+/** Shift a caret that sits at or after an edited token by its width change. */
+function mapCaretAfterToken(
+  caret: number,
+  tokenStart: number,
+  oldLength: number,
+  newLength: number,
+): number {
+  const tokenEnd = tokenStart + oldLength;
+  if (caret <= tokenStart) return caret;
+  if (caret >= tokenEnd) return caret + (newLength - oldLength);
+  return tokenStart + newLength;
+}
+
+/**
  * Splits composer text into the pieces the mirror paints.
  * A list marker wins over a skill token that starts in the same place, so the
  * marker width stays equal to the characters in the textarea.

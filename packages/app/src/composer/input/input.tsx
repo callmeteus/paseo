@@ -90,6 +90,7 @@ import {
   hasComposerInlineCode,
   hasComposerListMarker,
   indentComposerList,
+  normalizeComposerList,
 } from "@/composer/list-format";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
@@ -2301,14 +2302,23 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const handleInputChange = useCallback(
       (nextValue: string) => {
+        let normalizedValue = nextValue;
+        if (hasComposerListMarker(normalizedValue)) {
+          const normalized = normalizeComposerList(normalizedValue, selectionRef.current);
+          if (normalized.text !== normalizedValue) {
+            normalizedValue = normalized.text;
+            selectionRef.current = normalized.selection;
+            textInputRef.current?.setSelection(normalized.selection);
+          }
+        }
         updateComposerHeightForText?.(
           inlineChipDisplayText(valueRef.current),
-          inlineChipDisplayText(nextValue),
+          inlineChipDisplayText(normalizedValue),
         );
-        syncChipEditor(nextValue);
-        valueRef.current = nextValue;
-        updateLiveTextPresence(nextValue);
-        onChangeText(nextValue);
+        syncChipEditor(normalizedValue);
+        valueRef.current = normalizedValue;
+        updateLiveTextPresence(normalizedValue);
+        onChangeText(normalizedValue);
       },
       [onChangeText, syncChipEditor, updateComposerHeightForText, updateLiveTextPresence],
     );
