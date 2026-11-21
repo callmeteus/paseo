@@ -110,11 +110,15 @@ function resolveWorkerExecArgv(): string[] {
   if (!import.meta.url.endsWith(".ts")) {
     return [];
   }
-  // Some Node builds (including the CI runner) are compiled without TypeScript
-  // support, so --experimental-strip-types fails with ERR_NO_TYPESCRIPT. tsx
-  // loads the same source through esbuild and also resolves the .js specifiers
-  // used by the worker back to their .ts files.
-  return ["--import", import.meta.resolve("tsx")];
+  // The CI runner's Node has no TypeScript support and native loaders crash,
+  // so register the TypeScript-compiler-based loader for the worker process.
+  const loaderUrl = new URL("./terminal-ts-loader.mjs", import.meta.url).href;
+  const importSource = [
+    'import { register } from "node:module";',
+    'import { pathToFileURL } from "node:url";',
+    `register(${JSON.stringify(loaderUrl)}, pathToFileURL("./"));`,
+  ].join(" ");
+  return ["--import", `data:text/javascript,${encodeURIComponent(importSource)}`];
 }
 
 function isResponse(message: TerminalWorkerToParentMessage): message is TerminalWorkerResponse {
