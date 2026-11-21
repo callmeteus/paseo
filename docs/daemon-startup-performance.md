@@ -62,6 +62,12 @@ Almost all CPU is system time, not JavaScript. It comes from filesystem calls du
 
 The log shows 13 "Failed to refresh provider snapshot" entries and 31 "Failed to run forge PR status self-heal refresh" entries. Each forge failure builds and sends a batched GraphQL query covering seven repositories, then fails because a repository is missing from the batch response. The full error text is written to `daemon.log` every time. ACP provider probes spawn real processes that can take 5 to 15 seconds each. These loops burn CPU and disk I/O while the user waits.
 
+## Spawned runtime processes
+
+The daemon also leaves agent runtimes behind. A sample found 15 `opencode serve --hostname 127.0.0.1 --port 0` processes started through the daemon node runner. Together they used 5,115 MB working set and 7,878 MB private bytes, with 170 s of accumulated CPU, while sitting idle. There were also 18 `browse` MCP pairs (a `node cli.mjs mcp` process and a `browse.exe mcp` child each). The `opencode` processes have `cmd.exe` wrappers as direct parents, and all of those wrappers trace back to the daemon node runner, so they are Paseo children rather than unrelated user processes.
+
+These runtimes outlive the turn that created them. That makes them a larger source of RAM growth than the daemon heap itself, and it explains why a machine can look idle while memory stays high. Limiting timeline items (R-013) will not fix this on its own. Reaping idle and orphaned runtimes is tracked as R-014 in [ROADMAP.md](../ROADMAP.md).
+
 ## What is not the problem
 
 Steady state is mostly idle when few agents are active. Over the 5 second sample, no process exceeded 6.8% of one core. Event loop delay stayed under 45 ms. Once initialization settles, CPU from startup work drops sharply. With 13 agents and 3 active foreground turns, the daemon held 18.4% of one core and event loop delay peaked at 205.7 ms, so agent streaming becomes the steady cost. The problem at startup is the burst and the retries that keep parts of it alive; later the cost follows the number of active agents and the size of their timelines.

@@ -2,6 +2,15 @@
 
 ## Backlog
 
+- [ ] **R-014** Reap idle and orphaned opencode runtime processes
+      priority: high · status: planned · added: 2026-11-20
+      Paseo leaves spawned opencode runtimes behind. A sample found 15 `opencode serve --hostname 127.0.0.1 --port 0` processes under the daemon node runner, using 5,115 MB working set and 7,878 MB private bytes with 170 s of accumulated CPU, plus 18 `browse` MCP pairs. They sit idle after their turn ends and are not tied to the lifetime of the owning session, so they accumulate and can be orphaned when a parent exits. Bind each spawned runtime to its session or agent, terminate the whole process tree when that owner ends or is archived, and sweep periodically for runtimes whose owner no longer exists. See [docs/daemon-startup-performance.md](docs/daemon-startup-performance.md).
+  - Every spawned runtime records its owner, and a tree kill runs when the owner ends, crashes, or is archived.
+  - A periodic sweep removes runtimes whose owner is gone, including the `cmd.exe` wrapper on Windows and `browse` MCP children.
+  - Reaping never touches a runtime that belongs to an active chat or a running turn.
+  - The daemon reports the live runtime count and their total memory, and caps how many idle runtimes may remain.
+  - No orphaned child processes remain after a runtime is reaped.
+
 - [ ] **R-013** Bound timeline items in memory, prioritize active chats
       priority: high · status: planned · added: 2026-11-19
       Daemon RSS reached 1,012 MiB with 21,737 timeline items across 13 agents, one agent holding 6,628 items. Connection count stayed at 19, so memory growth follows accumulated timelines rather than client count. Cap the number of timeline items kept in memory per agent and in total. Keep full recent history for chats that are running or have an active foreground turn, and trim inactive chats first. The persisted timeline rows already hold the full history, so hydrate older chats from disk when the user opens them instead of keeping everything resident.
