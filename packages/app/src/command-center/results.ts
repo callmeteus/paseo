@@ -83,6 +83,17 @@ export interface CommandCenterFileResult {
   run(): void;
 }
 
+export interface CommandCenterProjectResult {
+  kind: "project";
+  id: string;
+  title: string;
+  subtitle: string;
+  projectViewKey: string;
+  iconDataUri: string | null;
+  activityAt: Date | null;
+  run(): void;
+}
+
 export interface CommandCenterContributionResult {
   kind: "contribution";
   id: string;
@@ -95,6 +106,7 @@ export interface CommandCenterContributionResult {
 export type CommandCenterResult =
   | CommandCenterWorkspaceResult
   | CommandCenterAgentResult
+  | CommandCenterProjectResult
   | CommandCenterFileResult
   | CommandCenterContributionResult;
 
@@ -183,7 +195,9 @@ function contributionSearchFields(
 
 /** Whether the row draws a second, subtitle line under its title. */
 function hasSubtitleLine(result: CommandCenterResult): boolean {
-  if (result.kind === "workspace" || result.kind === "agent") return true;
+  if (result.kind === "workspace" || result.kind === "agent" || result.kind === "project") {
+    return true;
+  }
   if (result.kind === "file") return false;
   const presentation = result.contribution.presentation;
   return presentation.kind === "action" && Boolean(presentation.subtitle);

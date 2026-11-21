@@ -107,6 +107,8 @@ export const ja: TranslationResources = {
       actions: "アクション",
       files: "ファイル",
       workspaces: "ワークスペース",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "エージェント",
       newAgent: "新しいエージェント",
       open: "{{name}}を開く",

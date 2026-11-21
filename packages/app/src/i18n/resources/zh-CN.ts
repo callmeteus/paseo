@@ -105,6 +105,8 @@ export const zhCN: TranslationResources = {
       actions: "操作",
       files: "文件",
       workspaces: "工作区",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "Agents",
       newAgent: "新建 Agent",
       open: "打开{{name}}",

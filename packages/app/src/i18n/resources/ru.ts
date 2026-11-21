@@ -107,6 +107,8 @@ export const ru: TranslationResources = {
       actions: "Действия",
       files: "Файлы",
       workspaces: "Рабочие пространства",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "Агенты",
       newAgent: "Новый агент",
       open: "Открыть {{name}}",

@@ -105,6 +105,8 @@ export const ar: TranslationResources = {
       actions: "الإجراءات",
       files: "الملفات",
       workspaces: "مساحات العمل",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "الوكلاء",
       newAgent: "وكيل جديد",
       open: "فتح {{name}}",

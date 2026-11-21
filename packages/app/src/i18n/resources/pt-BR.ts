@@ -107,6 +107,8 @@ export const ptBR: TranslationResources = {
       actions: "Ações",
       files: "Arquivos",
       workspaces: "Espaços de trabalho",
+      projects: "Projetos",
+      projectWorkspaces: "{{count}} espaços de trabalho",
       agents: "Agentes",
       newAgent: "Novo agente",
       open: "Abrir {{name}}",

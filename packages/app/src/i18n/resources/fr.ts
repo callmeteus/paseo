@@ -107,6 +107,8 @@ export const fr: TranslationResources = {
       actions: "Actions",
       files: "Fichiers",
       workspaces: "Espaces de travail",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "Agents",
       newAgent: "Nouvel agent",
       open: "Ouvrir {{name}}",

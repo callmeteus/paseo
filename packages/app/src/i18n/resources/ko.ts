@@ -106,6 +106,8 @@ export const ko: TranslationResources = {
       actions: "작업",
       files: "파일",
       workspaces: "워크스페이스",
+      projects: "Projects",
+      projectWorkspaces: "{{count}} workspaces",
       agents: "에이전트",
       newAgent: "새 에이전트",
       open: "{{name}} 열기",

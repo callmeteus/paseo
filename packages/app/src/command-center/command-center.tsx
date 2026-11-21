@@ -63,6 +63,8 @@ import {
   type CommandCenterScope,
 } from "@/stores/keyboard-shortcuts-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
+import { router } from "expo-router";
+import { buildProjectSettingsRoute } from "@/utils/host-routes";
 import { useKeyboardActionDispatcher } from "@/keyboard/keyboard-action-dispatcher-context";
 import {
   clearCommandCenterFocusRestoreElement,
@@ -89,6 +91,7 @@ import {
   type CommandCenterAgentResult,
   type CommandCenterFileResult,
   type CommandCenterListRow,
+  type CommandCenterProjectResult,
   type CommandCenterResult,
   type CommandCenterResultSection,
   type CommandCenterSearchFields,
@@ -134,6 +137,17 @@ function createAgentResultAction(serverId: string, agentId: string) {
   };
 }
 
+function createProjectResultAction(serverId: string, projectId: string) {
+  return () => {
+    clearCommandCenterFocusRestoreElement();
+    router.push(buildProjectSettingsRoute(serverId, projectId));
+  };
+}
+
+function projectSearchFields(result: CommandCenterProjectResult): CommandCenterSearchFields {
+  return { visible: [result.title, result.subtitle], hidden: [] };
+}
+
 /**
  * Build every pinned row. Deliberately not keyed on `query`: none of this work depends on what
  * was typed. Ordering belongs to `filterAndRankBuiltInResults`, which ranks on every keystroke.
@@ -141,11 +155,14 @@ function createAgentResultAction(serverId: string, agentId: string) {
 function useBuiltInRows(open: boolean): {
   workspaces: CommandCenterWorkspaceResult[];
   agents: CommandCenterAgentResult[];
+  projects: CommandCenterProjectResult[];
 } {
   const { t } = useTranslation();
-  const previousRows = useRef(
-    new Map<string, CommandCenterAgentResult | CommandCenterWorkspaceResult>(),
-  );
+  type BuiltInRow =
+    | CommandCenterAgentResult
+    | CommandCenterWorkspaceResult
+    | CommandCenterProjectResult;
+  const previousRows = useRef(new Map<string, BuiltInRow>());
   const { agents } = useAggregatedAgents({ demand: open });
   const { projects } = useProjects({ enabled: open });
   const showHost = useHosts().length > 1;
@@ -169,14 +186,12 @@ function useBuiltInRows(open: boolean): {
   return useMemo(() => {
     if (!open) {
       previousRows.current.clear();
-      return { workspaces: [], agents: [] };
+      return { workspaces: [], agents: [], projects: [] };
     }
     // Built-in IDs identify immutable navigation targets. Reuse their callbacks and unchanged
     // row data so a directory update does not invalidate every mounted ResultRow.
-    const nextRows = new Map<string, CommandCenterAgentResult | CommandCenterWorkspaceResult>();
-    const preserve = <T extends CommandCenterAgentResult | CommandCenterWorkspaceResult>(
-      row: T,
-    ): T => {
+    const nextRows = new Map<string, BuiltInRow>();
+    const preserve = <T extends BuiltInRow>(row: T): T => {
       const previous = previousRows.current.get(row.id);
       if (previous) row.run = previous.run;
       const stable = previous && equal(previous, row) ? (previous as T) : row;
@@ -184,12 +199,39 @@ function useBuiltInRows(open: boolean): {
       return stable;
     };
     const allWorkspaces: CommandCenterWorkspaceResult[] = [];
+    const allProjects: CommandCenterProjectResult[] = [];
     for (const project of projects) {
       const workspaceProject = {
         viewKey: project.viewKey,
         name: project.projectName,
         iconDataUri: iconDataByProjectViewKey.get(project.viewKey) ?? null,
       };
+      const primaryHost = project.hosts.find((host) => host.isOnline) ?? project.hosts[0];
+      if (primaryHost) {
+        const activityAt = primaryHost.workspaces.reduce<Date | null>((latest, workspace) => {
+          const enteredAt = workspace.statusEnteredAt;
+          if (!enteredAt) return latest;
+          if (!latest || enteredAt.getTime() > latest.getTime()) return enteredAt;
+          return latest;
+        }, null);
+        allProjects.push(
+          preserve({
+            kind: "project",
+            id: `project:${primaryHost.serverId}:${primaryHost.projectId}`,
+            title: project.projectName,
+            subtitle: joinSubtitleParts([
+              showHost ? primaryHost.serverName : null,
+              t("shell.commandCenter.projectWorkspaces", {
+                count: project.totalWorkspaceCount,
+              }),
+            ]),
+            projectViewKey: project.viewKey,
+            iconDataUri: workspaceProject.iconDataUri,
+            activityAt,
+            run: createProjectResultAction(primaryHost.serverId, primaryHost.projectId),
+          }),
+        );
+      }
       for (const host of project.hosts) {
         for (const workspace of host.workspaces) {
           if (workspace.archivingAt) continue;
@@ -235,7 +277,7 @@ function useBuiltInRows(open: boolean): {
       });
     });
     previousRows.current = nextRows;
-    return { workspaces: allWorkspaces, agents: agentRows };
+    return { workspaces: allWorkspaces, agents: agentRows, projects: allProjects };
   }, [agents, iconDataByProjectViewKey, open, projects, showHost, t]);
 }
 
@@ -252,6 +294,13 @@ function useBuiltInSections(open: boolean, query: string): CommandCenterResultSe
         rank: 2,
         title: t("shell.commandCenter.workspaces"),
         results: filterAndRankWorkspaces(rows.workspaces, query),
+      },
+      {
+        id: "projects",
+        band: PINNED_SECTION_BAND,
+        rank: 2.5,
+        title: t("shell.commandCenter.projects"),
+        results: filterAndRankBuiltInResults(rows.projects, query, projectSearchFields),
       },
       {
         id: "agents",
@@ -655,6 +704,37 @@ function ResultContent({
   }
   if (result.kind === "agent") {
     return <AgentResultContent result={result} query={query} backdrop={backdrop} />;
+  }
+  if (result.kind === "project") {
+    return (
+      <View style={styles.rowContent} testID={`command-center-project-${result.projectViewKey}`}>
+        <View style={styles.rowMain}>
+          <View style={styles.iconSlot}>
+            <ProjectIconView
+              iconDataUri={result.iconDataUri}
+              initial={result.title.charAt(0).toUpperCase()}
+              projectViewKey={result.projectViewKey}
+              size={16}
+              textStyle={styles.projectIconFallbackText}
+            />
+          </View>
+          <View style={styles.textContent}>
+            <QueryHighlightedText
+              query={query}
+              text={result.title}
+              style={styles.title}
+              numberOfLines={1}
+            />
+            <SubtitleWithTimestamp
+              query={query}
+              subtitle={result.subtitle}
+              activityAt={result.activityAt}
+              testID="command-center-project-subtitle"
+            />
+          </View>
+        </View>
+      </View>
+    );
   }
   if (result.kind === "workspace") {
     const key = result.id.slice("workspace:".length);
