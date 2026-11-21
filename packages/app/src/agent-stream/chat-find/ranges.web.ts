@@ -21,11 +21,12 @@ export function findMessageMatches(
   return findMessageRows(root, messageId).flatMap((row) => findRenderedMatches(row, query));
 }
 
-function renderedTextGroups(row: HTMLElement): Text[][] {
+function renderedTextGroups(row: HTMLElement, wholeRoot = false): Text[][] {
   const groups: Text[][] = [];
   // A plugin renderer owns the DOM of the message it replaced and sets no markers, so the
   // whole row is searched and each div (a React Native View or Text) bounds a match.
-  const pluginRow = row.dataset.pluginRow === "true";
+  // A markdown preview passes wholeRoot: its rendered blocks carry no message marker.
+  const pluginRow = wholeRoot || row.dataset.pluginRow === "true";
   const blocks = pluginRow ? `${BLOCKS},div` : BLOCKS;
   const contents = pluginRow
     ? [row]
@@ -61,7 +62,7 @@ function renderedTextGroups(row: HTMLElement): Text[][] {
 }
 
 /** Local offsets belong to the DOM that supplied the text, never to a host parser. */
-export function findRenderedMatches(row: HTMLElement, query: string): Range[] {
+export function findRenderedMatches(row: HTMLElement, query: string, wholeRoot = false): Range[] {
   if (!query.trim()) return [];
   const pattern = query
     .trim()
@@ -69,7 +70,7 @@ export function findRenderedMatches(row: HTMLElement, query: string): Range[] {
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("\\s+");
   const ranges: Range[] = [];
-  for (const texts of renderedTextGroups(row)) {
+  for (const texts of renderedTextGroups(row, wholeRoot)) {
     const points = texts.map((node) => ({ node, start: 0, end: 0 }));
     let text = "";
     for (const point of points) {
