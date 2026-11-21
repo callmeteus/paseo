@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import treeKill from "tree-kill";
 
 export interface TreeKillTarget {
@@ -53,6 +54,29 @@ export async function terminateWithTreeKill(
     : "kill-timeout";
 }
 
+function linuxDescendantPids(rootPid: number): number[] {
+  const descendants: number[] = [];
+  const queue = [rootPid];
+  const seen = new Set<number>([rootPid]);
+  while (queue.length > 0) {
+    const parent = queue.shift()!;
+    let children: string;
+    try {
+      children = readFileSync(`/proc/${parent}/task/${parent}/children`, "utf8");
+    } catch {
+      continue;
+    }
+    for (const token of children.trim().split(/\s+/)) {
+      const pid = Number(token);
+      if (!Number.isInteger(pid) || pid <= 0 || seen.has(pid)) continue;
+      seen.add(pid);
+      descendants.push(pid);
+      queue.push(pid);
+    }
+  }
+  return descendants;
+}
+
 export function signalProcessTree(child: TreeKillTarget, signal: NodeJS.Signals): Promise<void> {
   if (isProcessExited(child)) {
     return Promise.resolve();
@@ -61,6 +85,24 @@ export function signalProcessTree(child: TreeKillTarget, signal: NodeJS.Signals)
   const pid = child.pid;
   if (typeof pid !== "number" || pid <= 0) {
     signalDirectChild(child, signal);
+    return Promise.resolve();
+  }
+
+  // The tree-kill package shells out to `ps`, which is not guaranteed on a
+  // minimal CI runner. Linux exposes the same parent-child relation in /proc.
+  if (process.platform === "linux") {
+    for (const descendant of linuxDescendantPids(pid)) {
+      try {
+        process.kill(descendant, signal);
+      } catch {
+        // Ignore cleanup races.
+      }
+    }
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Ignore cleanup races.
+    }
     return Promise.resolve();
   }
 

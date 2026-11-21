@@ -105,5 +105,9 @@ jobs:
       - name: Build dependencies
         run: npm run build:server-deps
 
+      - name: Install Playwright browsers
+        if: ${{ matrix.suite == 'app' }}
+        run: npx playwright install --with-deps chromium
+
       - name: Run ${{ matrix.suite }} tests
         run: npm run test --workspace=@getpaseo/${{ matrix.suite }}

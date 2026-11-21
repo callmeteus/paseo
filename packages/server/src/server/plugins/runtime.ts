@@ -217,17 +217,9 @@ function resolveWorkerUrl(): URL {
 
 function resolveWorkerExecArgv(): string[] {
   if (!import.meta.url.endsWith(".ts")) return [];
-  const loaderUrl = new URL("../../terminal/terminal-ts-loader.mjs", import.meta.url).href;
-  const importSource = [
-    'import { register } from "node:module";',
-    'import { pathToFileURL } from "node:url";',
-    `register(${JSON.stringify(loaderUrl)}, pathToFileURL("./"));`,
-  ].join(" ");
-  return [
-    "--experimental-strip-types",
-    "--import",
-    `data:text/javascript,${encodeURIComponent(importSource)}`,
-  ];
+  // CI's Node build has no TypeScript support, so --experimental-strip-types
+  // throws ERR_NO_TYPESCRIPT. tsx loads the same TS modules through esbuild.
+  return ["--import", import.meta.resolve("tsx")];
 }
 
 function spawnPluginChild(): PluginChild {
