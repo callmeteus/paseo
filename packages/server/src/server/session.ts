@@ -2121,6 +2121,26 @@ export class Session {
     }
   }
 
+  private forwardAgentRemoved(event: {
+    agentId: string;
+    workspaceId?: string;
+    internal: boolean;
+  }): void {
+    if (event.internal) return;
+    void this.agentUpdates
+      .removeAgent(event.agentId)
+      .then(() => {
+        if (event.workspaceId) return this.emitWorkspaceUpdateForWorkspaceId(event.workspaceId);
+        return undefined;
+      })
+      .catch((error) => {
+        this.sessionLogger.error(
+          { err: error, agentId: event.agentId },
+          "Failed to emit agent removal",
+        );
+      });
+  }
+
   private subscribeToAgentEvents(): void {
     if (this.unsubscribeAgentEvents) {
       this.unsubscribeAgentEvents();
@@ -2142,6 +2162,11 @@ export class Session {
               text: event.text,
             },
           });
+          return;
+        }
+
+        if (event.type === "agent_removed") {
+          this.forwardAgentRemoved(event);
           return;
         }
 
@@ -4092,10 +4117,8 @@ export class Session {
   private async handleDeleteAgentRequest(agentId: string, requestId: string): Promise<void> {
     this.sessionLogger.info({ agentId }, `Deleting agent ${agentId} from registry`);
 
-    const knownWorkspaceId =
-      this.agentManager.getAgent(agentId)?.workspaceId ??
-      (await this.agentStorage.get(agentId))?.workspaceId ??
-      null;
+    const knownAgent =
+      this.agentManager.getAgent(agentId) ?? (await this.agentStorage.get(agentId));
 
     // File-backed storage still needs an early delete fence before closeAgent().
     beginAgentDeleteIfSupported(this.agentStorage, agentId);
@@ -4117,6 +4140,8 @@ export class Session {
       await this.agentStorage.remove(agentId);
       await this.agentManager.deleteAgentState(agentId);
       await this.messageQueueStore?.delete(agentId);
+      // Directory removal is daemon-wide; agent_deleted below stays a source-scoped RPC reply.
+      if (knownAgent) this.agentManager.notifyAgentRemoved(knownAgent);
     } catch (error) {
       this.sessionLogger.error({ err: error, agentId }, `Failed to fully delete agent ${agentId}`);
     }
@@ -4128,12 +4153,6 @@ export class Session {
         requestId,
       },
     });
-
-    await this.agentUpdates.removeAgent(agentId);
-
-    if (knownWorkspaceId) {
-      await this.emitWorkspaceUpdateForWorkspaceId(knownWorkspaceId);
-    }
   }
 
   private async handleSwapProviderRequest(
