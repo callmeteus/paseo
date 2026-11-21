@@ -86,6 +86,7 @@ import { composerPasteAction, isPlainTextPasteShortcut } from "@/composer/input/
 import { InlineMessageText } from "@/composer/inline-context-chip";
 import { ComposerMirrorText } from "@/composer/composer-mirror-text";
 import {
+  breaksComposerLineOnEnter,
   continueComposerList,
   hasComposerInlineCode,
   hasComposerListMarker,
@@ -493,9 +494,9 @@ function handleDesktopKeyPressImpl(
   }
 
   if (event.nativeEvent.key !== "Enter") return;
-  // Shift+Enter continues the list on desktop; on compact web Enter does not
-  // submit, so it breaks the line and continues the list the same way.
-  if (shiftKey || !ctx.submitOnEnter) {
+  if (
+    breaksComposerLineOnEnter({ shiftKey: Boolean(shiftKey), submitOnEnter: ctx.submitOnEnter })
+  ) {
     continueListOnEnter(event, ctx, { metaKey, ctrlKey, altKey });
     return;
   }
