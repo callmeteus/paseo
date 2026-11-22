@@ -89,9 +89,33 @@ Com `CI=true` no Linux: **2 arquivos passaram, 1 pulado pelo guard existente, 59
 
 Nenhum teste foi enfraquecido nem skip adicional foi adicionado. As falhas eram de ambiente, nao do codigo.
 
-## 9. Estado final
+## 9. Validacao completa no notebook (h-acer-nitro-v15)
+
+Feito em 2026-11-22, direto no notebook (Ubuntu 24.04, nao container):
+
+- Node.js v22.23.5 instalado.
+- Branch completa transferida para `/home/server/paseo-verify`.
+- `npm ci --ignore-scripts` com o lockfile regenerado no Linux: **passou** (2978 pacotes).
+- Patches do `postinstall` aplicados com `PATH=node_modules/.bin`: **passou**.
+- `typecheck`, `lint`, `format:check`: **passaram**.
+- Suíte de testes (com `CI=true`/`PASEO_CI=true`):
+  - Server: **621 passed, 66 skipped** (7 arquivos, 1 skip de worker real).
+  - App: **176 passed, 26 skipped** (8 arquivos).
+  - Protocol: **23 passed** (2 arquivos).
+  - Total: **820 testes, 0 falhas**.
+- Build Linux do desktop: **passou**, `Paseo.bin` gerado.
+- Smoke test manual com Xvfb: app abriu sem erros fatais. Navegado:
+  - Onboarding (Boas-vindas) e botao "Pular configuracao".
+  - Tela inicial (Novo workspace, Historico, Buscar, Agendamentos, Automacoes).
+  - Command Center com abas (Tudo / Espacos de trabalho / Acoes).
+  - Configuracoes (Geral, Aparencia, e a secao **Cluster** do nosso fork).
+  - Tela "Novo workspace" com seletores de projeto, host, diretorio e agente.
+- Avisos nao-fatais no log: rota `pair-scan` (presente no develop), `useNativeDriver` e `console-message` deprecado.
+- Limpeza: processos encerrados, `/home/server/paseo-verify` removido. Node.js mantido instalado.
+
+## 10. Estado final
 
 - PR #2: `OPEN`, `MERGEABLE`, `CLEAN`.
 - Worktree limpo, branch sincronizada com `origin/sync/original-main`.
-- Nitro Acer: processos encerrados, `/tmp/paseo-smoke` removido.
+- Notebook: validado, limpo, sem processos Paseo rodando.
 - h-server-1: VM de teste removida, nada rodando.
