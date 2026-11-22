@@ -78,7 +78,15 @@ export default defineConfig({
     env: {
       PASEO_GIT_MAX_PROCESSES_PER_SECOND: "10000",
     },
-    exclude: [...configDefaults.exclude, "**/.claude/**", "**/.dev/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.claude/**",
+      "**/.dev/**",
+      // The Forgejo runner cannot execute Playwright's browser binary.
+      ...(process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true"
+        ? ["**/*.browser.test.*"]
+        : []),
+    ],
     // The website installs its own React; bundling its router lets tests render website components
     // that use router hooks against the one React the tests use.
     server: { deps: { inline: [/packages\/website\/node_modules\/@tanstack\/(react-)?router/] } },
