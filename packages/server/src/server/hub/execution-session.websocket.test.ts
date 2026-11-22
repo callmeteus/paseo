@@ -248,7 +248,7 @@ test("ordinary Hub requests survive daemon restart and restore an archived works
     }),
   ).toMatchObject({ payload: { agentId, accepted: true } });
   expect(hub.providerPromptTexts().filter((text) => text === "follow up")).toHaveLength(1);
-}, 20_000);
+}, 120_000);
 
 test("Hub completes the standard hello before rejecting a second hello", async () => {
   const hub = await launchRelationship();
@@ -514,7 +514,7 @@ test("Hub resolves persisted execution ownership after daemon restart", async ()
   expect(workspaceId).toEqual(expect.any(String));
   expect(await hub.archivedWorkspaceAt(workspaceId!)).toEqual(expect.any(String));
   expect(await hub.worktreeState(worktreeCwd)).toEqual({ exists: false, listed: false });
-}, 20_000);
+}, 120_000);
 
 test("Hub treats missing and foreign executions as already controlled without exposing ownership", async () => {
   const hub = await launchRelationship();

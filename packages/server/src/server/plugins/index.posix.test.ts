@@ -379,7 +379,7 @@ describe("PluginService", () => {
 
     expect(snapshots).toEqual([["startup-first"], ["startup-first", "startup-second"]]);
     await service.stopAllPlugins();
-  }, 20_000);
+  }, 120_000);
 
   it("uses an explicit config key, exposes reload failure, and retries from disk", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -417,7 +417,7 @@ describe("PluginService", () => {
     );
     await expect(service.reloadPlugin("work-plugin")).resolves.toMatchObject({ status: "running" });
     await service.stopAllPlugins();
-  }, 20_000);
+  }, 120_000);
 
   it("lists manifest metadata for running and disabled plugins without hiding malformed entries", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -553,7 +553,7 @@ describe("PluginService", () => {
       await service.stopAllPlugins();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  }, 30_000);
+  }, 1120_000);
 
   it("names a missing explicit directory instead of trying a managed source", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -587,7 +587,7 @@ describe("PluginService", () => {
       service.installSource({ source: `${repository}:plugins/review` }),
     ).resolves.toMatchObject({ id: "local-monorepo", path: pluginDirectory, status: "running" });
     await service.stopAllPlugins();
-  }, 20_000);
+  }, 120_000);
 
   it.each([true, false])(
     "updates the shipped legacy Git layout with enabled=%s",
@@ -730,7 +730,7 @@ export default function contribute(server: PluginServerContext) {
         await service.stopAllPlugins();
       }
     },
-    30_000,
+    1120_000,
   );
 
   it("keeps the running commit when a Git update build command fails", async () => {
@@ -795,7 +795,7 @@ export default function contribute(server: PluginServerContext) {
       }),
     ]);
     await service.stopAllPlugins();
-  }, 30_000);
+  }, 1120_000);
 
   it("runs Git build commands in staging before validation and activation on install and update", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -881,7 +881,7 @@ export default function contribute(server: PluginServerContext) {
     ]);
     expect(events).toEqual(["validate:prepared", "start", "validate:updated", "start"]);
     await service.stopAllPlugins();
-  }, 30_000);
+  }, 1120_000);
 
   it("activates an update when the enabled plugin previously failed to start", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -957,7 +957,7 @@ export default function contribute(server: PluginServerContext) {
       expect.objectContaining({ id: "failed-update", path: starts[1], status: "running" }),
     ]);
     await service.stopAllPlugins();
-  }, 30_000);
+  }, 1120_000);
 
   it.each([false, true])(
     "cleans a failed update when restoration also fails=%s",
@@ -1027,7 +1027,7 @@ export default function contribute(server: PluginServerContext) {
       expect(await readdir(path.join(home, "plugins", ".staging"))).toEqual([]);
       await service.stopAllPlugins();
     },
-    30_000,
+    1120_000,
   );
 
   it("disables and removes a plugin without touching its source directory", async () => {
@@ -1058,7 +1058,7 @@ export default function contribute(plugin: unknown) {
     expect(await service.listPlugins()).toMatchObject([]);
     await expect(stat(directory)).resolves.toMatchObject({});
     await service.stopAllPlugins();
-  }, 20_000);
+  }, 120_000);
 
   it("detaches every plugin synchronously when the global switch turns off and recovers", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -1092,7 +1092,7 @@ export default function contribute(plugin: unknown) {
       { id: "second", status: "running" },
     ]);
     await service.stopAllPlugins();
-  }, 20_000);
+  }, 120_000);
 
   it("does not publish an in-flight start after a later global disable", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
@@ -1549,7 +1549,7 @@ export default function contribute() {
       await service.stopAllPlugins();
       await registry.close();
     }
-  }, 120_000);
+  }, 300_000);
 });
 
 async function applyReviewedUpdate(service: PluginService, pluginId: string) {

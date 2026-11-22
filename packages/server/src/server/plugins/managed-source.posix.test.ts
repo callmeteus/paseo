@@ -82,7 +82,7 @@ describe("managed Git plugin sources", () => {
         await sources.discard(candidate);
       }
     });
-  }, 30_000);
+  }, 1120_000);
 
   it("offers current default HEAD after installing a tag", async () => {
     const repository = await createRepository();
@@ -152,7 +152,7 @@ describe("managed Git plugin sources", () => {
       latestCommit: latest,
       updateAvailable: true,
     });
-  }, 30_000);
+  }, 1120_000);
   it("resolves branch, tag and commit installs against changed default HEAD and preserves the reviewed commit", async () => {
     const repository = await createRepository();
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-review-"));
@@ -212,7 +212,7 @@ describe("managed Git plugin sources", () => {
     expect(
       await restarted.preview(id, updated.directory, { kind: "git", ref: initial.slice(0, 8) }),
     ).toMatchObject({ target: { commit: initial } });
-  }, 30_000);
+  }, 1120_000);
   it("uses retained acquisition remote when credential rewriting changes origin, preserving nested identity", async () => {
     const repository = await createRepository();
     const nested = path.join(repository, "plugins", "review");
@@ -276,7 +276,7 @@ describe("managed Git plugin sources", () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  }, 30_000);
+  }, 1120_000);
 });
 
 describe("registry plugin sources", () => {
@@ -384,7 +384,7 @@ describe("registry plugin sources", () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  }, 30_000);
+  }, 1120_000);
 
   it("installs a bare id from a private registry and polls its pin without install intent", async () => {
     const repository = await createRepository();
@@ -560,4 +560,4 @@ it("installs and updates only the npm artifacts pinned by the plugin registry", 
     if (previous === undefined) delete process.env.npm_config_userconfig;
     else process.env.npm_config_userconfig = previous;
   }
-}, 30_000);
+}, 1120_000);

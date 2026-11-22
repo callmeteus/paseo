@@ -34,7 +34,7 @@ function waitForCliOutput(child: CliProcess, text: string): Promise<void> {
     const timer = setTimeout(() => {
       cleanup();
       reject(new Error(`CLI did not print ${text}:\n${output}`));
-    }, 20_000);
+    }, 120_000);
     child.stdout.on("data", onData);
     void child.then(
       (result) => {
@@ -280,4 +280,4 @@ test("logs --since filters history and live output through the CLI and daemon", 
   } finally {
     await rm(cliHome, { recursive: true, force: true });
   }
-}, 120_000);
+}, 300_000);

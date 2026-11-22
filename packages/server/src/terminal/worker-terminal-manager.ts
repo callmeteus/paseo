@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { fork } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -101,13 +102,17 @@ function createActivityToken(): string {
 function resolveWorkerUrl(): URL {
   const currentUrl = import.meta.url;
   if (currentUrl.endsWith(".ts")) {
+    // A compiled worker avoids loading TypeScript in a forked child, which is
+    // not supported by every Node build used by CI runners.
+    const compiled = new URL("../../dist/server/terminal/terminal-worker-process.js", currentUrl);
+    if (existsSync(fileURLToPath(compiled))) return compiled;
     return new URL("./terminal-worker-process.ts", currentUrl);
   }
   return new URL("./terminal-worker-process.js", currentUrl);
 }
 
 function resolveWorkerExecArgv(): string[] {
-  if (!import.meta.url.endsWith(".ts")) {
+  if (!import.meta.url.endsWith(".ts") || resolveWorkerUrl().pathname.includes("/dist/")) {
     return [];
   }
   // The CI runner's Node has no TypeScript support and native loaders crash,
