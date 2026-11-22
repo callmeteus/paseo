@@ -77,7 +77,11 @@ function controlFromFeature(feature: AgentFeature): AgentOptionControl {
     ...describe(feature),
   };
   if (feature.type === "toggle") {
-    return { type: "toggle", ...descriptor };
+    return {
+      type: "toggle",
+      ...descriptor,
+      ...(feature.desktopTrigger ? { desktopTrigger: feature.desktopTrigger } : {}),
+    };
   }
   const defaultChoice = feature.options.find((option) => option.isDefault);
   return {

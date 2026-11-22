@@ -58,7 +58,7 @@ test("a completed edit carries the replaced and replacement text", async () => {
   ]);
 });
 
-test("a todowrite part replays as a todo item so the checklist survives a daemon restart", () => {
+test("a todowrite part replays as a todo item so the checklist survives a daemon restart", async () => {
   const todowrite = assistant([
     {
       type: "tool",
@@ -81,7 +81,7 @@ test("a todowrite part replays as a todo item so the checklist survives a daemon
     },
   ]);
 
-  const events = new V2Timeline().messages([todowrite]);
+  const events = await collectTimelineSnapshot(new V2Timeline(), [todowrite]);
 
   expect(events.map((event) => (event.type === "timeline" ? event.item : null))).toEqual([
     {

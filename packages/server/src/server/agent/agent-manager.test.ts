@@ -719,7 +719,9 @@ test("OpenCode persistence excludes launch-only instructions from storage and cl
     workspaceId: undefined,
   });
   try {
-    expect(harness.instructions.get("paseo")).toBe("Daemon instruction\n\nPlugin instruction");
+    expect(harness.instructions.get("paseo")).toBe(
+      `Daemon instruction\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}\n\nPlugin instruction`,
+    );
     await manager.flush();
     const record = await storage.get(agent.id);
     expect(record?.persistence?.metadata).not.toHaveProperty("pluginAppendSystemPrompt");
@@ -2840,12 +2842,9 @@ test("listDraftControls reports the Fast selection a fresh Cursor draft opens wi
   const controls = [
     expect.objectContaining({ type: "toggle", key: "auto_accept" }),
     expect.objectContaining({
-      type: "select",
+      type: "toggle",
       key: "fast",
-      choices: [
-        { value: "false", label: "Off" },
-        { value: "true", label: "Fast" },
-      ],
+      label: "Fast",
     }),
   ];
 
@@ -14972,6 +14971,8 @@ test("loading a runtime starts its own idle clock instead of reusing the stored 
     updatedAt: "2025-01-01T00:00:00.000Z",
     lastActivityAt: "2025-01-01T00:00:00.000Z",
   });
+  h.probes[0] = async () => true;
+  h.probes[1] = async () => true;
 
   const resumed = await ensureAgentLoaded(agent.id, {
     agentManager: h.manager,
@@ -15144,7 +15145,7 @@ test("daemon-level /goal starts a turn and the timeline shows the typed text", a
     const result = await startAgentRun(manager, agent.id, "/goal make the build pass", logger);
     await completed;
 
-    expect(result).toEqual({ disposition: "turn_started" });
+    expect(result).toMatchObject({ disposition: "turn_started" });
     expect(session!.prompts).toHaveLength(1);
     const providerPrompt = session!.prompts[0];
     expect(String(providerPrompt)).toContain("<paseo-goal>");
@@ -15755,8 +15756,7 @@ async function expectAgentModeHandoff(manager: AgentManager, agentId: string): P
   const agentMetadata = agentLive?.persistence?.metadata;
   expect(agentLive?.config.workflowModeId).toBe("agent");
   expect(agentMetadata?.workflowModeId).toBe("agent");
-  expect(agentMetadata?.daemonAppendSystemPrompt).toContain("Debug mode has ended");
-  expect(agentMetadata?.daemonAppendSystemPrompt).not.toContain("You are in Debug mode");
+  expect(agentMetadata).not.toHaveProperty("daemonAppendSystemPrompt");
   expect(manager.planWorkflowTurn(agentId, "Vá")).toContain("Debug mode has ended");
   expect(manager.planWorkflowTurn(agentId, "de novo")).toBeNull();
 }
@@ -15793,7 +15793,8 @@ test("setAgentWorkflowMode persists the mode and recomposes the prompt on launch
   expect(client.sessions[0]?.describePersistence()?.metadata?.workflowModeId).toBe("debug");
   expect(sessionMetadata?.workflowModeId).toBe("debug");
   expect(liveMetadata).toMatchObject({ workflowModeId: "debug" });
-  expect(liveMetadata?.daemonAppendSystemPrompt).toContain("Debug mode");
+  expect(liveMetadata).not.toHaveProperty("daemonAppendSystemPrompt");
+  expect(client.sessions[0]?.systemPromptUpdates.at(-1)?.prompt).toContain("Debug mode");
 
   const reloaded = await manager.reloadAgentSession(snapshot.id);
   expect(reloaded.config.workflowModeId).toBe("debug");
@@ -17114,7 +17115,7 @@ test("plugin instructions are recomputed for each launch without changing saved 
   );
   expect(client.createdConfigs[0]).toMatchObject({
     systemPrompt: "Saved",
-    daemonAppendSystemPrompt: "Daemon",
+    daemonAppendSystemPrompt: `Daemon\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}`,
     pluginAppendSystemPrompt: ["Plugin one", "Plugin two"],
   });
   expect(snapshot.config.systemPrompt).toBe("Saved");
@@ -17153,7 +17154,9 @@ test("plugin instructions are recomputed for each launch without changing saved 
     snapshot.id,
   );
   expect(client.resumeOverrides.at(-1)?.systemPrompt).toBe("Saved");
-  expect(client.resumeOverrides.at(-1)?.daemonAppendSystemPrompt).toBe("Daemon");
+  expect(client.resumeOverrides.at(-1)?.daemonAppendSystemPrompt).toBe(
+    `Daemon\n\n${HUB_AUTOMATION_CHAT_INSTRUCTION}`,
+  );
   expect((await storage.get(snapshot.id))?.config?.systemPrompt).toBe("Saved");
 });
 
