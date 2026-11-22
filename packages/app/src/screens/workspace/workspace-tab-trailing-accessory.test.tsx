@@ -74,21 +74,12 @@ const { mockTheme } = vi.hoisted(() => {
 
 vi.mock("lucide-react-native", () => {
   const StubIcon = () => null;
-  return {
-    ArrowLeftToLine: StubIcon,
-    ArrowRightToLine: StubIcon,
-    Copy: StubIcon,
-    CopyX: StubIcon,
-    Download: StubIcon,
-    Ellipsis: StubIcon,
-    FolderInput: StubIcon,
-    FolderPlus: StubIcon,
-    Pencil: StubIcon,
-    RotateCw: StubIcon,
-    Split: StubIcon,
-    Trash2: StubIcon,
-    X: StubIcon,
-  };
+  // Any icon the component tree imports but this test does not assert can be a
+  // stub, so adding a new icon cannot break the suite with a missing export.
+  return new Proxy({ ArrowLeftToLine: StubIcon, X: StubIcon }, {
+    get: (target, property) =>
+      typeof property === "symbol" ? undefined : target[property as keyof typeof target] ?? StubIcon,
+  });
 });
 
 vi.mock("react-native-unistyles", () => ({
