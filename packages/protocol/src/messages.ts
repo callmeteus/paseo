@@ -163,18 +163,21 @@ export {
   type McpCatalogTestResponse,
 } from "./mcp-catalog/rpc-schemas.js";
 import {
+  AgentMessageQueueChangedEventSchema,
   AgentMessageQueueListRequestSchema,
   AgentMessageQueueListResponseSchema,
   AgentMessageQueueSetRequestSchema,
   AgentMessageQueueSetResponseSchema,
 } from "./message-queue/rpc-schemas.js";
 export {
+  AgentMessageQueueChangedEventSchema,
   AgentMessageQueueListRequestSchema,
   AgentMessageQueueListResponseSchema,
   AgentMessageQueueSetRequestSchema,
   AgentMessageQueueSetResponseSchema,
   AgentQueuedMessageImageSchema,
   AgentQueuedMessageSchema,
+  type AgentMessageQueueChangedEvent,
   type AgentMessageQueueListRequest,
   type AgentMessageQueueListResponse,
   type AgentMessageQueueSetRequest,
@@ -4204,6 +4207,7 @@ export const SessionEventSubscriptionSchema = z.enum([
   "activity_log",
   "plan_update",
   "agent_prompt_dropped",
+  "agent.message_queue.changed",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
 ]);
@@ -8710,6 +8714,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   McpCatalogTestResponseSchema,
   AgentMessageQueueListResponseSchema,
   AgentMessageQueueSetResponseSchema,
+  AgentMessageQueueChangedEventSchema,
 
   BrowserHostRegisterResponseSchema,
   SubscriptionReleaseResponseSchema,

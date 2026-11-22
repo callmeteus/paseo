@@ -961,6 +961,7 @@ export class Session {
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
   private readonly cursorSkillCatalog: SessionOptions["cursorSkillCatalog"];
   private unsubscribeAgentEvents: (() => void) | null = null;
+  private unsubscribeMessageQueueEvents: (() => void) | null = null;
   private unsubscribeSkillCatalog: (() => void) | null = null;
   private unsubscribeProjectMutations: (() => void) | null = null;
   private unsubscribePluginChanges: (() => void) | null = null;
@@ -1100,6 +1101,7 @@ export class Session {
     this.mcpBridgeAuthority = options.mcpBridgeAuthority;
     this.mcpCatalog = options.mcpCatalog;
     this.messageQueueStore = options.messageQueueStore;
+    this.subscribeToMessageQueueChanges();
     this.connectedHostSession = createHostSession(options, this);
     this.onMessage = onMessage;
     this.onMessageToSource = onMessageToSource
@@ -2317,6 +2319,17 @@ export class Session {
         continue;
       this.onMessageToSource(source, message);
     }
+  }
+
+  private subscribeToMessageQueueChanges(): void {
+    if (!this.messageQueueStore) return;
+    this.unsubscribeMessageQueueEvents = this.messageQueueStore.subscribe((change) => {
+      this.emit({
+        type: "agent.message_queue.changed",
+        agentId: change.agentId,
+        items: change.items,
+      });
+    });
   }
 
   private forwardAgentRemoved(event: {
@@ -11335,6 +11348,8 @@ export class Session {
       this.unsubscribeAgentEvents();
       this.unsubscribeAgentEvents = null;
     }
+    this.unsubscribeMessageQueueEvents?.();
+    this.unsubscribeMessageQueueEvents = null;
     this.unsubscribeProjectMutations?.();
     this.unsubscribeProjectMutations = null;
     this.unsubscribePluginChanges?.();
@@ -11425,6 +11440,7 @@ const DIRECT_SESSION_EVENT_MESSAGE_TYPES: ReadonlySet<SessionOutboundMessage["ty
   "activity_log",
   "plan_update",
   "agent_prompt_dropped",
+  "agent.message_queue.changed",
   "hub.execution.agent.update",
   "hub.execution.agent.stream",
 ]);
@@ -11469,6 +11485,10 @@ function legacyWantsEvent(
       return capabilities.has(CLIENT_CAPS.providerSubagents);
     // Old apps parse outbound messages strictly and do not know this type.
     case "agent.background_work.update":
+    // COMPAT(messageQueueChangeEvent): added in v0.13.4, remove after 2027-05-15.
+    // Legacy clients validate outbound messages against their older union and
+    // would drop this event as unknown; only explicit subscribers receive it.
+    case "agent.message_queue.changed":
       return false;
     default:
       return true;

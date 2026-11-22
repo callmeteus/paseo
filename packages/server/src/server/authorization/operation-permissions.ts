@@ -301,6 +301,7 @@ const OUTBOUND_PERMISSION = {
   "mcp.catalog.test.response": "daemon.manage",
   "agent.message_queue.list.response": "workspace.read",
   "agent.message_queue.set.response": "workspace.write",
+  "agent.message_queue.changed": "workspace.read",
   "agent.create.response": ["workspace.write", "hub.execute"],
   "agent.swap_provider.response": ["workspace.write", "hub.execute"],
   "agent.export_snapshot.response": ["workspace.read", "hub.execute"],

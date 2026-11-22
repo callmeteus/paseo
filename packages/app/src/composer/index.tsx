@@ -124,7 +124,7 @@ import {
   restoreDraftQueueToComposer,
   useDraftQueue,
 } from "@/composer/draft/message-queue";
-import { persistAgentMessageQueue } from "@/composer/queue-persistence";
+import { persistQueueWithReplicas } from "@/composer/queue-replication";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -2399,9 +2399,11 @@ function ComposerContentImpl({
   const persistQueue = useCallback(() => {
     if (!client || !supportsAgentMessageQueue) return;
     const items = useSessionStore.getState().sessions[serverId]?.queuedMessages.get(agentId) ?? [];
-    void persistAgentMessageQueue(client, agentId, items).catch((error) => {
-      console.error("[Composer] Failed to persist message queue", error);
-    });
+    void persistQueueWithReplicas({ source: { serverId, agentId }, client, items }).catch(
+      (error) => {
+        console.error("[Composer] Failed to persist message queue", error);
+      },
+    );
   }, [agentId, client, serverId, supportsAgentMessageQueue]);
 
   const queueWriter = useMemo<QueueWriter>(() => {

@@ -346,8 +346,13 @@ owner host.
 
 `$PASEO_HOME/message-queues/` stores composer queues per agent. Each file keeps the composer
 attachment payload and any image bytes so a different client can restore the queue after a refresh.
-The daemon only persists the queue; the client drains it when the agent goes idle. Deleting an agent
-deletes its queue file.
+The daemon persists the queue and publishes `agent.message_queue.changed` to every connected client;
+the client drains it when the agent goes idle. Hydration merges by message id, preserving local
+items that have not reached the daemon yet. Deleting an agent deletes its queue file.
+
+The app mirrors a queue to delegated children on connected hosts. Agent ids are generated per daemon,
+so the parent address in the child's `paseo.parent-*` labels is the identity mapping; replication
+runs parent to child only and requires `agentMessageQueue` on the destination.
 
 `agents.metadataGeneration.providers` selects the models for daemon-side metadata tasks: commit messages, PR text, branch names, and generated titles. An empty list is Automatic; a non-empty list is Manual and only those models are tried. See [public-docs/metadata-generation.md](../public-docs/metadata-generation.md#how-a-model-is-chosen).
 

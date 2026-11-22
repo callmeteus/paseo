@@ -84,7 +84,9 @@ import {
 } from "@/desktop/browser/automation/handler";
 import { schedulesQueryBaseKey } from "@/schedules/aggregated-schedules";
 import { dispatchComposerAgentMessage, sendQueuedComposerMessageNow } from "@/composer/actions";
-import { hydrateQueuedMessages, persistAgentMessageQueue } from "@/composer/queue-persistence";
+import { hydrateQueuedMessages } from "@/composer/queue-persistence";
+import { mergeQueuedMessages } from "@/composer/queue-merge";
+import { persistQueueWithReplicas } from "@/composer/queue-replication";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { encodeImages } from "@/utils/encode-images";
@@ -3028,7 +3030,7 @@ export class HostRuntimeStore {
       useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
         const next = new Map(previous);
         for (const [agentId, items] of hydrated) {
-          if ((next.get(agentId)?.length ?? 0) === 0) next.set(agentId, items);
+          next.set(agentId, mergeQueuedMessages(next.get(agentId), items));
         }
         return next;
       });
@@ -3055,9 +3057,11 @@ export class HostRuntimeStore {
     const session = useSessionStore.getState().sessions[serverId];
     if (session?.serverInfo?.features?.agentMessageQueue !== true) return;
     const items = session.queuedMessages.get(agentId) ?? [];
-    void persistAgentMessageQueue(client, agentId, items).catch((error) => {
-      console.error("[HostRuntime] Failed to persist queued agent messages", error);
-    });
+    void persistQueueWithReplicas({ source: { serverId, agentId }, client, items }).catch(
+      (error) => {
+        console.error("[HostRuntime] Failed to persist queued agent messages", error);
+      },
+    );
   }
 
   private clearHostReplica(serverId: string): void {
