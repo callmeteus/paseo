@@ -3615,6 +3615,11 @@ export class Session {
         return undefined;
       case "daemon.api_token.create.request":
         return this.daemonSession.handleApiTokenCreateRequest(msg);
+      case "daemon.api_token.rename.request":
+        this.daemonSession.handleApiTokenRenameRequest(msg);
+        return undefined;
+      case "daemon.api_token.rotate.request":
+        return this.daemonSession.handleApiTokenRotateRequest(msg);
       case "daemon.api_token.revoke.request":
         this.daemonSession.handleApiTokenRevokeRequest(msg);
         return undefined;

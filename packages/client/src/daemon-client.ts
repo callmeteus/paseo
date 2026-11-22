@@ -121,6 +121,8 @@ import type {
   DaemonGetPairingOfferResponse,
   DaemonApiTokenListResponse,
   DaemonApiTokenCreateResponse,
+  DaemonApiTokenRenameResponse,
+  DaemonApiTokenRotateResponse,
   DaemonApiTokenRevokeResponse,
   DaemonConfigReloadResponse,
   DiagnosticsResponse,
@@ -6133,6 +6135,29 @@ export class DaemonClient {
       requestId,
       message: { type: "daemon.api_token.create.request", name },
       responseType: "daemon.api_token.create.response",
+    });
+  }
+
+  async renameDaemonApiToken(
+    id: string,
+    name: string,
+    requestId?: string,
+  ): Promise<DaemonApiTokenRenameResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "daemon.api_token.rename.request", id, name },
+      responseType: "daemon.api_token.rename.response",
+    });
+  }
+
+  async rotateDaemonApiToken(
+    id: string,
+    requestId?: string,
+  ): Promise<DaemonApiTokenRotateResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "daemon.api_token.rotate.request", id },
+      responseType: "daemon.api_token.rotate.response",
     });
   }
 

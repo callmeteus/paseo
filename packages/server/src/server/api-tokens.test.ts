@@ -49,6 +49,46 @@ describe("ApiTokenStore", () => {
     expect(ApiTokenStore.load(home).hasTokens()).toBe(false);
   });
 
+  test("renames a token without changing its secret", async () => {
+    const store = ApiTokenStore.load(home);
+    const { secret, token } = await store.create("old-name");
+
+    const renamed = store.rename(token.id, "new-name");
+    expect(renamed?.name).toBe("new-name");
+    expect(renamed?.id).toBe(token.id);
+    expect(await store.verify(secret)).toBe(true);
+    expect(ApiTokenStore.load(home).list()[0]?.name).toBe("new-name");
+    expect(store.rename("missing", "whatever")).toBeNull();
+  });
+
+  test("rejects renaming to a name another token already uses", async () => {
+    const store = ApiTokenStore.load(home);
+    const first = await store.create("one");
+    await store.create("two");
+
+    expect(() => store.rename(first.token.id, "TWO")).toThrow(DuplicateApiTokenNameError);
+    expect(store.rename(first.token.id, "ONE")?.name).toBe("ONE");
+  });
+
+  test("rotation replaces the secret in place and invalidates the old one", async () => {
+    const store = ApiTokenStore.load(home);
+    const { secret, token } = await store.create("rotating");
+
+    const rotated = await store.rotate(token.id);
+    expect(rotated).not.toBeNull();
+    expect(rotated?.token.id).toBe(token.id);
+    expect(rotated?.token.name).toBe("rotating");
+    expect(rotated?.token.rotatedAt).toBeTypeOf("string");
+    expect(rotated?.secret).not.toBe(secret);
+    expect(await store.verify(secret)).toBe(false);
+    expect(await store.verify(rotated?.secret ?? "")).toBe(true);
+
+    const reloaded = ApiTokenStore.load(home);
+    expect(reloaded.list()[0]?.rotatedAt).toBe(rotated?.token.rotatedAt);
+    expect(await reloaded.verify(rotated?.secret ?? "")).toBe(true);
+    expect(await store.rotate("missing")).toBeNull();
+  });
+
   test("rejects duplicate names case-insensitively", async () => {
     const store = ApiTokenStore.load(home);
     await store.create("ci");

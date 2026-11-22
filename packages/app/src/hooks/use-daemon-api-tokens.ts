@@ -39,6 +39,29 @@ export function useDaemonApiTokens(serverId: string | null) {
     [client, queryClient, queryKey],
   );
 
+  const renameToken = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      if (!client) throw new Error("Host is disconnected");
+      const result = await client.renameDaemonApiToken(id, name);
+      queryClient.setQueryData<ApiTokenSummary[]>(queryKey, (current) =>
+        (current ?? []).map((token) => (token.id === id ? result.token : token)),
+      );
+    },
+    [client, queryClient, queryKey],
+  );
+
+  const rotateToken = useCallback(
+    async (id: string): Promise<string> => {
+      if (!client) throw new Error("Host is disconnected");
+      const result = await client.rotateDaemonApiToken(id);
+      queryClient.setQueryData<ApiTokenSummary[]>(queryKey, (current) =>
+        (current ?? []).map((token) => (token.id === id ? result.token : token)),
+      );
+      return result.secret;
+    },
+    [client, queryClient, queryKey],
+  );
+
   const revokeToken = useCallback(
     async (id: string): Promise<void> => {
       if (!client) throw new Error("Host is disconnected");
@@ -55,6 +78,8 @@ export function useDaemonApiTokens(serverId: string | null) {
     isLoading: tokensQuery.isLoading,
     isError: tokensQuery.isError,
     createToken,
+    renameToken,
+    rotateToken,
     revokeToken,
   };
 }
