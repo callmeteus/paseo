@@ -1794,6 +1794,29 @@ export const DaemonConfigReloadRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const ApiTokenSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.string(),
+});
+
+export const DaemonApiTokenListRequestSchema = z.object({
+  type: z.literal("daemon.api_token.list.request"),
+  requestId: z.string(),
+});
+
+export const DaemonApiTokenCreateRequestSchema = z.object({
+  type: z.literal("daemon.api_token.create.request"),
+  requestId: z.string(),
+  name: z.string(),
+});
+
+export const DaemonApiTokenRevokeRequestSchema = z.object({
+  type: z.literal("daemon.api_token.revoke.request"),
+  requestId: z.string(),
+  id: z.string(),
+});
+
 export const HubManagementDaemonConnectRequestSchema = z.object({
   type: z.literal("hub.management.daemon.connect.request"),
   requestId: z.string(),
@@ -4268,6 +4291,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   WaitForFinishRequestSchema,
   DaemonGetStatusRequestSchema,
   DaemonGetPairingOfferRequestSchema,
+  DaemonApiTokenListRequestSchema,
+  DaemonApiTokenCreateRequestSchema,
+  DaemonApiTokenRevokeRequestSchema,
   DaemonConfigReloadRequestSchema,
   HubManagementDaemonConnectRequestSchema,
   HubManagementDaemonGetStatusRequestSchema,
@@ -4917,6 +4943,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(mcpServers): added in v0.13.1, remove gate after 2027-03-01.
         mcpServers: z.boolean().optional(),
+        // COMPAT(apiTokens): added in v0.13.5, remove gate after 2027-05-22.
+        apiTokens: z.boolean().optional(),
         // COMPAT(mcpBridge): added in v0.13.2, remove gate after 2027-03-10.
         mcpBridge: z.boolean().optional(),
         // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.
@@ -6547,6 +6575,37 @@ export const DaemonGetPairingOfferResponseSchema = z.object({
       url: z.string(),
       qr: z.string().nullable().optional(),
       relayEnabled: z.boolean(),
+    })
+    .passthrough(),
+});
+
+export const DaemonApiTokenListResponseSchema = z.object({
+  type: z.literal("daemon.api_token.list.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      tokens: z.array(ApiTokenSummarySchema),
+    })
+    .passthrough(),
+});
+
+export const DaemonApiTokenCreateResponseSchema = z.object({
+  type: z.literal("daemon.api_token.create.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      token: ApiTokenSummarySchema,
+      secret: z.string(),
+    })
+    .passthrough(),
+});
+
+export const DaemonApiTokenRevokeResponseSchema = z.object({
+  type: z.literal("daemon.api_token.revoke.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      revoked: z.boolean(),
     })
     .passthrough(),
 });
@@ -8741,6 +8800,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetVoiceModeResponseMessageSchema,
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
+  DaemonApiTokenListResponseSchema,
+  DaemonApiTokenCreateResponseSchema,
+  DaemonApiTokenRevokeResponseSchema,
   DaemonConfigReloadResponseSchema,
   HubManagementDaemonConnectResponseSchema,
   HubManagementDaemonGetStatusResponseSchema,
@@ -9040,6 +9102,10 @@ export type ListProviderFeaturesResponseMessage = z.infer<
 export type ListAvailableProvidersResponse = z.infer<typeof ListAvailableProvidersResponseSchema>;
 export type DaemonGetStatusResponse = z.infer<typeof DaemonGetStatusResponseSchema>;
 export type DaemonGetPairingOfferResponse = z.infer<typeof DaemonGetPairingOfferResponseSchema>;
+export type ApiTokenSummary = z.infer<typeof ApiTokenSummarySchema>;
+export type DaemonApiTokenListResponse = z.infer<typeof DaemonApiTokenListResponseSchema>;
+export type DaemonApiTokenCreateResponse = z.infer<typeof DaemonApiTokenCreateResponseSchema>;
+export type DaemonApiTokenRevokeResponse = z.infer<typeof DaemonApiTokenRevokeResponseSchema>;
 export type DaemonConfigReloadResponse = z.infer<typeof DaemonConfigReloadResponseSchema>;
 export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;
 export type GetProvidersSnapshotResponseMessage = z.infer<

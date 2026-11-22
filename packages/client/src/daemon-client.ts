@@ -135,6 +135,9 @@ import type {
   UsageReportEntry,
   DaemonGetStatusResponse,
   DaemonGetPairingOfferResponse,
+  DaemonApiTokenListResponse,
+  DaemonApiTokenCreateResponse,
+  DaemonApiTokenRevokeResponse,
   DaemonConfigReloadResponse,
   DiagnosticsResponse,
   AgentRewindResponseMessage,
@@ -6762,6 +6765,36 @@ export class DaemonClient {
       },
       responseType: "daemon.get_pairing_offer.response",
       timeout: options?.timeout,
+    });
+  }
+
+  async listDaemonApiTokens(requestId?: string): Promise<DaemonApiTokenListResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "daemon.api_token.list.request" },
+      responseType: "daemon.api_token.list.response",
+    });
+  }
+
+  async createDaemonApiToken(
+    name: string,
+    requestId?: string,
+  ): Promise<DaemonApiTokenCreateResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "daemon.api_token.create.request", name },
+      responseType: "daemon.api_token.create.response",
+    });
+  }
+
+  async revokeDaemonApiToken(
+    id: string,
+    requestId?: string,
+  ): Promise<DaemonApiTokenRevokeResponse["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "daemon.api_token.revoke.request", id },
+      responseType: "daemon.api_token.revoke.response",
     });
   }
 

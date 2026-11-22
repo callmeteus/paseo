@@ -1074,14 +1074,16 @@ export class VoiceAssistantWebSocketServer {
       const token =
         extractHttpBearerToken(request.headers.authorization) ?? extractWsBearerToken(protocol);
       const hasHeaderCredential = token !== null;
-      if (password && hasHeaderCredential) {
+      const apiTokenVerifier = this.credentialSource?.apiTokens;
+      const credentialsConfigured = Boolean(password) || (apiTokenVerifier?.hasTokens() ?? false);
+      if (credentialsConfigured && hasHeaderCredential) {
         const requestMetadata = extractSocketRequestMetadata(request);
-        const isAuthorized = await isBearerTokenValidAsync({ password, token });
+        const isAuthorized = await isBearerTokenValidAsync({ password, token, apiTokenVerifier });
         if (!isAuthorized) {
           const reason = "Incorrect password";
           this.logger.warn(
             { ...requestMetadata, hasToken: true },
-            "Rejected WebSocket connection with invalid daemon password",
+            "Rejected WebSocket connection with invalid daemon credential",
           );
           ws.close(WS_CLOSE_DAEMON_AUTH_FAILED, reason);
           return;
@@ -1979,6 +1981,7 @@ export class VoiceAssistantWebSocketServer {
         credential: message.auth,
         passwordHash: this.passwordHash,
         localCredential: this.credentialSource?.localCredential?.() ?? null,
+        apiTokenVerifier: this.credentialSource?.apiTokens,
       });
       if (this.pendingConnections.get(ws) !== pending) return false;
       if ("rejection" in resolved) {
@@ -2353,6 +2356,8 @@ export class VoiceAssistantWebSocketServer {
         agentProfiles: true,
         // COMPAT(mcpServers): added in v0.13.1, remove gate after 2027-03-01.
         mcpServers: true,
+        // COMPAT(apiTokens): added in v0.13.5, remove gate after 2027-05-22.
+        apiTokens: true,
         // COMPAT(mcpBridge): added in v0.13.2, remove gate after 2027-03-10.
         mcpBridge: true,
         // COMPAT(mcpBridgeMultiHop): added in v0.13.2, remove gate after 2027-03-10.

@@ -53,6 +53,7 @@ $PASEO_HOME/
 ├── daemon-keypair.json                  # E2EE keypair for relay (mode 0600)
 ├── paseo.pid                            # Daemon PID lock file
 ├── local-credential                     # Per-run local client credential (mode 0600)
+├── api-tokens.json                      # Named daemon API tokens, hashes only (mode 0600)
 ├── daemon.log                           # Default log file (path configurable)
 ├── agents/
 │   └── {sanitized-cwd}/

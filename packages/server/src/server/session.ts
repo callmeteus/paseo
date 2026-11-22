@@ -4026,11 +4026,14 @@ export class Session {
         return this.daemonSession.handleGetPairingOfferRequest(msg);
       case "daemon.config.reload.request":
         return this.daemonSession.handleConfigReloadRequest(msg);
-      case "hub.management.daemon.connect.request":
-      case "hub.management.daemon.get_status.request":
-      case "hub.management.daemon.disconnect.request":
-      case "hub.management.daemon.permissions.update.request":
-        return this.daemonSession.handleHubRelationshipRequest(msg);
+      case "daemon.api_token.list.request":
+        this.daemonSession.handleApiTokenListRequest(msg);
+        return undefined;
+      case "daemon.api_token.create.request":
+        return this.daemonSession.handleApiTokenCreateRequest(msg);
+      case "daemon.api_token.revoke.request":
+        this.daemonSession.handleApiTokenRevokeRequest(msg);
+        return undefined;
       case "diagnostics.request":
         return this.daemonSession.handleDiagnosticsRequest(msg);
       case "daemon.update.request":

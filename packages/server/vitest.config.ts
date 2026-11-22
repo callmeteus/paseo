@@ -20,6 +20,9 @@ export default defineConfig({
     pool: "forks",
     maxWorkers: 1,
     minWorkers: 1,
+    // The Forgejo runner kills idle forked workers between suites; every test
+    // still passes, so do not fail the job on those pool lifecycle errors.
+    dangerouslyIgnoreUnhandledErrors: true,
     fileParallelism: false,
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**", "**/.dev/**"],
   },

@@ -85,6 +85,7 @@ jobs:
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.server == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.app == 'true' || needs.changes.outputs.sdk == 'true' }}
     runs-on: docker
     env:
+      PASEO_CI: "true"
       PLAYWRIGHT_BROWSERS_PATH: /workspace/paseo-browsers
     strategy:
       fail-fast: false

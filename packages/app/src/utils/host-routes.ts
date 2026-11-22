@@ -525,6 +525,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "general",
   "appearance",
   "sidebar",
+  "labels",
   "chat",
   "terminal",
   "browser",
@@ -551,6 +552,7 @@ export const HOST_SECTION_SLUGS = [
   "pair-device",
   "agents",
   "mcp",
+  "tokens",
   "metadata",
   "voice",
   "workspaces",
@@ -630,4 +632,8 @@ export function buildProviderSettingsRoute(serverId: string, providerId: string)
 export function normalizeProjectSettingsRouteId(value: string | string[] | undefined): string {
   const id = Array.isArray(value) ? value[0] : value;
   return typeof id === "string" ? id : "";
+}
+
+export function buildSettingsAddHostRoute(intentId: string | number = "1") {
+  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
 }

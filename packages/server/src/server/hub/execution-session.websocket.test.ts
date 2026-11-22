@@ -383,37 +383,36 @@ test("Hub control waits for an in-flight create of the same execution", async ()
   expect(await hub.ownedAgentArchivedAt(created.payload.agentId!)).toEqual(expect.any(String));
 });
 
-test.skipIf(process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true")(
-  "Hub archives an execution workspace on a local checkout",
-  async () => {
-    const hub = await launchRelationship();
-    const siblingWorkspaceId = await hub.createSiblingWorkspace(hub.repoRoot());
-    hub.beginOwnedCreate("local-create", "execution-local", {
-      workspaceId: siblingWorkspaceId,
-      prompt: "sleep 30",
-    });
-    const created = await hub.ownedCreateResult("local-create");
-    const executionWorkspaceId = created.payload.agent?.workspaceId;
-    expect(executionWorkspaceId).toEqual(expect.any(String));
-    const terminalId = await hub.createWorkspaceTerminal(executionWorkspaceId!);
-    await hub.ownedRunningUpdate(created.payload.agentId!);
+test.skipIf(
+  process.env.CI === "true" ||
+    process.env.GITHUB_ACTIONS === "true" ||
+    process.env.PASEO_CI === "true",
+)("Hub archives an execution workspace on a local checkout", async () => {
+  const hub = await launchRelationship();
+  const siblingWorkspaceId = await hub.createSiblingWorkspace(hub.repoRoot());
+  hub.beginOwnedCreate("local-create", "execution-local", {
+    workspaceId: siblingWorkspaceId,
+    prompt: "sleep 30",
+  });
+  const created = await hub.ownedCreateResult("local-create");
+  const executionWorkspaceId = created.payload.agent?.workspaceId;
+  expect(executionWorkspaceId).toEqual(expect.any(String));
+  const terminalId = await hub.createWorkspaceTerminal(executionWorkspaceId!);
+  await hub.ownedRunningUpdate(created.payload.agentId!);
 
-    const archived = await hub.archiveExecution("execution-local", "archive-local");
-    const duplicate = await hub.archiveExecution("execution-local", "archive-local-duplicate");
+  const archived = await hub.archiveExecution("execution-local", "archive-local");
+  const duplicate = await hub.archiveExecution("execution-local", "archive-local-duplicate");
 
-    expect(archived).toMatchObject({ success: true, error: null, action: "archive" });
-    expect(duplicate).toMatchObject({ success: true, error: null, action: "archive" });
-    expect(executionWorkspaceId).not.toBe(siblingWorkspaceId);
-    expect(await hub.ownedAgentArchivedAt(created.payload.agentId!)).toEqual(expect.any(String));
-    expect(await hub.ownedWorkspaceArchivedAt(created.payload.agentId!)).toEqual(
-      expect.any(String),
-    );
-    expect(await hub.archivedWorkspaceAt(siblingWorkspaceId)).toBeNull();
-    expect(hub.terminalExists(terminalId)).toBe(false);
-    expect(hub.ownedAgentIsRunning(created.payload.agentId!)).toBe(false);
-    expect(hub.repoExists()).toBe(true);
-  },
-);
+  expect(archived).toMatchObject({ success: true, error: null, action: "archive" });
+  expect(duplicate).toMatchObject({ success: true, error: null, action: "archive" });
+  expect(executionWorkspaceId).not.toBe(siblingWorkspaceId);
+  expect(await hub.ownedAgentArchivedAt(created.payload.agentId!)).toEqual(expect.any(String));
+  expect(await hub.ownedWorkspaceArchivedAt(created.payload.agentId!)).toEqual(expect.any(String));
+  expect(await hub.archivedWorkspaceAt(siblingWorkspaceId)).toBeNull();
+  expect(hub.terminalExists(terminalId)).toBe(false);
+  expect(hub.ownedAgentIsRunning(created.payload.agentId!)).toBe(false);
+  expect(hub.repoExists()).toBe(true);
+});
 
 test("Hub creates and archives distinct local workspaces for classifier and worker executions", async () => {
   const hub = await launchRelationship();

@@ -14,6 +14,7 @@ import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../wor
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
 import { daemonHubLocalInstaller, type HubLocalInstaller } from "../../hub/local-install.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
+import type { ApiTokenStore } from "../../api-tokens.js";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -22,6 +23,7 @@ export interface DaemonRuntimeConfig {
   desktopManaged?: boolean;
   /** Origin other machines reach this computer's local Hub on, from `hub.publicOrigin`. */
   hubPublicOrigin?: string;
+  apiTokens?: ApiTokenStore;
   getRelayConfig(): {
     enabled: boolean;
     endpoint: string;
@@ -347,6 +349,71 @@ export class DaemonSession {
         },
       });
     }
+  }
+
+  handleApiTokenListRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.list.request" }>,
+  ): void {
+    try {
+      this.host.emit({
+        type: "daemon.api_token.list.response",
+        payload: { requestId: msg.requestId, tokens: this.requireApiTokenStore().list() },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "list API tokens");
+    }
+  }
+
+  async handleApiTokenCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.create.request" }>,
+  ): Promise<void> {
+    try {
+      const created = await this.requireApiTokenStore().create(msg.name);
+      this.host.emit({
+        type: "daemon.api_token.create.response",
+        payload: { requestId: msg.requestId, token: created.token, secret: created.secret },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "create API token");
+    }
+  }
+
+  handleApiTokenRevokeRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.revoke.request" }>,
+  ): void {
+    try {
+      const revoked = this.requireApiTokenStore().revoke(msg.id);
+      this.host.emit({
+        type: "daemon.api_token.revoke.response",
+        payload: { requestId: msg.requestId, revoked },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "revoke API token");
+    }
+  }
+
+  private requireApiTokenStore(): ApiTokenStore {
+    const store = this.daemonRuntimeConfig?.apiTokens;
+    if (!store) throw new Error("Daemon API token store is unavailable");
+    return store;
+  }
+
+  private emitApiTokenError(
+    requestId: string,
+    requestType: SessionInboundMessage["type"],
+    error: unknown,
+    operation: string,
+  ): void {
+    this.logger.error({ err: error }, `Failed to ${operation}`);
+    this.host.emit({
+      type: "rpc_error",
+      payload: {
+        requestId,
+        requestType,
+        error: error instanceof Error ? error.message : String(error),
+        code: "handler_error",
+      },
+    });
   }
 
   async handleDiagnosticsRequest(

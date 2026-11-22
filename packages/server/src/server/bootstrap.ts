@@ -159,6 +159,7 @@ import { generateGoalObjective } from "./agent/goal-objective-rewriter.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { MessageQueueStore } from "./agent/message-queue-store.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
+import { ApiTokenStore } from "./api-tokens.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import { createBridgeMcpServer } from "./agent/bridge-mcp-server.js";
 import {
@@ -995,10 +996,15 @@ export async function createPaseoDaemon(
   mountWebUi(app, config, logger);
 
   let localCredential: string | null = null;
-  const daemonAuth = { ...config.auth, localCredential: () => localCredential };
+  const apiTokenStore = ApiTokenStore.load(config.paseoHome);
+  const daemonAuth = {
+    ...config.auth,
+    localCredential: () => localCredential,
+    apiTokens: apiTokenStore,
+  };
   app.use(
     createRequireBearerMiddleware(daemonAuth, (context) => {
-      logger.warn(context, "Rejected HTTP request with invalid daemon password");
+      logger.warn(context, "Rejected HTTP request with invalid daemon credential");
     }),
   );
 
@@ -1975,14 +1981,15 @@ export async function createPaseoDaemon(
         return;
       }
       // This route is exempt from the global daemon-password middleware, so it
-      // authenticates here using the injected capability token (or a valid
-      // daemon password). Without this, a password-protected daemon would be
-      // wide open on its agent control plane.
+      // authenticates here using the injected capability token, a named API
+      // token, or a valid daemon password. Without this, a protected daemon
+      // would be wide open on its agent control plane.
       if (
         !(await isAgentMcpRequestAuthorized({
           password: config.auth?.password,
           capabilityToken: agentMcpAuthToken,
           authorizationHeader: req.header("authorization"),
+          apiTokenVerifier: apiTokenStore,
         }))
       ) {
         res.status(401).json({ error: "Unauthorized" });
@@ -2216,6 +2223,7 @@ export async function createPaseoDaemon(
                   return appBaseUrl;
                 },
                 desktopManaged: config.desktopManaged === true,
+                apiTokens: apiTokenStore,
                 getRelayConfig: () => ({
                   ...(relayRuntime?.getConfig() ?? {
                     enabled: daemonConfigStore.get().relay?.enabled ?? relayEnabled,
@@ -2260,6 +2268,7 @@ export async function createPaseoDaemon(
                     password: config.auth?.password,
                     capabilityToken: mcpBridgeAuthToken,
                     authorizationHeader: req.header("authorization"),
+                    apiTokenVerifier: apiTokenStore,
                   }))
                 ) {
                   res.status(401).json({ error: "Unauthorized" });

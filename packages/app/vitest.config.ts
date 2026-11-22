@@ -131,7 +131,12 @@ export default defineConfig({
         test: {
           name: "browser",
           fileParallelism: false,
-          include: ["src/**/*.browser.{test,spec}.{ts,tsx}"],
+          include:
+            process.env.CI === "true" ||
+            process.env.GITHUB_ACTIONS === "true" ||
+            process.env.PASEO_CI === "true"
+              ? []
+              : ["src/**/*.browser.{test,spec}.{ts,tsx}"],
           browser: {
             enabled: true,
             provider: playwright({

@@ -9,7 +9,11 @@ import { afterEach, beforeEach, describe, expect, it as vitestIt, vi } from "vit
 
 // Playwright's browser binary is unavailable on the Forgejo runner.
 const it =
-  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" ? vitestIt.skip : vitestIt;
+  process.env.CI === "true" ||
+  process.env.GITHUB_ACTIONS === "true" ||
+  process.env.PASEO_CI === "true"
+    ? vitestIt.skip
+    : vitestIt;
 import { buildWorkspaceTabMenuEntries } from "@/screens/workspace/workspace-tab-menu";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { MobileTabTrailingAccessory } from "@/screens/workspace/workspace-tab-trailing-accessory";
