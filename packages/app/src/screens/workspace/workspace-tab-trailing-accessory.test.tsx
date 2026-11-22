@@ -31,15 +31,21 @@ const { mockTheme } = vi.hoisted(() => ({
   mockTheme: {
     colors: {
       foregroundMuted: "#aaa",
+      foreground: "#eee",
+      surface0: "#111",
+      surface1: "#1a1a1a",
       surface2: "#222",
+      border: "#333",
       borderAccent: "#444",
       accent: "#555",
     },
     borderRadius: { md: 6, lg: 8, xl: 10, "2xl": 12 },
     borderWidth: { 1: 1 },
     fontSize: { xs: 11, sm: 12, base: 14 },
-    spacing: { 0.5: 2, 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 },
+    fontWeight: { normal: "400", medium: "500", semibold: "600", bold: "700" },
+    spacing: { 0.5: 2, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 },
     opacity: { 50: 0.5 },
+    palette: { green: { 500: "#22c55e" }, red: { 500: "#ef4444" } },
   },
 }));
 
