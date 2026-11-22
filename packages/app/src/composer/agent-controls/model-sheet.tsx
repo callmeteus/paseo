@@ -17,6 +17,8 @@ import { ModelIconGlyph } from "@/model-icons/glyph";
 import { resolveChoiceIconId } from "@/model-icons/resolve";
 import { useActiveRouter } from "@/model-routers/use-router-picker";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
+import type { ToolbarGlyphs } from "@/components/ui/control-geometry";
+import type { ContextBridge } from "@/components/ui/isolated-bottom-sheet-modal";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 
@@ -32,6 +34,8 @@ interface CompactModelSheetProps {
   selectedProvider: string;
   selectedModel: string;
   thinkingLabel: string | null;
+  /** Kept for the merged caller; this sheet renders its own effort control. */
+  effortKeys?: string[][] | null;
   onSelect: (provider: string, modelId: string, serverId?: string | null) => void;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
@@ -45,7 +49,11 @@ interface CompactModelSheetProps {
   isRetryingProvider?: boolean;
   disabled?: boolean;
   serverId?: string | null;
-  glyphSize: number;
+  /** Merge bridge: the caller passes the glyph set instead of a single size. */
+  glyphs: ToolbarGlyphs;
+  /** False when the toolbar is too narrow for labels; only the provider glyph shows. */
+  showLabels?: boolean;
+  contextBridge?: ContextBridge | null;
   canSwitchProvider: boolean;
   onRouterPicked?: (routerId: string | null) => void;
   /** Router bound to the chat (or staged); undefined uses the default router. */
@@ -102,7 +110,8 @@ export function CompactModelSheet({
   isRetryingProvider = false,
   disabled = false,
   serverId = null,
-  glyphSize,
+  glyphs,
+  showLabels = true,
   canSwitchProvider,
   onRouterPicked,
   activeRouterId,
@@ -321,8 +330,11 @@ export function CompactModelSheet({
         chevron={null}
       >
         {choiceIconId || hasSelectedProvider ? (
-          <ComposerToolbarGlyph size={glyphSize}>
-            <ChoiceIcon size={glyphSize} color={styles.providerIcon.color} />
+          <ComposerToolbarGlyph role={showLabels ? "label" : "icon"}>
+            <ChoiceIcon
+              size={glyphs[showLabels ? "label" : "icon"].size}
+              color={styles.providerIcon.color}
+            />
           </ComposerToolbarGlyph>
         ) : null}
         <View style={styles.triggerLabels}>

@@ -113,6 +113,8 @@ export interface DiffCell {
   lineNumber: number | null;
   tokens: DiffTokenRun[];
   fragments: DiffFragment[];
+  /** Monospace columns per visual line until this cell is measured. */
+  estimatedWrapColumns?: number;
   reviewTarget: ReviewableDiffTarget | null;
   sourceIdentity: DiffSourceIdentity;
 }
@@ -186,6 +188,8 @@ export interface BuildDiffDocumentModelInput {
   reviewActions?: InlineReviewActions;
   labels: { binary: string; tooLarge: string };
   materializationWindow?: { top: number; height: number };
+  /** Also measure the anchored row so relayout can restore its exact fragment. */
+  materializationAnchor?: DiffScrollAnchor | null;
   /** A geometry-compatible model whose unchanged file measurements may be reused. */
   reuseFrom?: readonly DiffDocumentModel[];
 }
@@ -205,6 +209,8 @@ export type DiffHit =
       kind: "cell";
       target: ReviewableDiffTarget | null;
       position: DiffCharacterPosition;
+      /** The grapheme under the pointer, which word gestures select from. */
+      graphemeOffset: number;
     };
 
 export interface DiffSelection {

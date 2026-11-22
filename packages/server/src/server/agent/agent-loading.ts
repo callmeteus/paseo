@@ -6,7 +6,6 @@ import type { AgentStorage } from "./agent-storage.js";
 import type { AgentTimelineRow } from "./agent-timeline-store-types.js";
 import {
   buildConfigOverrides,
-  buildSessionConfig,
   extractAttention,
   extractTimestamps,
   isStoredAgentProviderAvailable,
@@ -29,7 +28,7 @@ const pendingAgentInitializations = new Map<string, PendingAgentInitialization>(
 
 export type AgentLoaderManager = Pick<
   AgentManager,
-  | "createAgent"
+  | "createAgentFromRecord"
   | "getAgent"
   | "getRegisteredProviderIds"
   | "hydrateTimelineFromProvider"
@@ -43,6 +42,7 @@ export interface EnsureAgentLoadedDeps {
   agentStorage: AgentStorage;
   validProviders?: Iterable<AgentProvider>;
   broadcastTimeline?: boolean;
+  purpose?: "history" | "interactive";
   logger: Logger;
 }
 
@@ -129,31 +129,16 @@ export async function ensureAgentLoaded(
           modelRouterId: record.modelRouterId,
           goal: record.goal,
         },
-        record.archivedAt ? { purpose: "history" } : undefined,
+        deps.purpose ? { purpose: deps.purpose } : undefined,
       );
       resumedFromPersistence = true;
       deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
     } else {
       // No provider handle to resume: this starts the agent's first session rather than
       // bringing one back, so it stamps activity and carries no stored attention. Records
-      // without a handle never got far enough to accumulate either.
-      const config = buildSessionConfig(record, {
-        validProviders,
-      });
-      if (!config) {
-        throw new Error(`Agent ${agentId} references unavailable provider '${record.provider}'`);
-      }
-      snapshot = await deps.agentManager.createAgent(config, agentId, {
-        labels: record.labels,
-        workspaceId: record.workspaceId,
-        owner: record.owner,
-        migratedFrom: record.migratedFrom,
-        migratedTo: record.migratedTo,
-        portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
-        modelRouterId: record.modelRouterId,
-        goal: record.goal,
-        preserveTimeline: true,
-      });
+      // without a handle never got far enough to accumulate either. The manager rereads the
+      // record inside the agent's lane, so a write that lands after this read is not lost.
+      snapshot = await deps.agentManager.createAgentFromRecord(agentId);
       deps.logger.info({ agentId, provider: record.provider }, "Agent created from stored config");
     }
 

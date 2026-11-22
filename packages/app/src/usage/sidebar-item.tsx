@@ -1,42 +1,83 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { TriangleAlert } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import {
-  Pressable,
   Text,
   View,
   type LayoutChangeEvent,
+  type PressableStateCallbackType,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { useRetainedPanelActive } from "@/components/retained-panel";
+import { PressHighlight } from "@/components/ui/press-highlight";
+import { useAppVisible } from "@/hooks/use-app-visible";
 import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
-import { useUsagePreferences } from "./display";
+import type { Theme } from "@/styles/theme";
+import { useUsageDisplay } from "./display";
 import { useUsageHostId } from "./hosts";
-import { useUsageHostReports } from "./queries";
-import { UsageSourceIcon } from "./source-icon";
+import { useUsageInSidebar } from "./in-sidebar";
 import { UsageMeter } from "./meter";
 import { PinnedUsageHover } from "./pinned-hover";
 import {
   choosePinnedUsageLayout,
   METER_GAP,
   MIN_METER_WIDTH,
+  resolvePinnedUsage,
   resolvePinnedUsageItems,
   type PinnedUsageItem,
   type PinnedUsageLayout,
+  type PinnedUsageSource,
 } from "./pinned";
 import type { UsageDisplayAs } from "./preferences";
+import { useUsageHostReports } from "./queries";
+import { UsageSourceIcon } from "./source-icon";
 import type { UsageReportEntry } from "./types";
 import { UsageModal } from "./usage-modal";
 
-/** Each pinned sidebar item: a provider's unified summary or one of its windows. */
-function useUsageSummary(): {
+const ThemedTriangleAlert = withUnistyles(TriangleAlert);
+const errorIconColor = (theme: Theme) => ({ color: theme.colors.statusDanger });
+
+/**
+ * The summary windows with data on the usage host, under their source, in card order. Empty while
+ * none has data. Only the visible sidebar polls the host.
+ */
+export function useUsageSummary(): readonly PinnedUsageSource[] {
+  const { t } = useTranslation();
+  const active = useRetainedPanelActive();
+  const isAppVisible = useAppVisible();
+  const { inSidebar } = useUsageInSidebar();
+  const serverId = useUsageHostId();
+  const reports = useUsageHostReports({
+    serverId: inSidebar ? serverId : null,
+    shouldPoll: active && inSidebar && isAppVisible,
+  });
+  const { preferences } = useUsageDisplay(reports);
+  return useMemo(() => resolvePinnedUsage(reports, preferences, t), [preferences, reports, t]);
+}
+
+/** Whether the sidebar Usage item has anything to show. */
+export function useHasUsageSummary(): boolean {
+  return useUsageSummary().length > 0;
+}
+
+/** Our unified line: each pinned unified summary and window, with the entry behind each hover. */
+function useUsageSidebarItems(): {
   items: readonly PinnedUsageItem[];
   entries: ReadonlyMap<string, UsageReportEntry>;
   displayAs: UsageDisplayAs;
 } {
   const { t } = useTranslation();
-  const { preferences } = useUsagePreferences();
-  const reports = useUsageHostReports(useUsageHostId());
+  const active = useRetainedPanelActive();
+  const isAppVisible = useAppVisible();
+  const { inSidebar } = useUsageInSidebar();
+  const serverId = useUsageHostId();
+  const reports = useUsageHostReports({
+    serverId: inSidebar ? serverId : null,
+    shouldPoll: active && inSidebar && isAppVisible,
+  });
+  const { preferences } = useUsageDisplay(reports);
   return useMemo(() => {
     const entries = new Map(reports.map((entry) => [entry.id, entry]));
     return {
@@ -47,20 +88,15 @@ function useUsageSummary(): {
   }, [preferences, reports, t]);
 }
 
-/** Whether the sidebar Usage item has anything to show. */
-export function useHasUsageSummary(): boolean {
-  return useUsageSummary().items.length > 0;
-}
-
 /**
  * The sidebar footer's usage entry: the pinned unified summaries and windows, and nothing
  * while no item is pinned. Pressing it opens the Usage modal.
  */
-export function UsageSidebarItem() {
+export function UsageSidebarItem({ sources }: { sources: readonly PinnedUsageSource[] }) {
   const { t } = useTranslation();
   const label = t(builtinSidebarNavLabelKey("usage"));
   const openUsage = useOpenSidebarUsage();
-  const { items, entries, displayAs } = useUsageSummary();
+  const { items, entries, displayAs } = useUsageSidebarItems();
   if (items.length === 0) return null;
   return (
     <PinnedUsageTrigger
@@ -68,6 +104,9 @@ export function UsageSidebarItem() {
       items={items}
       entries={entries}
       displayAs={displayAs}
+      sources={sources}
+      errorLabel={t("providerUsage.refreshFailed")}
+      unifiedLabel={t("providerUsage.unified.short")}
       onPress={openUsage}
     />
   );
@@ -109,11 +148,18 @@ function pinnedUsageLabel(
   label: string,
   items: readonly PinnedUsageItem[],
   unifiedLabel: string,
+  sources: readonly PinnedUsageSource[],
+  errorLabel: string,
 ): string {
   const parts = items.map((item) =>
     item.kind === "unified" ? `${item.unified.driver.label} (${unifiedLabel})` : item.window.label,
   );
-  return `${label}: ${parts.join(", ")}`;
+  const error = sources.some((source) => source.hasError) ? `, ${errorLabel}` : "";
+  return `${label}: ${parts.join(", ")}${error}`;
+}
+
+function triggerStyle({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {
+  return [styles.trigger, hovered && styles.triggerHovered];
 }
 
 function layoutWidth(event: LayoutChangeEvent): number {
@@ -130,17 +176,23 @@ function PinnedUsageTrigger({
   items,
   entries,
   displayAs,
+  sources,
+  errorLabel,
+  unifiedLabel,
   onPress,
 }: {
   label: string;
   items: readonly PinnedUsageItem[];
   entries: ReadonlyMap<string, UsageReportEntry>;
   displayAs: UsageDisplayAs;
+  sources: readonly PinnedUsageSource[];
+  errorLabel: string;
+  unifiedLabel: string;
   onPress: () => void;
 }) {
-  const { t } = useTranslation();
   const [available, setAvailable] = useState<number | null>(null);
   const [labelsWidth, setLabelsWidth] = useState<number | null>(null);
+  const [compactWidth, setCompactWidth] = useState<number | null>(null);
   const [percentsWidth, setPercentsWidth] = useState<number | null>(null);
   const handleAvailableLayout = useCallback((event: LayoutChangeEvent) => {
     setAvailable(layoutWidth(event));
@@ -148,25 +200,36 @@ function PinnedUsageTrigger({
   const handleLabelsLayout = useCallback((event: LayoutChangeEvent) => {
     setLabelsWidth(layoutWidth(event));
   }, []);
+  const handleCompactLayout = useCallback((event: LayoutChangeEvent) => {
+    setCompactWidth(layoutWidth(event));
+  }, []);
   const handlePercentsLayout = useCallback((event: LayoutChangeEvent) => {
     setPercentsWidth(layoutWidth(event));
   }, []);
   const layout = choosePinnedUsageLayout({
     available,
     labelsWidth,
+    compactWidth,
     percentsWidth,
     windowCount: items.length,
   });
   return (
-    <Pressable
+    <PressHighlight
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={pinnedUsageLabel(label, items, t("providerUsage.unified.short"))}
-      style={styles.trigger}
+      accessibilityLabel={pinnedUsageLabel(label, items, unifiedLabel, sources, errorLabel)}
+      style={triggerStyle}
+      highlightStyle={styles.triggerPressed}
       testID="sidebar-usage"
     >
       <View style={styles.line} onLayout={handleAvailableLayout}>
-        <PinnedUsageLine items={items} layout={layout} entries={entries} displayAs={displayAs} />
+        <PinnedUsageLine
+          items={items}
+          layout={layout}
+          entries={entries}
+          displayAs={displayAs}
+          sources={sources}
+        />
       </View>
       <View
         style={styles.measure}
@@ -181,6 +244,17 @@ function PinnedUsageTrigger({
             layout="labels"
             entries={entries}
             displayAs={displayAs}
+            sources={sources}
+            measuring
+          />
+        </View>
+        <View style={styles.measured} onLayout={handleCompactLayout}>
+          <PinnedUsageLine
+            items={items}
+            layout="compact"
+            entries={entries}
+            displayAs={displayAs}
+            sources={sources}
             measuring
           />
         </View>
@@ -190,12 +264,19 @@ function PinnedUsageTrigger({
             layout="percents"
             entries={entries}
             displayAs={displayAs}
+            sources={sources}
             measuring
           />
         </View>
       </View>
-    </Pressable>
+    </PressHighlight>
   );
+}
+
+function pinnedUsageTestID(measuring: boolean, kind: PinnedUsageItem["kind"]): string | undefined {
+  if (measuring) return undefined;
+  if (kind === "unified") return "sidebar-usage-unified";
+  return "sidebar-usage-pinned-window";
 }
 
 /**
@@ -207,12 +288,14 @@ function PinnedUsageLine({
   layout,
   entries,
   displayAs,
+  sources,
   measuring = false,
 }: {
   items: readonly PinnedUsageItem[];
   layout: PinnedUsageLayout;
   entries: ReadonlyMap<string, UsageReportEntry>;
   displayAs: UsageDisplayAs;
+  sources: readonly PinnedUsageSource[];
   measuring?: boolean;
 }) {
   return items.map((item, index) => (
@@ -224,15 +307,10 @@ function PinnedUsageLine({
       layout={layout}
       entry={entries.get(item.sourceKey) ?? null}
       displayAs={displayAs}
+      hasError={sources.some((source) => source.key === item.sourceKey && source.hasError)}
       measuring={measuring}
     />
   ));
-}
-
-function pinnedUsageTestID(measuring: boolean, kind: PinnedUsageItem["kind"]): string | undefined {
-  if (measuring) return undefined;
-  if (kind === "unified") return "sidebar-usage-unified";
-  return "sidebar-usage-pinned-window";
 }
 
 function PinnedUsageCluster({
@@ -242,6 +320,7 @@ function PinnedUsageCluster({
   layout,
   entry,
   displayAs,
+  hasError,
   measuring,
 }: {
   item: PinnedUsageItem;
@@ -250,6 +329,7 @@ function PinnedUsageCluster({
   layout: PinnedUsageLayout;
   entry: UsageReportEntry | null;
   displayAs: UsageDisplayAs;
+  hasError: boolean;
   measuring: boolean;
 }) {
   const { t } = useTranslation();
@@ -261,13 +341,25 @@ function PinnedUsageCluster({
   const tone = item.kind === "unified" ? item.unified.tone : item.window.tone;
   const shortLabel =
     item.kind === "unified" ? t("providerUsage.unified.short") : item.window.shortLabel;
+  // A narrow line keeps the bare period token ("5h", "wk") instead of dropping every label.
+  const compactLabel = item.kind === "unified" ? "" : item.window.compactLabel;
+  const suffix = layout === "compact" ? compactLabel : shortLabel;
   const leadStyle = startsSource ? styles.iconGap : null;
   const testID = pinnedUsageTestID(measuring, item.kind);
   const body = (
     <>
       {startsSource ? (
         <View testID={measuring ? undefined : "sidebar-usage-source"}>
-          <UsageSourceIcon svg={icon} size={14} />
+          <View style={styles.source}>
+            <UsageSourceIcon svg={icon} size={14} />
+            {hasError ? (
+              <ThemedTriangleAlert
+                size={12}
+                uniProps={errorIconColor}
+                testID={measuring ? undefined : "sidebar-usage-error"}
+              />
+            ) : null}
+          </View>
         </View>
       ) : null}
       {layout === "meters" ? (
@@ -281,8 +373,8 @@ function PinnedUsageCluster({
         testID={testID}
       >
         {percentText}
-        {layout === "percents" || shortLabel === "" ? null : (
-          <Text style={styles.windowLabel}>{` ${shortLabel}`}</Text>
+        {layout === "percents" || suffix === "" ? null : (
+          <Text style={styles.windowLabel}>{` ${suffix}`}</Text>
         )}
       </Text>
     </>
@@ -319,6 +411,12 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },
+  triggerHovered: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  triggerPressed: {
+    backgroundColor: theme.colors.surface2,
+  },
   line: {
     flex: 1,
     minWidth: 0,
@@ -349,6 +447,11 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     flexBasis: 0,
   },
+  source: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
   sourceGap: {
     paddingLeft: theme.spacing[3],
   },
@@ -367,8 +470,7 @@ const styles = StyleSheet.create((theme) => ({
     marginRight: METER_GAP,
   },
   meter: {
-    height: 6,
-    borderRadius: 3,
+    flexGrow: 1,
   },
   percent: {
     flexShrink: 0,

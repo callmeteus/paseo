@@ -10,14 +10,17 @@ import type {
   AgentSkillsStatus,
 } from "@getpaseo/protocol/messages";
 import type { TFunction } from "i18next";
+import { SettingsRow, SettingsSection } from "@/components/settings";
 import { Button } from "@/components/ui/button";
-import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { Switch } from "@/components/ui/switch";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { SkillSelectionSheet } from "./selection-sheet";
-import { useAgentSkills } from "./use-agent-skills";
+import { useAgentSkills, type AgentSkillsController } from "./use-agent-skills";
+
+export { useAgentSkills, type AgentSkillsController } from "./use-agent-skills";
 
 const OP_KIND_ORDER: Record<AgentSkillOperation["kind"], number> = {
   add: 0,
@@ -47,7 +50,13 @@ function resolveDisplayState(
   return status?.state ?? null;
 }
 
-function computeHasSelected(status: AgentSkillsStatus | null): boolean {
+/** Whether the host has Paseo's skills installed in any form, current or not. */
+export function areSkillsInstalled(status: AgentSkillsStatus | null): boolean {
+  return status !== null && status.state !== "not-installed";
+}
+
+/** Whether the saved selection names any skill there is to install. */
+export function hasSelectedSkills(status: AgentSkillsStatus | null): boolean {
   if (!status) return false;
   if (status.selection.mode === "all") return status.available.length > 0;
   return status.selection.skills.some((name) => status.available.includes(name));
@@ -56,22 +65,20 @@ function computeHasSelected(status: AgentSkillsStatus | null): boolean {
 export function AgentSkillsSection({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const skills = useAgentSkills(serverId);
-  const refreshSkills = skills.refresh;
-  const skillsConnected = skills.connected;
-  const skillsSupported = skills.supported;
+  const { refresh, connected, supported } = skills;
   const [isChoosing, setIsChoosing] = useState(false);
   useFocusEffect(
     useCallback(() => {
-      if (skillsConnected && skillsSupported) void refreshSkills();
+      if (connected && supported) void refresh();
       return undefined;
-    }, [refreshSkills, skillsConnected, skillsSupported]),
+    }, [refresh, connected, supported]),
   );
   const maintenanceOps = useMemo(
     () => skills.status?.ops.filter((op) => op.kind !== "delete") ?? [],
     [skills.status?.ops],
   );
   const state = resolveDisplayState(skills.status, maintenanceOps);
-  const hasSelected = computeHasSelected(skills.status);
+  const hasSelected = hasSelectedSkills(skills.status);
   const globalSkills = skills.status?.global;
 
   const handleReconcile = useCallback(async () => {
@@ -115,7 +122,7 @@ export function AgentSkillsSection({ serverId }: { serverId: string }) {
         variant="ghost"
         size="sm"
         leftIcon={docsIcon}
-        textStyle={settingsStyles.sectionHeaderLinkText}
+        textStyle={styles.docsLinkText}
         style={settingsStyles.sectionHeaderLink}
         onPress={handleOpenDocs}
         accessibilityLabel={t("settings.host.skills.openDocs")}
@@ -126,13 +133,13 @@ export function AgentSkillsSection({ serverId }: { serverId: string }) {
     [docsIcon, handleOpenDocs, t],
   );
 
-  if (!skills.connected || !skills.supported) {
+  if (!connected || !supported) {
     return (
       <SettingsSection title={t("settings.host.skills.sectionTitle")} trailing={trailing}>
         <View style={settingsStyles.card} testID="host-agent-skills-unavailable">
           <View style={styles.emptyCard}>
             <Text style={styles.mutedText}>
-              {skills.connected
+              {connected
                 ? t("settings.host.skills.unsupported")
                 : t("settings.host.skills.unavailable")}
             </Text>
@@ -244,6 +251,98 @@ function GlobalSkillRow({ skill, isFirst }: { skill: AgentGlobalSkill; isFirst: 
   );
 }
 
+/**
+ * The orchestration skills row: a switch for whether they are installed, a gear that opens the
+ * skill picker, and Update when the installed skills fall behind the bundled ones. The caller
+ * decides what the switch is bound to; the picker and Update always act on the host.
+ */
+export function AgentSkillsRow({
+  skills,
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  skills: AgentSkillsController;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  const { status, isWorking, reconcile, saveSelection } = skills;
+  const [isChoosing, setIsChoosing] = useState(false);
+  // Deleting a deselected skill is a choice made in the picker, not an update to offer here.
+  const maintenanceOps = useMemo(
+    () => status?.ops.filter((op) => op.kind !== "delete") ?? [],
+    [status?.ops],
+  );
+  const needsUpdate = status?.state === "drift" && maintenanceOps.length > 0;
+
+  const handleUpdate = useCallback(async () => {
+    if (isWorking) return;
+    const confirmed = await confirmDialog({
+      title: t("settings.host.skills.updateTitle"),
+      message: formatUpdateMessage(maintenanceOps, t),
+      confirmLabel: t("settings.host.skills.actions.update"),
+    });
+    if (confirmed) await reconcile();
+  }, [isWorking, maintenanceOps, reconcile, t]);
+  const handleOpen = useCallback(() => setIsChoosing(true), []);
+  const handleClose = useCallback(() => setIsChoosing(false), []);
+  const chooseIcon = useMemo(
+    () => <ThemedSettings size={ICON_SIZE.sm} uniProps={mutedMapping} />,
+    [],
+  );
+
+  return (
+    <>
+      <SettingsRow
+        label={t("settings.host.skills.title")}
+        hint={
+          needsUpdate
+            ? t("settings.host.skills.updateAvailable")
+            : t("settings.host.skills.description")
+        }
+      >
+        <View style={styles.controls}>
+          {needsUpdate ? (
+            <Button variant="outline" onPress={handleUpdate} disabled={disabled || isWorking}>
+              {isWorking
+                ? t("settings.host.skills.actions.working")
+                : t("settings.host.skills.actions.update")}
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            leftIcon={chooseIcon}
+            onPress={handleOpen}
+            disabled={disabled || status === null || isWorking}
+            accessibilityLabel={t("settings.host.skills.choose")}
+          />
+          <Switch
+            value={value}
+            onValueChange={onValueChange}
+            // Nothing picked means nothing to install; the gear is the way forward.
+            disabled={
+              disabled || status === null || isWorking || (!value && !hasSelectedSkills(status))
+            }
+            accessibilityLabel={t("settings.host.skills.title")}
+          />
+        </View>
+      </SettingsRow>
+      {status ? (
+        <SkillSelectionSheet
+          visible={isChoosing}
+          available={status.available}
+          selection={status.selection}
+          isSaving={isWorking}
+          onSave={saveSelection}
+          onClose={handleClose}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function SkillsActions({
   state,
   isWorking,
@@ -299,6 +398,11 @@ const styles = StyleSheet.create((theme) => ({
   installedLabel: { flexDirection: "row", alignItems: "center", gap: 4 },
   mutedText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
   actionsRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  controls: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
+  docsLinkText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   emptyCard: { padding: theme.spacing[4] },
   globalBlock: { gap: theme.spacing[2] },
   globalTitle: {

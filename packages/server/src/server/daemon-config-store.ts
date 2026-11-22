@@ -1,9 +1,18 @@
 import {
   loadPersistedConfig,
-  savePersistedConfig,
+  savePersistedConfigAsync,
+  loadPersistedConfigAsync,
   type PersistedConfig,
 } from "./persisted-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
+import {
+  convertLegacyClaudeUltracode,
+  convertLegacyOptions,
+  foldProfileFeatureValues,
+  resolveAdapter,
+  withLegacyProfileFeatureValues,
+} from "./agent/option-controls.js";
+import type { AgentProfile } from "@getpaseo/protocol/agent-profile";
 import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
@@ -22,6 +31,7 @@ type ProviderOverride = import("./agent/provider-launch-config.js").ProviderOver
 interface SupportedMutableConfigPatch {
   relay?: { enabled?: boolean; requireProtectedSecurity?: boolean };
   mcp?: { injectIntoAgents?: boolean };
+  usage?: { enabled: boolean };
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
@@ -34,6 +44,8 @@ interface SupportedMutableConfigPatch {
   idleRuntimeCleanupAfter?: MutableDaemonConfig["idleRuntimeCleanupAfter"];
   hubAllowHttp?: boolean;
   hubPublicOrigin?: string;
+  resumeOnStartup?: boolean;
+  resumePrompt?: string;
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
@@ -174,6 +186,62 @@ function omitProvidersFromOverrides(
   return Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined;
 }
 
+/**
+ * Profiles are held and persisted with `options` only, in the current keys: a profile is old
+ * data entering, so it is converted for the adapter its provider runs on, which `config.json`'s
+ * `providers` section names through `extends`.
+ */
+function foldConfigProfiles<T extends { agentProfiles?: AgentProfile[] }>(input: {
+  config: T;
+  providers: Record<string, ProviderOverride> | undefined;
+  source: "stored" | "client write";
+  held?: AgentProfile[];
+}): T {
+  const { config, providers, source, held = [] } = input;
+  if (!config.agentProfiles) return config;
+  const convert = (provider: string, options: Record<string, unknown> | undefined) =>
+    convertLegacyOptions({
+      provider: resolveAdapter({ provider, extendsOf: (id) => providers?.[id]?.extends }),
+      options,
+    });
+  const identity = (_provider: string, options: Record<string, unknown> | undefined) => options;
+  const foldWith = (profile: AgentProfile, convertWith: typeof convert) => {
+    const folded = foldProfileFeatureValues<
+      Pick<AgentProfile, "provider" | "options" | "featureValues">
+    >({
+      profile,
+      stored: held.find((candidate) => candidate.id === profile.id),
+      source,
+      convert: convertWith,
+    });
+    const { providerOptions, ...converted } = convertLegacyClaudeUltracode(
+      { ...folded, thinkingOptionId: profile.thinkingOptionId, providerOptions: folded.options },
+      resolveAdapter({ provider: profile.provider, extendsOf: (id) => providers?.[id]?.extends }),
+    );
+    return { ...converted, options: providerOptions };
+  };
+  return {
+    ...config,
+    agentProfiles: config.agentProfiles.map((profile) => {
+      // A malformed value rejects a client write before anything is committed.
+      if (source === "client write") return foldWith(profile, convert);
+      try {
+        return foldWith(profile, convert);
+      } catch {
+        // A hand-edited `config.json` value that cannot convert must not stop the daemon from
+        // starting; it keeps its keys and is rejected when an agent is created from it.
+        return foldWith(profile, identity);
+      }
+    }),
+  };
+}
+
+/** The config API boundary: the unchanged app reads profile options from `featureValues`. */
+export function toWireDaemonConfig(config: MutableDaemonConfig): MutableDaemonConfig {
+  if (!config.agentProfiles) return config;
+  return { ...config, agentProfiles: config.agentProfiles.map(withLegacyProfileFeatureValues) };
+}
+
 function getValueAtPath(config: MutableDaemonConfig, path: string): unknown {
   return path
     .split(".")
@@ -189,6 +257,7 @@ const RELOADABLE_PATHS = [
   "daemon.relay.requireProtectedSecurity",
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
+  "daemon.usage.enabled",
   "daemon.browserTools.enabled",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
@@ -209,6 +278,8 @@ const RELOADABLE_PATHS = [
   "agents.idleRuntimeCleanupAfter",
   "hub.allowHttp",
   "hub.publicOrigin",
+  "agents.resumeOnStartup",
+  "agents.resumePrompt",
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
   "agents.metadataGeneration",
@@ -222,6 +293,7 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.relay.requireProtectedSecurity", "relay.requireProtectedSecurity"],
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
+  ["daemon.usage.enabled", "usage.enabled"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
   ["daemon.hostnames", "hostnames"],
   ["daemon.cors.allowedOrigins", "cors.allowedOrigins"],
@@ -242,6 +314,8 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["agents.idleRuntimeCleanupAfter", "idleRuntimeCleanupAfter"],
   ["hub.allowHttp", "hubAllowHttp"],
   ["hub.publicOrigin", "hubPublicOrigin"],
+  ["agents.resumeOnStartup", "resumeOnStartup"],
+  ["agents.resumePrompt", "resumePrompt"],
   ["agents.providers", "providers"],
   ["agents.catalogRefreshTimeoutMs", "catalogRefreshTimeoutMs"],
   ["agents.metadataGeneration", "metadataGeneration"],
@@ -324,10 +398,12 @@ function pickHubAllowHttpPatch(
   };
 }
 
+// eslint-disable-next-line complexity -- merge: combined two implementations
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
     ...pickMcpConfigPatch(patch),
+    usage: patch.usage,
     ...(patch.mcp?.injectIntoAgents !== undefined
       ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
       : {}),
@@ -347,6 +423,8 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       ? { enableTerminalAgentHooks: patch.enableTerminalAgentHooks }
       : {}),
     ...(patch.remoteAccess !== undefined ? { remoteAccess: patch.remoteAccess } : {}),
+    ...(patch.resumeOnStartup !== undefined ? { resumeOnStartup: patch.resumeOnStartup } : {}),
+    ...(patch.resumePrompt !== undefined ? { resumePrompt: patch.resumePrompt } : {}),
     ...(patch.idleRuntimeCleanup !== undefined
       ? { idleRuntimeCleanup: patch.idleRuntimeCleanup }
       : {}),
@@ -400,6 +478,7 @@ export function applyMutableProviderConfigToOverrides(
 }
 
 export class DaemonConfigStore {
+  private mutations: Promise<unknown> = Promise.resolve();
   private current: MutableDaemonConfig;
   private readonly paseoHome: string;
   private readonly logger: LoggerLike | undefined;
@@ -431,7 +510,7 @@ export class DaemonConfigStore {
     this.startupPersisted = options.startupPersisted ?? loadPersistedConfig(paseoHome, this.logger);
     this.lastKnownPersisted = this.startupPersisted;
     this.current = MutableDaemonConfigSchema.parse({
-      ...initial,
+      ...foldConfigProfiles({ config: initial, providers: initial.providers, source: "stored" }),
       relay: initial.relay ?? { enabled: true },
       ...this.readSpeech(this.startupPersisted),
     });
@@ -441,22 +520,49 @@ export class DaemonConfigStore {
     return this.current;
   }
 
-  public patch(partial: MutableDaemonConfigPatch): MutableDaemonConfig {
-    const parsedPatch = pickSupportedPatchFields(MutableDaemonConfigPatchSchema.parse(partial));
-    return this.applySupportedPatch(parsedPatch);
+  public patch(
+    partial:
+      | MutableDaemonConfigPatch
+      | ((current: MutableDaemonConfig) => MutableDaemonConfigPatch),
+  ): Promise<MutableDaemonConfig> {
+    return this.enqueue(() =>
+      this.applySupportedPatch(
+        pickSupportedPatchFields(
+          MutableDaemonConfigPatchSchema.parse(
+            typeof partial === "function" ? partial(this.current) : partial,
+          ),
+        ),
+      ),
+    );
   }
 
-  public setAgentSkillSelection(selection: AgentSkillSelection): MutableDaemonConfig {
-    return this.applySupportedPatch({ skills: { selection } });
+  public setAgentSkillSelection(selection: AgentSkillSelection): Promise<MutableDaemonConfig> {
+    return this.enqueue(() => this.applySupportedPatch({ skills: { selection } }));
   }
 
-  private applySupportedPatch(parsedPatch: SupportedMutableConfigPatch): MutableDaemonConfig {
+  private foldPatchProfiles<
+    T extends { agentProfiles?: AgentProfile[]; providers?: Record<string, ProviderOverride> },
+  >(submittedPatch: T): T {
+    return foldConfigProfiles({
+      config: submittedPatch,
+      // The provider graph this request will commit, so `extends` survives a partial edit.
+      providers: deepMerge(this.current.providers ?? {}, submittedPatch.providers ?? {}),
+      source: "client write",
+      held: this.current.agentProfiles,
+    });
+  }
+
+  // eslint-disable-next-line complexity -- merge: combined two implementations
+  private async applySupportedPatch(
+    parsedPatch: SupportedMutableConfigPatch,
+  ): Promise<MutableDaemonConfig> {
     if (parsedPatch.relay?.enabled !== undefined && !this.relayEnabledMutable) {
       throw new Error(
         "Relay is controlled by a daemon launch override. Remove PASEO_RELAY_ENABLED or the relay CLI flag before changing it here.",
       );
     }
-    const { removeProviders = [], ...patch } = parsedPatch;
+    const { removeProviders = [], ...submittedPatch } = parsedPatch;
+    const patch = this.foldPatchProfiles(submittedPatch);
     const { features: speechPatch, ...configPatch } = patch;
     const removedProviders = Array.from(new Set(removeProviders));
     const merged = deepMerge(this.current, configPatch);
@@ -478,11 +584,20 @@ export class DaemonConfigStore {
     const configChanged = !isEqualValue(this.current, next);
 
     // A replaced API key leaves the speech view unchanged, so a speech patch always persists.
-    if (!configChanged && removedProviders.length === 0 && speechPatch === undefined) {
+    // Profiles held folded in memory may still be on disk with `featureValues`; saving them writes `options`.
+    const profilesStaleOnDisk =
+      patch.agentProfiles !== undefined &&
+      !isEqualValue(patch.agentProfiles, this.lastKnownPersisted.daemon?.agentProfiles);
+    if (
+      !configChanged &&
+      removedProviders.length === 0 &&
+      speechPatch === undefined &&
+      !profilesStaleOnDisk
+    ) {
       return this.current;
     }
 
-    const { previous: persistedBeforePatch, knownNext } = this.persistConfig(
+    const { previous: persistedBeforePatch, knownNext } = await this.persistConfig(
       patch,
       removedProviders,
     );
@@ -491,7 +606,7 @@ export class DaemonConfigStore {
       try {
         this.applyReplacement(next, { removedProviders });
       } catch (error) {
-        savePersistedConfig(this.paseoHome, persistedBeforePatch, this.logger);
+        await savePersistedConfigAsync(this.paseoHome, persistedBeforePatch, this.logger);
         throw error;
       }
     }
@@ -522,17 +637,25 @@ export class DaemonConfigStore {
     );
   }
 
-  public reload(): DaemonConfigReloadResult {
+  public reload(): Promise<DaemonConfigReloadResult> {
+    return this.enqueue(() => this.reloadPersisted());
+  }
+
+  private async reloadPersisted(): Promise<DaemonConfigReloadResult> {
     if (!this.reloadSource) {
       throw new Error("Daemon config reload is unavailable for this daemon instance");
     }
 
-    const persisted = loadPersistedConfig(this.paseoHome, this.logger);
+    const persisted = await loadPersistedConfigAsync(this.paseoHome, this.logger);
     const resolved = this.reloadSource.resolve(persisted);
     // Plugin source changes require the plugin lifecycle operation or a daemon
     // restart. The global switch is independently reloadable.
     const desired = MutableDaemonConfigSchema.parse({
-      ...resolved.mutable,
+      ...foldConfigProfiles({
+        config: resolved.mutable,
+        providers: resolved.mutable.providers,
+        source: "stored",
+      }),
       plugins: this.current.plugins,
       ...this.readSpeech(persisted),
     });
@@ -689,11 +812,24 @@ export class DaemonConfigStore {
     };
   }
 
-  private persistConfig(
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutations.then(operation);
+    this.mutations = result.catch(() => {});
+    return result;
+  }
+
+  public readServicePorts(): Promise<NonNullable<PersistedConfig["worktrees"]>["servicePorts"]> {
+    return this.enqueue(
+      async () =>
+        (await loadPersistedConfigAsync(this.paseoHome, this.logger)).worktrees?.servicePorts,
+    );
+  }
+
+  private async persistConfig(
     patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
     removeProviders: readonly string[],
-  ): { previous: PersistedConfig; knownNext: PersistedConfig } {
-    const persisted = loadPersistedConfig(this.paseoHome, this.logger);
+  ): Promise<{ previous: PersistedConfig; knownNext: PersistedConfig }> {
+    const persisted = await loadPersistedConfigAsync(this.paseoHome, this.logger);
     const merge = (source: PersistedConfig) =>
       mergeMutablePatchIntoPersistedConfig({
         persisted: source,
@@ -703,7 +839,7 @@ export class DaemonConfigStore {
       });
     const nextPersisted = merge(persisted);
     const knownNext = merge(this.lastKnownPersisted);
-    savePersistedConfig(this.paseoHome, nextPersisted, this.logger);
+    await savePersistedConfigAsync(this.paseoHome, nextPersisted, this.logger);
     return { previous: persisted, knownNext };
   }
 }
@@ -747,6 +883,7 @@ function applyIdleCleanupPatch(
   }
 }
 
+// eslint-disable-next-line complexity -- merge: combined two implementations
 function mergeMutableAgentPatch(
   persistedAgents: PersistedConfig["agents"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -758,6 +895,8 @@ function mergeMutableAgentPatch(
     patch.modelRouters === undefined &&
     patch.skills === undefined &&
     idleCleanupPatchAbsent(patch) &&
+    !hasRestartRecoveryPatch(patch) &&
+    patch.idleRuntimeCleanup === undefined &&
     removeProviders.length === 0
   ) {
     return persistedAgents;
@@ -794,6 +933,11 @@ function mergeMutableAgentPatch(
     next["modelRouters"] = patch.modelRouters;
   }
 
+  Object.assign(next, restartRecoveryPatch(patch));
+  if (patch.idleRuntimeCleanup !== undefined) {
+    next["idleRuntimeCleanup"] = patch.idleRuntimeCleanup;
+  }
+
   applyIdleCleanupPatch(next, patch);
 
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
@@ -812,6 +956,7 @@ function mergeRemoteAccessPatch(
   });
 }
 
+// eslint-disable-next-line complexity -- merge: combined two implementations
 function mergeMutableDaemonPatch(
   persistedDaemon: PersistedConfig["daemon"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -827,6 +972,7 @@ function mergeMutableDaemonPatch(
   if (patch.mcp?.injectIntoAgents !== undefined) {
     next.mcp = { ...next.mcp, injectIntoAgents: patch.mcp.injectIntoAgents };
   }
+  if (patch.usage) next.usage = patch.usage;
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };
   }
@@ -846,4 +992,14 @@ function mergeMutableDaemonPatch(
   if (patch.mcpShares !== undefined) next.mcpShares = patch.mcpShares;
   if (patch.mcpBridges !== undefined) next.mcpBridges = patch.mcpBridges;
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function hasRestartRecoveryPatch(patch: SupportedMutableConfigPatch) {
+  return patch.resumeOnStartup !== undefined || patch.resumePrompt !== undefined;
+}
+function restartRecoveryPatch(patch: SupportedMutableConfigPatch) {
+  return {
+    ...(patch.resumeOnStartup !== undefined ? { resumeOnStartup: patch.resumeOnStartup } : {}),
+    ...(patch.resumePrompt !== undefined ? { resumePrompt: patch.resumePrompt } : {}),
+  };
 }

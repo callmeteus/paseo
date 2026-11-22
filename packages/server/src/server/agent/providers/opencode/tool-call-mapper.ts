@@ -56,7 +56,7 @@ export function mapOpencodeToolCall(params: OpencodeToolCallParams): ToolCallTim
   // user answered elsewhere (OpenCode says aborted). Neither is work the timeline can finish, and
   // painting the aborted case as an error blames the tool for the user's choice.
   const status = isQuestionTool(name) ? "completed" : normalizedStatus;
-  const detail = deriveOpencodeToolDetail(name, input, output, error, raw.metadata);
+  const detail = deriveOpencodeToolDetail(name, input, output, raw.metadata);
 
   if (status === "failed") {
     return {

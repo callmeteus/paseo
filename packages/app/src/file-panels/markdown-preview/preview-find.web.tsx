@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { PaneFind, findShortcutPlatform, isFindShortcut, type PaneFindHandle } from "@/pane-find";
 import { usePaneFocus } from "@/panels/pane-context";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { hasActiveWebOverlay } from "@/lib/overlay-root";
+import { hasActiveOverlay } from "@/keyboard";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import { findRenderedMatches } from "@/agent-stream/chat-find/ranges.web";
 import type { Theme } from "@/styles/theme";
@@ -49,7 +49,7 @@ export function MarkdownPreviewFind({
   useEffect(() => {
     if (!open || !active || !isInteractive) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || hasActiveWebOverlay() || isImeComposingKeyboardEvent(event))
+      if (event.defaultPrevented || hasActiveOverlay() || isImeComposingKeyboardEvent(event))
         return;
       // RN Web TextInputs stop bubbling; the widget handles a repeat itself.
       if (isFindShortcut(event, findShortcutPlatform())) {
@@ -106,7 +106,7 @@ export function MarkdownPreviewFind({
   useEffect(() => {
     if (!active || !isInteractive) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || hasActiveWebOverlay() || isImeComposingKeyboardEvent(event))
+      if (event.defaultPrevented || hasActiveOverlay() || isImeComposingKeyboardEvent(event))
         return;
       const target = event.target;
       if (

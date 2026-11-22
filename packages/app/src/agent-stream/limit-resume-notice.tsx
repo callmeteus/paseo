@@ -55,7 +55,7 @@ export function LimitResumeOffer({
   text: string;
 }) {
   const { t } = useTranslation();
-  const reports = useUsageHostReports(serverId);
+  const reports = useUsageHostReports({ serverId });
   const routerId = useSessionStore((state) => {
     const session = state.sessions[serverId];
     return (

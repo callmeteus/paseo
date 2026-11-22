@@ -19,6 +19,7 @@ function summary(overrides: Partial<OverviewSummary> = {}): OverviewSummary {
     agentCount: 0,
     otherToolCount: 0,
     paseoCallCount: 0,
+    paseoActions: {},
     failedFileCount: 0,
     readFiles: [],
     thinkingDurationMs: 0,

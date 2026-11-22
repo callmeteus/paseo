@@ -135,9 +135,10 @@ describe("tool call detail-level projection", () => {
     expect(tail).toEqual([task, shell]);
 
     const overview = project({ level: "overview", head: [task, shell], isTurnActive: true });
-    expect(overview.groupsByHostId.size).toBe(1);
+    // The remaining shell is a lone call, so it appears as itself without a group.
+    expect(overview.groupsByHostId.size).toBe(0);
     expect(overview.groupsByHostId.get(task.id)).toBeUndefined();
-    expect(overview.groupsByHostId.get(shell.id)?.run.calls.map((call) => call.id)).toEqual(["2"]);
+    expect(overview.head.map((item) => item.id)).toEqual(["2"]);
     expect(overview.head.some((item) => item.id === task.id)).toBe(false);
 
     const plainOther = toolCall(
@@ -185,11 +186,7 @@ describe("tool call detail-level projection", () => {
       preparedHistory: prepared,
     });
     expect(single.head).toEqual([firstCall]);
-    expect(single.groupsByHostId.get(firstCall.id)?.run).toMatchObject({
-      calls: [firstCall],
-      latest: firstCall,
-      isSealed: false,
-    });
+    expect(single.groupsByHostId.size).toBe(0);
 
     const grouped = project({
       level: "overview",
@@ -217,18 +214,11 @@ describe("tool call detail-level projection", () => {
     expect(result.groupsByHostId.get("1")?.isLoading).toBe(true);
   });
 
-  it("builds a loading aggregate for a one-call run", () => {
+  it("leaves a running lone call visible without an aggregate", () => {
     const call = toolCall("1", { type: "shell", command: "one" }, { status: "running" });
     const result = project({ level: "overview", head: [call], isTurnActive: true });
-    const group = result.groupsByHostId.get(call.id);
-    if (!group) {
-      throw new Error("Expected an overview group");
-    }
-
-    expect(group).toMatchObject({
-      isLoading: true,
-      summary: { commandCount: 1 },
-    });
+    expect(result.head).toEqual([call]);
+    expect(result.groupsByHostId.size).toBe(0);
   });
 
   it("keeps an active overview group on its latest call until a visible boundary arrives", () => {
@@ -330,6 +320,8 @@ describe("tool call detail-level projection", () => {
       run: expect.any(Object),
       isLoading: false,
       summary: {
+        thoughtCount: 0,
+        // A rejected edit is an attempt, not an applied change.
         editedFileCount: 0,
         commandCount: 1,
         readFileCount: 2,
@@ -338,10 +330,10 @@ describe("tool call detail-level projection", () => {
         agentCount: 0,
         otherToolCount: 0,
         paseoCallCount: 0,
+        paseoActions: {},
         failedFileCount: 1,
         readFiles: ["/repo/src/a.ts", "/repo/src/b.ts"],
         thinkingDurationMs: 0,
-        thoughtCount: 0,
         hasText: false,
       },
     });
@@ -409,7 +401,8 @@ describe("tool call detail-level projection", () => {
 
     const group = result.groupsByHostId.get("1");
     expect(group?.run.steps.map((step) => step.id)).toEqual(["1", "2", "3", "4"]);
-    expect(group?.run.calls.map((call) => call.id)).toEqual(["2", "4"]);
+    // Reasoning does not count as tool work.
+    expect(group?.run.toolCalls.map((call) => call.id)).toEqual(["2", "4"]);
     expect(group?.summary).toMatchObject({
       readFileCount: 2,
       thoughtCount: 2,
@@ -464,9 +457,9 @@ describe("tool call detail-level projection", () => {
       ],
     });
 
-    // The streaming line stays visible, so it splits the run into two groups.
-    expect(result.groupsByHostId.get("1")?.run.steps.map((step) => step.id)).toEqual(["1"]);
-    expect(result.groupsByHostId.get("3")?.run.steps.map((step) => step.id)).toEqual(["3"]);
+    // The streaming line stays visible, so no two calls ever share a group.
+    expect(result.head.map((item) => item.id)).toEqual(["1", "2", "3"]);
+    expect(result.groupsByHostId.size).toBe(0);
   });
 
   it("does not turn a stretch of narration alone into a group", () => {
@@ -491,8 +484,8 @@ describe("tool call detail-level projection", () => {
     const result = project({ level: "overview", tail, includeShortText: true });
 
     // An error must stay visible, so it splits the run instead of hiding inside it.
-    expect(result.groupsByHostId.get("1")?.run.steps.map((step) => step.id)).toEqual(["1"]);
-    expect(result.groupsByHostId.get("3")?.run.steps.map((step) => step.id)).toEqual(["3"]);
+    expect(result.tail.map((item) => item.id)).toEqual(["1", "2", "3"]);
+    expect(result.groupsByHostId.size).toBe(0);
   });
 
   it("counts Paseo calls separately from other tools", () => {
@@ -510,7 +503,12 @@ describe("tool call detail-level projection", () => {
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { fetchCount: 2, otherToolCount: 0, paseoCallCount: 2 },
+      summary: {
+        fetchCount: 2,
+        otherToolCount: 0,
+        paseoCallCount: 2,
+        paseoActions: { "Listed agents": 1, "List worktrees": 1 },
+      },
     });
   });
 
@@ -528,7 +526,11 @@ describe("tool call detail-level projection", () => {
     const result = project({ level: "overview", head: calls });
 
     expect(result.groupsByHostId.get("1")).toMatchObject({
-      summary: { searchCount: 3, otherToolCount: 0, paseoCallCount: 3 },
+      summary: {
+        searchCount: 3,
+        otherToolCount: 0,
+        paseoActions: { "Listed providers": 1, "List worktrees": 2 },
+      },
     });
   });
 
@@ -658,7 +660,112 @@ describe("tool call detail-level projection", () => {
     const result = project({ level: "overview", head: [singleCall, plan, speak] });
 
     expect(result.head).toEqual([singleCall, plan, speak]);
-    expect(result.groupsByHostId.get(singleCall.id)?.run.calls).toEqual([singleCall]);
-    expect(result.groupsByHostId.size).toBe(1);
+    expect(result.groupsByHostId.size).toBe(0);
   });
+});
+
+it("keeps a heartbeat trigger visible outside grouped work", () => {
+  const trigger = toolCall(
+    "1",
+    { type: "plain_text", text: "Check progress" },
+    { name: "heartbeat" },
+  );
+  const work = toolCall("2", { type: "shell", command: "pwd" });
+  const result = project({ level: "overview", tail: [trigger, work] });
+  expect(result.tail.map((item) => item.id)).toEqual(["1", "2"]);
+  expect(result.groupsByHostId.has("1")).toBe(false);
+});
+
+it("does not merge tools from different canonical turns", () => {
+  const first = toolCall("1", { type: "shell", command: "pwd" });
+  first.turnId = "first";
+  const second = toolCall("2", { type: "shell", command: "ls" });
+  second.turnId = "second";
+  const result = project({ level: "overview", tail: [first, second] });
+  expect(result.tail.map((item) => item.id)).toEqual(["1", "2"]);
+});
+
+it.each([false, true])(
+  "handles streaming reasoning across retained history (Expand thinking %s)",
+  (autoExpandReasoning) => {
+    const call = { ...toolCall("1", { type: "shell", command: "echo ok" }), turnId: "run" };
+    const thoughtItem: StreamItem = {
+      kind: "thought",
+      id: "reasoning",
+      text: "Checking",
+      status: "loading",
+      timestamp: new Date(),
+      turnId: "run",
+    };
+    const tail = [call];
+    const result = project({
+      level: "overview",
+      tail,
+      head: [thoughtItem],
+      isTurnActive: true,
+      // Expand thinking is the inverse of folding reasoning into a group's steps.
+      preparedHistory: prepareToolCallHistory(
+        "overview",
+        tail,
+        !autoExpandReasoning,
+        false,
+        autoExpandReasoning,
+      ),
+    });
+    expect(result.head).toEqual(autoExpandReasoning ? [thoughtItem] : []);
+    expect(result.groupsByHostId.get(call.id)?.run.steps).toEqual(
+      autoExpandReasoning ? undefined : [call, thoughtItem],
+    );
+    expect(result.groupsByHostId.get(call.id)?.summary).toEqual(
+      autoExpandReasoning
+        ? undefined
+        : expect.objectContaining({
+            commandCount: 1,
+            otherToolCount: 0,
+            thoughtCount: 1,
+          }),
+    );
+  },
+);
+
+it("turns a retained lone call into a group without replacing its row key", () => {
+  const first = toolCall("1", { type: "shell", command: "one" });
+  const second = toolCall("2", { type: "shell", command: "two" });
+  const tail = [assistant("before"), first];
+  const preparedHistory = prepareToolCallHistory("overview", tail);
+  const single = project({ level: "overview", tail, preparedHistory, isTurnActive: true });
+  const grouped = project({
+    level: "overview",
+    tail,
+    head: [second],
+    preparedHistory,
+    isTurnActive: true,
+  });
+  expect(single.groupsByHostId.size).toBe(0);
+  expect(single.tail).toBe(tail);
+  expect(grouped.tail).toBe(single.tail);
+  expect(grouped.head).toEqual([]);
+  expect(grouped.groupsByHostId.get(first.id)?.run.calls).toEqual([first, second]);
+  expect(grouped.historyGroupUpdatesByHostId.get(first.id)).toBe(
+    grouped.groupsByHostId.get(first.id),
+  );
+});
+
+it("shows one thought as itself until another groupable item arrives", () => {
+  const thoughtItem: StreamItem = {
+    kind: "thought",
+    id: "thought",
+    text: "Checking",
+    status: "ready",
+    timestamp: new Date(0),
+  };
+  const single = project({ level: "overview", tail: [thoughtItem] });
+  expect(single.tail).toEqual([thoughtItem]);
+  expect(single.groupsByHostId.size).toBe(0);
+  const grouped = project({
+    level: "overview",
+    tail: [thoughtItem, toolCall("1", { type: "shell", command: "one" })],
+  });
+  expect(grouped.tail.map((item) => item.id)).toEqual([thoughtItem.id]);
+  expect(grouped.groupsByHostId.get(thoughtItem.id)?.run.steps).toHaveLength(2);
 });

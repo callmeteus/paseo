@@ -70,6 +70,14 @@
           },
           "additionalProperties": {}
         },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
         "browserTools": {
           "type": "object",
           "properties": {
@@ -162,6 +170,13 @@
                 "type": "string"
               },
               "featureValues": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "options": {
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
@@ -523,6 +538,12 @@
           "description": "How long a resumable agent stays idle before its process is released. One of 15m, 30m, 1h, 2h, 4h, 8h, 24h. Defaults to 1h.",
           "type": "string",
           "enum": ["15m", "30m", "1h", "2h", "4h", "8h", "24h"]
+        },
+        "resumeOnStartup": {
+          "type": "boolean"
+        },
+        "resumePrompt": {
+          "type": "string"
         },
         "catalogRefreshTimeoutMs": {
           "type": "integer",

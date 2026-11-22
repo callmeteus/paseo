@@ -1,7 +1,10 @@
+import { findMountedWindowStart } from "@/agent-stream/history-window";
 import { z } from "zod";
 import {
+  AgentBackgroundWorkSummarySchema,
   AgentStatusSchema,
   AgentTimelineItemPayloadSchema,
+  ForgeWebSchema,
   WorkspaceGitHubRuntimePayloadSchema,
 } from "@getpaseo/protocol/messages";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
@@ -19,6 +22,7 @@ import {
   type AgentToolCallData,
   type StreamItem,
 } from "@/types/stream";
+import type { UnsettledTurn } from "@/timeline/turn-liveness";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { clearLegacyReplicaCache } from "./legacy-cleanup";
 import {
@@ -66,6 +70,8 @@ export interface CachedTimeline {
   items: StreamItem[];
   range: AgentTimelineCursorState | null;
   hasOlder: boolean;
+  /** Set when these messages were captured while a turn was open and not yet caught up. */
+  unsettledTurn?: UnsettledTurn;
 }
 
 const PERSIST_DELAY_MS = 1_000;
@@ -238,6 +244,7 @@ const StoredAgentSnapshotSchema = z.strictObject({
   updatedAt: IsoDateSchema,
   lastUserMessageAt: IsoDateSchema.nullable(),
   status: AgentStatusSchema,
+  backgroundWork: AgentBackgroundWorkSummarySchema.optional(),
   activeTurn: z
     .strictObject({
       turnId: z.string(),
@@ -254,6 +261,8 @@ const StoredAgentSnapshotSchema = z.strictObject({
   lastError: z.string().optional(),
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()),
+  // Optional: clients without background_agents never received a background agent to cache.
+  background: z.boolean().optional(),
   requiresAttention: z.boolean().optional(),
   attentionReason: z
     .enum(["finished", "error", "permission", "question", "goal-paused", "goal-complete"])
@@ -307,6 +316,7 @@ const WorkspaceGitRuntimeSchema = z
   .optional();
 
 const StoredWorkspaceSchema = z.strictObject({
+  parentWorkspaceId: z.string().optional(),
   // Require both keys: a cursor without these values would preserve the wrong sort on reconnect.
   createdAt: IsoDateSchema.nullable(),
   lastUserMessageAt: IsoDateSchema.nullable(),
@@ -338,6 +348,7 @@ const StoredWorkspaceSchema = z.strictObject({
   gitRuntime: WorkspaceGitRuntimeSchema,
   githubRuntime: WorkspaceGitHubRuntimePayloadSchema,
   forge: z.string().optional(),
+  forgeWeb: ForgeWebSchema.optional(),
 });
 
 const StoredProjectSchema = z.strictObject({
@@ -362,6 +373,9 @@ const StoredTimelineSchema = z.strictObject({
     })
     .nullable(),
   hasOlder: z.boolean(),
+  unsettledTurn: z
+    .strictObject({ turnId: z.string().nullable(), startedAt: IsoDateSchema.nullable() })
+    .optional(),
 });
 
 type StoredAgent = z.infer<typeof StoredAgentSchema>;
@@ -394,15 +408,19 @@ const DirectoryCheckpointSchema = z.strictObject({
   agents: DirectoryCursorSchema.optional(),
 });
 
-// Old checkpoints could describe a baseline that an overlapping refresh had discarded.
-// Revalidate directory contents once without evicting cached rows or timelines.
+// A checkpoint is trusted only when this version wrote it. Earlier writers could store one for a
+// directory the cache no longer held: unversioned ones after an overlapping refresh, version 1
+// after an eviction. Rejecting them revalidates directory contents once without evicting cached
+// rows or timelines.
+const DIRECTORY_CHECKPOINT_VERSION = 2;
+
 const StoredDirectoryCheckpointSchema = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(DIRECTORY_CHECKPOINT_VERSION),
   cursors: DirectoryCheckpointSchema,
 });
 
 function serializeDirectoryCheckpoint(cursors: DirectoryCheckpoint) {
-  return { version: 1 as const, cursors };
+  return { version: DIRECTORY_CHECKPOINT_VERSION, cursors };
 }
 
 function deserializeDirectoryCheckpoint(payload: string): DirectoryCheckpoint {
@@ -418,6 +436,16 @@ function deserializeTimeline(stored: StoredTimeline | null): CachedTimeline | nu
     items: stored.items.map(deserializeTimelineItem),
     range: stored.range,
     hasOlder: stored.hasOlder,
+    ...(stored.unsettledTurn
+      ? {
+          unsettledTurn: {
+            turnId: stored.unsettledTurn.turnId,
+            startedAt: stored.unsettledTurn.startedAt
+              ? new Date(stored.unsettledTurn.startedAt)
+              : null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -519,6 +547,9 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         version: item.version,
         data: item.data,
       };
+    // A folded turn's summary row is presentation, not timeline.
+    case "turn_summary":
+      return null;
   }
 }
 
@@ -639,6 +670,31 @@ function serializeAgentTurn(agent: Agent): NonNullable<StoredAgent["turn"]> {
   };
 }
 
+function serializeAgentCapabilities(
+  capabilities: Agent["capabilities"],
+): StoredAgent["snapshot"]["capabilities"] {
+  return {
+    supportsStreaming: capabilities.supportsStreaming,
+    supportsSessionPersistence: capabilities.supportsSessionPersistence,
+    ...(capabilities.supportsSessionListing !== undefined
+      ? { supportsSessionListing: capabilities.supportsSessionListing }
+      : {}),
+    supportsDynamicModes: capabilities.supportsDynamicModes,
+    supportsMcpServers: capabilities.supportsMcpServers,
+    supportsReasoningStream: capabilities.supportsReasoningStream,
+    supportsToolInvocations: capabilities.supportsToolInvocations,
+    ...(capabilities.supportsRewindConversation !== undefined
+      ? { supportsRewindConversation: capabilities.supportsRewindConversation }
+      : {}),
+    ...(capabilities.supportsRewindFiles !== undefined
+      ? { supportsRewindFiles: capabilities.supportsRewindFiles }
+      : {}),
+    ...(capabilities.supportsRewindBoth !== undefined
+      ? { supportsRewindBoth: capabilities.supportsRewindBoth }
+      : {}),
+  };
+}
+
 function serializeAgent(agent: Agent): StoredAgent {
   const snapshot = {
     id: agent.id,
@@ -659,26 +715,7 @@ function serializeAgent(agent: Agent): StoredAgent {
           },
         }
       : {}),
-    capabilities: {
-      supportsStreaming: agent.capabilities.supportsStreaming,
-      supportsSessionPersistence: agent.capabilities.supportsSessionPersistence,
-      ...(agent.capabilities.supportsSessionListing !== undefined
-        ? { supportsSessionListing: agent.capabilities.supportsSessionListing }
-        : {}),
-      supportsDynamicModes: agent.capabilities.supportsDynamicModes,
-      supportsMcpServers: agent.capabilities.supportsMcpServers,
-      supportsReasoningStream: agent.capabilities.supportsReasoningStream,
-      supportsToolInvocations: agent.capabilities.supportsToolInvocations,
-      ...(agent.capabilities.supportsRewindConversation !== undefined
-        ? { supportsRewindConversation: agent.capabilities.supportsRewindConversation }
-        : {}),
-      ...(agent.capabilities.supportsRewindFiles !== undefined
-        ? { supportsRewindFiles: agent.capabilities.supportsRewindFiles }
-        : {}),
-      ...(agent.capabilities.supportsRewindBoth !== undefined
-        ? { supportsRewindBoth: agent.capabilities.supportsRewindBoth }
-        : {}),
-    },
+    capabilities: serializeAgentCapabilities(agent.capabilities),
     currentModeId: agent.currentModeId,
     workflowModeId: agent.workflowModeId,
     availableModes: [],
@@ -687,7 +724,9 @@ function serializeAgent(agent: Agent): StoredAgent {
     ...(agent.lastError ? { lastError: agent.lastError } : {}),
     title: agent.title,
     labels: agent.labels,
+    ...(agent.background ? { background: true } : {}),
     requiresAttention: agent.requiresAttention ?? false,
+    backgroundWork: agent.backgroundWork,
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp?.toISOString() ?? null,
     archivedAt: agent.archivedAt?.toISOString() ?? null,
@@ -726,6 +765,7 @@ function restoreWorkspace(stored: StoredWorkspace): WorkspaceDescriptor {
 
 function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
   return {
+    parentWorkspaceId: workspace.parentWorkspaceId,
     createdAt: workspace.createdAt?.toISOString() ?? null,
     lastUserMessageAt: workspace.lastUserMessageAt?.toISOString() ?? null,
     id: workspace.id,
@@ -764,6 +804,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     gitRuntime: workspace.gitRuntime,
     githubRuntime: workspace.githubRuntime,
     forge: workspace.forge,
+    forgeWeb: workspace.forgeWeb,
   };
 }
 
@@ -795,7 +836,14 @@ function serializeTimeline(timeline: CachedTimeline): StoredTimeline | null {
   const canonicalItems = timeline.items.filter(
     (item) => item.kind !== "user_message" || !isUnreconciledLocalUserMessage(item),
   );
-  const items = canonicalItems.map(serializeTimelineItem).filter((item) => item !== null);
+  const start = findMountedWindowStart({
+    items: canonicalItems,
+    minMountedCount: MAX_TIMELINE_ITEMS,
+  });
+  const items = canonicalItems
+    .slice(start)
+    .map(serializeTimelineItem)
+    .filter((item) => item !== null);
   const range = timeline.range;
   const canPersistCoverage =
     range !== null &&
@@ -812,11 +860,19 @@ function serializeTimeline(timeline: CachedTimeline): StoredTimeline | null {
     canonicalItems.some((item) => item.timelineCursor?.seq === range.endSeq);
   return {
     agentId: timeline.agentId,
-    items: items.slice(-MAX_TIMELINE_ITEMS),
+    items,
     range: canPersistCoverage
       ? { epoch: range.epoch, startSeq: range.startSeq, endSeq: range.endSeq }
       : null,
     hasOlder: canPersistCoverage ? timeline.hasOlder : false,
+    ...(timeline.unsettledTurn
+      ? {
+          unsettledTurn: {
+            turnId: timeline.unsettledTurn.turnId,
+            startedAt: timeline.unsettledTurn.startedAt?.toISOString() ?? null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -945,6 +1001,7 @@ export class ReplicaCache {
   private pendingUpserts = new Map<string, StructuredReplicaUpsert>();
   private pendingDeletes = new Map<string, ReplicaRowKey>();
   private pendingBaselines = new Set<string>();
+  // Hosts whose stored directory was evicted. Only a baseline stores their directory again.
   private readonly invalidatedHosts = new Set<string>();
   private readonly maxBytes: number;
   private totalBytes = 0;
@@ -1086,11 +1143,7 @@ export class ReplicaCache {
   private async deleteInvalidRow(row: ReplicaRow): Promise<void> {
     const invalidEntity = directoryEntityForRow(row);
     if (!invalidEntity) {
-      const changes = { upserts: [], deletes: [row] } satisfies ReplicaRowChanges;
-      await this.queueOperation(async () => {
-        await this.rowStore.apply(changes);
-        this.applyStoredChanges(changes);
-      });
+      await this.applyRepair(row.serverId, { upserts: [], deletes: [row] });
       return;
     }
 
@@ -1121,10 +1174,7 @@ export class ReplicaCache {
             ]
           : [],
     };
-    await this.queueOperation(async () => {
-      await this.rowStore.apply(changes);
-      this.applyStoredChanges(changes);
-    });
+    await this.applyRepair(row.serverId, changes);
   }
 
   private async repairInvalidDirectoryRows(
@@ -1147,9 +1197,16 @@ export class ReplicaCache {
             ]
           : [],
     };
-    await this.queueOperation(async () => {
-      await this.rowStore.apply(changes);
-      this.applyStoredChanges(changes);
+    await this.applyRepair(serverId, changes);
+  }
+
+  // A repair is queued behind writes that can evict its host. If one did, the host has no
+  // directory left for the repaired checkpoint to describe, so only the deletes still apply.
+  private applyRepair(serverId: string, changes: ReplicaRowChanges): Promise<void> {
+    return this.queueOperation(async () => {
+      const applied = this.invalidatedHosts.has(serverId) ? { ...changes, upserts: [] } : changes;
+      await this.rowStore.apply(applied);
+      this.applyStoredChanges(applied);
     });
   }
 
@@ -1159,7 +1216,6 @@ export class ReplicaCache {
     checkpoint?: DirectoryCheckpoint,
   ): void {
     if (!this.activeServerIds.has(serverId)) return;
-    if (this.invalidatedHosts.has(serverId)) return;
     for (const mutation of mutations) {
       if (mutation.type === "delete") {
         this.queueEntityDelete(serverId, mutation.kind, mutation.id);
@@ -1389,9 +1445,17 @@ export class ReplicaCache {
   }
 
   private materializePendingChanges(pending: PendingReplicaChanges): ReplicaRowChanges {
-    const deletes = new Map(pending.deletes.map((row) => [pendingRowKey(row), row]));
+    // Decided here, inside the serialized write, because eviction happens there too. A mutation
+    // queued before its host was evicted would otherwise store a checkpoint without its directory.
+    const isStorable = (row: ReplicaRowKey): boolean =>
+      row.kind === "timeline" ||
+      !this.invalidatedHosts.has(row.serverId) ||
+      pending.baselines.has(row.serverId);
+    const deletes = new Map(
+      pending.deletes.filter(isStorable).map((row) => [pendingRowKey(row), row]),
+    );
     const upserts: ReplicaRow[] = [];
-    for (const upsert of pending.upserts) {
+    for (const upsert of pending.upserts.filter(isStorable)) {
       const row = this.materializeUpsert(upsert);
       if (row) upserts.push(row);
       else deletes.set(pendingRowKey(upsert), upsert);
@@ -1540,8 +1604,10 @@ export class ReplicaCache {
       projectedTotal -= bytes;
       projectedBytes.delete(serverId);
       evicted.add(serverId);
-      this.invalidatedHosts.add(serverId);
       if (this.storedRows.has(serverId)) await this.rowStore.deleteHost(serverId);
+      // Only after the delete commits: a failed eviction leaves the rows stored, and writers that
+      // check this set must keep their checkpoint in step with those rows.
+      this.invalidatedHosts.add(serverId);
       this.removeStoredHost(serverId);
     }
 

@@ -1,17 +1,23 @@
+import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
 import { isPreapprovedAcpMcpTool } from "./acp-tool-policy.js";
 import { ACPProviderOptionsSchema } from "./acp-options.js";
+import { applyProviderOptionsPatch, foldFeatureValues } from "../option-controls.js";
+import { assertChangesAreLive } from "../provider-options.js";
 import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
+import { setImmediate } from "node:timers/promises";
 
 import {
   isBackgroundProviderNotice,
   stripBackgroundProviderNotice,
 } from "@getpaseo/protocol/provider-error";
 
+// eslint-disable-next-line paseo/no-sync-io -- merge: pre-existing synchronous IO
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { startElicitationBridge, type ElicitationBridge } from "../../mcp/elicitation-callback.js";
@@ -77,13 +83,15 @@ import {
 import { UpstreamMcpRegistry } from "../../mcp/upstream.js";
 import { readProjectMcpConfigs } from "../../mcp/project-mcp-config.js";
 import type { Logger } from "pino";
+import { z } from "zod";
 
 import {
   getAgentStreamEventTurnId,
   type AgentCapabilityFlags,
   type AgentClient,
   type AgentCreateConfigUnattendedInput,
-  type AgentFeature,
+  type AgentDraftControls,
+  type AgentOptionControl,
   type AgentLaunchContext,
   type AgentMetadata,
   type AgentMode,
@@ -139,6 +147,7 @@ import {
 } from "../provider-launch-config.js";
 import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
 import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "./provider-runner.js";
+import { resolveResumeProcessCwd } from "./resume-process-cwd.js";
 import {
   buildStringCommandShellInvocation,
   createStringCommandShellEnvOverlay,
@@ -184,27 +193,37 @@ function assertChildWithPipes(
   }
 }
 
-// Node reports a failed spawn (missing binary or missing cwd) as a child
-// `error` event; without a listener it becomes an uncaught exception.
-function rejectOnSpawnError(child: ChildProcess, stderrChunks: string[]): Promise<never> {
+// Watch process failures as well as spawn errors: the SDK leaves initialize
+// pending when the child exits without replying. `close` waits for stderr to
+// drain, so the failure includes the launcher's diagnostic.
+function rejectOnProcessFailure(child: ChildProcess, stderrChunks: string[]): Promise<never> {
   return new Promise<never>((_, reject) => {
     child.once("error", (error) => {
       const stderr = stderrChunks.join("").trim();
       reject(new Error(stderr ? `${String(error)}\n${stderr}` : String(error)));
     });
+    child.once("close", (code, signal) => {
+      const stderr = stderrChunks.join("").trim();
+      const status = signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`;
+      reject(
+        new Error(
+          `ACP agent process exited before initialization completed (${status})${
+            stderr ? `\n${stderr}` : ""
+          }`,
+        ),
+      );
+    });
   });
 }
 
-async function isDirectory(target: string): Promise<boolean> {
-  try {
-    return (await fs.stat(target)).isDirectory();
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return false;
-    }
-    throw error;
+function describeACPDisconnect(child: ChildProcess | null): string {
+  if (child?.signalCode) {
+    return `ACP agent disconnected (signal ${child.signalCode})`;
   }
+  if (child?.exitCode != null) {
+    return `ACP agent disconnected (exit code ${child.exitCode})`;
+  }
+  return "ACP agent disconnected";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -381,6 +400,7 @@ const ACP_PROBE_CLOSE_TIMEOUT_MS = 2_000;
 // request when the provider never answers, so these calls must be bounded
 // or the provider process is never terminated.
 const ACP_CLOSE_REQUEST_TIMEOUT_MS = 2_000;
+const ACP_DISCONNECT_EXIT_GRACE_MS = 1_000;
 const ACP_IMPORT_HISTORY_LOAD_TIMEOUT_MS = 30_000;
 const ACP_IMPORT_HISTORY_BUDGET_MS = 60_000;
 // A provider that never answers `session/prompt` leaves the chat loading
@@ -549,6 +569,14 @@ export function startKiloStdinKeepalive(
   child.once("close", stop);
   return stop;
 }
+
+/**
+ * An ACP agent publishes its slash-command inventory incrementally. Wait this
+ * long without another batch before treating the inventory as complete. MiniMax
+ * publishes its skills about 350ms after its built-in commands.
+ */
+const COMMAND_INVENTORY_QUIET_MS = 600;
+const COMMAND_INVENTORY_POLL_MS = 25;
 
 function summarizeMalformedACPStdoutError(error: unknown): { type: string; message: string } {
   return {
@@ -789,7 +817,7 @@ interface ACPProcessTransport {
   connection: ClientSideConnection;
   stderrChunks: string[];
   spawnReady: Promise<void>;
-  spawnError: Promise<never>;
+  processError: Promise<never>;
 }
 
 interface ACPImportPromptPreviews {
@@ -884,6 +912,7 @@ interface PendingPermission {
   resolve: (response: RequestPermissionResponse) => void;
   reject: (error: Error) => void;
   turnId: string | null;
+  toolCallId: string;
 }
 
 interface PendingElicitation {
@@ -1070,39 +1099,133 @@ export function deriveModelDefinitionsFromACP(
   models: SessionModelState | null | undefined,
   configOptions?: SessionConfigOption[] | null,
 ): AgentModelDefinition[] {
-  const thinkingOptions = deriveSelectorOptions(configOptions, "thought_level");
-  const defaultThinkingOptionId = thinkingOptions.find((option) => option.isDefault)?.id ?? null;
+  const sessionThinking = deriveSessionThinking(configOptions);
 
   if (models?.availableModels?.length) {
-    return models.availableModels.map((model) => ({
-      provider,
-      id: model.modelId,
-      label: model.name,
-      description: model.description ?? undefined,
-      isDefault: model.modelId === models.currentModelId,
-      thinkingOptions: thinkingOptions.length > 0 ? thinkingOptions : undefined,
-      defaultThinkingOptionId: defaultThinkingOptionId ?? undefined,
-    }));
+    return models.availableModels.map((model) => {
+      const isDefault = model.modelId === models.currentModelId;
+      const thinking = deriveACPModelThinking({
+        metadata: model._meta,
+        isDefault,
+        sessionThinking,
+      });
+      return {
+        provider,
+        id: model.modelId,
+        label: model.name,
+        description: model.description ?? undefined,
+        isDefault,
+        thinkingOptions: thinking.thinkingOptions,
+        defaultThinkingOptionId: thinking.defaultThinkingOptionId,
+      };
+    });
   }
 
   const modelOptions = deriveSelectorOptions(configOptions, "model");
-  return modelOptions.map((option) => ({
-    provider,
-    id: option.id,
-    label: option.label,
-    description: option.description,
-    isDefault: option.isDefault,
-    thinkingOptions: thinkingOptions.length > 0 ? thinkingOptions : undefined,
-    defaultThinkingOptionId: defaultThinkingOptionId ?? undefined,
-    metadata: option.metadata,
-  }));
+  return modelOptions.map((option) => {
+    const thinking = deriveACPModelThinking({
+      metadata: option.metadata,
+      isDefault: option.isDefault === true,
+      sessionThinking,
+    });
+    return {
+      provider,
+      id: option.id,
+      label: option.label,
+      description: option.description,
+      isDefault: option.isDefault,
+      thinkingOptions: thinking.thinkingOptions,
+      defaultThinkingOptionId: thinking.defaultThinkingOptionId,
+      metadata: option.metadata,
+    };
+  });
 }
 
-export function deriveFeaturesFromACP(
+type ACPModelThinking = Pick<AgentModelDefinition, "thinkingOptions" | "defaultThinkingOptionId">;
+
+const NO_THINKING: ACPModelThinking = {
+  thinkingOptions: undefined,
+  defaultThinkingOptionId: undefined,
+};
+
+// Some ACP agents describe each model's reasoning levels in the model's `_meta`.
+const ACPModelReasoningSchema = z.object({
+  supportsReasoningEffort: z.boolean().optional(),
+  reasoningEffort: z.string().min(1).nullish(),
+  reasoningEfforts: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        value: z.string().min(1).optional(),
+        label: z.string(),
+        description: z.string().nullish(),
+        default: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
+function deriveSessionThinking(
+  configOptions: SessionConfigOption[] | null | undefined,
+): ACPModelThinking {
+  const thinkingOptions = deriveSelectorOptions(configOptions, "thought_level");
+  if (thinkingOptions.length === 0) {
+    return NO_THINKING;
+  }
+  return {
+    thinkingOptions,
+    defaultThinkingOptionId: thinkingOptions.find((option) => option.isDefault)?.id,
+  };
+}
+
+// A model's own reasoning metadata describes that model. A model that reports none
+// keeps the session's thought_level options, which describe the startup model.
+function deriveACPModelThinking(input: {
+  metadata: Record<string, unknown> | null | undefined;
+  isDefault: boolean;
+  sessionThinking: ACPModelThinking;
+}): ACPModelThinking {
+  const { metadata, isDefault, sessionThinking } = input;
+  const parsed = ACPModelReasoningSchema.safeParse(metadata ?? {});
+  if (!parsed.success) {
+    return sessionThinking;
+  }
+  const { supportsReasoningEffort, reasoningEffort, reasoningEfforts } = parsed.data;
+  if (supportsReasoningEffort === false || reasoningEfforts?.length === 0) {
+    return NO_THINKING;
+  }
+  if (!reasoningEfforts) {
+    return sessionThinking;
+  }
+
+  const ids = reasoningEfforts.map((effort) => effort.value ?? effort.id);
+  if (new Set(ids).size !== ids.length) {
+    return sessionThinking;
+  }
+  const markedDefault = reasoningEfforts.find((effort) => effort.default);
+  const defaultCandidates = [
+    isDefault ? sessionThinking.defaultThinkingOptionId : undefined,
+    reasoningEffort,
+    markedDefault ? (markedDefault.value ?? markedDefault.id) : undefined,
+  ];
+  const defaultThinkingOptionId =
+    defaultCandidates.find((id) => id && ids.includes(id)) ?? undefined;
+  return {
+    thinkingOptions: reasoningEfforts.map((effort, index) => ({
+      id: ids[index],
+      label: effort.label,
+      description: effort.description ?? undefined,
+      isDefault: ids[index] === defaultThinkingOptionId,
+    })),
+    defaultThinkingOptionId,
+  };
+}
+
+export function deriveControlsFromACP(
   configOptions: SessionConfigOption[] | null | undefined,
   featureOptions: ACPConfigFeatureOption[],
-): AgentFeature[] {
-  return featureOptions.flatMap((featureOption): AgentFeature[] => {
+): AgentOptionControl[] {
+  return featureOptions.flatMap((featureOption): AgentOptionControl[] => {
     const option = findSelectConfigFeatureOption(configOptions, featureOption);
     if (!option) {
       return [];
@@ -1117,12 +1240,12 @@ export function deriveFeaturesFromACP(
         return [
           {
             type: "toggle",
-            id: featureOption.id,
+            key: featureOption.id,
             label: featureOption.label,
             description: featureOption.description,
             tooltip: featureOption.tooltip,
             icon: featureOption.icon,
-            value: option.currentValue === "true",
+            defaultValue: option.currentValue === "true",
           },
         ];
       }
@@ -1131,20 +1254,32 @@ export function deriveFeaturesFromACP(
     return [
       {
         type: "select",
-        id: featureOption.id,
+        key: featureOption.id,
         label: featureOption.label,
         description: featureOption.description,
         tooltip: featureOption.tooltip,
         icon: featureOption.icon,
-        value: option.currentValue ?? null,
-        options: deriveConfigFeatureSelectOptions(option, featureOption),
+        choices: deriveConfigFeatureSelectOptions(option, featureOption).map((choice) => ({
+          value: choice.id,
+          label: choice.label,
+          description: choice.description,
+        })),
       },
     ];
   });
 }
 
-function isACPAutoAcceptEnabled(config: AgentSessionConfig): boolean {
-  return config.featureValues?.[ACP_AUTO_ACCEPT_FEATURE_ID] === true;
+/** The feature selects as the agent reports them, keyed by feature id. */
+function featureValuesFromACP(
+  configOptions: SessionConfigOption[] | null | undefined,
+  featureOptions: ACPConfigFeatureOption[],
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const featureOption of featureOptions) {
+    const current = findSelectConfigFeatureOption(configOptions, featureOption)?.currentValue;
+    if (current != null) values[featureOption.id] = current;
+  }
+  return values;
 }
 
 /**
@@ -1159,27 +1294,28 @@ function canAutoAcceptAcpPermission(
   return isACPAutoAcceptEnabled(config) && !isACPChooserRequest(params.options);
 }
 
-function buildACPAutoAcceptFeature(config: AgentSessionConfig): AgentFeature {
-  return {
-    type: "toggle",
-    id: ACP_AUTO_ACCEPT_FEATURE_ID,
-    label: "Auto-accept",
-    description: "Automatically approves ACP permission prompts.",
-    tooltip: "Auto-accept permission prompts",
-    icon: "shield-check",
-    desktopTrigger: "label",
-    value: isACPAutoAcceptEnabled(config),
-  };
+function isACPAutoAcceptEnabled(config: AgentSessionConfig): boolean {
+  return config.providerOptions?.[ACP_AUTO_ACCEPT_FEATURE_ID] === true;
 }
+
+const ACP_AUTO_ACCEPT_CONTROL: AgentOptionControl = {
+  type: "toggle",
+  key: ACP_AUTO_ACCEPT_FEATURE_ID,
+  label: "Auto Accept",
+  description: "Automatically approves ACP permission prompts.",
+  tooltip: "Auto accept permission prompts",
+  icon: "shield-check",
+  desktopTrigger: "label",
+};
 
 function resolveACPCreateConfig(
   input: ResolveAgentCreateConfigInput,
 ): ResolveAgentCreateConfigResult {
   const isUnattendedCreate = input.unattended || input.parent?.isUnattended === true;
-  const featureValues =
-    isUnattendedCreate && input.featureValues?.[ACP_AUTO_ACCEPT_FEATURE_ID] === undefined
-      ? { ...input.featureValues, [ACP_AUTO_ACCEPT_FEATURE_ID]: true }
-      : input.featureValues;
+  const providerOptions =
+    isUnattendedCreate && input.providerOptions?.[ACP_AUTO_ACCEPT_FEATURE_ID] === undefined
+      ? { ...input.providerOptions, [ACP_AUTO_ACCEPT_FEATURE_ID]: true }
+      : input.providerOptions;
 
   if (
     input.requestedMode === undefined &&
@@ -1187,22 +1323,16 @@ function resolveACPCreateConfig(
     input.parent !== null &&
     input.parent.provider !== input.provider
   ) {
-    return { modeId: undefined, featureValues };
+    return { modeId: undefined, providerOptions };
   }
 
-  return resolveDefaultAgentCreateConfig({ ...input, featureValues });
+  return resolveDefaultAgentCreateConfig({ ...input, providerOptions });
 }
 
 function isACPCreateConfigUnattended(input: AgentCreateConfigUnattendedInput): boolean {
   return (
     isDefaultAgentCreateConfigUnattended(input) ||
-    input.config.featureValues?.[ACP_AUTO_ACCEPT_FEATURE_ID] === true ||
-    input.features?.some(
-      (feature) =>
-        feature.id === ACP_AUTO_ACCEPT_FEATURE_ID &&
-        feature.type === "toggle" &&
-        feature.value === true,
-    ) === true
+    input.config.providerOptions?.[ACP_AUTO_ACCEPT_FEATURE_ID] === true
   );
 }
 
@@ -1495,10 +1625,10 @@ export class ACPAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    const autoAcceptFeature = buildACPAutoAcceptFeature(config);
+  async listControls(config: AgentSessionConfig): Promise<AgentDraftControls> {
+    const options = config.providerOptions ?? {};
     if (this.configFeatureOptions.length === 0) {
-      return [autoAcceptFeature];
+      return { controls: [ACP_AUTO_ACCEPT_CONTROL], options };
     }
 
     this.assertProvider(config);
@@ -1513,10 +1643,18 @@ export class ACPAgentClient implements AgentClient {
       );
       probeSessionId = response.sessionId;
       const transformed = this.transformSessionResponse(response);
-      return [
-        autoAcceptFeature,
-        ...deriveFeaturesFromACP(transformed.configOptions, this.configFeatureOptions),
-      ];
+      return {
+        controls: [
+          ACP_AUTO_ACCEPT_CONTROL,
+          ...deriveControlsFromACP(transformed.configOptions, this.configFeatureOptions),
+        ],
+        // The probe opened with the agent's own defaults, which a session would overwrite with
+        // the set values, so those stand over the probe's reading.
+        options: {
+          ...featureValuesFromACP(transformed.configOptions, this.configFeatureOptions),
+          ...options,
+        },
+      };
     } finally {
       await this.closeProbe(probe, probeSessionId);
     }
@@ -1686,6 +1824,7 @@ export class ACPAgentClient implements AgentClient {
       client?: ACPClient;
     },
   ): Promise<SpawnedACPProcess> {
+    const configuredOptions = ACPProviderOptionsSchema.parse(options?.providerOptions ?? {});
     const transport = await this.spawnTransport(launchEnv, options?.client);
     const probe: UninitializedACPProcess = {
       child: transport.child,
@@ -1697,7 +1836,7 @@ export class ACPAgentClient implements AgentClient {
       const initialize = await this.initializeTransport(
         transport,
         options?.initializeTimeoutMs,
-        options?.providerOptions,
+        configuredOptions.clientCapabilities,
       );
       const initializedProbe: SpawnedACPProcess = {
         ...probe,
@@ -1733,7 +1872,7 @@ export class ACPAgentClient implements AgentClient {
       stderrChunks.push(chunk.toString());
     });
 
-    const spawnErrorPromise = rejectOnSpawnError(child, stderrChunks);
+    const processErrorPromise = rejectOnProcessFailure(child, stderrChunks);
     const spawnReadyPromise = new Promise<void>((resolve) => {
       child.once("spawn", () => {
         resolve();
@@ -1752,16 +1891,15 @@ export class ACPAgentClient implements AgentClient {
       connection,
       stderrChunks,
       spawnReady: spawnReadyPromise,
-      spawnError: spawnErrorPromise,
+      processError: processErrorPromise,
     };
   }
 
   protected async initializeTransport(
     transport: ACPProcessTransport,
     initializeTimeoutMs?: number,
-    providerOptions?: Record<string, unknown>,
+    clientCapabilities?: ACPClientCapabilities,
   ): Promise<InitializeResponse> {
-    const configuredOptions = ACPProviderOptionsSchema.parse(providerOptions ?? {});
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const initializeTimeoutPromise = initializeTimeoutMs
       ? new Promise<never>((_, reject) => {
@@ -1778,11 +1916,11 @@ export class ACPAgentClient implements AgentClient {
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: buildACPClientCapabilities(
               this.clientCapabilityMeta,
-              configuredOptions.clientCapabilities ?? this.clientCapabilities,
+              clientCapabilities ?? this.clientCapabilities,
             ),
             clientInfo: { name: "Paseo", version: "dev" },
           }),
-          transport.spawnError,
+          transport.processError,
           ...(initializeTimeoutPromise ? [initializeTimeoutPromise] : []),
         ]),
       );
@@ -1863,7 +2001,7 @@ export class ACPAgentClient implements AgentClient {
       try {
         transport = await this.spawnTransport(PROBE_ENV);
         await withTimeout(
-          Promise.race([transport.spawnReady, transport.spawnError]),
+          Promise.race([transport.spawnReady, transport.processError]),
           phaseTimeoutMs,
           `ACP spawn timed out after ${phaseTimeoutMs}ms`,
         );
@@ -2061,6 +2199,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private readonly earlySessionUpdates: SessionNotification[] = [];
   private currentMode: string | null = null;
   private availableModes: AgentMode[];
+  private sessionModeState: SessionStateResponse["modes"] = null;
   private currentModel: string | null = null;
   private availableModels: AvailableACPModel[] | null = null;
   private thinkingOptionId: string | null = null;
@@ -2071,8 +2210,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   private lastPublishedTitle: string | null = null;
   private lastActivityAt: string | null = null;
   private configOptions: SessionConfigOption[] = [];
+  /** How the opened session differs from the options it was given. */
+  openOptionsPatch: Record<string, unknown> = {};
+  /** Selects the provider moves while Paseo is opening or applying options belong to that result, not to events. */
+  private optionsTransactionDepth = 0;
   private cachedCommands: AgentSlashCommand[] = [];
-  private commandsReadyDeferred: { promise: Promise<void>; resolve: () => void } | null = null;
+  /** When the last command batch arrived; null while nothing has been published. */
+  private commandsUpdatedAt: number | null = null;
   private commandsReadySettled = false;
   private waitForInitialCommands: boolean;
   private initialCommandsWaitTimeoutMs: number;
@@ -2130,7 +2274,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
     this.initialHandle = options.handle;
     this.resumePurpose = options.resumePurpose ?? "interactive";
-    this.config = { ...config, provider: options.provider };
+    // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01 with the helper.
+    this.config = foldFeatureValues({ ...config, provider: options.provider });
     this.currentMode = config.modeId ?? null;
     this.currentModel = config.model ?? null;
     this.thinkingOptionId = config.thinkingOptionId ?? null;
@@ -2343,6 +2488,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     if (!this.connection || !this.sessionId) {
       throw new Error(`${this.provider} session is not initialized`);
     }
+    if (this.connection.signal?.aborted) {
+      throw new Error(describeACPDisconnect(this.child));
+    }
     if (this.activeForegroundTurnId) {
       throw new Error("A foreground turn is already active");
     }
@@ -2388,6 +2536,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.armTurnIdleTimeout(turnId);
     this.armTurnFirstActivityTimeout(turnId);
 
+    const connection = this.connection;
+    const signal = connection.signal;
+    const child = this.child;
+    const failOnDisconnect = () => void this.failDisconnectedTurn(turnId, child);
+    signal?.addEventListener("abort", failOnDisconnect, { once: true });
     void this.runPromptWithRetries({
       turnId,
       messageId,
@@ -2395,7 +2548,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       // transcript on later turns. ACP has no system-prompt field, so the
       // Hub note stays on the MCP server instructions instead of this text.
       prompt: toACPContentBlocks(effectivePrompt),
-    });
+    }).finally(() => signal?.removeEventListener("abort", failOnDisconnect));
 
     return { turnId };
   }
@@ -2559,6 +2712,29 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
   }
 
+  // The SDK aborts the connection without rejecting the pending prompt, and before the child's
+  // exit event, so wait for the exit status before failing the turn.
+  private async failDisconnectedTurn(turnId: string, child: ChildProcess | null): Promise<void> {
+    await setImmediate();
+    if (child && child.exitCode === null && child.signalCode === null) {
+      await once(child, "exit", {
+        signal: AbortSignal.timeout(ACP_DISCONNECT_EXIT_GRACE_MS),
+      }).catch(() => undefined);
+    }
+    if (this.closed || this.activeForegroundTurnId !== turnId) {
+      return;
+    }
+    this.synthesizeCanceledToolCalls();
+    const error = describeACPDisconnect(child);
+    this.finishTurn({
+      type: "turn_failed",
+      provider: this.provider,
+      error,
+      diagnostic: this.collectDiagnostic(error),
+      turnId,
+    });
+  }
+
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {
     this.subscribers.add(callback);
     if (this.sessionId) {
@@ -2597,65 +2773,46 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return this.currentMode;
   }
 
-  get features(): AgentFeature[] {
+  get controls(): AgentOptionControl[] {
     return [
-      buildACPAutoAcceptFeature(this.config),
-      ...deriveFeaturesFromACP(this.configOptions, this.configFeatureOptions),
+      ACP_AUTO_ACCEPT_CONTROL,
+      ...deriveControlsFromACP(this.configOptions, this.configFeatureOptions),
     ];
   }
 
-  private ensureCommandsReadyDeferred(): void {
-    if (this.commandsReadyDeferred || this.commandsReadySettled || this.cachedCommands.length > 0) {
-      return;
-    }
-
-    let resolve!: () => void;
-    const promise = new Promise<void>((r) => {
-      resolve = r;
-    });
-    this.commandsReadyDeferred = { promise, resolve };
-  }
-
   private settleCommandsReady(): void {
-    if (this.commandsReadySettled) {
-      return;
-    }
     this.commandsReadySettled = true;
-    this.commandsReadyDeferred?.resolve();
-    this.commandsReadyDeferred = null;
   }
 
-  private async waitForCommandsReady(): Promise<void> {
-    const deferred = this.commandsReadyDeferred;
-    if (!deferred) {
-      return;
-    }
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      await Promise.race([
-        deferred.promise,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, this.initialCommandsWaitTimeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
+  /**
+   * Providers publish their command inventory incrementally. MiniMax sends its
+   * built-in commands twice, then a third batch about 350ms later that merges in
+   * every discovered skill. Returning after the first batch loses the skills.
+   *
+   * Wait for the inventory to go quiet rather than for the first batch. The
+   * quiet window must exceed the gap between a provider's own batches; 600ms
+   * covers MiniMax with margin. `initialCommandsWaitTimeoutMs` still bounds the
+   * whole wait for providers that publish once or never publish at all.
+   */
+  private async waitForCommandsToSettle(): Promise<void> {
+    const deadline = Date.now() + this.initialCommandsWaitTimeoutMs;
+    while (!this.commandsReadySettled && !this.closed) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return;
+      const quietFor = this.commandsUpdatedAt === null ? 0 : Date.now() - this.commandsUpdatedAt;
+      if (quietFor >= COMMAND_INVENTORY_QUIET_MS) return;
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.min(remaining, COMMAND_INVENTORY_POLL_MS)),
+      );
     }
   }
 
   async listCommands(): Promise<AgentSlashCommand[]> {
-    if (this.cachedCommands.length > 0) {
-      return this.cachedCommands;
-    }
-    if (!this.waitForInitialCommands || this.closed) {
+    if (this.commandsReadySettled || this.closed || !this.waitForInitialCommands) {
       return this.cachedCommands;
     }
 
-    this.ensureCommandsReadyDeferred();
-    await this.waitForCommandsReady();
+    await this.waitForCommandsToSettle();
     this.settleCommandsReady();
     return this.cachedCommands;
   }
@@ -2665,11 +2822,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error("ACP session not initialized");
     }
 
-    const selection = resolveACPModeSelection({
-      modeId,
-      availableModes: this.availableModes,
-      configOptions: this.configOptions,
-    });
+    const selection = this.resolveModeSelection(modeId);
     await this.setModeWithSelection({ modeId, selection });
   }
 
@@ -2695,7 +2848,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       if (providerResult.configOptions) {
         this.configOptions = this.transformConfigOptions(providerResult.configOptions);
       }
-      this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
+      this.availableModes = this.modesFromConfig().modes;
       this.pushEvent({
         type: "mode_changed",
         provider: this.provider,
@@ -2760,6 +2913,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     const { connection, sessionId } = this;
+    const before = this.featureValues();
     const response = await this.runACPRequest(() =>
       connection.setSessionConfigOption({
         sessionId,
@@ -2774,7 +2928,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       requestedValue: modeId,
       label: "mode",
     });
-    this.availableModes = deriveModesFromACP(this.defaultModes, null, this.configOptions).modes;
+    this.reportFeatureChanges(before);
+    this.availableModes = this.modesFromConfig().modes;
     this.pushEvent({
       type: "mode_changed",
       provider: this.provider,
@@ -2801,16 +2956,17 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     };
   }
 
-  async setModel(modelId: string | null): Promise<void> {
+  async setModel(modelId: string | null): Promise<{ model: string | null }> {
     if (!this.connection || !this.sessionId) {
       throw new Error("ACP session not initialized");
     }
     if (!modelId) {
       this.currentModel = null;
-      return;
+      return { model: this.currentModel };
     }
 
     await this.setModelWithSelection({ modelId, selection: this.resolveModelSelection(modelId) });
+    return { model: this.currentModel };
   }
 
   private resolveModelSelection(modelId: string): ACPModelSelection {
@@ -2885,6 +3041,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     const { connection, sessionId } = this;
+    const before = this.featureValues();
     const response = await this.runACPRequest(() =>
       connection.setSessionConfigOption({
         sessionId,
@@ -2899,6 +3056,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       requestedValue: modelId,
       label: "model",
     });
+    this.reportFeatureChanges(before);
     this.pushEvent({
       type: "model_changed",
       provider: this.provider,
@@ -2936,6 +3094,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       throw new Error(`${this.provider} does not expose ACP thought-level selection`);
     }
     const { connection, sessionId } = this;
+    const before = this.featureValues();
     const response = await this.runACPRequest(() =>
       connection.setSessionConfigOption({
         sessionId,
@@ -2950,6 +3109,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       requestedValue: thinkingOptionId,
       label: "thought-level",
     });
+    this.reportFeatureChanges(before);
     this.pushEvent({
       type: "thinking_option_changed",
       provider: this.provider,
@@ -2957,14 +3117,91 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     });
   }
 
-  async setFeature(featureId: string, value: unknown): Promise<void> {
+  /**
+   * Applies only the options the patch sets; returns the selects that ended up different.
+   * Provider notifications that arrive meanwhile are part of that result. When a write is
+   * rejected, what the provider moved is reported as an event, since nothing is stored.
+   * The agent manager sends one apply at a time per session.
+   */
+  async applyOptions(options: ProviderOptions): Promise<Record<string, unknown>> {
+    assertChangesAreLive({
+      provider: this.config.provider,
+      patch: options,
+      current: this.config.providerOptions,
+      live: [ACP_AUTO_ACCEPT_FEATURE_ID, ...this.configFeatureOptions.map(({ id }) => id)],
+    });
+    ACPProviderOptionsSchema.parse(
+      applyProviderOptionsPatch({ options: this.config.providerOptions, patch: options }),
+    );
+    const before = this.featureValues();
+    const requested: Record<string, unknown> = {};
+    try {
+      await this.inOptionsTransaction(async () => {
+        for (const [id, value] of Object.entries(options)) {
+          const featureOption = this.configFeatureOptions.find((candidate) => candidate.id === id);
+          if (!featureOption) continue;
+          // A removal asks for the select's empty choice; a provider without one rejects it. The
+          // choice it lands on is reported against the `null` that was asked, so the options
+          // hold the value the session runs with.
+          requested[id] = value;
+          const option = findSelectConfigFeatureOption(this.configOptions, featureOption);
+          if (!option || (value ?? "") !== option.currentValue) {
+            await this.setConfigFeature(id, value);
+          }
+        }
+      });
+    } catch (error) {
+      this.reportFeatureChanges(before);
+      throw error;
+    }
+    // Auto Accept is Paseo's own setting, so it changes only once every write has been accepted.
+    if (ACP_AUTO_ACCEPT_FEATURE_ID in options) {
+      this.config.providerOptions = {
+        ...this.config.providerOptions,
+        [ACP_AUTO_ACCEPT_FEATURE_ID]: options[ACP_AUTO_ACCEPT_FEATURE_ID] === true,
+      };
+    }
+    return this.featureDifferences({ ...before, ...requested });
+  }
+
+  private async inOptionsTransaction<T>(run: () => Promise<T>): Promise<T> {
+    this.optionsTransactionDepth += 1;
+    try {
+      return await run();
+    } finally {
+      this.optionsTransactionDepth -= 1;
+    }
+  }
+
+  /** The selects as the provider reports them now. */
+  private featureValues(): Record<string, string> {
+    return featureValuesFromACP(this.configOptions, this.configFeatureOptions);
+  }
+
+  /** The selects whose value is not what `expected` says, including ones it does not name. */
+  private featureDifferences(expected: Record<string, unknown>): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(this.featureValues()).filter(([id, value]) => expected[id] !== value),
+    );
+  }
+
+  /** Reports the selects the provider moved on its own, compared with their values `before`. */
+  private reportFeatureChanges(before: Record<string, string>): void {
+    if (this.optionsTransactionDepth > 0) return;
+    const patch = this.featureDifferences(before);
+    if (Object.keys(patch).length > 0) {
+      this.pushEvent({ type: "options_changed", provider: this.provider, patch });
+    }
+  }
+
+  private async setConfigFeature(featureId: string, value: unknown): Promise<void> {
     if (!this.connection || !this.sessionId) {
       throw new Error("ACP session not initialized");
     }
 
     if (featureId === ACP_AUTO_ACCEPT_FEATURE_ID) {
-      this.config.featureValues = {
-        ...this.config.featureValues,
+      this.config.providerOptions = {
+        ...this.config.providerOptions,
         [ACP_AUTO_ACCEPT_FEATURE_ID]: value === true,
       };
       return;
@@ -3002,8 +3239,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         requestedValue,
         label: featureOption.label,
       });
-      this.config.featureValues = {
-        ...this.config.featureValues,
+      this.config.providerOptions = {
+        ...this.config.providerOptions,
         [featureId]: currentValue === "true",
       };
       return;
@@ -3025,14 +3262,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         value: requestedValue,
       }),
     );
-    const currentValue = this.applyConfigOptionResponse({
+    this.applyConfigOptionResponse({
       response,
       configId: option.id,
       category: featureOption.category,
       requestedValue,
       label: featureOption.label,
     });
-    this.config.featureValues = { ...this.config.featureValues, [featureId]: currentValue };
   }
 
   private applyConfigOptionResponse({
@@ -3357,6 +3593,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         resolve,
         reject,
         turnId: this.activeForegroundTurnId,
+        toolCallId: params.toolCall.toolCallId,
       });
     });
 
@@ -3503,14 +3740,12 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  // Cache an asynchronously-delivered slash-command batch and unblock any
-  // listCommands() call that is waiting on the initial batch. Used when a
-  // provider supplies an extensionCommandsParser whose result arrives after
-  // session/new (e.g. via a vendor extension notification). The ready gate is
-  // always settled — even for an empty batch — so a provider that legitimately
-  // reports no commands does not leave listCommands() blocked for the full
-  // initial-commands timeout. An optional sessionId scopes the batch to this
-  // session; notifications addressed to a different session are ignored.
+  // Cache an asynchronously-delivered slash-command batch from a provider that
+  // supplies an extensionCommandsParser (e.g. a vendor extension notification).
+  // An empty batch is the provider saying it has no commands, so it settles the
+  // waiter immediately instead of letting it wait out the quiet window. An
+  // optional sessionId scopes the batch to this session; notifications
+  // addressed to a different session are ignored.
   private applyResolvedCommands(
     commands: AgentSlashCommand[],
     options?: { sessionId?: string },
@@ -3524,7 +3759,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
 
     if (commands.length > 0) {
+      this.commandsUpdatedAt = Date.now();
       this.cachedCommands = commands;
+      // A non-empty batch may be followed by more. Let the quiet window decide
+      // when the inventory is complete rather than settling here; an empty
+      // batch is the provider saying it has nothing, which must still unblock
+      // the waiter immediately.
+      return;
     }
     this.settleCommandsReady();
   }
@@ -3647,11 +3888,8 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   // Loading an archived agent's history runs nothing in its working directory, which
   // may have been removed with its worktree. session/load still names the original
   // directory; only the process starts from the home directory.
-  private async resolveProcessCwd(): Promise<string> {
-    if (this.resumePurpose !== "history" || (await isDirectory(this.config.cwd))) {
-      return this.config.cwd;
-    }
-    return homedir();
+  private resolveProcessCwd(): Promise<string> {
+    return resolveResumeProcessCwd(this.config.cwd, this.resumePurpose);
   }
 
   private async spawnProcess(): Promise<SpawnedACPProcess> {
@@ -3682,7 +3920,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     child.stderr.on("data", (chunk: Buffer | string) => {
       stderrChunks.push(chunk.toString());
     });
-    const spawnError = rejectOnSpawnError(child, stderrChunks);
+    const processError = rejectOnProcessFailure(child, stderrChunks);
     child.once("exit", (code, signal) => {
       if (this.closed || this.historyRuntimeReleased) {
         return;
@@ -3719,7 +3957,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
           ),
           clientInfo: { name: "Paseo", version: "dev" },
         }),
-        spawnError,
+        processError,
       ]),
     );
 
@@ -3794,6 +4032,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       : response;
 
     this.configOptions = this.transformConfigOptions(transformed.configOptions ?? []);
+    this.sessionModeState = transformed.modes ?? null;
 
     const modeInfo = deriveModesFromACP(this.defaultModes, transformed.modes, this.configOptions);
     this.availableModes = modeInfo.modes;
@@ -3816,14 +4055,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     return this.modeIdTransformer ? this.modeIdTransformer(modeId) : modeId;
   }
 
-  private async applyConfiguredOverrides(): Promise<void> {
+  private applyConfiguredOverrides(): Promise<void> {
+    return this.inOptionsTransaction(() => this.writeConfiguredOverrides());
+  }
+
+  private async writeConfiguredOverrides(): Promise<void> {
     const configuredModeId = this.config.modeId;
     if (configuredModeId && configuredModeId !== this.currentMode) {
-      const selection = resolveACPModeSelection({
-        modeId: configuredModeId,
-        availableModes: this.availableModes,
-        configOptions: this.configOptions,
-      });
+      const selection = this.resolveModeSelection(configuredModeId);
       await this.setModeWithSelection({ modeId: configuredModeId, selection });
     }
     const configuredModelId = this.config.model;
@@ -3858,13 +4097,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         );
       }
     }
-    const configuredFeatureValues = this.config.featureValues ?? {};
+    const configuredFeatureValues = this.config.providerOptions ?? {};
     for (const featureOption of this.configFeatureOptions) {
       if (!Object.prototype.hasOwnProperty.call(configuredFeatureValues, featureOption.id)) {
         continue;
       }
       try {
-        await this.setFeature(featureOption.id, configuredFeatureValues[featureOption.id]);
+        await this.setConfigFeature(featureOption.id, configuredFeatureValues[featureOption.id]);
       } catch (error) {
         if (!this.isStaleFeatureValueError(error, featureOption.id, switchedModel)) {
           throw error;
@@ -3875,6 +4114,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         );
       }
     }
+    // The options are the state, so every select the session opened with is reported, including
+    // ones nobody set (a native default is stored like any other value).
+    this.openOptionsPatch = this.featureDifferences(configuredFeatureValues);
   }
 
   /**
@@ -3978,8 +4220,14 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleUsageUpdate(update);
         return pendingUserEvents;
       case "available_commands_update":
+        this.commandsUpdatedAt = Date.now();
         this.cachedCommands = update.availableCommands.map(mapAcpAvailableCommandToSlashCommand);
-        this.settleCommandsReady();
+        // An empty batch means the agent has no commands and would otherwise
+        // wait out the whole quiet window. A non-empty batch may be one of
+        // several, so completion belongs to the quiet window.
+        if (update.availableCommands.length === 0) {
+          this.settleCommandsReady();
+        }
         return pendingUserEvents;
       default:
         return pendingUserEvents;
@@ -4055,6 +4303,9 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       snapshot = this.toolSnapshotTransformer(snapshot);
     }
     this.toolCalls.set(toolCallId, snapshot);
+    if (update.status === "completed" || update.status === "failed") {
+      this.cancelPendingPermissions((pending) => pending.toolCallId === toolCallId);
+    }
     return [this.wrapTimeline(mapToolSnapshotToTimeline(snapshot, this.terminalEntries))];
   }
 
@@ -4130,9 +4381,38 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentMode = this.transformModeId(update.currentModeId);
   }
 
+  private modesFromConfig() {
+    let modes = this.sessionModeState;
+    if (modes) {
+      let currentModeId = this.currentMode ?? modes.currentModeId;
+      const configMode = findSelectConfigOption({
+        configOptions: this.configOptions,
+        category: "mode",
+      });
+      // Copilot config updates name real modes; Hermes config values are a separate policy namespace.
+      if (configMode && modes.availableModes.some((mode) => mode.id === configMode.currentValue)) {
+        currentModeId = configMode.currentValue;
+      }
+      modes = { ...modes, currentModeId };
+    }
+    return deriveModesFromACP(this.defaultModes, modes, this.configOptions);
+  }
+
+  private resolveModeSelection(modeId: string): ACPModeSelection {
+    const hasSessionModes = Boolean(this.sessionModeState?.availableModes.length);
+    const modeConfig = findSelectConfigOption({
+      configOptions: this.configOptions,
+      category: "mode",
+    });
+    const configOnly = !hasSessionModes && modeConfig !== null;
+    const availableModes = configOnly ? [] : this.availableModes;
+    return resolveACPModeSelection({ modeId, availableModes, configOptions: this.configOptions });
+  }
+
   private handleConfigOptionUpdate(update: ConfigOptionUpdate): AgentStreamEvent[] {
+    const before = this.featureValues();
     this.configOptions = this.transformConfigOptions(update.configOptions);
-    const modeInfo = deriveModesFromACP(this.defaultModes, null, this.configOptions);
+    const modeInfo = this.modesFromConfig();
     const nextMode = modeInfo.currentModeId;
     const nextModel = deriveCurrentConfigValue(this.configOptions, "model");
     const nextThinkingOptionId = deriveCurrentConfigValue(this.configOptions, "thought_level");
@@ -4141,6 +4421,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.currentMode = nextMode ?? this.currentMode;
     this.currentModel = nextModel ?? this.currentModel;
     this.thinkingOptionId = nextThinkingOptionId ?? this.thinkingOptionId;
+    this.reportFeatureChanges(before);
 
     const events: AgentStreamEvent[] = [];
     if (nextMode !== null) {
@@ -4424,11 +4705,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.clearTurnIdleTimeout();
     this.clearTurnFirstActivityTimeout();
     this.deliverTranslatedEvents(this.flushPendingUserMessage());
-    // A turn that ends without completing leaves no way to answer its open
-    // permission requests, so tell the agent they were cancelled.
-    if (event.type !== "turn_completed") {
-      this.cancelPendingPermissions();
-    }
+    // Failed and canceled turns clear every request in the manager. Answer the
+    // same set here so an outside-turn request cannot keep the provider blocked.
+    this.cancelPendingPermissions(
+      (pending) => event.type !== "turn_completed" || pending.turnId === event.turnId,
+    );
     this.activeForegroundTurnId = null;
     this.fallbackAssistantMessageId = null;
     if (this.submittedUserMessageTurnId === event.turnId) {
@@ -4437,9 +4718,20 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.pushEvent(event);
   }
 
-  private cancelPendingPermissions(): void {
-    for (const pending of this.pendingPermissions.values()) {
+  private cancelPendingPermissions(
+    matches: (pending: PendingPermission) => boolean = () => true,
+  ): void {
+    for (const [requestId, pending] of this.pendingPermissions) {
+      if (!matches(pending)) continue;
+      this.pendingPermissions.delete(requestId);
       pending.resolve({ outcome: { outcome: "cancelled" } });
+      this.pushEvent({
+        type: "permission_resolved",
+        provider: this.provider,
+        requestId,
+        resolution: { behavior: "deny", message: "Permission request canceled" },
+        turnId: pending.turnId ?? undefined,
+      });
     }
     this.pendingPermissions.clear();
     for (const pending of this.pendingElicitations.values()) {
@@ -5191,10 +5483,16 @@ function appendTerminalOutput(entry: TerminalEntry, chunk: string): void {
   if (!limit) {
     return;
   }
-  while (Buffer.byteLength(entry.output, "utf8") > limit && entry.output.length > 0) {
-    entry.output = entry.output.slice(1);
-    entry.truncated = true;
+  const output = Buffer.from(entry.output, "utf8");
+  if (output.length <= limit) {
+    return;
   }
+  let start = output.length - limit;
+  while (start < output.length && (output[start] & 0xc0) === 0x80) {
+    start += 1;
+  }
+  entry.output = output.subarray(start).toString("utf8");
+  entry.truncated = true;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {

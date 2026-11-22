@@ -5,7 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
-import { createControlGeometry, type ButtonControlSize } from "@/components/ui/control-geometry";
+import { createControlGeometry, type ControlSize } from "@/components/ui/control-geometry";
 import { useContainedControlSize } from "@/components/ui/control-size";
 import { settingsStyles } from "@/styles/settings";
 import {
@@ -51,10 +51,8 @@ function FontFamilyOption({
   );
 }
 
-function sizeStyle(size: ButtonControlSize) {
-  if (size === "xs") return styles.xs;
-  if (size === "md" || size === "lg") return styles.md;
-  return styles.sm;
+function sizeStyle(size: ControlSize) {
+  return size === "md" ? styles.md : styles.sm;
 }
 
 export function FontFamilyField({
@@ -97,7 +95,11 @@ export function FontFamilyField({
     [size],
   );
   const labelStyle = useMemo(
-    () => [styles.label, size === "xs" && styles.labelXs, { fontFamily: triggerFontFamily }],
+    () => [
+      styles.label,
+      size === "md" ? styles.labelMd : styles.labelSm,
+      { fontFamily: triggerFontFamily },
+    ],
     [size, triggerFontFamily],
   );
   const renderOption = useCallback(
@@ -178,7 +180,6 @@ const styles = StyleSheet.create((theme) => {
       borderColor: theme.colors.borderAccent,
       backgroundColor: "transparent",
     },
-    xs: geometry.buttonXs,
     sm: geometry.buttonSm,
     md: geometry.buttonMd,
     pressed: {
@@ -187,8 +188,8 @@ const styles = StyleSheet.create((theme) => {
     label: {
       flexShrink: 1,
       color: theme.colors.foreground,
-      ...geometry.buttonText,
     },
-    labelXs: geometry.buttonTextXs,
+    labelSm: geometry.buttonTextSm,
+    labelMd: geometry.buttonTextMd,
   };
 });

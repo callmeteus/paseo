@@ -13,7 +13,8 @@ import { createPortal } from "react-dom";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { getOverlayRoot, OVERLAY_Z, useWebOverlayRegistration } from "@/lib/overlay-root";
+import { useOverlayRegistration } from "@/keyboard";
+import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
 import { formatShortcut } from "@/utils/format-shortcut";
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import { createAssistantSelectionClipboardContent } from "./content.web";
@@ -111,7 +112,8 @@ export function AssistantSelectionCopySurface({
     },
     [handleAddSelection],
   );
-  const setOverlayScope = useWebOverlayRegistration({
+  const setOverlayScope = useOverlayRegistration({
+    keys: ["l"],
     active: action !== null,
     layer: OVERLAY_Z.tooltip + 1,
     onKeyDown: handleShortcutKeyDown,

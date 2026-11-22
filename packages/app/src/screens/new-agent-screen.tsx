@@ -4,6 +4,7 @@ import { MenuHeader } from "@/components/headers/menu-header";
 import { NewAgentTabsRow } from "@/screens/workspace/new-agent-tabs-row";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
+import { useComposerEditingSession } from "@/composer/editing-session";
 import { useImportSession } from "@/hooks/use-import-session";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { generateDraftId } from "@/stores/draft-keys";
@@ -29,6 +30,7 @@ export function NewAgentScreen({ serverId, workspaceId, draftId }: NewAgentScree
   const [creationDraftId] = useState(() => draftId?.trim() || generateDraftId());
   const importSession = useImportSession({ serverId, workspaceId });
   const isCompact = useIsCompactFormFactor();
+  const editingSession = useComposerEditingSession("chat");
 
   const handleCreated = useCallback(
     (snapshot: AgentSnapshotPayload) => {
@@ -69,6 +71,7 @@ export function NewAgentScreen({ serverId, workspaceId, draftId }: NewAgentScree
         tabId={creationDraftId}
         draftId={creationDraftId}
         isPaneFocused={true}
+        editingSession={editingSession}
         onCreated={handleCreated}
         onOpenWorkspaceFile={handleOpenWorkspaceFile}
         onOpenImportSheet={importSession.open}

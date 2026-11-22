@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { TextReplacement } from "@/composer/types";
 import type { DraftAgentControlsProps } from "@/composer/agent-controls";
-import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
+import type { DraftCommandTarget } from "@/agent-commands";
 import {
   useAgentFormState,
   type CreateAgentInitialValues,
   type UseAgentFormStateResult,
 } from "@/hooks/use-agent-form-state";
-import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
+import { useDraftProviderOptions } from "@/hooks/use-draft-provider-options";
 import {
   buildDraftAgentControls,
   hasDraftContent,
@@ -28,6 +29,8 @@ import { useShallow } from "zustand/shallow";
 import type { ComposerTextSource } from "@/composer/text-source";
 import { isWeb } from "@/constants/platform";
 
+const NO_METADATA: Record<string, JsonValue> = {};
+
 export type AttachmentUpdater =
   | UserComposerAttachment[]
   | ((prev: UserComposerAttachment[]) => UserComposerAttachment[]);
@@ -35,7 +38,10 @@ export type AttachmentUpdater =
 interface AgentInputDraftComposerOptions {
   initialServerId: string | null;
   initialValues?: CreateAgentInitialValues;
+  /** COMPAT(providerOptions): the pre-rename name kept for our draft callers. */
   initialFeatureValues?: Record<string, unknown>;
+  initialProviderOptions?: Record<string, unknown>;
+  context?: "draft" | "new-workspace";
   isVisible?: boolean;
   lockedWorkingDir?: string;
 }
@@ -50,7 +56,10 @@ type DraftComposerState = UseAgentFormStateResult & {
   effectiveModeId: string;
   effectiveModelId: string;
   effectiveThinkingOptionId: string;
+  /** Our draft callers still read this name; it mirrors `providerOptions`. */
   featureValues: Record<string, unknown> | undefined;
+  providerOptions: Record<string, unknown> | undefined;
+  metadata: Record<string, JsonValue>;
   agentControls: DraftAgentControlsProps;
   commandDraft: DraftCommandTarget;
 };
@@ -205,10 +214,18 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [saveDraft],
   );
 
+  const metadata = useDraftStore((state) => state.metadataByDraftKey[draftKey] ?? NO_METADATA);
+  const setMetadata = useCallback(
+    (patch: Record<string, JsonValue>) =>
+      useDraftStore.getState().patchDraftMetadata({ draftKey, patch }),
+    [draftKey],
+  );
+
   const clear = useCallback(
     (lifecycle: "sent" | "abandoned") => {
       textPublication.cancel();
       useDraftStore.getState().clearDraftInput({ draftKey, lifecycle });
+      if (lifecycle === "sent") useDraftStore.getState().clearDraftMetadata({ draftKey });
     },
     [draftKey, textPublication],
   );
@@ -288,26 +305,33 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   );
 
   const {
-    features: draftFeatures,
-    featureValues: draftFeatureValues,
-    setFeatureValue: setDraftFeatureValue,
-    applyProfileFeatureValues,
-  } = useDraftAgentFeatures({
+    optionControls: draftOptionControls,
+    options: draftOptions,
+    shownOptions: draftShownOptions,
+    setOption: setDraftOption,
+    applyProfile: applyProfileOptions,
+  } = useDraftProviderOptions({
     serverId: formState.selectedServerId,
     provider: formState.selectedProvider,
+    getProvider: formState.getSelectedProvider,
     cwd: workingDir,
     modeId: formState.selectedMode,
     modelId: effectiveModelId,
     thinkingOptionId: effectiveThinkingOptionId,
-    initialFeatureValues: composerOptions?.initialFeatureValues,
+    initialOptions:
+      composerOptions?.initialProviderOptions ?? composerOptions?.initialFeatureValues,
   });
+
+  // COMPAT(providerOptions): our draft callers still read `featureValues`; the
+  // options model now owns what used to be the feature record.
+  const draftFeatureValues = draftOptions;
 
   const applyDraftAgentProfile = useCallback(
     (profile: Parameters<typeof formState.applyProfileFromUser>[0]) => {
       formState.applyProfileFromUser(profile);
-      applyProfileFeatureValues(profile.featureValues);
+      applyProfileOptions({ provider: profile.provider, options: profile.options });
     },
-    [applyProfileFeatureValues, formState],
+    [applyProfileOptions, formState],
   );
 
   const commandDraft = useMemo(
@@ -317,15 +341,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         cwd: workingDir,
         effectiveModelId,
         effectiveThinkingOptionId,
-        featureValues: draftFeatureValues,
+        providerOptions: draftOptions,
       }),
-    [
-      effectiveModelId,
-      effectiveThinkingOptionId,
-      draftFeatureValues,
-      providerSelection,
-      workingDir,
-    ],
+    [effectiveModelId, effectiveThinkingOptionId, draftOptions, providerSelection, workingDir],
   );
 
   const composerState = useMemo<DraftComposerState | null>(() => {
@@ -340,11 +358,18 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       effectiveModelId,
       effectiveThinkingOptionId,
       featureValues: draftFeatureValues,
+      providerOptions: draftOptions,
+      metadata,
       agentControls: buildDraftAgentControls({
         formState,
-        features: draftFeatures,
-        onSetFeature: setDraftFeatureValue,
+        effectiveModelId,
+        optionControls: draftOptionControls,
+        options: draftShownOptions,
+        onSetOption: setDraftOption,
         onApplyAgentProfile: applyDraftAgentProfile,
+        context: composerOptions.context ?? "draft",
+        metadata,
+        onSetMetadata: setMetadata,
       }),
       commandDraft,
     };
@@ -354,11 +379,15 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     effectiveModeId,
     effectiveModelId,
     effectiveThinkingOptionId,
-    draftFeatures,
     draftFeatureValues,
+    draftOptions,
+    draftShownOptions,
+    draftOptionControls,
     applyDraftAgentProfile,
     formState,
-    setDraftFeatureValue,
+    metadata,
+    setDraftOption,
+    setMetadata,
     workingDir,
   ]);
 

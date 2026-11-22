@@ -2,8 +2,8 @@ import type { SessionInfo, PermissionRuleset } from "@opencode/client";
 import type { V2Api } from "./api.js";
 
 import type {
-  AgentFeature,
   AgentLaunchContext,
+  AgentOptionControl,
   AgentSessionConfig,
 } from "../../../agent-sdk-types.js";
 
@@ -11,17 +11,9 @@ import { OpenCodeProviderOptionsSchema, buildOpenCodePermissionRules } from "../
 
 import { modelRef } from "./mapping.js";
 
-export function features(config: AgentSessionConfig): AgentFeature[] {
-  return [
-    {
-      type: "toggle",
-      id: "auto_accept",
-      label: "Auto-accept",
-      desktopTrigger: "label",
-      value: config.featureValues?.["auto_accept"] === true,
-    },
-  ];
-}
+export const controls: AgentOptionControl[] = [
+  { type: "toggle", key: "auto_accept", label: "Auto-accept", desktopTrigger: "label" },
+];
 export function permissionRules(config: AgentSessionConfig): PermissionRuleset {
   const rules =
     buildOpenCodePermissionRules(
@@ -73,7 +65,7 @@ export async function applyResumeOverrides(
 // it must not force a dedicated server. Custom MCP is location-scoped, and any
 // other env key belongs to the process, so both need isolation. Mirrors the v1
 // adapter's `requiresDedicatedOpenCodeServer`.
-const V2_SESSION_ENV_KEYS = new Set(["PASEO_AGENT_ID", "PASEO_AGENT_CWD"]);
+const V2_SESSION_ENV_KEYS = new Set(["PASEO_AGENT_ID", "PASEO_AGENT_CWD", "PASEO_WORKSPACE_ID"]);
 
 export function requiresDedicatedV2Server(
   config: AgentSessionConfig,

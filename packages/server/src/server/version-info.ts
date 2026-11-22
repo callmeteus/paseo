@@ -1,3 +1,4 @@
+/* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";

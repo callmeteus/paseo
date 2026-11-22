@@ -29,6 +29,8 @@ const preferences: UsagePreferences = {
   displayAs: "used",
   pins: [unifiedUsagePin("claude"), { sourceId: "claude", windowId: "five-hour" }],
   serverId: null,
+  cardOrder: [],
+  cardsOff: [],
 };
 
 let root: Root;

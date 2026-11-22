@@ -5,7 +5,7 @@ import type {
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
-import type { DraftCommandTarget } from "@/hooks/use-agent-commands-query";
+import type { DraftCommandTarget } from "@/agent-commands";
 import { i18n } from "@/i18n/i18next";
 import { compareMatchScores, scoreTextFields } from "@getpaseo/protocol/search/text-match";
 import {
@@ -177,36 +177,54 @@ export function buildProviderSelectorProviders(input: {
   }));
 }
 
+/** One provider in a selector, whatever its state. */
+export function buildSelectorProvider(
+  entry: ProviderSnapshotEntry,
+  isConnected = true,
+): ProviderSelectorProvider {
+  const label = entry.label ?? entry.provider;
+  return {
+    id: entry.provider,
+    label,
+    modelSelection: buildEntryModelSelection(entry, label, isConnected),
+  };
+}
+
+/**
+ * The providers a user can pick a model from: enabled, and installed or still being probed. The
+ * provider of the picker's current choice stays whatever its state, so the selector still names
+ * it. Every picker says what that choice is, or `null` for none, so none can forget it.
+ */
 export function buildSelectableProviderSelectorProviders(
   entries: ProviderSnapshotEntry[] | undefined,
-  isConnected = true,
-  serverId?: string | null,
-  disabledModelIdsByProvider?: DisabledModelIdsByProvider,
+  options: {
+    isConnected?: boolean;
+    selectedProvider?: string | null;
+    serverId?: string | null;
+    disabledModelIdsByProvider?: DisabledModelIdsByProvider;
+  },
 ): ProviderSelectorProvider[] {
-  return (
-    (entries ?? [])
-      // Broken providers are not choices: keep them out of the model list and out
-      // of cross-provider search. They stay visible in Settings, where the error
-      // and its diagnostics belong.
-      .filter(
-        (entry) => entry.enabled && entry.status !== "error" && entry.status !== "unavailable",
-      )
-      .map((entry) => {
-        const label = entry.label ?? entry.provider;
-        return {
-          id: entry.provider,
+  const { isConnected = true, selectedProvider, serverId, disabledModelIdsByProvider } = options;
+  return (entries ?? [])
+    .filter(
+      (entry) =>
+        entry.provider === selectedProvider || (entry.enabled && entry.status !== "unavailable"),
+    )
+    .map((entry) => {
+      const label = entry.label ?? entry.provider;
+      return {
+        id: entry.provider,
+        label,
+        serverId,
+        modelSelection: buildEntryModelSelection(
+          entry,
           label,
+          isConnected,
           serverId,
-          modelSelection: buildEntryModelSelection(
-            entry,
-            label,
-            isConnected,
-            serverId,
-            disabledModelIdsByProvider?.[entry.provider],
-          ),
-        };
-      })
-  );
+          disabledModelIdsByProvider?.[entry.provider],
+        ),
+      };
+    });
 }
 
 export function getProviderModelRows(
@@ -362,7 +380,7 @@ export function buildDraftCommandTarget(input: {
   cwd: string;
   effectiveModelId: string;
   effectiveThinkingOptionId: string;
-  featureValues?: Record<string, unknown>;
+  providerOptions?: Record<string, unknown>;
 }): DraftCommandTarget {
   const cwd = input.cwd.trim();
   if (!cwd) {
@@ -382,7 +400,7 @@ export function buildDraftCommandTarget(input: {
     ...(input.effectiveThinkingOptionId
       ? { thinkingOptionId: input.effectiveThinkingOptionId }
       : {}),
-    ...(input.featureValues ? { featureValues: input.featureValues } : {}),
+    ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
   };
   return { status: "ready", config };
 }

@@ -1,3 +1,4 @@
+// eslint-disable-next-line paseo/no-sync-io -- merge: pre-existing synchronous IO
 import { existsSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 

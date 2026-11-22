@@ -3,7 +3,9 @@ import {
   stripBackgroundProviderNotice,
 } from "@getpaseo/protocol/provider-error";
 
-import { validateProviderOptions } from "../provider-options.js";
+import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
+import { applyProviderOptionsPatch } from "../option-controls.js";
+import { assertChangesAreLive, validateProviderOptions } from "../provider-options.js";
 import {
   createOpencodeClient,
   type AssistantMessage as OpenCodeAssistantMessage,
@@ -30,8 +32,10 @@ import {
   type AgentCapabilityFlags,
   type AgentClient,
   type AgentCreateSessionOptions,
-  type AgentFeature,
+  type AgentDraftControls,
+  type AgentOptionControl,
   type AgentLaunchContext,
+  type AgentResumeSessionOptions,
   type AgentMode,
   type AgentModelDefinition,
   type AgentPermissionAction,
@@ -242,15 +246,25 @@ const DEFAULT_MODES: AgentMode[] = [
 ];
 
 function isOpenCodeAutoAcceptEnabled(config: AgentSessionConfig): boolean {
-  return config.featureValues?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === true;
+  return config.providerOptions?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === true;
 }
 
-function withOpenCodeAutoAcceptFeature(
-  featureValues: Record<string, unknown> | undefined,
+/** What opening changed in the options the caller gave: legacy `full-access` turns Auto Accept on. */
+function openCodeOpenOptionsPatch(input: {
+  given: AgentSessionConfig;
+  opened: OpenCodeAgentConfig;
+}): Record<string, unknown> {
+  return isOpenCodeAutoAcceptEnabled(input.opened) && !isOpenCodeAutoAcceptEnabled(input.given)
+    ? { [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: true }
+    : {};
+}
+
+function withOpenCodeAutoAccept(
+  providerOptions: ProviderOptions | undefined,
   enabled: boolean,
-): Record<string, unknown> {
+): ProviderOptions {
   return {
-    ...featureValues,
+    ...providerOptions,
     [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: enabled,
   };
 }
@@ -269,25 +283,25 @@ function resolveOpenCodeCreateConfig(
   const requestedMode = legacyFullAccess
     ? OPENCODE_BUILD_MODE_ID
     : (input.requestedMode ?? inheritedOpenCodeMode);
-  const featureValues =
+  const providerOptions =
     legacyFullAccess ||
-    (isUnattendedCreate && input.featureValues?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === undefined)
-      ? withOpenCodeAutoAcceptFeature(input.featureValues, true)
-      : input.featureValues;
+    (isUnattendedCreate && input.providerOptions?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === undefined)
+      ? withOpenCodeAutoAccept(input.providerOptions, true)
+      : input.providerOptions;
 
   if (inheritsUnattended && requestedMode === undefined) {
     // Unattendedness for OpenCode is carried by auto_accept (set above), not
     // by any particular agent. Leave the mode unset so OpenCode uses its own
     // default agent — `build` may not exist in the user's OpenCode config.
-    return { modeId: undefined, featureValues };
+    return { modeId: undefined, providerOptions };
   }
 
   const resolved = resolveDefaultAgentCreateConfig({
     ...input,
     requestedMode,
-    featureValues,
+    providerOptions,
   });
-  return { ...resolved, featureValues };
+  return { ...resolved, providerOptions };
 }
 
 function isOpenCodeCreateConfigUnattended(
@@ -295,27 +309,19 @@ function isOpenCodeCreateConfigUnattended(
 ): boolean {
   return (
     isDefaultAgentCreateConfigUnattended(input) ||
-    input.config.featureValues?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === true ||
-    input.features?.some(
-      (feature) =>
-        feature.id === OPENCODE_AUTO_ACCEPT_FEATURE_ID &&
-        (feature.value === true || feature.value === "true"),
-    ) === true
+    input.config.providerOptions?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === true
   );
 }
 
-function buildOpenCodeAutoAcceptFeature(config: AgentSessionConfig): AgentFeature {
-  return {
-    type: "toggle",
-    id: OPENCODE_AUTO_ACCEPT_FEATURE_ID,
-    label: "Auto-accept",
-    description: "Automatically approves OpenCode tool permission prompts.",
-    tooltip: "Auto-accept permission prompts",
-    icon: "shield-check",
-    desktopTrigger: "label",
-    value: isOpenCodeAutoAcceptEnabled(config),
-  };
-}
+const OPENCODE_AUTO_ACCEPT_CONTROL: AgentOptionControl = {
+  type: "toggle",
+  key: OPENCODE_AUTO_ACCEPT_FEATURE_ID,
+  label: "Auto Accept",
+  description: "Automatically approves OpenCode tool permission prompts.",
+  tooltip: "Auto accept permission prompts",
+  icon: "shield-check",
+  desktopTrigger: "label",
+};
 
 function buildOpenCodePermissionActions(): AgentPermissionAction[] {
   return [
@@ -360,7 +366,11 @@ type OpenCodeAgentConfig = Omit<AgentSessionConfig, "providerOptions"> & {
   providerOptions: OpenCodeProviderOptions;
 };
 
-const OPENCODE_SESSION_ENV_KEYS = new Set(["PASEO_AGENT_ID", "PASEO_AGENT_CWD"]);
+const OPENCODE_SESSION_ENV_KEYS = new Set([
+  "PASEO_AGENT_ID",
+  "PASEO_AGENT_CWD",
+  "PASEO_WORKSPACE_ID",
+]);
 
 function requiresDedicatedOpenCodeServer(
   config: OpenCodeAgentConfig,
@@ -693,10 +703,7 @@ function normalizeOpenCodeConfig(config: OpenCodeAgentConfig): OpenCodeAgentConf
   return {
     ...normalized,
     modeId: OPENCODE_BUILD_MODE_ID,
-    featureValues: {
-      ...normalized.featureValues,
-      [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: true,
-    },
+    providerOptions: withOpenCodeAutoAccept(normalized.providerOptions, true),
   };
 }
 
@@ -1513,6 +1520,7 @@ export class OpenCodeAgentClient implements AgentClient {
         false,
         unbindBridge,
         connectServer,
+        openCodeOpenOptionsPatch({ given: config, opened: openCodeConfig }),
       );
     } catch (error) {
       await connection.release();
@@ -1524,6 +1532,7 @@ export class OpenCodeAgentClient implements AgentClient {
     handle: AgentPersistenceHandle,
     overrides?: Partial<AgentSessionConfig>,
     launchContext?: AgentLaunchContext,
+    _options?: AgentResumeSessionOptions,
   ): Promise<AgentSession> {
     const metadata = (handle.metadata ?? {}) as Partial<AgentSessionConfig>;
     const cwd = overrides?.cwd ?? metadata.cwd;
@@ -1568,6 +1577,7 @@ export class OpenCodeAgentClient implements AgentClient {
         registeredAcquisition !== null,
         unbindBridge,
         connectServer,
+        openCodeOpenOptionsPatch({ given: config, opened: openCodeConfig }),
       );
     } catch (error) {
       await connection.release();
@@ -1689,8 +1699,9 @@ export class OpenCodeAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return [buildOpenCodeAutoAcceptFeature(this.assertConfig(config))];
+  async listControls(config: AgentSessionConfig): Promise<AgentDraftControls> {
+    this.assertConfig(config);
+    return { controls: [OPENCODE_AUTO_ACCEPT_CONTROL], options: config.providerOptions ?? {} };
   }
 
   async listImportableSessions(
@@ -3338,6 +3349,7 @@ interface OpenCodeServerConnection {
 class OpenCodeAgentSession implements AgentSession {
   readonly provider = "opencode" as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
+  readonly openOptionsPatch: Record<string, unknown>;
 
   private readonly config: OpenCodeAgentConfig;
   private server: OpenCodeServerConnection;
@@ -3372,6 +3384,7 @@ class OpenCodeAgentSession implements AgentSession {
   private partTypes = new Map<string, string>();
   private availableModesCache: AgentMode[] | null = null;
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
+  private readonly turnNamespace = randomUUID();
   private nextTurnOrdinal = 0;
   private turnState: OpenCodeTurnState = { status: "idle" };
   /**
@@ -3425,8 +3438,10 @@ class OpenCodeAgentSession implements AgentSession {
     private readonly externallyDriven = false,
     releaseBridge?: () => void,
     connectServer?: () => Promise<OpenCodeServerConnection>,
+    openOptionsPatch: Record<string, unknown> = {},
   ) {
     this.config = config;
+    this.openOptionsPatch = openOptionsPatch;
     this.server = {
       client,
       events,
@@ -3532,8 +3547,8 @@ class OpenCodeAgentSession implements AgentSession {
     return this.turnState.status === "running" ? this.turnState.turnId : null;
   }
 
-  get features(): AgentFeature[] {
-    return [buildOpenCodeAutoAcceptFeature(this.config)];
+  get controls(): AgentOptionControl[] {
+    return [OPENCODE_AUTO_ACCEPT_CONTROL];
   }
 
   async getRuntimeInfo(): Promise<AgentRuntimeInfo> {
@@ -3719,6 +3734,7 @@ class OpenCodeAgentSession implements AgentSession {
     const systemPrompt = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
+      ...(this.config.pluginAppendSystemPrompt ?? []),
     );
     const model = this.parseModel(this.config.model);
     const effectiveMode = resolveOpenCodeRuntimeAgentId(this.currentMode);
@@ -4056,6 +4072,7 @@ class OpenCodeAgentSession implements AgentSession {
           const systemPrompt = composeSystemPromptParts(
             this.config.systemPrompt,
             this.config.daemonAppendSystemPrompt,
+            ...(this.config.pluginAppendSystemPrompt ?? []),
           );
           const promptResponse = await this.client.session.promptAsync({
             sessionID: this.sessionId,
@@ -4903,15 +4920,6 @@ class OpenCodeAgentSession implements AgentSession {
             ...item,
             status: "failed",
             error,
-            detail:
-              item.detail.type === "sub_agent"
-                ? {
-                    ...item.detail,
-                    log: [item.detail.log, error.message]
-                      .filter((entry) => entry.trim().length > 0)
-                      .join("\n"),
-                  }
-                : item.detail,
           },
         },
         turnId,
@@ -4948,7 +4956,7 @@ class OpenCodeAgentSession implements AgentSession {
 
   private createTurnId(): string {
     this.gapRepairRevision += 1;
-    return `opencode-turn-${this.nextTurnOrdinal++}`;
+    return `opencode-turn-${this.turnNamespace}-${this.nextTurnOrdinal++}`;
   }
 
   private traceOpenCode(msg: OpenCodeTraceMessage, data: OpenCodeTraceData = {}): void {
@@ -5022,7 +5030,15 @@ class OpenCodeAgentSession implements AgentSession {
     const normalizedModeId = normalizeOpenCodeModeId(modeId);
     if (normalizedModeId === OPENCODE_LEGACY_FULL_ACCESS_MODE_ID) {
       this.currentMode = OPENCODE_BUILD_MODE_ID;
-      await this.setFeature(OPENCODE_AUTO_ACCEPT_FEATURE_ID, true);
+      this.setAutoAccept(true);
+      this.notifySubscribers(
+        {
+          type: "options_changed",
+          provider: "opencode",
+          patch: { [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: true },
+        },
+        null,
+      );
       return;
     }
 
@@ -5038,17 +5054,33 @@ class OpenCodeAgentSession implements AgentSession {
     this.config.workflowModeId = workflowModeId ?? undefined;
   }
 
+  async applyOptions(options: ProviderOptions): Promise<void> {
+    assertChangesAreLive({
+      provider: "opencode",
+      patch: options,
+      current: this.config.providerOptions,
+      live: [OPENCODE_AUTO_ACCEPT_FEATURE_ID],
+    });
+    const next = validateProviderOptions(
+      "opencode",
+      OpenCodeProviderOptionsSchema,
+      applyProviderOptionsPatch({ options: this.config.providerOptions, patch: options }),
+    );
+    if (OPENCODE_AUTO_ACCEPT_FEATURE_ID in options) {
+      this.setAutoAccept(next?.[OPENCODE_AUTO_ACCEPT_FEATURE_ID] === true);
+    }
+  }
+
   async setFeature(featureId: string, value: unknown): Promise<void> {
     if (featureId !== OPENCODE_AUTO_ACCEPT_FEATURE_ID) {
       throw new Error(`Unsupported OpenCode feature '${featureId}'`);
     }
+    await this.applyOptions({ [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: value === true });
+  }
 
-    const enabled = value === true;
+  private setAutoAccept(enabled: boolean): void {
     this.autoAcceptEnabled = enabled;
-    this.config.featureValues = {
-      ...this.config.featureValues,
-      [OPENCODE_AUTO_ACCEPT_FEATURE_ID]: enabled,
-    };
+    this.config.providerOptions = withOpenCodeAutoAccept(this.config.providerOptions, enabled);
   }
 
   getPendingPermissions(): AgentPermissionRequest[] {
@@ -5089,22 +5121,24 @@ class OpenCodeAgentSession implements AgentSession {
           answers,
         });
       }
-
-      this.pendingPermissions.delete(requestId);
-      this.pendingPermissionDirectories.delete(requestId);
-      return;
+    } else {
+      const reply = resolveOpenCodePermissionReply(response);
+      await this.client.permission.reply({
+        requestID: requestId,
+        directory,
+        reply,
+        message: response.behavior === "deny" ? response.message : undefined,
+      });
     }
-
-    const reply = resolveOpenCodePermissionReply(response);
-    await this.client.permission.reply({
-      requestID: requestId,
-      directory,
-      reply,
-      message: response.behavior === "deny" ? response.message : undefined,
-    });
 
     this.pendingPermissions.delete(requestId);
     this.pendingPermissionDirectories.delete(requestId);
+    this.notifySubscribers({
+      type: "permission_resolved",
+      provider: "opencode",
+      requestId,
+      resolution: response,
+    });
   }
 
   describePersistence(): AgentPersistenceHandle | null {

@@ -60,6 +60,6 @@ describe("useDragReorderState", () => {
       result.current.handlers.onDragEnd(dragEnd("one", "three"));
     });
 
-    expect(onDragEnd).toHaveBeenCalledWith([rows[1], rows[2], rows[0]]);
+    expect(onDragEnd).toHaveBeenCalledWith([rows[1], rows[2], rows[0]], "one");
   });
 });
