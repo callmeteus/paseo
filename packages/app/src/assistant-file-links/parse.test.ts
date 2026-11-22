@@ -609,7 +609,7 @@ describe("normalizeInlinePathTarget", () => {
     const spreadsheet =
       "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
     expect(
-      normalizeInlinePathTarget(spreadsheet, "C:/Users/Gio/Documents/Projetos/gti-infra"),
+      normalizeInlinePathTarget(spreadsheet, "C:/Users/Gio/Documents/Projetos/infra"),
     ).toEqual({
       directory: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas",
       file: spreadsheet,
