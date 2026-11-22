@@ -1798,6 +1798,7 @@ export const ApiTokenSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   createdAt: z.string(),
+  rotatedAt: z.string().optional(),
 });
 
 export const DaemonApiTokenListRequestSchema = z.object({
@@ -1809,6 +1810,19 @@ export const DaemonApiTokenCreateRequestSchema = z.object({
   type: z.literal("daemon.api_token.create.request"),
   requestId: z.string(),
   name: z.string(),
+});
+
+export const DaemonApiTokenRenameRequestSchema = z.object({
+  type: z.literal("daemon.api_token.rename.request"),
+  requestId: z.string(),
+  id: z.string(),
+  name: z.string(),
+});
+
+export const DaemonApiTokenRotateRequestSchema = z.object({
+  type: z.literal("daemon.api_token.rotate.request"),
+  requestId: z.string(),
+  id: z.string(),
 });
 
 export const DaemonApiTokenRevokeRequestSchema = z.object({
@@ -4293,6 +4307,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetPairingOfferRequestSchema,
   DaemonApiTokenListRequestSchema,
   DaemonApiTokenCreateRequestSchema,
+  DaemonApiTokenRenameRequestSchema,
+  DaemonApiTokenRotateRequestSchema,
   DaemonApiTokenRevokeRequestSchema,
   DaemonConfigReloadRequestSchema,
   HubManagementDaemonConnectRequestSchema,
@@ -6600,6 +6616,27 @@ export const DaemonApiTokenCreateResponseSchema = z.object({
     .passthrough(),
 });
 
+export const DaemonApiTokenRenameResponseSchema = z.object({
+  type: z.literal("daemon.api_token.rename.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      token: ApiTokenSummarySchema,
+    })
+    .passthrough(),
+});
+
+export const DaemonApiTokenRotateResponseSchema = z.object({
+  type: z.literal("daemon.api_token.rotate.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      token: ApiTokenSummarySchema,
+      secret: z.string(),
+    })
+    .passthrough(),
+});
+
 export const DaemonApiTokenRevokeResponseSchema = z.object({
   type: z.literal("daemon.api_token.revoke.response"),
   payload: z
@@ -8802,6 +8839,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetPairingOfferResponseSchema,
   DaemonApiTokenListResponseSchema,
   DaemonApiTokenCreateResponseSchema,
+  DaemonApiTokenRenameResponseSchema,
+  DaemonApiTokenRotateResponseSchema,
   DaemonApiTokenRevokeResponseSchema,
   DaemonConfigReloadResponseSchema,
   HubManagementDaemonConnectResponseSchema,
@@ -9105,6 +9144,8 @@ export type DaemonGetPairingOfferResponse = z.infer<typeof DaemonGetPairingOffer
 export type ApiTokenSummary = z.infer<typeof ApiTokenSummarySchema>;
 export type DaemonApiTokenListResponse = z.infer<typeof DaemonApiTokenListResponseSchema>;
 export type DaemonApiTokenCreateResponse = z.infer<typeof DaemonApiTokenCreateResponseSchema>;
+export type DaemonApiTokenRenameResponse = z.infer<typeof DaemonApiTokenRenameResponseSchema>;
+export type DaemonApiTokenRotateResponse = z.infer<typeof DaemonApiTokenRotateResponseSchema>;
 export type DaemonApiTokenRevokeResponse = z.infer<typeof DaemonApiTokenRevokeResponseSchema>;
 export type DaemonConfigReloadResponse = z.infer<typeof DaemonConfigReloadResponseSchema>;
 export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;

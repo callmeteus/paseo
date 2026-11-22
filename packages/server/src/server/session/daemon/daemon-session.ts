@@ -378,6 +378,52 @@ export class DaemonSession {
     }
   }
 
+  handleApiTokenRenameRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.rename.request" }>,
+  ): void {
+    try {
+      const token = this.requireApiTokenStore().rename(msg.id, msg.name);
+      if (!token) {
+        this.emitApiTokenError(
+          msg.requestId,
+          msg.type,
+          new Error("API token not found"),
+          "rename API token",
+        );
+        return;
+      }
+      this.host.emit({
+        type: "daemon.api_token.rename.response",
+        payload: { requestId: msg.requestId, token },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "rename API token");
+    }
+  }
+
+  async handleApiTokenRotateRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.rotate.request" }>,
+  ): Promise<void> {
+    try {
+      const rotated = await this.requireApiTokenStore().rotate(msg.id);
+      if (!rotated) {
+        this.emitApiTokenError(
+          msg.requestId,
+          msg.type,
+          new Error("API token not found"),
+          "rotate API token",
+        );
+        return;
+      }
+      this.host.emit({
+        type: "daemon.api_token.rotate.response",
+        payload: { requestId: msg.requestId, token: rotated.token, secret: rotated.secret },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "rotate API token");
+    }
+  }
+
   handleApiTokenRevokeRequest(
     msg: Extract<SessionInboundMessage, { type: "daemon.api_token.revoke.request" }>,
   ): void {

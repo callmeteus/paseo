@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -23,17 +23,24 @@ import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { confirmDialog } from "@/utils/confirm-dialog";
-import { Copy, KeyRound, MoreHorizontal, Trash2 } from "lucide-react-native";
+import { Copy, KeyRound, MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react-native";
 import { formatApiTokenCreatedAt, validateApiTokenName } from "./api-tokens-model";
 
 const ThemedCopy = withUnistyles(Copy);
 const ThemedKeyRound = withUnistyles(KeyRound);
 const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
+const ThemedPencil = withUnistyles(Pencil);
+const ThemedRefreshCw = withUnistyles(RefreshCw);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedSpinner = withUnistyles(LoadingSpinner);
 
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const dangerIconColor = (theme: Theme) => ({ color: theme.colors.statusDanger });
+
+interface RevealedSecret {
+  secret: string;
+  title: string;
+}
 
 interface HostApiTokensPageProps {
   serverId: string;
@@ -44,29 +51,61 @@ export function HostApiTokensPage({ serverId }: HostApiTokensPageProps) {
   const toast = useToast();
   const supported = useHostFeature(serverId, "apiTokens");
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const { tokens, isLoading, isError, createToken, revokeToken } = useDaemonApiTokens(serverId);
+  const { tokens, isLoading, isError, createToken, renameToken, rotateToken, revokeToken } =
+    useDaemonApiTokens(serverId);
   const [isCreateOpen, setCreateOpen] = useState(false);
-  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [renamingToken, setRenamingToken] = useState<ApiTokenSummary | null>(null);
+  const [revealed, setRevealed] = useState<RevealedSecret | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const handleCreate = useCallback(
     async (name: string) => {
       const secret = await createToken(name);
       setCreateOpen(false);
-      setRevealedSecret(secret);
+      setRevealed({ secret, title: t("settings.host.apiTokens.createdTitle") });
     },
-    [createToken],
+    [createToken, t],
   );
 
-  const handleCopy = useCallback(async () => {
-    if (!revealedSecret) return;
-    try {
-      await Clipboard.setStringAsync(revealedSecret);
-      toast.copied(t("settings.host.apiTokens.copyLabel"));
-    } catch {
-      toast.error(t("settings.host.apiTokens.copyFailed"));
-    }
-  }, [revealedSecret, toast, t]);
+  const handleRename = useCallback(
+    async (name: string) => {
+      if (!renamingToken) return;
+      try {
+        await renameToken(renamingToken.id, name);
+        toast.show(t("settings.host.apiTokens.renamed", { name }));
+        setRenamingToken(null);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.errors.unableToSave"));
+      }
+    },
+    [renamingToken, renameToken, toast, t],
+  );
+
+  const openRename = useCallback((token: ApiTokenSummary) => setRenamingToken(token), []);
+
+  const handleRotate = useCallback(
+    async (token: ApiTokenSummary) => {
+      const confirmed = await confirmDialog({
+        title: t("settings.host.apiTokens.rotateTitle"),
+        message: t("settings.host.apiTokens.rotateMessage", { name: token.name }),
+        confirmLabel: t("settings.host.apiTokens.rotateConfirm"),
+        cancelLabel: t("common.actions.cancel"),
+        destructive: true,
+      });
+      if (!confirmed) return;
+      setBusyId(token.id);
+      try {
+        const secret = await rotateToken(token.id);
+        setRevealed({ secret, title: t("settings.host.apiTokens.rotatedTitle") });
+        toast.show(t("settings.host.apiTokens.rotated", { name: token.name }));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.errors.unableToSave"));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [rotateToken, toast, t],
+  );
 
   const handleRevoke = useCallback(
     async (token: ApiTokenSummary) => {
@@ -78,22 +117,33 @@ export function HostApiTokensPage({ serverId }: HostApiTokensPageProps) {
         destructive: true,
       });
       if (!confirmed) return;
-      setRevokingId(token.id);
+      setBusyId(token.id);
       try {
         await revokeToken(token.id);
         toast.show(t("settings.host.apiTokens.revoked", { name: token.name }));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("common.errors.unableToSave"));
       } finally {
-        setRevokingId(null);
+        setBusyId(null);
       }
     },
     [revokeToken, toast, t],
   );
 
+  const handleCopy = useCallback(async () => {
+    if (!revealed) return;
+    try {
+      await Clipboard.setStringAsync(revealed.secret);
+      toast.copied(t("settings.host.apiTokens.copyLabel"));
+    } catch {
+      toast.error(t("settings.host.apiTokens.copyFailed"));
+    }
+  }, [revealed, toast, t]);
+
   const openCreate = useCallback(() => setCreateOpen(true), []);
   const closeCreate = useCallback(() => setCreateOpen(false), []);
-  const closeReveal = useCallback(() => setRevealedSecret(null), []);
+  const closeRename = useCallback(() => setRenamingToken(null), []);
+  const closeReveal = useCallback(() => setRevealed(null), []);
   const sectionTrailing = useMemo(
     () => (
       <Button variant="outline" onPress={openCreate} testID="api-tokens-create-button">
@@ -147,16 +197,35 @@ export function HostApiTokensPage({ serverId }: HostApiTokensPageProps) {
               key={token.id}
               token={token}
               isFirst={index === 0}
-              isRevoking={revokingId === token.id}
+              isBusy={busyId === token.id}
+              onRename={openRename}
+              onRotate={handleRotate}
               onRevoke={handleRevoke}
             />
           ))}
         </View>
       </SettingsSection>
 
-      <CreateTokenSheet visible={isCreateOpen} onClose={closeCreate} onSubmit={handleCreate} />
+      <TokenNameSheet
+        visible={isCreateOpen}
+        title={t("settings.host.apiTokens.createTitle")}
+        submitLabel={t("settings.host.apiTokens.create")}
+        onClose={closeCreate}
+        onSubmit={handleCreate}
+        testID="api-token-create-sheet"
+      />
 
-      <RevealTokenSheet secret={revealedSecret} onCopy={handleCopy} onClose={closeReveal} />
+      <TokenNameSheet
+        visible={renamingToken !== null}
+        title={t("settings.host.apiTokens.renameTitle")}
+        submitLabel={t("common.actions.save")}
+        initialName={renamingToken?.name ?? ""}
+        onClose={closeRename}
+        onSubmit={handleRename}
+        testID="api-token-rename-sheet"
+      />
+
+      <RevealTokenSheet reveal={revealed} onCopy={handleCopy} onClose={closeReveal} />
     </View>
   );
 }
@@ -164,13 +233,19 @@ export function HostApiTokensPage({ serverId }: HostApiTokensPageProps) {
 interface TokenRowProps {
   token: ApiTokenSummary;
   isFirst: boolean;
-  isRevoking: boolean;
+  isBusy: boolean;
+  onRename: (token: ApiTokenSummary) => void;
+  onRotate: (token: ApiTokenSummary) => void;
   onRevoke: (token: ApiTokenSummary) => void;
 }
 
-function TokenRow({ token, isFirst, isRevoking, onRevoke }: TokenRowProps) {
+function TokenRow({ token, isFirst, isBusy, onRename, onRotate, onRevoke }: TokenRowProps) {
   const { t } = useTranslation();
+  const handleRename = useCallback(() => onRename(token), [onRename, token]);
+  const handleRotate = useCallback(() => onRotate(token), [onRotate, token]);
   const handleRevoke = useCallback(() => onRevoke(token), [onRevoke, token]);
+  const pencilLeading = useMemo(() => <ThemedPencil size={14} uniProps={mutedIconColor} />, []);
+  const refreshLeading = useMemo(() => <ThemedRefreshCw size={14} uniProps={mutedIconColor} />, []);
   const trashLeading = useMemo(() => <ThemedTrash2 size={14} uniProps={dangerIconColor} />, []);
 
   return (
@@ -188,10 +263,17 @@ function TokenRow({ token, isFirst, isRevoking, onRevoke }: TokenRowProps) {
             date: formatApiTokenCreatedAt(token.createdAt),
           })}
         </Text>
+        {token.rotatedAt ? (
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.apiTokens.rotatedOn", {
+              date: formatApiTokenCreatedAt(token.rotatedAt),
+            })}
+          </Text>
+        ) : null}
       </View>
       <DropdownMenu>
         <DropdownMenuTrigger
-          disabled={isRevoking}
+          disabled={isBusy}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={t("settings.host.apiTokens.actions.menu", { name: token.name })}
@@ -200,6 +282,20 @@ function TokenRow({ token, isFirst, isRevoking, onRevoke }: TokenRowProps) {
           <ThemedMoreHorizontal size={16} uniProps={mutedIconColor} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" width={200}>
+          <DropdownMenuItem
+            leading={pencilLeading}
+            onSelect={handleRename}
+            testID={`api-token-rename-${token.id}`}
+          >
+            {t("settings.host.apiTokens.actions.rename")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            leading={refreshLeading}
+            onSelect={handleRotate}
+            testID={`api-token-rotate-${token.id}`}
+          >
+            {t("settings.host.apiTokens.actions.rotate")}
+          </DropdownMenuItem>
           <DropdownMenuItem
             destructive
             leading={trashLeading}
@@ -214,23 +310,39 @@ function TokenRow({ token, isFirst, isRevoking, onRevoke }: TokenRowProps) {
   );
 }
 
-interface CreateTokenSheetProps {
+interface TokenNameSheetProps {
   visible: boolean;
+  title: string;
+  submitLabel: string;
+  initialName?: string;
   onClose: () => void;
   onSubmit: (name: string) => Promise<void>;
+  testID: string;
 }
 
-function CreateTokenSheet({ visible, onClose, onSubmit }: CreateTokenSheetProps) {
+function TokenNameSheet({
+  visible,
+  title,
+  submitLabel,
+  initialName = "",
+  onClose,
+  onSubmit,
+  testID,
+}: TokenNameSheetProps) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const inputRef = useRef<EditingTextInputHandle>(null);
 
-  const header = useMemo<SheetHeader>(
-    () => ({ title: t("settings.host.apiTokens.createTitle") }),
-    [t],
-  );
+  useEffect(() => {
+    if (!visible) return;
+    setName(initialName);
+    setError(null);
+    setIsPending(false);
+  }, [visible, initialName]);
+
+  const header = useMemo<SheetHeader>(() => ({ title }), [title]);
 
   const handleNameChange = useCallback((value: string) => {
     setName(value);
@@ -263,28 +375,28 @@ function CreateTokenSheet({ visible, onClose, onSubmit }: CreateTokenSheetProps)
       visible={visible}
       header={header}
       onClose={onClose}
-      testID="api-token-create-sheet"
+      testID={testID}
       desktopMaxWidth={480}
     >
       <View style={styles.sheetBody}>
         <Field
           label={t("settings.host.apiTokens.nameLabel")}
           error={error}
-          testID="api-token-name-field"
+          testID={`${testID}-name-field`}
         >
           <FormTextInput
             ref={inputRef}
-            initialValue=""
-            resetKey={visible ? "open" : "closed"}
+            initialValue={initialName}
+            resetKey={`${visible}-${initialName}`}
             onChangeText={handleNameChange}
             placeholder={t("settings.host.apiTokens.namePlaceholder")}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isPending}
             returnKeyType="done"
-            nativeID="api-token-name-input"
+            nativeID={`${testID}-name-input`}
             accessibilityLabel={t("settings.host.apiTokens.nameLabel")}
-            testID="api-token-name-input"
+            testID={`${testID}-name-input`}
           />
         </Field>
         <View style={styles.actions}>
@@ -292,7 +404,7 @@ function CreateTokenSheet({ visible, onClose, onSubmit }: CreateTokenSheetProps)
             variant="secondary"
             onPress={onClose}
             disabled={isPending}
-            testID="api-token-cancel-button"
+            testID={`${testID}-cancel-button`}
           >
             {t("common.actions.cancel")}
           </Button>
@@ -300,9 +412,9 @@ function CreateTokenSheet({ visible, onClose, onSubmit }: CreateTokenSheetProps)
             variant="default"
             onPress={handleSubmit}
             disabled={isPending}
-            testID="api-token-submit-button"
+            testID={`${testID}-submit-button`}
           >
-            {t("settings.host.apiTokens.create")}
+            {submitLabel}
           </Button>
         </View>
       </View>
@@ -311,21 +423,21 @@ function CreateTokenSheet({ visible, onClose, onSubmit }: CreateTokenSheetProps)
 }
 
 interface RevealTokenSheetProps {
-  secret: string | null;
+  reveal: RevealedSecret | null;
   onCopy: () => void;
   onClose: () => void;
 }
 
-function RevealTokenSheet({ secret, onCopy, onClose }: RevealTokenSheetProps) {
+function RevealTokenSheet({ reveal, onCopy, onClose }: RevealTokenSheetProps) {
   const { t } = useTranslation();
   const header = useMemo<SheetHeader>(
-    () => ({ title: t("settings.host.apiTokens.createdTitle") }),
-    [t],
+    () => ({ title: reveal?.title ?? t("settings.host.apiTokens.createdTitle") }),
+    [reveal, t],
   );
 
   return (
     <AdaptiveModalSheet
-      visible={secret !== null}
+      visible={reveal !== null}
       header={header}
       onClose={onClose}
       testID="api-token-reveal-sheet"
@@ -335,7 +447,7 @@ function RevealTokenSheet({ secret, onCopy, onClose }: RevealTokenSheetProps) {
         <Text style={settingsStyles.rowHint}>{t("settings.host.apiTokens.revealHint")}</Text>
         <View style={styles.secretBox}>
           <Text selectable style={styles.secretText} testID="api-token-secret">
-            {secret ?? ""}
+            {reveal?.secret ?? ""}
           </Text>
         </View>
         <View style={styles.actions}>

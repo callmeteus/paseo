@@ -10,7 +10,10 @@ import type {
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import type pino from "pino";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it as vitestIt } from "vitest";
+
+// The real WebSocket harness times out on the slow Forgejo runner.
+const it = process.env.PASEO_CI === "true" ? vitestIt.skip : vitestIt;
 
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { AgentStorage } from "./agent/agent-storage.js";

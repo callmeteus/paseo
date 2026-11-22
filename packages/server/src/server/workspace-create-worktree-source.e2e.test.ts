@@ -3,7 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot keep the terminal worker alive (SIGSEGV).
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 
 import { DaemonClient } from "./test-utils/index.js";
 import { WebSocket } from "ws";

@@ -27,19 +27,61 @@ void testI18n;
 const capturedRootProps: { compactMode?: string }[] = [];
 const capturedContentProps: { sheetTitle?: string; testID?: string }[] = [];
 
-const { mockTheme } = vi.hoisted(() => ({
-  mockTheme: {
-    colors: { foregroundMuted: "#aaa", surface2: "#222" },
-    borderRadius: { md: 6 },
-    fontSize: { xs: 11 },
-  },
-}));
+const { mockTheme } = vi.hoisted(() => {
+  // Any token the components read but this test does not assert can resolve to
+  // an inert proxy, so adding a new design token cannot break this suite.
+  const fallbacks = new Map<string, object>();
+  const fallback = (key: string): object => {
+    let value = fallbacks.get(key);
+    if (!value) {
+      value = new Proxy(
+        {},
+        {
+          get: (_target, property) =>
+            typeof property === "symbol" ? undefined : fallback(`${key}.${String(property)}`),
+        },
+      );
+      fallbacks.set(key, value);
+    }
+    return value;
+  };
+  const tokens = {
+    colors: {
+      foregroundMuted: "#aaa",
+      foreground: "#eee",
+      surface0: "#111",
+      surface1: "#1a1a1a",
+      surface2: "#222",
+      border: "#333",
+      borderAccent: "#444",
+      accent: "#555",
+      palette: { green: { 500: "#22c55e" }, red: { 500: "#ef4444" } },
+    },
+    borderRadius: { md: 6, lg: 8, xl: 10, "2xl": 12 },
+    borderWidth: { 1: 1 },
+    fontSize: { xs: 11, sm: 12, base: 14 },
+    fontWeight: { normal: "400", medium: "500", semibold: "600", bold: "700" },
+    spacing: { 0.5: 2, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 },
+    opacity: { 50: 0.5 },
+    palette: { green: { 500: "#22c55e" }, red: { 500: "#ef4444" } },
+  };
+  return {
+    mockTheme: new Proxy(tokens, {
+      get: (target, property) =>
+        property in target ? target[property as keyof typeof tokens] : fallback(String(property)),
+    }),
+  };
+});
 
 vi.mock("lucide-react-native", () => {
   const StubIcon = () => null;
   return {
+    ArrowLeft: StubIcon,
     ArrowLeftToLine: StubIcon,
     ArrowRightToLine: StubIcon,
+    Check: StubIcon,
+    CheckCircle: StubIcon,
+    ChevronLeft: StubIcon,
     Copy: StubIcon,
     CopyX: StubIcon,
     Download: StubIcon,
@@ -48,6 +90,7 @@ vi.mock("lucide-react-native", () => {
     FolderPlus: StubIcon,
     Pencil: StubIcon,
     RotateCw: StubIcon,
+    Search: StubIcon,
     Split: StubIcon,
     Trash2: StubIcon,
     X: StubIcon,

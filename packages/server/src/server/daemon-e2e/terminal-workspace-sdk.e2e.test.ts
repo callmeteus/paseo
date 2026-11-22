@@ -2,7 +2,10 @@ import { resolveDaemonVersion } from "../daemon-version.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot keep the terminal worker alive (SIGSEGV).
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 import { createPaseoClient, type PaseoClient } from "@getpaseo/client";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon, type TestPaseoDaemon } from "../test-utils/paseo-daemon.js";

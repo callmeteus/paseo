@@ -12,7 +12,10 @@ import {
   DaemonClient as HostClient,
 } from "@getpaseo/client/internal/daemon-client";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot host the local relay / OpenCode binaries used here.
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { WebSocket } from "ws";

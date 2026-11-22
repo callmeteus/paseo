@@ -17,6 +17,7 @@ export const ApiTokenSummarySchema = z.object({
   id: z.string(),
   name: ApiTokenNameSchema,
   createdAt: z.string(),
+  rotatedAt: z.string().optional(),
 });
 
 export type ApiTokenSummary = z.infer<typeof ApiTokenSummarySchema>;
@@ -27,6 +28,7 @@ const StoredApiTokenSchema = z.object({
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   hash: z.string().regex(HASH_PATTERN),
   createdAt: z.string(),
+  rotatedAt: z.string().optional(),
 });
 
 const StoredApiTokenFileSchema = z.object({
@@ -83,15 +85,13 @@ export class ApiTokenStore implements ApiTokenVerifier {
 
   list(): ApiTokenSummary[] {
     return this.tokens
-      .map((token) => ({ id: token.id, name: token.name, createdAt: token.createdAt }))
+      .map((token) => this.toSummary(token))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async create(nameInput: string): Promise<{ token: ApiTokenSummary; secret: string }> {
     const name = ApiTokenNameSchema.parse(nameInput);
-    if (this.tokens.some((token) => token.name.toLowerCase() === name.toLowerCase())) {
-      throw new DuplicateApiTokenNameError(name);
-    }
+    this.assertNameAvailable(name);
     const secret = `${TOKEN_PREFIX}${randomBytes(TOKEN_BYTES).toString("base64url")}`;
     const record: StoredApiToken = {
       id: randomUUID(),
@@ -103,6 +103,32 @@ export class ApiTokenStore implements ApiTokenVerifier {
     this.tokens = [...this.tokens, record];
     this.persist();
     return { token: this.toSummary(record), secret };
+  }
+
+  rename(id: string, nameInput: string): ApiTokenSummary | null {
+    const existing = this.tokens.find((token) => token.id === id);
+    if (!existing) return null;
+    const name = ApiTokenNameSchema.parse(nameInput);
+    this.assertNameAvailable(name, id);
+    const renamed = { ...existing, name };
+    this.tokens = this.tokens.map((token) => (token.id === id ? renamed : token));
+    this.persist();
+    return this.toSummary(renamed);
+  }
+
+  async rotate(id: string): Promise<{ token: ApiTokenSummary; secret: string } | null> {
+    const existing = this.tokens.find((token) => token.id === id);
+    if (!existing) return null;
+    const secret = `${TOKEN_PREFIX}${randomBytes(TOKEN_BYTES).toString("base64url")}`;
+    const rotated: StoredApiToken = {
+      ...existing,
+      fingerprint: fingerprintOf(secret),
+      hash: await hash(secret, DAEMON_PASSWORD_BCRYPT_COST),
+      rotatedAt: new Date().toISOString(),
+    };
+    this.tokens = this.tokens.map((token) => (token.id === id ? rotated : token));
+    this.persist();
+    return { token: this.toSummary(rotated), secret };
   }
 
   revoke(id: string): boolean {
@@ -129,8 +155,23 @@ export class ApiTokenStore implements ApiTokenVerifier {
     return false;
   }
 
+  private assertNameAvailable(name: string, exceptId?: string): void {
+    if (
+      this.tokens.some(
+        (token) => token.id !== exceptId && token.name.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      throw new DuplicateApiTokenNameError(name);
+    }
+  }
+
   private toSummary(token: StoredApiToken): ApiTokenSummary {
-    return { id: token.id, name: token.name, createdAt: token.createdAt };
+    return {
+      id: token.id,
+      name: token.name,
+      createdAt: token.createdAt,
+      ...(token.rotatedAt ? { rotatedAt: token.rotatedAt } : {}),
+    };
   }
 
   private persist(): void {
