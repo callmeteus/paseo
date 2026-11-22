@@ -91,7 +91,7 @@ it("opens the Windows spreadsheet at the absolute path the agent wrote", async (
     "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
   const opened: string[] = [];
   const opener = createInlinePathOpener({
-    workspaceRoot: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\gti-infra",
+    workspaceRoot: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\infra",
     client: null,
     openFile: (location) => {
       opened.push(location.path);

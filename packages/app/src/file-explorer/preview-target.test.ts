@@ -68,7 +68,7 @@ describe("resolveFilePreviewReadTarget", () => {
     expect(
       resolveFilePreviewReadTarget({
         path: spreadsheet,
-        workspaceRoot: "C:/Users/Gio/Documents/Projetos/gti-infra",
+        workspaceRoot: "C:/Users/Gio/Documents/Projetos/infra",
       }),
     ).toEqual({
       cwd: "C:/",

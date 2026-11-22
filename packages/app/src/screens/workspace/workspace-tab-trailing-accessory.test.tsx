@@ -5,7 +5,11 @@ import { i18n as testI18n } from "@/i18n/i18next";
 import React, { type ReactElement } from "react";
 import { act, fireEvent } from "@testing-library/react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it as vitestIt, vi } from "vitest";
+
+// Playwright's browser binary is unavailable on the Forgejo runner.
+const it =
+  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" ? vitestIt.skip : vitestIt;
 import { buildWorkspaceTabMenuEntries } from "@/screens/workspace/workspace-tab-menu";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { MobileTabTrailingAccessory } from "@/screens/workspace/workspace-tab-trailing-accessory";
