@@ -300,80 +300,85 @@ test("SDK host clients preserve ordinary permission RPC errors", async () => {
   expect(remoteError.code).toBe(directError.code);
 });
 
-test.skipIf(process.env.PASEO_CI === "true")("distinct origin sessions cannot collide through a caller-selected route scope, including terminal binary output", async () => {
-  const b = await daemon();
-  const wire = await hostWire(b);
-  const a = await daemon();
-  const admin = await api(a);
-  await admin.paseo.hosts.add({ connection: wire.connection });
-  const serverId = (await online(admin.paseo)).hosts[0]!.serverId!;
-  const remote = await admin.paseo.hosts.client(serverId);
-  const workspace = await remote.workspaces.create({
-    source: { kind: "directory", path: b.staticDir },
-  });
-  const one = await workspace.terminals.create({
-    command: process.execPath,
-    args: ["-e", "process.stdin.on('data', data => process.stdout.write(data))"],
-    name: "First",
-  });
-  const two = await workspace.terminals.create({
-    command: process.execPath,
-    args: ["-e", "process.stdin.on('data', data => process.stdout.write(data))"],
-    name: "Second",
-  });
-  const firstOrigin = await api(a);
-  const secondOrigin = await api(a);
-  const first = await RoutePeer.open(firstOrigin.client, serverId);
-  const second = await RoutePeer.open(secondOrigin.client, serverId);
-  await first.subscribeTerminal(one.id);
-  await second.subscribeTerminal(two.id);
-  expect(wire.connections()).toBe(1);
-  first.input("FIRST_ONLY\n");
-  second.input("SECOND_ONLY\n");
-  await expect.poll(() => first.output()).toContain("FIRST_ONLY");
-  await expect.poll(() => second.output()).toContain("SECOND_ONLY");
-  expect(first.output()).not.toContain("SECOND_ONLY");
-  expect(second.output()).not.toContain("FIRST_ONLY");
-  const firstBytes = new Uint8Array([0, 255, 128, 173]);
-  const secondBytes = new Uint8Array([173, 128, 255, 0]);
-  const paths = await Promise.all([
-    first.upload("first.bin", firstBytes),
-    second.upload("second.bin", secondBytes),
-  ]);
-  expect((await readFile(paths[0]!)).equals(firstBytes)).toBe(true);
-  expect((await readFile(paths[1]!)).equals(secondBytes)).toBe(true);
+test.skipIf(process.env.PASEO_CI === "true")(
+  "distinct origin sessions cannot collide through a caller-selected route scope, including terminal binary output",
+  async () => {
+    const b = await daemon();
+    const wire = await hostWire(b);
+    const a = await daemon();
+    const admin = await api(a);
+    await admin.paseo.hosts.add({ connection: wire.connection });
+    const serverId = (await online(admin.paseo)).hosts[0]!.serverId!;
+    const remote = await admin.paseo.hosts.client(serverId);
+    const workspace = await remote.workspaces.create({
+      source: { kind: "directory", path: b.staticDir },
+    });
+    const one = await workspace.terminals.create({
+      command: process.execPath,
+      args: ["-e", "process.stdin.on('data', data => process.stdout.write(data))"],
+      name: "First",
+    });
+    const two = await workspace.terminals.create({
+      command: process.execPath,
+      args: ["-e", "process.stdin.on('data', data => process.stdout.write(data))"],
+      name: "Second",
+    });
+    const firstOrigin = await api(a);
+    const secondOrigin = await api(a);
+    const first = await RoutePeer.open(firstOrigin.client, serverId);
+    const second = await RoutePeer.open(secondOrigin.client, serverId);
+    await first.subscribeTerminal(one.id);
+    await second.subscribeTerminal(two.id);
+    expect(wire.connections()).toBe(1);
+    first.input("FIRST_ONLY\n");
+    second.input("SECOND_ONLY\n");
+    await expect.poll(() => first.output()).toContain("FIRST_ONLY");
+    await expect.poll(() => second.output()).toContain("SECOND_ONLY");
+    expect(first.output()).not.toContain("SECOND_ONLY");
+    expect(second.output()).not.toContain("FIRST_ONLY");
+    const firstBytes = new Uint8Array([0, 255, 128, 173]);
+    const secondBytes = new Uint8Array([173, 128, 255, 0]);
+    const paths = await Promise.all([
+      first.upload("first.bin", firstBytes),
+      second.upload("second.bin", secondBytes),
+    ]);
+    expect((await readFile(paths[0]!)).equals(firstBytes)).toBe(true);
+    expect((await readFile(paths[1]!)).equals(secondBytes)).toBe(true);
 
-  const binary = wire.frames.filter((frame) => frame.binary);
-  expect(binary.length).toBeGreaterThan(0);
-  expect(binary.every((frame) => decodeHostRouteFrame(frame.bytes) !== null)).toBe(true);
-  expect(
-    binary.some((frame) => {
-      const payload = decodeHostRouteFrame(frame.bytes)!.payload;
-      return Buffer.from(payload).equals(
-        encodeTerminalStreamFrame({
-          opcode: TerminalStreamOpcode.Input,
-          slot: 0,
-          payload: "FIRST_ONLY\n",
-        }),
-      );
-    }),
-  ).toBe(true);
-  const json = wire.frames
-    .filter((frame) => !frame.binary)
-    .map((frame) => JSON.parse(frame.bytes.toString()));
-  expect(json.filter((frame) => frame.type === "hello")).toHaveLength(1);
-  expect(json.some((frame) => frame.message?.type === "hosts.link.open.request")).toBe(true);
-  expect(
-    json.some((frame) => frame.message?.binary === true || frame.message?.payload?.binary === true),
-  ).toBe(false);
-  await first.close();
-  second.input("STILL_SECOND\n");
-  await expect.poll(() => second.output()).toContain("STILL_SECOND");
-  await second.close();
-  await one.kill();
-  await two.kill();
-  await remote.dispose();
-});
+    const binary = wire.frames.filter((frame) => frame.binary);
+    expect(binary.length).toBeGreaterThan(0);
+    expect(binary.every((frame) => decodeHostRouteFrame(frame.bytes) !== null)).toBe(true);
+    expect(
+      binary.some((frame) => {
+        const payload = decodeHostRouteFrame(frame.bytes)!.payload;
+        return Buffer.from(payload).equals(
+          encodeTerminalStreamFrame({
+            opcode: TerminalStreamOpcode.Input,
+            slot: 0,
+            payload: "FIRST_ONLY\n",
+          }),
+        );
+      }),
+    ).toBe(true);
+    const json = wire.frames
+      .filter((frame) => !frame.binary)
+      .map((frame) => JSON.parse(frame.bytes.toString()));
+    expect(json.filter((frame) => frame.type === "hello")).toHaveLength(1);
+    expect(json.some((frame) => frame.message?.type === "hosts.link.open.request")).toBe(true);
+    expect(
+      json.some(
+        (frame) => frame.message?.binary === true || frame.message?.payload?.binary === true,
+      ),
+    ).toBe(false);
+    await first.close();
+    second.input("STILL_SECOND\n");
+    await expect.poll(() => second.output()).toContain("STILL_SECOND");
+    await second.close();
+    await one.kill();
+    await two.kill();
+    await remote.dispose();
+  },
+);
 
 import {
   encodeFileTransferFrame,
