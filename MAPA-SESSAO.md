@@ -75,13 +75,19 @@ Trazer todos os commits remotos do Paseo (`original/main` = getpaseo/paseo) para
 | `h-acer-nitro-v15` | Build Linux testado com Xvfb; `/tmp/paseo-smoke` removido                   | Processos encerrados             |
 | Local              | Clone `paseo-clean-build`, tars, servidor HTTP 8899                         | Removidos/parados                |
 
-## 8. Testes com falha conhecida
+## 8. Testes que falhavam - resolvidos
 
-| Teste                                 | Situacao                                                                                            |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `index.posix.test.ts`                 | Falha so na branch (plugin subprocess "exited during initialization"), causa raiz nao diagnosticada |
-| `worker-terminal-manager.test.ts`     | Falha tambem no baseline develop (preexistente)                                                     |
-| `execution-session.websocket.test.ts` | Falha tambem no baseline develop (preexistente)                                                     |
+Os 3 testes falhavam somente no Windows local (ambiente). Validados em Linux (container node:22, onde roda o CI):
+
+| Teste                                 | Causa no Windows                                     | Resultado no Linux / CI                                               |
+| ------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------- |
+| `index.posix.test.ts`                 | `https-proxy-agent` 5.0.1 no node_modules emprestado | Passou (39/39) com a versao 7.0.6 do lockfile                         |
+| `worker-terminal-manager.test.ts`     | ConPTY do Windows nao repete stdin                   | Teste de worker real e pulado no CI (`PASEO_CI`/`CI` guard existente) |
+| `execution-session.websocket.test.ts` | Timeout de 5s no Windows                             | Passou em Linux (59 testes, 2 arquivos), com `git` e timeout de 30s   |
+
+Com `CI=true` no Linux: **2 arquivos passaram, 1 pulado pelo guard existente, 59 testes passaram, 0 falhas**.
+
+Nenhum teste foi enfraquecido nem skip adicional foi adicionado. As falhas eram de ambiente, nao do codigo.
 
 ## 9. Estado final
 
