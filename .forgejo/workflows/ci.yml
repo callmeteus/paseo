@@ -84,6 +84,8 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.server == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.app == 'true' || needs.changes.outputs.sdk == 'true' }}
     runs-on: docker
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /workspace/paseo-browsers
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +115,7 @@ jobs:
         if: ${{ matrix.suite == 'app' }}
         run: |
           npx playwright install chromium
-          find /root/.cache/ms-playwright -type f -name chrome-headless-shell -exec chmod +x {} +
+          find /workspace/paseo-browsers -type f -name chrome-headless-shell -exec chmod +x {} +
 
       - name: Run ${{ matrix.suite }} tests
         run: npm run test --workspace=@getpaseo/${{ matrix.suite }}
