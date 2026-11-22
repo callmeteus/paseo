@@ -69,6 +69,7 @@ const sessionMock = vi.hoisted(() => {
       void this.delivery.detach(source);
     });
     getClientActivity = vi.fn(() => null);
+    setHopContext = vi.fn();
     wantsSourceEvent = (source: object) => !this.delivery.isModern(source);
     getSessionId = vi.fn(() => "mock-session-id");
     getPermissions = vi.fn(() => this.args.permissions as string[]);
@@ -83,6 +84,8 @@ const sessionMock = vi.hoisted(() => {
     setHostSource = (sourceId: string) => {
       this.args.sourceId = sourceId;
     };
+    setRemoteToolSource = vi.fn();
+    setOriginServerId = vi.fn();
     getHostSourceId = () => this.args.sourceId as string;
     allowsInbound = vi.fn(() => true);
     allowsPermission = vi.fn(() => true);

@@ -25,7 +25,7 @@ import {
   McpBridgeSchema,
   McpServerConfigSchema,
   McpShareSchema,
-} from "@getpaseo/protocol/messages";
+} from "@getpaseo/protocol/daemon-config-schemas";
 import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
@@ -398,8 +398,16 @@ export const PersistedConfigSchema = z
         idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional().describe(
           "How long a resumable agent stays idle before its process is released. One of 15m, 30m, 1h, 2h, 4h, 8h, 24h. Defaults to 1h.",
         ),
-        resumeOnStartup: z.boolean().optional(),
-        resumePrompt: z.string().optional(),
+        resumeOnStartup: z
+          .boolean()
+          .optional()
+          .describe("Resume agents interrupted by a daemon restart. Defaults to true."),
+        resumePrompt: z
+          .string()
+          .optional()
+          .describe(
+            "Prompt sent to an interrupted agent when it resumes. Defaults to 'Resume working.'",
+          ),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
         modelRouters: ModelRouterSettingsSchema.optional(),

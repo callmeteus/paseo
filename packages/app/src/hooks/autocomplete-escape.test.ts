@@ -14,17 +14,17 @@ function args(overrides: Partial<AutocompleteEscapeArgs> = {}): AutocompleteEsca
 }
 
 describe("resolveAutocompleteEscape", () => {
-  it("clears the input when the slash opened at the start", () => {
+  it("dismisses a slash at the start without clearing the chat", () => {
     const input = args({
       mode: "command",
       slashCommand: { start: 0, end: 2, query: "", position: "start" },
     });
 
     const escape = resolveAutocompleteEscape(input);
-    expect(escape).toBe(input.clearInput);
+    expect(escape).toBeDefined();
     escape?.();
-    expect(input.clearInput).toHaveBeenCalledOnce();
-    expect(input.dismissCommand).not.toHaveBeenCalled();
+    expect(input.dismissCommand).toHaveBeenCalledWith(0);
+    expect(input.clearInput).not.toHaveBeenCalled();
   });
 
   it("dismisses an inline slash command without touching the input", () => {

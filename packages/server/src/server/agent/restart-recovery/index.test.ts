@@ -47,6 +47,7 @@ test("recovery saves intent before normalization, clears before dispatch, and re
     await recovery.prepareStartup();
     expect((await storage.get("working"))?.resumeOnStartup).toBe(true);
     expect((await storage.get("working"))?.lastStatus).toBe("closed");
+    expect((await storage.get("idle"))?.resumeOnStartup).toBeUndefined();
     recovery.resumePending();
     const running = new AbortController().signal;
     await recovery.waitForResume("broken", running);

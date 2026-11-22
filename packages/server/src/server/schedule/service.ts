@@ -304,6 +304,7 @@ export class ScheduleService {
   private readonly heartbeatStops = new Map<string, () => Promise<void>>();
   private recovering = false;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
 
   constructor(options: ScheduleServiceOptions) {
     this.logger = options.logger.child({ module: "schedule-service" });
@@ -323,6 +324,7 @@ export class ScheduleService {
   }
 
   async start(): Promise<void> {
+    this.closed = false;
     if (this.tickTimer) {
       return;
     }
@@ -346,6 +348,9 @@ export class ScheduleService {
   }
 
   async stop(): Promise<void> {
+    // Set before clearing the timer: a tick already in flight must not claim another
+    // run while shutdown is closing agents and provider runtimes.
+    this.closed = true;
     if (this.tickTimer) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
@@ -641,9 +646,11 @@ export class ScheduleService {
   }
 
   async tick(): Promise<void> {
+    if (this.closed) return;
     const now = this.now();
     const schedules = await this.store.list();
     for (const schedule of schedules) {
+      if (this.closed) return;
       if (schedule.status !== "active" || !schedule.nextRunAt) {
         continue;
       }

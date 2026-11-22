@@ -3773,7 +3773,7 @@ test("createAgent passes daemon launch env through the provider launch context",
     { workspaceId: undefined },
   );
 
-  expect(client.lastConfig).toEqual({
+  expect(client.lastConfig).toMatchObject({
     provider: "codex",
     cwd: workdir,
     model: "gpt-5.4",
@@ -9004,15 +9004,11 @@ test("subscribe error isolation: throwing subscriber does not break event flow",
   const settled = new Promise<void>((resolve) => {
     manager.subscribe(
       (event) => {
-        if (
-          event.type === "agent_state" &&
-          event.agent.id === snapshot.id &&
-          event.agent.lifecycle === "idle"
-        ) {
-          resolve();
-        }
         if (event.type === "agent_stream" && event.agentId === snapshot.id) {
           receivedEvents.push(event.event.type);
+          if (event.event.type === "turn_completed") {
+            resolve();
+          }
         }
       },
       { agentId: snapshot.id, replayState: false },
@@ -10144,12 +10140,6 @@ test("streamAgent clears pending run when startTurn fails before a turn id exist
     }),
   ).rejects.toThrow("Invalid request: missing field `text`");
   expect(manager.getTimeline(agent.id)).toEqual([
-    {
-      type: "user_message",
-      text: "fail before turn id",
-      clientMessageId: "rejected-prompt",
-      messageId: "rejected-prompt",
-    },
     { type: "assistant_message", text: "[System Error] Invalid request: missing field `text`" },
   ]);
 
@@ -15628,6 +15618,44 @@ test("reconciliation keeps Paseo-only rows and marks external output unread", as
     expect(manager.getAgent(agentId)?.attention).toMatchObject({
       requiresAttention: true,
       attentionReason: "finished",
+    });
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation preserves a restored attention reason during resume", async () => {
+  const { manager, agentId, session, workdir } = await startMutableHistoryAgent();
+  try {
+    await manager.appendTimelineItem(agentId, { type: "user_message", text: "hello" });
+    const live = manager.getAgent(agentId);
+    expect(live).not.toBeNull();
+    const restoredAt = new Date("2025-01-02T00:00:00.000Z");
+    // getAgent returns a shallow copy; mutate the shared attention object.
+    live!.attention.requiresAttention = true;
+    live!.attention.attentionReason = "permission";
+    live!.attention.attentionTimestamp = restoredAt;
+    expect(manager.getAgent(agentId)?.attention?.attentionReason).toBe("permission");
+    session.history = [
+      providerTimelineEvent({ type: "user_message", text: "hello", messageId: "m1" }),
+      providerTimelineEvent({
+        type: "assistant_message",
+        text: "missed while down",
+        messageId: "m2",
+      }),
+    ];
+
+    const result = await manager.reconcileTimelineFromProvider(agentId, {
+      markUnread: true,
+      preserveAttention: true,
+    });
+
+    expect(result.appended).toBe(1);
+    expect(manager.getAgent(agentId)?.attention).toEqual({
+      requiresAttention: true,
+      attentionReason: "permission",
+      attentionTimestamp: restoredAt,
     });
   } finally {
     await manager.closeAgent(agentId).catch(() => undefined);

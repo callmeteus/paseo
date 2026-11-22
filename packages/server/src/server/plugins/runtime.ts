@@ -289,17 +289,15 @@ function resolveWorkerUrl(): URL {
 
 function resolveWorkerExecArgv(): string[] {
   if (!import.meta.url.endsWith(".ts")) return [];
+  // CI's Node build has no TypeScript support and native loaders crash, so
+  // register the TypeScript-compiler-based loader for the plugin subprocess.
   const loaderUrl = new URL("../../terminal/terminal-ts-loader.mjs", import.meta.url).href;
   const importSource = [
     'import { register } from "node:module";',
     'import { pathToFileURL } from "node:url";',
     `register(${JSON.stringify(loaderUrl)}, pathToFileURL("./"));`,
   ].join(" ");
-  return [
-    "--experimental-strip-types",
-    "--import",
-    `data:text/javascript,${encodeURIComponent(importSource)}`,
-  ];
+  return ["--import", `data:text/javascript,${encodeURIComponent(importSource)}`];
 }
 
 function spawnPluginChild(): PluginChild {

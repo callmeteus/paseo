@@ -14,13 +14,12 @@ export interface AutocompleteEscapeArgs {
 
 /**
  * Escape belongs to the picker, not the global shortcut, while a token is open.
- * A slash at the start owns the whole input and is cleared; one typed after text
- * only closes its picker so the sentence stays untouched.
+ * It only dismisses the picker; the typed text always stays intact. Clearing the
+ * draft here would wipe everything the user had already written.
  */
 export function resolveAutocompleteEscape(args: AutocompleteEscapeArgs): (() => void) | undefined {
   const command = args.slashCommand;
   if (args.mode === "command" && command) {
-    if (command.position === "start") return args.clearInput;
     return () => args.dismissCommand(command.start);
   }
   const mention = args.fileMention;

@@ -558,6 +558,13 @@ function resolveUsageEnabled(persisted: ReturnType<typeof loadPersistedConfig>):
   return persisted.daemon?.usage?.enabled !== false;
 }
 
+function resolveRestartRecoveryConfig(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return {
+    resumeOnStartup: persisted.agents?.resumeOnStartup ?? true,
+    resumePrompt: persisted.agents?.resumePrompt ?? "Resume working.",
+  };
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -599,6 +606,7 @@ function resolveStaticLoadConfigSettings(
     ]),
     trustedProxies: resolveTrustedProxiesConfig(env, persisted),
     appBaseUrl: env.PASEO_APP_BASE_URL ?? persisted.app?.baseUrl ?? DEFAULT_APP_BASE_URL,
+    ...resolveRestartRecoveryConfig(persisted),
   };
 }
 
@@ -663,6 +671,8 @@ export function resolveConfigFromPersisted(
     mcpBridges,
     hostnames,
     trustedProxies,
+    resumeOnStartup,
+    resumePrompt,
   } = resolveStaticLoadConfigSettings(env, cli, persisted);
   const relay = resolveRelayConfig({
     env,
@@ -723,6 +733,8 @@ export function resolveConfigFromPersisted(
     agentProviderSettings: extractAgentProviderSettings(settings.providerOverrides),
     idleRuntimeCleanup: persisted.agents?.idleRuntimeCleanup ?? true,
     idleRuntimeCleanupAfter: resolveIdleRuntimeCleanupAfter(persisted),
+    resumeOnStartup,
+    resumePrompt,
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
     modelRouters: persisted.agents?.modelRouters,
@@ -763,7 +775,7 @@ export function resolveReloadableConfig(
     relayEnabled: relay.enabled,
     relayRequireProtectedSecurity: relay.requireProtectedSecurity,
     idleRuntimeCleanup: persisted.agents?.idleRuntimeCleanup ?? true,
-    ...resolveRestartRecoveryConfig(persisted.agents),
+    ...resolveRestartRecoveryConfig(persisted),
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
     providerOverrides: extractProviderOverrides(
@@ -913,11 +925,4 @@ function resolveSpeechOverrideControlledPaths(
   if (env.PASEO_VOICE_LLM_PROVIDER !== undefined) paths.push("features.voiceMode.llm.provider");
   if (env.PASEO_LOCAL_MODELS_DIR !== undefined) paths.push("providers.local.modelsDir");
   return paths;
-}
-
-function resolveRestartRecoveryConfig(agents: PersistedConfig["agents"]) {
-  return {
-    resumeOnStartup: agents?.resumeOnStartup ?? false,
-    resumePrompt: agents?.resumePrompt ?? "Resume working.",
-  };
 }

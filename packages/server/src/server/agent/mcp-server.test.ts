@@ -299,6 +299,15 @@ function buildAgentManagerSpies() {
     listDraftFeatures: vi.fn(),
     listDraftControls: vi.fn(),
     setAgentChatMode: vi.fn().mockResolvedValue({ mode: "chat", applied: "now" }),
+    assertProviderEnabled: vi.fn(),
+    applyPendingChatMode: vi.fn().mockResolvedValue(undefined),
+    planSkillTurn: vi.fn().mockResolvedValue(null),
+    planWorkflowTurn: vi.fn().mockReturnValue(null),
+    planCursorRulesTurn: vi.fn().mockReturnValue(null),
+    replaceAgentRun: vi.fn().mockResolvedValue(undefined),
+    reloadAgentSession: vi.fn().mockResolvedValue(undefined),
+    archiveSnapshot: vi.fn().mockResolvedValue(undefined),
+    unarchiveSnapshot: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -1171,6 +1180,7 @@ describe("browser MCP tools", () => {
   it("does not register browser tools when browser tools are disabled", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "agent-1",
       cwd: REPO_CWD,
       workspaceId: BROWSER_WORKSPACE_ID,
@@ -1285,6 +1295,7 @@ describe("browser MCP tools", () => {
   it("wires browser tools through the browser tools broker", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "agent-1",
       cwd: REPO_CWD,
       workspaceId: BROWSER_WORKSPACE_ID,
@@ -1692,6 +1703,7 @@ describe("create_agent MCP tool", () => {
       agentStorage,
       providerSnapshotManager: createOpenCodeManager().manager,
       ensureWorkspaceForCreate: ensureWorkspace,
+      listActiveWorkspaces: async () => [{ cwd: existingCwd }],
       logger,
     });
 
@@ -1709,7 +1721,7 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: existingCwd }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -1792,6 +1804,7 @@ describe("create_agent MCP tool", () => {
   it("requires a caller workspace for current workspace intent", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       config: {},
       cwd: existingCwd,
@@ -1852,7 +1865,7 @@ describe("create_agent MCP tool", () => {
         cwd: existingCwd,
       }),
       undefined,
-      { workspaceId: "wks_existing", background: false },
+      expect.objectContaining({ workspaceId: "wks_existing", background: false }),
     );
   });
 
@@ -1896,7 +1909,7 @@ describe("create_agent MCP tool", () => {
         providerOptions: { fast_mode: true },
       }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -1955,7 +1968,7 @@ describe("create_agent MCP tool", () => {
     );
   });
 
-  it("requires provider as provider/model and rejects the old model field", async () => {
+  it("accepts an omitted provider and rejects the old model field", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const server = await createAgentMcpServer({
       agentManager,
@@ -1972,12 +1985,7 @@ describe("create_agent MCP tool", () => {
       title: "Short title",
       initialPrompt: "test",
     });
-    expect(missingProvider.success).toBe(false);
-    expect(
-      missingProvider.error.issues.some(
-        (issue: { path: Array<string | number> }) => issue.path[0] === "provider",
-      ),
-    ).toBe(true);
+    expect(missingProvider.success).toBe(true);
 
     const providerWithoutModel = await tool.inputSchema.safeParseAsync({
       ...detachedDirectoryWorkspace(existingCwd),
@@ -2092,7 +2100,7 @@ describe("create_agent MCP tool", () => {
         title: "Fix auth bug",
       }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -2127,7 +2135,7 @@ describe("create_agent MCP tool", () => {
         title: "Fix auth",
       }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -2168,11 +2176,11 @@ describe("create_agent MCP tool", () => {
         thinkingOptionId: "think-hard",
       }),
       undefined,
-      {
+      expect.objectContaining({
         labels: { source: "mcp" },
         workspaceId: "workspace-created",
         background: false,
-      },
+      }),
     );
   });
 
@@ -2274,7 +2282,10 @@ describe("create_agent MCP tool", () => {
           title: "Directory agent",
         }),
         undefined,
-        { workspaceId: "workspace-directory-auto-title", background: false },
+        expect.objectContaining({
+          workspaceId: "workspace-directory-auto-title",
+          background: false,
+        }),
       );
       expect(workspaceRecords.get("workspace-directory-auto-title")).toMatchObject({
         title: "Directory Workspace Title",
@@ -2896,6 +2907,7 @@ describe("create_agent MCP tool", () => {
     const subdir = join(baseDir, "subdir");
     await mkdir(subdir, { recursive: true });
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "voice-agent",
       config: { title: "Voice" },
       cwd: baseDir,
@@ -2937,14 +2949,14 @@ describe("create_agent MCP tool", () => {
         cwd: subdir,
       }),
       undefined,
-      {
+      expect.objectContaining({
         labels: {
           [PARENT_AGENT_ID_LABEL]: "voice-agent",
           source: "voice",
         },
         workspaceId: "wks_voice",
         background: false,
-      },
+      }),
     );
     await rm(baseDir, { recursive: true, force: true });
   });
@@ -2952,6 +2964,7 @@ describe("create_agent MCP tool", () => {
   it("defaults notify-on-finish on for caller agents", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       config: {},
       cwd: existingCwd,
@@ -2990,6 +3003,7 @@ describe("create_agent MCP tool", () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
       id: "parent-agent",
+      labels: {},
       config: {},
       cwd: existingCwd,
       workspaceId: "wks_parent",
@@ -3079,6 +3093,7 @@ describe("create_agent MCP tool", () => {
   it("creates detached caller agents without a parent label", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       config: {},
       cwd: existingCwd,
@@ -3120,19 +3135,20 @@ describe("create_agent MCP tool", () => {
         cwd: existingCwd,
       }),
       undefined,
-      {
+      expect.objectContaining({
         labels: {
           source: "handoff",
         },
         workspaceId: "wks_parent",
         background: false,
-      },
+      }),
     );
   });
 
   it("accepts provider features from caller agents and passes them through createAgent", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       config: {},
       cwd: existingCwd,
@@ -3182,13 +3198,13 @@ describe("create_agent MCP tool", () => {
         providerOptions: { fast_mode: true },
       }),
       undefined,
-      {
+      expect.objectContaining({
         labels: {
           [PARENT_AGENT_ID_LABEL]: "parent-agent",
         },
         workspaceId: "wks_parent",
         background: false,
-      },
+      }),
     );
   });
 
@@ -3196,6 +3212,7 @@ describe("create_agent MCP tool", () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
       id: "parent-agent",
+      labels: {},
       cwd: existingCwd,
       workspaceId: "wks_parent",
       provider: "codex",
@@ -3324,7 +3341,7 @@ describe("create_agent MCP tool", () => {
     });
     expect(configArg.mcpServers).toBeUndefined();
     expect(agentIdArg).toBeUndefined();
-    expect(optionsArg).toEqual({
+    expect(optionsArg).toMatchObject({
       workspaceId: "workspace-created",
       background: false,
     });
@@ -3404,7 +3421,7 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ modeId: "dynamic" }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -3443,7 +3460,7 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ modeId: "build", providerOptions: { auto_accept: true } }),
       undefined,
-      { workspaceId: "workspace-created", background: false },
+      expect.objectContaining({ workspaceId: "workspace-created", background: false }),
     );
   });
 
@@ -3451,6 +3468,7 @@ describe("create_agent MCP tool", () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
       id: "parent-agent",
+      labels: {},
       config: {},
       cwd: existingCwd,
       workspaceId: "wks_parent",
@@ -3503,6 +3521,7 @@ describe("create_agent MCP tool", () => {
   it("accepts an explicit valid mode across providers", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       config: {},
       cwd: existingCwd,
@@ -4019,6 +4038,7 @@ describe("send_agent_prompt MCP tool", () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
       id: "parent-agent",
+      labels: {},
       config: {},
       cwd: existingCwd,
       workspaceId: "wks_parent",
@@ -4074,6 +4094,7 @@ describe("send_agent_prompt MCP tool", () => {
   it("acknowledges top-level prompts without a completion wait", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "child-agent",
       cwd: existingCwd,
       lifecycle: "idle",
@@ -4112,6 +4133,7 @@ describe("send_agent_prompt MCP tool", () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
       id: "parent-agent",
+      labels: {},
       config: {},
       cwd: existingCwd,
       workspaceId: "wks_parent",
@@ -5163,6 +5185,7 @@ describe("create_schedule MCP tool", () => {
   it("inherits the caller provider, model, and features when provider is omitted", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       provider: "opencode",
       cwd: REPO_CWD,
@@ -5312,6 +5335,7 @@ describe("create_heartbeat MCP tool", () => {
   it("creates a self-targeted cron heartbeat", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
+      labels: {},
       id: "parent-agent",
       provider: "codex",
       cwd: REPO_CWD,

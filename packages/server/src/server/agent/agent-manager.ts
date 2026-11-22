@@ -421,6 +421,8 @@ interface ReconcileTimelineOptions {
   broadcast?: boolean;
   /** Mark the chat unread when the merge ends on agent output. */
   markUnread?: boolean;
+  /** Keep a restored attention reason when history replay is the source of the rows. */
+  preserveAttention?: boolean;
 }
 
 interface ReconcileTimelineResult {
@@ -5509,7 +5511,12 @@ export class AgentManager {
       options?.broadcast ?? false,
     );
     this.materializeTaskWorkers(agent, { broadcast: options?.broadcast ?? false });
-    this.markReconciledTimeline(agent, appendedRows, options?.markUnread === true);
+    this.markReconciledTimeline(
+      agent,
+      appendedRows,
+      options?.markUnread === true,
+      options?.preserveAttention === true,
+    );
 
     this.logger.info(
       { agentId, appended: appendedRows.length },
@@ -5573,6 +5580,7 @@ export class AgentManager {
     agent: ActiveManagedAgent,
     appendedRows: readonly AgentTimelineRow[],
     markUnread: boolean,
+    preserveAttention: boolean,
   ): void {
     agent.historyPrimed = true;
     if (appendedRows.some((row) => row.item.type === "user_message")) {
@@ -5582,7 +5590,7 @@ export class AgentManager {
 
     const lastAppended = appendedRows.at(-1);
     if (markUnread && lastAppended && isAgentOutputItem(lastAppended.item)) {
-      this.markExternalActivityAttention(agent);
+      this.markExternalActivityAttention(agent, preserveAttention);
       return;
     }
     this.emitState(agent);
@@ -5611,8 +5619,13 @@ export class AgentManager {
    * Marks the chat unread after external provider activity. Reuses the
    * `finished` reason so clients keep one unread concept.
    */
-  private markExternalActivityAttention(agent: ActiveManagedAgent): void {
+  private markExternalActivityAttention(agent: ActiveManagedAgent, preserveReason = false): void {
     if (agent.internal) return;
+    if (preserveReason && agent.attention?.requiresAttention) {
+      this.touchUpdatedAt(agent);
+      this.emitState(agent);
+      return;
+    }
     agent.attention = {
       requiresAttention: true,
       attentionReason: "finished",

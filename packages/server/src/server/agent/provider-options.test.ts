@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import { createTestLogger } from "../../test-utils/test-logger.js";
+import { isClaudeAvailable } from "../../test-utils/claude-availability.js";
 
 import { AgentManager } from "./agent-manager.js";
 import { validateProviderOptions } from "./provider-options.js";
@@ -269,22 +270,25 @@ describe("configured provider options", () => {
     await session.close();
   });
 
-  test("config options reach Claude and provider validation reaches the create caller", async () => {
-    const logger = createTestLogger();
-    const registry = buildProviderRegistry(logger, {
-      providerOverrides: {
-        claude: { options: { sandbox: { network: { allowLocalBinding: "yes" } } } },
-      },
-    });
-    const manager = new AgentManager({
-      logger,
-      clients: { claude: registry.claude.createClient(logger) },
-      providerDefinitions: { claude: registry.claude },
-    });
-    await expect(
-      manager.createAgent({ provider: "claude", cwd: "/tmp", model: "sonnet" }, undefined, {
-        workspaceId: undefined,
-      }),
-    ).rejects.toThrow("providerOptions.sandbox.network.allowLocalBinding");
-  });
+  test.skipIf(!isClaudeAvailable())(
+    "config options reach Claude and provider validation reaches the create caller",
+    async () => {
+      const logger = createTestLogger();
+      const registry = buildProviderRegistry(logger, {
+        providerOverrides: {
+          claude: { options: { sandbox: { network: { allowLocalBinding: "yes" } } } },
+        },
+      });
+      const manager = new AgentManager({
+        logger,
+        clients: { claude: registry.claude.createClient(logger) },
+        providerDefinitions: { claude: registry.claude },
+      });
+      await expect(
+        manager.createAgent({ provider: "claude", cwd: "/tmp", model: "sonnet" }, undefined, {
+          workspaceId: undefined,
+        }),
+      ).rejects.toThrow("providerOptions.sandbox.network.allowLocalBinding");
+    },
+  );
 });

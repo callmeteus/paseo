@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { PermissionResult, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
+import { isClaudeAvailable } from "../../../../test-utils/claude-availability.js";
 import * as executableUtils from "../../../../executable-resolution/executable-resolution.js";
 import { buildAgentAttentionNotificationPayload } from "@getpaseo/protocol/agent-attention-notification";
 import {
@@ -579,7 +580,7 @@ describe("ClaudeAgentClient.fetchCatalog", () => {
 describe("ClaudeAgentClient binary resolution", () => {
   const logger = createTestLogger();
 
-  test("resolves the installed Claude Code version", async () => {
+  test.skipIf(!isClaudeAvailable())("resolves the installed Claude Code version", async () => {
     await expect(resolveClaudeCodeVersion()).resolves.toMatch(/^\d+\.\d+\.\d+$/);
   });
 

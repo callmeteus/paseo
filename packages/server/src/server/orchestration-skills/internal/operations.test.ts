@@ -40,6 +40,7 @@ async function makeSandbox(): Promise<Sandbox> {
   const codexDir = path.join(root, "home", ".codex", "skills");
   const antigravityDir = path.join(root, "home", ".gemini", "config", "skills");
   const targets: TestSkillTargets = {
+    home: path.join(root, "global-home"),
     sourceDir: path.join(root, "bundle"),
     installDirs: [agentsDir, claudeDir, antigravityDir],
     agentsDir,
@@ -191,6 +192,7 @@ describe("getSkillsStatus", () => {
       ops: [],
       available: ["paseo", "paseo-loop"],
       installed: ["paseo", "paseo-loop"],
+      global: [],
     });
   });
 
@@ -222,6 +224,7 @@ describe("getSkillsStatus", () => {
       ops: [],
       available: ["paseo", "paseo-loop"],
       installed: ["paseo", "paseo-loop"],
+      global: [],
     });
   });
 
@@ -349,6 +352,7 @@ describe("custom skill selection", () => {
       ops: [],
       available: ["paseo", "paseo-advisor", "paseo-loop"],
       installed: ["paseo", "paseo-loop"],
+      global: [],
     });
     expect(await installedIn(sandbox.targets, "paseo")).toEqual([true, true, false, true]);
     expect(await installedIn(sandbox.targets, "paseo-loop")).toEqual([true, true, false, true]);
@@ -370,6 +374,7 @@ describe("custom skill selection", () => {
       ops: [],
       available: ["paseo", "paseo-advisor", "paseo-loop"],
       installed: ["paseo"],
+      global: [],
     });
   });
 
@@ -427,6 +432,7 @@ describe("custom skill selection", () => {
       ops: [],
       available: ["paseo", "paseo-advisor", "paseo-loop"],
       installed: [],
+      global: [],
     });
     expect(await installedIn(sandbox.targets, "paseo")).toEqual([false, false, false, false]);
     expect(await installedIn(sandbox.targets, "paseo-loop")).toEqual([false, false, false, false]);
@@ -440,6 +446,7 @@ describe("custom skill selection", () => {
       ops: [],
       available: ["paseo", "paseo-advisor", "paseo-loop"],
       installed: ["paseo"],
+      global: [],
     });
     expect(await installedIn(sandbox.targets, "not-a-skill")).toEqual([false, false, false, false]);
   });
@@ -485,6 +492,7 @@ describe("installSkills / updateSkills", () => {
       ops: [],
       available: ["paseo", "paseo-loop"],
       installed: ["paseo", "paseo-loop"],
+      global: [],
     });
     for (const name of ["paseo", "paseo-loop"]) {
       const expected = name === "paseo" ? "paseo-v1" : "loop-v1";
@@ -649,6 +657,7 @@ describe("installSkills / updateSkills", () => {
       ops: [{ kind: "delete", name: "paseo-chat" }],
       available: ["paseo", "paseo-loop"],
       installed: ["paseo", "paseo-chat", "paseo-loop"],
+      global: [],
     });
     expect(
       await fs.readFile(path.join(sandbox.targets.agentsDir, "paseo", "SKILL.md"), "utf-8"),
@@ -690,6 +699,7 @@ describe("installSkills / updateSkills", () => {
       ops: [],
       available: ["paseo", "paseo-loop"],
       installed: ["paseo", "paseo-loop"],
+      global: [],
     });
     expect(
       await fs.readFile(
@@ -774,6 +784,7 @@ describe("installSkills / updateSkills", () => {
       ],
       available: ["paseo", "paseo-loop"],
       installed: [],
+      global: [],
     });
     expect(await installedIn(sandbox.targets, "paseo")).toEqual([false, false, false, false]);
   });

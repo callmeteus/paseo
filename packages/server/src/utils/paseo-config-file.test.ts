@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -368,6 +376,10 @@ describe("paseo config file substrate", () => {
       writeFileSync(join(tempDir, "paseo.json"), JSON.stringify({ worktree: { setup: "old" } }));
       const expectedRevision = await statPaseoConfigPath(tempDir);
       writeFileSync(join(tempDir, "paseo.json"), JSON.stringify({ worktree: { setup: "new" } }));
+      // Both fixtures have the same byte length; on coarse filesystems the mtime
+      // can collide too, so force a distinct revision before the stale check.
+      const changedAt = new Date(Date.now() + 2_000);
+      utimesSync(join(tempDir, "paseo.json"), changedAt, changedAt);
       const currentRevision = await statPaseoConfigPath(tempDir);
 
       const result = await writePaseoConfigForEdit({

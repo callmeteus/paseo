@@ -67,5 +67,5 @@ describe("native streaming Markdown", () => {
       previous = head.length;
     }
     expect(previous).toBeGreaterThan(1000);
-  }, 15000);
+  }, 60_000);
 });

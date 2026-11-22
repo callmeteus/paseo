@@ -200,14 +200,24 @@ export function createCachedCliPathResolver(
   resolve: () => Promise<string | null>,
 ): () => Promise<string | null> {
   let pending: Promise<string | null> | null = null;
+  let cachedPath: string | null = null;
+  let cachedPathEnv: string | undefined;
   return function resolveCliPath(): Promise<string | null> {
-    if (pending) {
+    const pathEnvAtStart = process.env.PATH;
+    if (pending && pathEnvAtStart === cachedPathEnv) {
       return pending;
     }
+    if (cachedPath !== null && pathEnvAtStart === cachedPathEnv) {
+      return Promise.resolve(cachedPath);
+    }
+    cachedPathEnv = pathEnvAtStart;
     const current: Promise<string | null> = resolve()
       .then((path) => {
-        if (path === null && pending === current) {
-          pending = null;
+        if (pending === current) {
+          cachedPath = path;
+          if (path === null) {
+            pending = null;
+          }
         }
         return path;
       })

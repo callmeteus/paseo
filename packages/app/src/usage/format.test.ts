@@ -12,6 +12,9 @@ import {
 } from "./format";
 
 const NOW = Date.parse("2026-07-19T00:00:00.000Z");
+// Minimal Node builds ship only the English ICU locale. Intl-dependent
+// assertions must skip there instead of failing on a missing locale.
+const hasFullIcu = Intl.NumberFormat.supportedLocalesOf(["fr", "ar"]).length === 2;
 
 describe("formatAmount", () => {
   beforeEach(async () => {
@@ -21,13 +24,13 @@ describe("formatAmount", () => {
   afterEach(async () => {
     await i18n.changeLanguage("en");
   });
-  it("groups thousands in the app's language", () => {
+  it.skipIf(!hasFullIcu)("groups thousands in the app's language", () => {
     expect(formatAmount(12345, "credits", "en")).toBe("12,345");
     expect(formatAmount(12345, "requests", "en")).toBe("12,345");
     expect(formatAmount(12345, "credits", "fr").replace(/\s/g, " ")).toBe("12 345");
   });
 
-  it("formats dollars as the language writes currency", () => {
+  it.skipIf(!hasFullIcu)("formats dollars as the language writes currency", () => {
     expect(formatAmount(1234.5, "usd", "en")).toBe("$1,234.50");
     expect(formatAmount(1234.5, "usd", "fr").replace(/\s/g, " ")).toBe("1 234,50 $US");
   });
@@ -52,11 +55,11 @@ describe("formatAmount", () => {
     expect(formatAgo(threeDaysAgo, NOW)).toBe("3日前");
   });
 
-  it("formats percentages with locale-specific spacing", () => {
+  it.skipIf(!hasFullIcu)("formats percentages with locale-specific spacing", () => {
     expect(formatPct(42, "fr")).toBe("42\u00a0%");
   });
 
-  it("formats relative-time counts with the active locale", async () => {
+  it.skipIf(!hasFullIcu)("formats relative-time counts with the active locale", async () => {
     await i18n.changeLanguage("fr");
     const days = 1_234;
     const daysFromNow = new Date(NOW + days * 24 * 60 * 60 * 1000).toISOString();
@@ -78,7 +81,7 @@ describe("formatAmount", () => {
     expect(formatAgo(twoDaysAgo, NOW)).toBe("قبل يومين");
   });
 
-  it("uses locale-aware compact notation for token balances", () => {
+  it.skipIf(!hasFullIcu)("uses locale-aware compact notation for token balances", () => {
     expect(formatAmount(1_234, "tokens", "en")).toBe("1.2K");
     expect(formatAmount(1_234, "tokens", "ar")).toBe("1.2\u00a0ألف");
   });

@@ -659,7 +659,7 @@ describe("AgentStorage", () => {
   });
 
   test("remove deletes all duplicate record files across project directories", async () => {
-    const agentId = "agent-duplicate";
+    const agentId = "00000000-0000-4000-8000-000000000d00";
 
     // Create a valid record file in two different project directories to simulate
     // storage migrations/duplication. Only one copy will be referenced in-memory,

@@ -14,10 +14,10 @@ Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idl
 
 ## Daemon restart recovery
 
-Restart recovery is off by default. Enable `agents.resumeOnStartup` in host config or
-Host settings → Agents to resume interrupted agents after graceful shutdown or a crash. The daemon
-reopens the saved provider conversation and settings, then sends `Resume working.`. Customize
-the prompt with `agents.resumePrompt` or the same settings page.
+Restart recovery is on by default. Set `agents.resumeOnStartup` to `false` in host config or
+Host settings → Agents to turn it off; the same settings page changes the prompt sent to resumed
+agents, or use `agents.resumePrompt`. After a graceful shutdown or a crash, the daemon reopens the
+saved provider conversation and settings, then sends `Resume working.` by default.
 Disabling recovery consumes pending intent; enabling it later does not revive old work.
 
 Only agents recorded as running qualify. Idle and initializing agents stay inactive. Archived
@@ -32,6 +32,10 @@ closing runtimes.
 This is best-effort continuation. A crash between saving intent and dispatching a prompt can lose
 or repeat a continuation. Provider resume owns conversation restoration; there is no recovery retry
 loop or exactly-once turn guarantee.
+
+Reconciling provider history on resume keeps the stored attention reason. For the full list of
+durable and runtime-only state across a restart, see
+[daemon-restart-continuity.md](daemon-restart-continuity.md).
 
 ## Runtime residency
 

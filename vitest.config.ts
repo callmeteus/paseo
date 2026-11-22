@@ -45,6 +45,14 @@ export default defineConfig({
         find: /^@getpaseo\/server\/hub-local$/,
         replacement: path.resolve(__dirname, "packages/server/src/server/hub/local-install.ts"),
       },
+      {
+        find: /^@getpaseo\/server\/daemon-control$/,
+        replacement: path.resolve(__dirname, "packages/server/src/server/daemon-instance.ts"),
+      },
+      {
+        find: /^@getpaseo\/server\/process$/,
+        replacement: path.resolve(__dirname, "packages/server/src/utils/spawn.ts"),
+      },
       { find: "@", replacement: path.resolve(appDir, "src") },
       // The website's `~/` path alias, as in packages/website/tsconfig.json.
       { find: /^~\/(.*)$/, replacement: path.resolve(__dirname, "packages/website/src/$1") },

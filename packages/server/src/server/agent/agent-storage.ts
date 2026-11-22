@@ -67,6 +67,7 @@ const RAW_STORED_AGENT_SCHEMA = z.object({
   labels: z.record(z.string(), z.string()).default({}),
   metadata: z.record(z.string(), z.custom<JsonValue>()).default({}),
   lastStatus: AgentStatusSchema.default("closed"),
+  /** Pending intent to resume this agent's interrupted turn after a daemon restart. */
   resumeOnStartup: z.boolean().optional(),
   lastModeId: z.string().nullable().optional(),
   config: SERIALIZABLE_CONFIG_SCHEMA,
@@ -492,6 +493,8 @@ export class AgentStorage {
       }
       // Background is fixed at creation; a runtime opened without it cannot clear it.
       if (existing?.background) record.background = true;
+      // A running agent carries resume intent across its closed snapshot on shutdown.
+      // Settled states consume it.
       record.resumeOnStartup =
         existing?.resumeOnStartup && agent.lifecycle !== "idle" && agent.lifecycle !== "error";
       return record;

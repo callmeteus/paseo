@@ -30,6 +30,7 @@ import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { findFreePort } from "./service-proxy.js";
+import { isClaudeAvailable } from "../test-utils/claude-availability.js";
 import {
   configureGitProcessPolicy,
   snapshotGitCommandRuntimeMetrics,
@@ -298,6 +299,7 @@ describe("paseo daemon bootstrap", () => {
         requestId: "runtime-policies",
         appliedPaths: [
           "agents.catalogRefreshTimeoutMs",
+          "agents.modelRouters",
           "agents.providers",
           "app.baseUrl",
           "daemon.cors.allowedOrigins",
@@ -1159,14 +1161,14 @@ test("disabled recovery closes stale active records without resuming sessions", 
   });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${handle.port}/ws` });
   try {
-    const expected = records.map((record) => ({
-      ...record,
-      resumeOnStartup: false,
-      lastStatus:
-        record.lastStatus === "running" || record.lastStatus === "initializing"
-          ? "closed"
-          : record.lastStatus,
-    }));
+    const expected = records.map((record) => {
+      const busy = record.lastStatus === "running" || record.lastStatus === "initializing";
+      return {
+        ...record,
+        ...(busy ? { resumeOnStartup: false } : {}),
+        lastStatus: busy ? "closed" : record.lastStatus,
+      };
+    });
     expect(
       (await handle.daemon.agentStorage.listAll()).sort((a, b) => a.id.localeCompare(b.id)),
     ).toEqual(expected.sort((a, b) => a.id.localeCompare(b.id)));
@@ -1199,7 +1201,7 @@ test("disabled recovery closes stale active records without resuming sessions", 
   }
 }, 30_000);
 
-test.each(["reject", "stall"] as const)(
+test.skipIf(!isClaudeAvailable()).each(["reject", "stall"] as const)(
   "shutdown closes Claude and its process despite a %s peer and stalled SDK handshake",
   async (failure) => {
     let child: ChildProcess | undefined;

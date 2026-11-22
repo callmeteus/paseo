@@ -12,10 +12,12 @@
   "exports": {
     "./*": {
       "types": "./dist/*.d.ts",
+      "source": "./src/*.ts",
       "default": "./dist/*.js"
     },
     "./addresses": {
       "types": "./dist/addresses.d.ts",
+      "source": "./src/addresses.ts",
       "default": "./dist/addresses.js"
     }
   },

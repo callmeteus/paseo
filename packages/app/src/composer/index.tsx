@@ -2764,6 +2764,7 @@ function ComposerContentImpl({
       if (!result) return;
       replaceUserInput(result.text);
       setSelectedAttachments(result.attachments);
+      focusMessageInputWithPlatformStrategy(messageInputRef);
     },
     [agentId, queueWriter, replaceUserInput, setSelectedAttachments],
   );

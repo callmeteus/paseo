@@ -328,59 +328,25 @@ const MutableRelayConfigSchema = z
   })
   .passthrough();
 
-const McpStdioServerConfigSchema = z.object({
-  type: z.literal("stdio"),
-  command: z.string(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  // COMPAT(mcpStdioCwd): added in v0.13.2, optional so older daemons ignore it.
-  cwd: z.string().optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-const McpHttpServerConfigSchema = z.object({
-  type: z.literal("http"),
-  url: z.string(),
-  headers: z.record(z.string(), z.string()).optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-const McpSseServerConfigSchema = z.object({
-  type: z.literal("sse"),
-  url: z.string(),
-  headers: z.record(z.string(), z.string()).optional(),
-  alwaysLoad: z.boolean().optional(),
-});
-
-export const McpServerConfigSchema = z.discriminatedUnion("type", [
-  McpStdioServerConfigSchema,
-  McpHttpServerConfigSchema,
-  McpSseServerConfigSchema,
-]);
-
-export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
-
-export const McpShareSchema = z
-  .object({
-    hosts: z.array(z.string().min(1)),
-    tools: z.array(z.string().min(1)).optional(),
-  })
-  .strict();
-
-export const McpBridgeSchema = z
-  .object({
-    host: z.string().min(1),
-    via: z.string().min(1).optional(),
-    server: z.string().min(1),
-  })
-  .strict();
-
-export type McpShare = z.infer<typeof McpShareSchema>;
-export type McpBridge = z.infer<typeof McpBridgeSchema>;
-
-export const IDLE_RUNTIME_CLEANUP_AFTER = ["15m", "30m", "1h", "2h", "4h", "8h", "24h"] as const;
-export const IdleRuntimeCleanupAfterSchema = z.enum(IDLE_RUNTIME_CLEANUP_AFTER);
-export type IdleRuntimeCleanupAfter = (typeof IDLE_RUNTIME_CLEANUP_AFTER)[number];
+import {
+  IdleRuntimeCleanupAfterSchema,
+  McpBridgeSchema,
+  McpServerConfigSchema,
+  McpShareSchema,
+} from "./daemon-config-schemas.js";
+export {
+  IDLE_RUNTIME_CLEANUP_AFTER,
+  IdleRuntimeCleanupAfterSchema,
+  McpBridgeSchema,
+  McpServerConfigSchema,
+  McpShareSchema,
+} from "./daemon-config-schemas.js";
+export type {
+  IdleRuntimeCleanupAfter,
+  McpBridge,
+  McpServerConfig,
+  McpShare,
+} from "./daemon-config-schemas.js";
 
 export const MutableDaemonConfigSchema = z
   .object({
@@ -424,13 +390,13 @@ export const MutableDaemonConfigSchema = z
     idleRuntimeCleanup: z.boolean().optional(),
     // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, keep optional while old daemons are supported.
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    // COMPAT(restartRecovery): added in v0.13.2, keep optional while old daemons are supported.
+    resumeOnStartup: z.boolean().optional(),
+    resumePrompt: z.string().optional(),
     // COMPAT(hubAllowHttpSetting): added in v0.13.1, keep optional while old daemons are supported.
     hubAllowHttp: z.boolean().optional(),
     // COMPAT(hubPublicOriginSetting): added in v0.13.3, keep optional while old daemons are supported.
     hubPublicOrigin: z.string().optional(),
-    // COMPAT(restartRecovery): added in v0.14.0, keep optional for older hosts.
-    resumeOnStartup: z.boolean().optional(),
-    resumePrompt: z.string().optional(),
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
@@ -468,11 +434,12 @@ export const MutableDaemonConfigPatchSchema = z
     remoteAccess: RemoteAccessConfigSchema.partial().optional(),
     idleRuntimeCleanup: z.boolean().optional(),
     idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional(),
+    // COMPAT(restartRecovery): added in v0.13.2, optional for older daemons.
+    resumeOnStartup: z.boolean().optional(),
+    resumePrompt: z.string().optional(),
     hubAllowHttp: z.boolean().optional(),
     // COMPAT(hubPublicOriginSetting): added in v0.13.3, optional for older daemons.
     hubPublicOrigin: z.string().optional(),
-    resumeOnStartup: z.boolean().optional(),
-    resumePrompt: z.string().optional(),
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),

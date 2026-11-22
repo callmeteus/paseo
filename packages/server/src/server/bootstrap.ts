@@ -648,6 +648,15 @@ function initialIdleRuntimeCleanupAfter(config: ReloadableSettingsWithForkFields
   return config.idleRuntimeCleanupAfter ?? "1h";
 }
 
+function initialRestartRecoveryConfig(
+  config: Pick<PaseoDaemonConfig, "resumeOnStartup" | "resumePrompt">,
+) {
+  return {
+    resumeOnStartup: config.resumeOnStartup !== false,
+    resumePrompt: config.resumePrompt ?? "Resume working.",
+  };
+}
+
 // eslint-disable-next-line complexity -- merge: combined two implementations
 function createInitialMutableDaemonConfig(
   config: ReloadableSettingsWithForkFields,
@@ -682,8 +691,7 @@ function createInitialMutableDaemonConfig(
     hubPublicOrigin: config.hubPublicOrigin,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
     idleRuntimeCleanupAfter: initialIdleRuntimeCleanupAfter(config),
-    resumeOnStartup: config.resumeOnStartup === true,
-    resumePrompt: config.resumePrompt ?? "Resume working.",
+    ...initialRestartRecoveryConfig(config),
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
@@ -1232,14 +1240,25 @@ export async function createPaseoDaemon(
   const restartRecovery = createRestartRecovery({
     storage: agentStorage,
     settings: () => ({
-      enabled: daemonConfigStore.get().resumeOnStartup === true,
+      enabled: daemonConfigStore.get().resumeOnStartup !== false,
       prompt: daemonConfigStore.get().resumePrompt ?? "Resume working.",
     }),
-    eligible: async (record) =>
-      !record.workspaceId || !(await workspaceRegistry?.get(record.workspaceId))?.archivedAt,
+    eligible: async (record) => {
+      if (!record.workspaceId) return true;
+      const workspace = await workspaceRegistry?.get(record.workspaceId);
+      return !workspace?.archivedAt;
+    },
     dispatch: (agentId, prompt) =>
-      sendPromptToAgent({ agentId, prompt, agentManager, agentStorage, logger, unarchive: false }),
-    report: (agentId, err) => logger.error({ agentId, err }, "Agent restart recovery failed"),
+      sendPromptToAgent({
+        agentManager,
+        agentStorage,
+        agentId,
+        prompt,
+        unarchive: false,
+        logger,
+      }),
+    report: (agentId, error) =>
+      logger.error({ agentId, err: error }, "Agent restart recovery failed"),
   });
   await restartRecovery.prepareStartup();
   logger.info({ elapsed: elapsed() }, "Agent storage initialized");
@@ -1741,6 +1760,7 @@ export async function createPaseoDaemon(
     ...createFinishObservation({
       agentManager,
       agentStorage,
+      // A child chosen for recovery reports its real outcome only after its resume was sent.
       waitForResume: restartRecovery.waitForResume,
       serverId,
       logger,
@@ -1775,6 +1795,7 @@ export async function createPaseoDaemon(
     wsServer?.broadcast(wrapSessionMessage({ type: "plan_update", payload: input }));
   };
   const planBuilds = createPlanBuildTracker({
+    paseoHome: config.paseoHome,
     emit: emitPlanUpdate,
     subscribe: (listener) => agentManager.subscribe(listener, { replayState: false }),
     dispatchBuild: async (entry) => {
@@ -1790,6 +1811,9 @@ export async function createPaseoDaemon(
     },
     onDispatchError: (error, entry) => {
       logger.error({ err: error, entry }, "plan build dispatch failed");
+    },
+    onStoreError: (error) => {
+      logger.warn({ err: error }, "Failed to persist pending plan builds");
     },
   });
 
@@ -2271,12 +2295,18 @@ export async function createPaseoDaemon(
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
+            restartRecovery.resumePending();
             providerCatalogRefreshScheduler.start();
             openWeightRouterSync.start();
             restartRecovery.resumePending();
             await finishSubscriptions.start();
             await changeRequestWatches.start();
             wsServer.beginAcceptingConnections();
+            // Builds queued by the previous daemon never got their dispatch turn. Re-send
+            // them now so the plan does not sit half-done with a stale "building" marker.
+            void planBuilds.recoverPending().catch((error) => {
+              logger.warn({ err: error }, "Failed to recover pending plan builds");
+            });
             const relaySecurityLogger = logger.child({ module: "relay-security" });
             relayRuntime = createRelayRuntime({
               config: {
@@ -2333,6 +2363,9 @@ export async function createPaseoDaemon(
       speechService.start();
       scriptHealthMonitor.start();
     } catch (error) {
+      // A failed start must not leave the schedule ticker alive; it can create work
+      // against runtimes that are being torn down below.
+      await scheduleService.stop().catch(() => undefined);
       await cursorSkillCatalog?.stop().catch(() => undefined);
       cursorSkillCatalog = null;
       providerCatalogRefreshScheduler.stop();
@@ -2353,6 +2386,9 @@ export async function createPaseoDaemon(
   };
 
   const stop = async (options?: { keepTerminals?: boolean }) => {
+    // Stop the ticker first: an in-flight schedule tick can otherwise claim and run a
+    // schedule after agents and provider runtimes have already been closed.
+    await scheduleService.stop().catch(() => undefined);
     await cursorSkillCatalog?.stop().catch((error) => {
       logger.warn({ err: error }, "Failed to stop Cursor skill catalog watch");
     });
@@ -2380,6 +2416,7 @@ export async function createPaseoDaemon(
     await finishSubscriptions.close();
     await wsServer?.agentMessages.close();
     agentManager.prepareForShutdown();
+    // Save intent before closing runtimes so the next daemon can continue running work.
     await restartRecovery.captureRunningAgents();
     await closeAllAgents(logger, agentManager);
     await withTimeout({
@@ -2406,7 +2443,6 @@ export async function createPaseoDaemon(
       logger.error({ err: error }, "Terminal shutdown failed");
     }
     await speechService.stop();
-    await scheduleService.stop().catch(() => undefined);
     await relayRuntime?.stop().catch(() => undefined);
     if (wsServer) {
       await wsServer.close();

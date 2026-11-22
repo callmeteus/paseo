@@ -2005,7 +2005,12 @@ export class HostRuntimeStore {
   private controllers = new Map<string, HostRuntimeController>();
   private hostObservations = new Map<
     string,
-    { client: DaemonClient; observation: OwnedSubscription<HostDirectory>; unsubscribe: () => void }
+    {
+      client: DaemonClient;
+      epoch: number;
+      observation: OwnedSubscription<HostDirectory>;
+      unsubscribe: () => void;
+    }
   >();
   private fleetDirectoryDemand = new Map<string, () => void>();
   private serverListeners = new Map<string, Set<() => void>>();
@@ -2022,7 +2027,8 @@ export class HostRuntimeStore {
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private queuedAgentDrainInFlight = new Set<string>();
-  private messageQueuesHydratedServers = new Set<string>();
+  /** Epoch of the last successful queue hydration, so a restarted daemon refetches. */
+  private messageQueuesHydratedEpochs = new Map<string, number>();
   private messageQueueHydrationInFlight = new Set<string>();
   private onlineServerIds = new Set<string>();
   private observedServerIds = new Set<string>();
@@ -2869,7 +2875,7 @@ export class HostRuntimeStore {
         const snapshot = controller.getSnapshot();
         this.syncSessionReplica(snapshot.serverId, snapshot);
         this.syncDirectoryConnection(snapshot.serverId);
-        this.syncHostDiscovery(snapshot.serverId);
+        this.syncHostDiscovery(snapshot.serverId, snapshot.connectionEpoch);
         this.emit(snapshot.serverId);
       });
       void controller
@@ -2888,10 +2894,12 @@ export class HostRuntimeStore {
     }
   }
 
-  private syncHostDiscovery(serverId: string): void {
+  private syncHostDiscovery(serverId: string, epoch: number): void {
     const client = this.getClient(serverId);
     const previous = this.hostObservations.get(serverId);
-    if (previous?.client === client) return;
+    // A daemon restart keeps the same client object but bumps the connection epoch. Rebuild
+    // the observation so the new daemon's features and host catalog are re-evaluated.
+    if (previous && previous.client === client && previous.epoch === epoch) return;
     previous?.unsubscribe();
     void previous?.observation.release();
     this.hostObservations.delete(serverId);
@@ -2904,7 +2912,8 @@ export class HostRuntimeStore {
       return;
     const observation = client.observeHosts();
     const apply = (directory: HostDirectory) => {
-      if (this.hostObservations.get(serverId)?.client !== client) return;
+      const current = this.hostObservations.get(serverId);
+      if (!current || current.client !== client || current.epoch !== epoch) return;
       const prefs = this.clusterPrefs();
       const observerName =
         directory.self.label?.trim() || client.getLastServerInfoMessage()?.hostname?.trim() || null;
@@ -2948,7 +2957,7 @@ export class HostRuntimeStore {
         if (message.type === "hosts.changed") apply(message.payload.directory);
       },
     });
-    this.hostObservations.set(serverId, { client, observation, unsubscribe });
+    this.hostObservations.set(serverId, { client, epoch, observation, unsubscribe });
     void observation.ready.then(apply).catch(() => undefined);
   }
 
@@ -2971,10 +2980,10 @@ export class HostRuntimeStore {
       sessionStore.updateSessionServerInfo(serverId, toDaemonServerInfo(serverInfo));
       if (
         serverInfo.features?.agentMessageQueue === true &&
-        !this.messageQueuesHydratedServers.has(serverId) &&
+        this.messageQueuesHydratedEpochs.get(serverId) !== snapshot.connectionEpoch &&
         !this.messageQueueHydrationInFlight.has(serverId)
       ) {
-        void this.hydrateMessageQueues(serverId, snapshot.client);
+        void this.hydrateMessageQueues(serverId, snapshot.client, snapshot.connectionEpoch);
       }
     }
     this.syncOnlinePresence(serverId, snapshot);
@@ -3003,7 +3012,11 @@ export class HostRuntimeStore {
     }
   }
 
-  private async hydrateMessageQueues(serverId: string, client: DaemonClient): Promise<void> {
+  private async hydrateMessageQueues(
+    serverId: string,
+    client: DaemonClient,
+    epoch: number,
+  ): Promise<void> {
     this.messageQueueHydrationInFlight.add(serverId);
     try {
       const queues = await client.listAgentMessageQueues();
@@ -3019,7 +3032,7 @@ export class HostRuntimeStore {
         }
         return next;
       });
-      this.messageQueuesHydratedServers.add(serverId);
+      this.messageQueuesHydratedEpochs.set(serverId, epoch);
       this.drainHydratedMessageQueues(serverId);
     } catch (error) {
       console.warn("[HostRuntime] Failed to restore persisted message queues", error);
@@ -3029,7 +3042,7 @@ export class HostRuntimeStore {
   }
 
   private drainHydratedMessageQueues(serverId: string): void {
-    if (!this.messageQueuesHydratedServers.has(serverId)) return;
+    if (!this.messageQueuesHydratedEpochs.has(serverId)) return;
     const session = useSessionStore.getState().sessions[serverId];
     if (!session) return;
     for (const agentId of session.queuedMessages.keys()) {
@@ -3050,7 +3063,7 @@ export class HostRuntimeStore {
   private clearHostReplica(serverId: string): void {
     useSessionStore.getState().clearSession(serverId);
     useWorkspaceSetupStore.getState().clearServer(serverId);
-    this.messageQueuesHydratedServers.delete(serverId);
+    this.messageQueuesHydratedEpochs.delete(serverId);
     this.messageQueueHydrationInFlight.delete(serverId);
     this.onlineServerIds.delete(serverId);
     this.observedServerIds.delete(serverId);

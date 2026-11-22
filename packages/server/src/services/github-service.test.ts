@@ -9,7 +9,7 @@ import {
   GitHubCommandError,
   GITHUB_POLL_ALIGNMENT_MS,
   computeGithubNextInterval,
-  createGitHubService,
+  createGitHubService as createGitHubServiceBase,
   parseStatusCheckRollup,
   type GitHubCommandRunner,
   type GitHubCommandRunnerOptions,
@@ -18,6 +18,15 @@ import {
 } from "./github-service.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { CheckoutPrStatusResponseSchema } from "@getpaseo/protocol/messages";
+
+// Most tests inject a fake runner, so they must not depend on a real `gh`
+// binary being installed on the runner. Callers that exercise CLI discovery
+// still override resolveGhPath explicitly.
+function createGitHubService(
+  options: Parameters<typeof createGitHubServiceBase>[0] = {},
+): ReturnType<typeof createGitHubServiceBase> {
+  return createGitHubServiceBase({ resolveGhPath: async () => "/usr/bin/gh", ...options });
+}
 
 const EXPECTED_GITHUB_FAST_POLL_MS = 20_000;
 const EXPECTED_GITHUB_SLOW_POLL_MS = 120_000;

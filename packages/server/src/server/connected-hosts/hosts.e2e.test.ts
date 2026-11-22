@@ -11,6 +11,13 @@ import type { HostDirectory } from "@getpaseo/protocol/hosts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 
+// MCP-origin delegation is gated by daemon.remoteAccess, which is off by
+// default. These tests predate the gate and need every test daemon to trust the
+// others, so seed fixed server ids and allow all of them in both directions
+// before each daemon boots.
+const TEST_PEER_IDS = Array.from({ length: 64 }, (_, index) => `srv-hosts-test-${index}`);
+let nextTestDaemonIndex = 0;
+
 // These asynchronous failures otherwise disappear into the fixture's silent logger.
 // Only completion errors and filesystem metadata belong in CI, never prompts or credentials.
 function completionLogger() {
@@ -57,7 +64,26 @@ afterEach(async () => {
 async function daemon(
   options: Parameters<typeof createTestPaseoDaemon>[0] = {},
 ): Promise<TestPaseoDaemon> {
-  const instance = await createTestPaseoDaemon(options);
+  const root = options.paseoHomeRoot ?? (await mkdtemp(join(tmpdir(), "paseo-hosts-home-")));
+  const home = join(root, ".paseo");
+  await mkdir(home, { recursive: true });
+  const serverIdPath = join(home, "server-id");
+  if (!existsSync(serverIdPath)) {
+    await writeFile(serverIdPath, TEST_PEER_IDS[nextTestDaemonIndex++]!);
+  }
+  const scope = {
+    enabled: true,
+    peers: TEST_PEER_IDS,
+    chats: true,
+    agents: true,
+    files: "write",
+    commands: { mode: "any" },
+  };
+  const instance = await createTestPaseoDaemon({
+    ...options,
+    paseoHomeRoot: root,
+    remoteAccess: { outbound: scope, inbound: scope },
+  });
   cleanup.push(() => instance.close());
   return instance;
 }

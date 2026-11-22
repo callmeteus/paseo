@@ -59,6 +59,7 @@ interface TestPaseoDaemonOptions {
   pluginRegistryUrl?: PaseoDaemonConfig["pluginRegistryUrl"];
   builtinPlugins?: BuiltinPluginLoader;
   plugins?: PaseoDaemonConfig["plugins"];
+  remoteAccess?: PaseoDaemonConfig["remoteAccess"];
 }
 
 export interface TestPaseoDaemon {
@@ -236,6 +237,7 @@ async function prepareTestDaemonConfig(
     pluginsEnabled: options.pluginsEnabled,
     plugins: options.plugins,
     pluginRegistryUrl: options.pluginRegistryUrl,
+    remoteAccess: options.remoteAccess,
   };
   return { config, paseoHomeRoot, paseoHome, staticDir, createdDirs };
 }

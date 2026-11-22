@@ -3,6 +3,7 @@
  */
 import React from "react";
 import { act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,8 @@ import { defaultHostAppearance } from "@/hosts/appearance";
 vi.hoisted(() => {
   (globalThis as unknown as { __DEV__: boolean }).__DEV__ = false;
 });
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 function workspaceDescriptor(input: {
   id: string;
@@ -142,9 +145,11 @@ describe("WorkspaceShortcutTargetsSubscriber", () => {
   it("publishes workspace shortcut targets without rendering the sidebar", async () => {
     await act(async () => {
       root?.render(
-        <SidebarModelProvider>
-          <WorkspaceShortcutTargetsSubscriber enabled={true} />
-        </SidebarModelProvider>,
+        <QueryClientProvider client={queryClient}>
+          <SidebarModelProvider>
+            <WorkspaceShortcutTargetsSubscriber enabled={true} />
+          </SidebarModelProvider>
+        </QueryClientProvider>,
       );
     });
 
@@ -210,9 +215,11 @@ describe("WorkspaceShortcutTargetsSubscriber", () => {
 
     await act(async () => {
       root?.render(
-        <SidebarModelProvider>
-          <WorkspaceShortcutTargetsSubscriber enabled={true} />
-        </SidebarModelProvider>,
+        <QueryClientProvider client={queryClient}>
+          <SidebarModelProvider>
+            <WorkspaceShortcutTargetsSubscriber enabled={true} />
+          </SidebarModelProvider>
+        </QueryClientProvider>,
       );
     });
 
@@ -244,9 +251,11 @@ describe("WorkspaceShortcutTargetsSubscriber", () => {
 
     await act(async () => {
       root?.render(
-        <SidebarModelProvider>
-          <WorkspaceShortcutTargetsSubscriber enabled={true} />
-        </SidebarModelProvider>,
+        <QueryClientProvider client={queryClient}>
+          <SidebarModelProvider>
+            <WorkspaceShortcutTargetsSubscriber enabled={true} />
+          </SidebarModelProvider>
+        </QueryClientProvider>,
       );
     });
 
@@ -266,17 +275,21 @@ describe("WorkspaceShortcutTargetsSubscriber", () => {
   it("clears targets when disabled", async () => {
     await act(async () => {
       root?.render(
-        <SidebarModelProvider>
-          <WorkspaceShortcutTargetsSubscriber enabled={true} />
-        </SidebarModelProvider>,
+        <QueryClientProvider client={queryClient}>
+          <SidebarModelProvider>
+            <WorkspaceShortcutTargetsSubscriber enabled={true} />
+          </SidebarModelProvider>
+        </QueryClientProvider>,
       );
     });
 
     await act(async () => {
       root?.render(
-        <SidebarModelProvider>
-          <WorkspaceShortcutTargetsSubscriber enabled={false} />
-        </SidebarModelProvider>,
+        <QueryClientProvider client={queryClient}>
+          <SidebarModelProvider>
+            <WorkspaceShortcutTargetsSubscriber enabled={false} />
+          </SidebarModelProvider>
+        </QueryClientProvider>,
       );
     });
 

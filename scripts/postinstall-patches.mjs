@@ -78,9 +78,10 @@ const patchedPackages = [
   // Android resize: retain until upstream clears descendant geometry when the SVG canvas resizes.
   // The native pixel regression is included in the patch; preserve the separate transform hunks.
   {
-    nodeModulesPath: "packages/app/node_modules/react-native-svg",
+    // npm hoists react-native-svg to the root node_modules. patch-package resolves the patch's
+    // node_modules/... paths relative to its cwd, so this entry must run from the root.
+    nodeModulesPath: "node_modules/react-native-svg",
     patchPrefix: "react-native-svg+",
-    cwd: "packages/app",
   },
   // Reconcile ResponderEventPlugin trackedTouchCount and ResponderTouchHistoryStore touchBank with
   // nativeEvent.touches.length so an unmatched touch start or single-pointer synthetic cancel

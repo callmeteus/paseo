@@ -458,6 +458,26 @@ export const PASEO_TOOL_CATALOG = {
     context: field("name"),
     detail: { inputOrder: ["name"] },
   },
+  list_slack_channels: {
+    label: "List Slack channels",
+    completedLabel: "Listed Slack channels",
+    context: field("query"),
+    detail: { inputOrder: ["connection", "query"] },
+  },
+  read_slack_messages: {
+    label: "Read Slack messages",
+    completedLabel: "Read Slack messages",
+    context: field("channel"),
+    detail: { inputOrder: ["connection", "channel", "limit"] },
+  },
+
+  // Planning
+  plan_build: {
+    label: "Build plan",
+    completedLabel: "Built plan",
+    context: field("path"),
+    detail: { inputOrder: ["path"] },
+  },
 
   // Browser
   browser_list_hosts: browser("List browser hosts", "Listed browser hosts"),

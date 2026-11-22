@@ -231,13 +231,9 @@ export class HubRelationshipController implements HubRelationshipManagement {
     this.retryPolicy = options.retryPolicy ?? new BoundedExponentialHubRetryPolicy();
     this.record = this.load();
     if (this.record?.state === "disconnecting") {
-      // COMPAT(hubUnilateralDisconnect): added in v0.4.0, remove after 2027-02-13 once legacy records have aged out.
-      this.options.logger.warn(
-        { daemonId: this.record.relationship.daemonId },
-        "Removed legacy disconnecting Hub relationship during startup",
-      );
-      rmSync(this.filePath, { force: true });
-      this.record = null;
+      // Keep the in-flight disconnect. Deleting it on restart leaves the Hub enrolled and
+      // makes a fresh enroll fail with "already has a relationship". start() retries the revoke.
+      this.state = "disconnecting";
     }
     if (this.record?.state === "revoked") {
       this.state = "revoked";
@@ -246,6 +242,25 @@ export class HubRelationshipController implements HubRelationshipManagement {
   }
 
   async start(): Promise<void> {
+    if (this.record?.state === "disconnecting") {
+      const disconnecting = this.record;
+      try {
+        await this.options.remote.revoke({
+          daemonId: disconnecting.relationship.daemonId,
+          hubOrigin: disconnecting.relationship.hubOrigin,
+          credential: disconnecting.credential.secret,
+        });
+        this.remove();
+        this.record = null;
+        this.state = "not_connected";
+      } catch (error) {
+        this.options.logger.warn(
+          { err: error, daemonId: disconnecting.relationship.daemonId },
+          "Could not finish an interrupted Hub disconnect; keeping the relationship for the next start",
+        );
+      }
+      return;
+    }
     if (this.record?.state === "active") this.openSocket(false);
     if (this.record?.state === "pending") {
       const enrollmentGeneration = this.beginEnrollmentAttempt();

@@ -42,10 +42,10 @@ interface SupportedMutableConfigPatch {
   remoteAccess?: MutableDaemonConfigPatch["remoteAccess"];
   idleRuntimeCleanup?: boolean;
   idleRuntimeCleanupAfter?: MutableDaemonConfig["idleRuntimeCleanupAfter"];
-  hubAllowHttp?: boolean;
-  hubPublicOrigin?: string;
   resumeOnStartup?: boolean;
   resumePrompt?: string;
+  hubAllowHttp?: boolean;
+  hubPublicOrigin?: string;
   appendSystemPrompt?: string;
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
@@ -276,6 +276,8 @@ const RELOADABLE_PATHS = [
   "app.baseUrl",
   "agents.idleRuntimeCleanup",
   "agents.idleRuntimeCleanupAfter",
+  "agents.resumeOnStartup",
+  "agents.resumePrompt",
   "hub.allowHttp",
   "hub.publicOrigin",
   "agents.resumeOnStartup",
@@ -312,6 +314,8 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["app.baseUrl", "app.baseUrl"],
   ["agents.idleRuntimeCleanup", "idleRuntimeCleanup"],
   ["agents.idleRuntimeCleanupAfter", "idleRuntimeCleanupAfter"],
+  ["agents.resumeOnStartup", "resumeOnStartup"],
+  ["agents.resumePrompt", "resumePrompt"],
   ["hub.allowHttp", "hubAllowHttp"],
   ["hub.publicOrigin", "hubPublicOrigin"],
   ["agents.resumeOnStartup", "resumeOnStartup"],
@@ -429,6 +433,7 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       ? { idleRuntimeCleanup: patch.idleRuntimeCleanup }
       : {}),
     ...pickIdleRuntimeCleanupAfterPatch(patch),
+    ...pickRestartRecoveryPatch(patch),
     ...pickHubAllowHttpPatch(patch),
     ...(patch.appendSystemPrompt !== undefined
       ? { appendSystemPrompt: patch.appendSystemPrompt }
@@ -439,6 +444,15 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
     ...(patch.features !== undefined ? { features: patch.features } : {}),
     ...pickClusterPatch(patch),
+  };
+}
+
+function pickRestartRecoveryPatch(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "resumeOnStartup" | "resumePrompt"> {
+  return {
+    ...(patch.resumeOnStartup !== undefined ? { resumeOnStartup: patch.resumeOnStartup } : {}),
+    ...(patch.resumePrompt !== undefined ? { resumePrompt: patch.resumePrompt } : {}),
   };
 }
 
@@ -884,6 +898,19 @@ function applyIdleCleanupPatch(
 }
 
 // eslint-disable-next-line complexity -- merge: combined two implementations
+function restartRecoveryPatchAbsent(patch: SupportedMutableConfigPatch): boolean {
+  return patch.resumeOnStartup === undefined && patch.resumePrompt === undefined;
+}
+
+function applyRestartRecoveryPatch(
+  next: Record<string, unknown>,
+  patch: SupportedMutableConfigPatch,
+): void {
+  if (patch.resumeOnStartup !== undefined) next["resumeOnStartup"] = patch.resumeOnStartup;
+  if (patch.resumePrompt !== undefined) next["resumePrompt"] = patch.resumePrompt;
+}
+
+// eslint-disable-next-line complexity -- merge: combined two implementations
 function mergeMutableAgentPatch(
   persistedAgents: PersistedConfig["agents"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -894,6 +921,7 @@ function mergeMutableAgentPatch(
     patch.metadataGeneration === undefined &&
     patch.modelRouters === undefined &&
     patch.skills === undefined &&
+    restartRecoveryPatchAbsent(patch) &&
     idleCleanupPatchAbsent(patch) &&
     !hasRestartRecoveryPatch(patch) &&
     patch.idleRuntimeCleanup === undefined &&
@@ -920,7 +948,7 @@ function mergeMutableAgentPatch(
     const removed = new Set(removeProviders);
     next["metadataGeneration"] = {
       providers: persistedAgents.metadataGeneration.providers.filter(
-        (entry) => !removed.has(entry.provider),
+        (entry: { provider: string }) => !removed.has(entry.provider),
       ),
     };
   }
@@ -939,6 +967,7 @@ function mergeMutableAgentPatch(
   }
 
   applyIdleCleanupPatch(next, patch);
+  applyRestartRecoveryPatch(next, patch);
 
   return Object.keys(next).length > 0 ? (next as PersistedConfig["agents"]) : undefined;
 }
