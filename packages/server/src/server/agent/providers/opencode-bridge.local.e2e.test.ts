@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { expect, test } from "vitest";
+import { expect, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot host the local relay / OpenCode binaries used here.
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 
 import { execCommand } from "../../../utils/spawn.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
