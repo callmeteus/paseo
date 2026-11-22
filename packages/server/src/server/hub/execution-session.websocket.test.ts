@@ -343,7 +343,7 @@ test("Hub control waits for an in-flight create of the same execution", async ()
   expect(await hub.ownedAgentArchivedAt(created.payload.agentId!)).toEqual(expect.any(String));
 });
 
-test.skipIf(process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true")(
+test.skipIf(process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" || process.env.PASEO_CI === "true")(
   "Hub archives an execution workspace on a local checkout",
   async () => {
     const hub = await launchRelationship();

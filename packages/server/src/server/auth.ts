@@ -5,9 +5,15 @@ import { matchesLocalCredential } from "./local-credential.js";
 
 export const DAEMON_PASSWORD_BCRYPT_COST = 12;
 
+export interface ApiTokenVerifier {
+  hasTokens(): boolean;
+  verify(secret: string): Promise<boolean>;
+}
+
 export interface DaemonAuthConfig {
   password?: string;
   localCredential?: () => string | null;
+  apiTokens?: ApiTokenVerifier;
 }
 
 export interface BearerAuthRejectContext {
@@ -19,17 +25,21 @@ export interface BearerAuthRejectContext {
 interface BearerValidationInput {
   password: string | undefined;
   token: string | null;
+  apiTokenVerifier?: ApiTokenVerifier;
 }
 
 export async function isBearerTokenValidAsync(input: BearerValidationInput): Promise<boolean> {
-  if (!input.password) {
+  if (!input.password && !input.apiTokenVerifier?.hasTokens()) {
     return true;
   }
   if (input.token === null) {
     return false;
   }
+  if (input.apiTokenVerifier && (await input.apiTokenVerifier.verify(input.token))) {
+    return true;
+  }
 
-  return compare(input.token, input.password);
+  return input.password ? compare(input.token, input.password) : false;
 }
 
 export function hashDaemonPassword(password: string): string {
@@ -79,8 +89,12 @@ export function createRequireBearerMiddleware(
   onReject?: (context: BearerAuthRejectContext) => void,
 ): RequestHandler {
   const password = auth?.password;
+  const apiTokenVerifier = auth?.apiTokens;
   return (req, res, next) => {
-    if (!password || shouldBypassBearerAuth(req.method, req.path)) {
+    if (
+      (!password && !apiTokenVerifier?.hasTokens()) ||
+      shouldBypassBearerAuth(req.method, req.path)
+    ) {
       next();
       return;
     }
@@ -94,7 +108,7 @@ export function createRequireBearerMiddleware(
           localCredential !== undefined &&
           token !== null &&
           matchesLocalCredential(localCredential, token);
-        if (!isLocal && !(await isBearerTokenValidAsync({ password, token }))) {
+        if (!isLocal && !(await isBearerTokenValidAsync({ password, token, apiTokenVerifier }))) {
           onReject?.({
             path: req.path,
             method: req.method,
@@ -129,16 +143,17 @@ export function shouldBypassBearerAuth(method: string, path: string): boolean {
  * Authorizes a request to the Agent MCP endpoint (/mcp/agents), which is exempt
  * from the global daemon-password middleware. Accepts either the per-daemon-run
  * capability token the daemon injects into its own agents' configs and MCP
- * client, or a valid daemon-password bearer (so existing password-authenticated
- * callers keep working). When no daemon password is configured the endpoint is
- * open, matching the global middleware's behavior.
+ * client, a named API token, or a valid daemon-password bearer (so existing
+ * password-authenticated callers keep working). The endpoint is open only when
+ * neither a password nor named tokens are configured.
  */
 export async function isAgentMcpRequestAuthorized(input: {
   password: string | undefined;
   capabilityToken: string | null;
   authorizationHeader: string | undefined;
+  apiTokenVerifier?: ApiTokenVerifier;
 }): Promise<boolean> {
-  if (!input.password) {
+  if (!input.password && !input.apiTokenVerifier?.hasTokens()) {
     return true;
   }
   const token = extractHttpBearerToken(input.authorizationHeader);
@@ -151,5 +166,9 @@ export async function isAgentMcpRequestAuthorized(input: {
       return true;
     }
   }
-  return isBearerTokenValidAsync({ password: input.password, token });
+  return isBearerTokenValidAsync({
+    password: input.password,
+    token,
+    apiTokenVerifier: input.apiTokenVerifier,
+  });
 }

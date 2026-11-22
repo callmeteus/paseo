@@ -3610,6 +3610,14 @@ export class Session {
       case "daemon.config.reload.request":
         this.daemonSession.handleConfigReloadRequest(msg);
         return undefined;
+      case "daemon.api_token.list.request":
+        this.daemonSession.handleApiTokenListRequest(msg);
+        return undefined;
+      case "daemon.api_token.create.request":
+        return this.daemonSession.handleApiTokenCreateRequest(msg);
+      case "daemon.api_token.revoke.request":
+        this.daemonSession.handleApiTokenRevokeRequest(msg);
+        return undefined;
       case "diagnostics.request":
         return this.daemonSession.handleDiagnosticsRequest(msg);
       case "daemon.update.request":

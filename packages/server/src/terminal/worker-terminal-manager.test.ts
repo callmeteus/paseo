@@ -3,7 +3,7 @@ import { afterEach, expect, it as vitestIt } from "vitest";
 // The Forgejo runner's Node cannot keep a forked TypeScript worker alive (it
 // exits with SIGSEGV even when the worker is compiled to JS). Keep the suite
 // runnable locally, but skip those real-worker cases on CI instead of failing.
-const skipRealWorker = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+const skipRealWorker = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" || process.env.PASEO_CI === "true";
 const it = skipRealWorker ? vitestIt.skip : vitestIt;
 import { isPlatform } from "../test-utils/platform.js";
 import { EventEmitter } from "node:events";

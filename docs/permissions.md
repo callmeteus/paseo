@@ -15,6 +15,8 @@ A principal is the durable identity the daemon authorizes. A credential proves t
 
 A pairing invitation is neither. It is an expiring, single-use exchange that creates a principal and credential with the permissions selected by its issuer.
 
+A named API token is an owner credential for service clients such as an MCP gateway. It authenticates the owner principal, so a token carries the same authority as the daemon password. Create and revoke tokens in host settings; listing tokens needs `daemon.read`, creating and revoking need `daemon.manage`. Tokens are not separate principals and have no per-token permission set.
+
 ## Permissions
 
 | Permission          | Authority                                                                  |

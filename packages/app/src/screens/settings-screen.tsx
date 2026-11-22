@@ -44,6 +44,8 @@ import {
   PanelLeft,
   MessageSquare,
   ChevronRight,
+  Tag,
+  KeyRound,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
@@ -58,6 +60,7 @@ import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { ChatSection } from "@/screens/settings/chat/chat-section";
 import { SidebarNavSection } from "@/screens/settings/sidebar/sidebar-nav-section";
 import { SendingSection } from "@/screens/settings/general/sending-section";
+import { LabelsSection } from "@/screens/settings/labels-section";
 import {
   useAppSettings,
   useSettings,
@@ -127,6 +130,7 @@ import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import { HostVoicePage } from "@/screens/settings/voice/voice-page";
+import { HostApiTokensPage } from "@/screens/settings/api-tokens-page";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
 import { SETTINGS_DESKTOP_SIDEBAR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
@@ -177,6 +181,12 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
     labelKey: "settings.sections.sidebar",
     icon: PanelLeft,
     Content: SidebarNavSection,
+  },
+  {
+    id: "labels",
+    labelKey: "workspaceLabels.title",
+    icon: Tag,
+    Content: LabelsSection,
   },
   { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare, Content: ChatSection },
   {
@@ -250,6 +260,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "pair-device", labelKey: "openProject.tiles.pairDevice.title", icon: Smartphone },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "mcp", labelKey: "settings.hostSections.mcp", icon: Plug },
+  { id: "tokens", labelKey: "settings.hostSections.tokens", icon: KeyRound },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
   { id: "voice", labelKey: "settings.hostSections.voice", icon: Mic },
   { id: "workspaces", labelKey: "settings.hostSections.workspaces", icon: FolderGit2 },
@@ -276,6 +287,8 @@ function renderHostSettingsContent(
       return <HostAgentsPage serverId={view.serverId} />;
     case "mcp":
       return <HostMcpPage serverId={view.serverId} />;
+    case "tokens":
+      return <HostApiTokensPage serverId={view.serverId} />;
     case "metadata":
       return <MetadataGenerationPage serverId={view.serverId} />;
     case "voice":
