@@ -55,6 +55,7 @@ const { mockTheme } = vi.hoisted(() => {
       border: "#333",
       borderAccent: "#444",
       accent: "#555",
+      palette: { green: { 500: "#22c55e" }, red: { 500: "#ef4444" } },
     },
     borderRadius: { md: 6, lg: 8, xl: 10, "2xl": 12 },
     borderWidth: { 1: 1 },
