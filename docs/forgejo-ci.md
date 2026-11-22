@@ -21,12 +21,12 @@ equivalent. Do not reintroduce them.
 
 These Forgejo repo secrets are required:
 
-| Secret                   | Used for                                                            |
-| ------------------------ | ------------------------------------------------------------------- |
+| Secret                   | Used for                                                        |
+| ------------------------ | --------------------------------------------------------------- |
 | `GTI_CI_APP_ID`          | GitHub App ID (`gti-ci`, stored in Vault `secret/infra/gti-ci`) |
-| `GTI_CI_APP_PRIVATE_KEY` | GitHub App private key (same Vault path)                            |
-| `CLOUDFLARE_API_TOKEN`   | Web/website/relay deploys                                           |
-| `CLOUDFLARE_ACCOUNT_ID`  | Web/website/relay deploys                                           |
+| `GTI_CI_APP_PRIVATE_KEY` | GitHub App private key (same Vault path)                        |
+| `CLOUDFLARE_API_TOKEN`   | Web/website/relay deploys                                       |
+| `CLOUDFLARE_ACCOUNT_ID`  | Web/website/relay deploys                                       |
 
 Each job that talks to GitHub starts with `actions/create-github-app-token`,
 which exchanges the two App secrets for a short-lived installation token. The

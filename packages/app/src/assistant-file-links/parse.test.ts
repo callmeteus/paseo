@@ -608,12 +608,12 @@ describe("normalizeInlinePathTarget", () => {
   it("keeps a Windows spreadsheet absolute when the workspace is a different folder", () => {
     const spreadsheet =
       "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas\\Servidor-IA-HomeLab-2026-11-05.xlsx";
-    expect(
-      normalizeInlinePathTarget(spreadsheet, "C:/Users/Gio/Documents/Projetos/infra"),
-    ).toEqual({
-      directory: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas",
-      file: spreadsheet,
-    });
+    expect(normalizeInlinePathTarget(spreadsheet, "C:/Users/Gio/Documents/Projetos/infra")).toEqual(
+      {
+        directory: "C:\\Users\\Gio\\Documents\\Projetos\\Plataformas\\zorro\\entregas",
+        file: spreadsheet,
+      },
+    );
   });
 
   it("still treats the Windows workspace root as the current directory", () => {

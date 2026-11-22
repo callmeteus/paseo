@@ -111,7 +111,9 @@ jobs:
 
       - name: Install Playwright browsers
         if: ${{ matrix.suite == 'app' }}
-        run: npx playwright install chromium
+        run: |
+          npx playwright install chromium
+          find /root/.cache/ms-playwright -type f -name chrome-headless-shell -exec chmod +x {} +
 
       - name: Run ${{ matrix.suite }} tests
         run: npm run test --workspace=@getpaseo/${{ matrix.suite }}
