@@ -16,7 +16,7 @@ import { deriveAgentStreamTurnLiveness } from "@/timeline/session-stream-reducer
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import { requestTimelineReplacement } from "@/timeline/timeline-replacement";
 import { type ViewedTimelineOwner } from "@/timeline/viewed-timeline-sync";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { AgentQueuedMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 import {
   buildAgentAttentionNotificationPayload,
@@ -30,6 +30,8 @@ import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { useLimitResumeRunner } from "@/agent-stream/limit-resume-run";
 import { getHostRuntimeStore, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { restoreDroppedPrompt } from "@/composer/recover-dropped-prompt";
+import { hydrateQueuedMessages } from "@/composer/queue-persistence";
+import { mergeQueuedMessages } from "@/composer/queue-merge";
 import { useVoiceAudioEngineOptional, useVoiceRuntimeOptional } from "@/contexts/voice-context";
 import type { AudioPlaybackSource } from "@/audio";
 import {
@@ -182,6 +184,18 @@ function notifyVoiceAbortFailure(
   if (data.type === "error" && data.metadata?.voiceAbortFailed === true) {
     notifyError(data.content);
   }
+}
+
+async function applyMessageQueueChange(
+  serverId: string,
+  payload: { agentId: string; items: readonly AgentQueuedMessage[] },
+): Promise<void> {
+  const items = await hydrateQueuedMessages(payload.items);
+  useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
+    const next = new Map(previous);
+    next.set(payload.agentId, mergeQueuedMessages(next.get(payload.agentId), items));
+    return next;
+  });
 }
 
 interface SessionProviderSharedProps {
@@ -507,6 +521,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         "status.server_info",
         "status.agent_commands_changed",
         "agent_prompt_dropped",
+        "agent.message_queue.changed",
       ],
       { notifications: true },
     );
@@ -537,6 +552,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         if (message.type !== "agent.provider_subagents.update") return;
         useProviderSubagentStore.getState().applyUpdate(serverId, message.payload);
       },
+    });
+
+    onFeed("agent.message_queue.changed", (message) => {
+      if (message.type !== "agent.message_queue.changed") return;
+      void applyMessageQueueChange(serverId, { agentId: message.agentId, items: message.items });
     });
 
     const unsubCheckoutStatusUpdate = onFeed("checkout_status_update", (message) => {

@@ -60,6 +60,35 @@ describe("MessageQueueStore", () => {
     await expect(store.list()).resolves.toEqual({});
   });
 
+  test("notifies subscribers when a queue is written and cleared", async () => {
+    const { store } = await createStore();
+    const changes: Array<{ agentId: string; items: unknown[] }> = [];
+    const unsubscribe = store.subscribe((change) => changes.push(change));
+
+    await store.set("agent-1", [queuedMessage("one")]);
+    await store.set("agent-1", []);
+    unsubscribe();
+    await store.set("agent-1", [queuedMessage("two")]);
+
+    expect(changes).toEqual([
+      { agentId: "agent-1", items: [queuedMessage("one")] },
+      { agentId: "agent-1", items: [] },
+    ]);
+  });
+
+  test("keeps notifying other subscribers when one listener throws", async () => {
+    const { store } = await createStore();
+    const received: string[] = [];
+    store.subscribe(() => {
+      throw new Error("bad listener");
+    });
+    store.subscribe((change) => received.push(change.agentId));
+
+    await store.set("agent-1", [queuedMessage("one")]);
+
+    expect(received).toEqual(["agent-1"]);
+  });
+
   test("ignores invalid files instead of dropping every queue", async () => {
     const { home, store } = await createStore();
     await store.set("agent-1", [queuedMessage("one")]);

@@ -15,8 +15,16 @@ const STORED_QUEUE_SCHEMA = z.object({
  * Host-side persistence for composer queues. Attachments and image bytes live
  * in the item payload so a fresh client can restore the queue unchanged.
  */
+export interface MessageQueueChange {
+  agentId: string;
+  items: AgentQueuedMessage[];
+}
+
+type MessageQueueListener = (change: MessageQueueChange) => void;
+
 export class MessageQueueStore {
   private readonly directory: string;
+  private readonly listeners = new Set<MessageQueueListener>();
 
   constructor(
     private readonly options: {
@@ -25,6 +33,17 @@ export class MessageQueueStore {
     },
   ) {
     this.directory = path.join(options.paseoHome, "message-queues");
+  }
+
+  /**
+   * Observe persisted queue changes. The store is shared by every session, so
+   * this is the daemon-wide fan-out point for queue synchronisation.
+   */
+  public subscribe(listener: MessageQueueListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   async get(agentId: string): Promise<AgentQueuedMessage[]> {
@@ -83,11 +102,23 @@ export class MessageQueueStore {
     }
     const parsed = STORED_QUEUE_SCHEMA.parse({ agentId, items });
     await writeJsonFileAtomic(this.pathFor(agentId), parsed);
+    this.notify({ agentId, items: parsed.items });
     return parsed.items;
   }
 
   async delete(agentId: string): Promise<void> {
     await fs.rm(this.pathFor(agentId), { force: true });
+    this.notify({ agentId, items: [] });
+  }
+
+  private notify(change: MessageQueueChange): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(change);
+      } catch (error) {
+        this.options.logger.warn({ err: error, agentId: change.agentId }, "Queue listener failed");
+      }
+    }
   }
 
   private pathFor(agentId: string): string {
