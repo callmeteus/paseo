@@ -2,7 +2,11 @@ import { beforeAll, describe, expect, it as vitestIt } from "vitest";
 
 // Playwright's browser binary is unavailable on the Forgejo runner.
 const it =
-  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" || process.env.PASEO_CI === "true" ? vitestIt.skip : vitestIt;
+  process.env.CI === "true" ||
+  process.env.GITHUB_ACTIONS === "true" ||
+  process.env.PASEO_CI === "true"
+    ? vitestIt.skip
+    : vitestIt;
 import type {
   DaemonClient,
   FetchAgentHistoryEntry,

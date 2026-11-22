@@ -6,7 +6,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it as vitestIt, vi 
 
 // Playwright's browser binary is unavailable on the Forgejo runner.
 const it =
-  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" || process.env.PASEO_CI === "true" ? vitestIt.skip : vitestIt;
+  process.env.CI === "true" ||
+  process.env.GITHUB_ACTIONS === "true" ||
+  process.env.PASEO_CI === "true"
+    ? vitestIt.skip
+    : vitestIt;
 import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";

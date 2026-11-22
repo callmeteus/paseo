@@ -94,7 +94,9 @@ export default defineConfig({
           name: "browser",
           fileParallelism: false,
           include:
-            process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" || process.env.PASEO_CI === "true"
+            process.env.CI === "true" ||
+            process.env.GITHUB_ACTIONS === "true" ||
+            process.env.PASEO_CI === "true"
               ? []
               : ["src/**/*.browser.{test,spec}.{ts,tsx}"],
           browser: {
