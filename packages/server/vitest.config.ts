@@ -18,7 +18,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: [path.resolve(__dirname, "./src/test-utils/vitest-setup.ts")],
     pool: "forks",
-    maxWorkers: 2,
+    maxWorkers: 1,
     minWorkers: 1,
     fileParallelism: false,
     exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**", "**/.dev/**"],

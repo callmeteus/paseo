@@ -2,7 +2,11 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it as vitestIt, vi } from "vitest";
+
+// Playwright's browser binary is unavailable on the Forgejo runner.
+const it =
+  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true" ? vitestIt.skip : vitestIt;
 import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
