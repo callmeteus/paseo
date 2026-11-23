@@ -115,9 +115,13 @@ export function HostTabsRow({
   );
   const renderHostTab = useCallback(
     ({ item: host }: { item: HostProfile }) => (
-      <HostTabChip host={host} active={host.serverId === activeServerId} onPress={onSelectHost} />
+      <HostTabChip
+        host={host}
+        active={!showAllActive && host.serverId === activeServerId}
+        onPress={onSelectHost}
+      />
     ),
-    [activeServerId, onSelectHost],
+    [activeServerId, onSelectHost, showAllActive],
   );
 
   // dnd-kit can keep DOM focus on the previously pressed chip after a selection

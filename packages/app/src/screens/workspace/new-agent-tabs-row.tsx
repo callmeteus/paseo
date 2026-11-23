@@ -11,6 +11,9 @@ import {
 import { generateDraftId } from "@/stores/draft-keys";
 import { buildNewAgentRoute } from "@/utils/host-routes";
 import type { Href } from "expo-router";
+import { ensurePanelsRegistered } from "@/panels/register-panels";
+import { NewTabLauncherProvider, type NewTabLauncher } from "@/workspace-tabs/launcher";
+import type { NewTabSelection } from "@/workspace-tabs/new-tab";
 
 const noop = () => undefined;
 
@@ -26,6 +29,10 @@ export function NewAgentTabsRow({
   serverId: string;
   workspaceId: string;
 }): ReactElement | null {
+  // This route renders the tab strip outside WorkspaceScreen, so neither the panels nor the
+  // launcher that the new-tab menu needs have been set up. The new-tab menu mounts lazily and
+  // would otherwise throw an invariant from useWorkspaceTabLaunchCatalog.
+  ensurePanelsRegistered();
   const router = useRouter();
   const [hoveredCloseTabKey, setHoveredCloseTabKey] = useState<string | null>(null);
   const persistenceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId }) ?? "";
@@ -78,6 +85,43 @@ export function NewAgentTabsRow({
     [persistenceKey],
   );
 
+  const openDraft = useCallback(
+    (draftId: string, openui?: boolean) =>
+      navigateToWorkspace({
+        serverId,
+        workspaceId,
+        target: { kind: "draft", draftId, ...(openui ? { openui: true } : {}) },
+      }),
+    [serverId, workspaceId],
+  );
+  const launcher = useMemo<NewTabLauncher>(
+    () => ({
+      showChanges: false,
+      showPullRequest: false,
+      showBrowser: false,
+      terminalDisabled: true,
+      launch: (selection: NewTabSelection) => {
+        if (selection.kind === "agent") {
+          router.push(
+            buildNewAgentRoute({
+              serverId,
+              workspaceId,
+              draftId: generateDraftId(),
+            }) as Href,
+          );
+          return;
+        }
+        if (selection.kind === "chat") {
+          openDraft(generateDraftId(), true);
+          return;
+        }
+        if (selection.kind === "target") {
+          navigateToWorkspace({ serverId, workspaceId, target: selection.target });
+        }
+      },
+    }),
+    [openDraft, router, serverId, workspaceId],
+  );
   const onCreateNewTab = useCallback(() => {
     router.push(
       buildNewAgentRoute({
@@ -91,28 +135,30 @@ export function NewAgentTabsRow({
   if (!persistenceKey) return null;
 
   return (
-    <WorkspaceDesktopTabsRow
-      paneId={paneState.pane?.id}
-      isFocused={true}
-      tabs={tabs}
-      normalizedServerId={serverId}
-      normalizedWorkspaceId={workspaceId}
-      setHoveredCloseTabKey={setHoveredCloseTabKey}
-      onNavigateTab={onNavigateTab}
-      onCloseTab={onCloseTab}
-      onCopyResumeCommand={noop}
-      onCopyAgentId={noop}
-      onCopyTerminalId={noop}
-      onCopyFilePath={noop}
-      onReloadAgent={noop}
-      onRenameTab={noop}
-      onCloseTabsToLeft={noop}
-      onCloseTabsToRight={noop}
-      onCloseOtherTabs={noop}
-      onCreateNewTab={onCreateNewTab}
-      onReorderTabs={noop}
-      focusModeEnabled={false}
-      onExitFocusMode={noop}
-    />
+    <NewTabLauncherProvider value={launcher}>
+      <WorkspaceDesktopTabsRow
+        paneId={paneState.pane?.id}
+        isFocused={true}
+        tabs={tabs}
+        normalizedServerId={serverId}
+        normalizedWorkspaceId={workspaceId}
+        setHoveredCloseTabKey={setHoveredCloseTabKey}
+        onNavigateTab={onNavigateTab}
+        onCloseTab={onCloseTab}
+        onCopyResumeCommand={noop}
+        onCopyAgentId={noop}
+        onCopyTerminalId={noop}
+        onCopyFilePath={noop}
+        onReloadAgent={noop}
+        onRenameTab={noop}
+        onCloseTabsToLeft={noop}
+        onCloseTabsToRight={noop}
+        onCloseOtherTabs={noop}
+        onCreateNewTab={onCreateNewTab}
+        onReorderTabs={noop}
+        focusModeEnabled={false}
+        onExitFocusMode={noop}
+      />
+    </NewTabLauncherProvider>
   );
 }
