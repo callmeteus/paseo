@@ -71,11 +71,9 @@ export function builtinSidebarNavShortcutAction(id: BuiltinSidebarItemId): strin
   return BUILTIN_SHORTCUT_ACTIONS[id];
 }
 
-/** Builtins that start hidden until the user turns them on: the Usage summary is opt-in. */
-const HIDDEN_BY_DEFAULT: ReadonlySet<BuiltinSidebarItemId> = new Set(["usage"]);
-
-function builtinVisibleByDefault(id: BuiltinSidebarItemId): boolean {
-  return !HIDDEN_BY_DEFAULT.has(id);
+/** Every builtin starts visible; an individual stored preference can still hide one. */
+function builtinVisibleByDefault(_id: BuiltinSidebarItemId): boolean {
+  return true;
 }
 
 export function pluginSidebarNavKey(

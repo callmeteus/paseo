@@ -55,6 +55,27 @@ test("ambiguous provider delivery is never blindly replayed after restart", asyn
   expect(deliveries).toBe(1);
 });
 
+test("a pending receipt already in the timeline is completed without a second delivery", async () => {
+  const { requests, directory } = await fixture();
+  let deliveries = 0;
+  const input = {
+    agentId: "agent",
+    messageId: "arrival",
+    request: {},
+    send: async (beforeDispatch: () => Promise<void>) => {
+      await beforeDispatch();
+      deliveries++;
+      throw new Error("connection lost");
+    },
+  };
+  await expect(requests.send(input)).rejects.toThrow("connection lost");
+  await expect(new MessageReceipts(directory, () => true).send(input)).resolves.toBeUndefined();
+  expect(deliveries).toBe(1);
+  // The completed receipt keeps later retries idempotent.
+  await expect(new MessageReceipts(directory, () => false).send(input)).resolves.toBeUndefined();
+  expect(deliveries).toBe(1);
+});
+
 test("a send that fails before beforeDispatch can be retried with the same message", async () => {
   const { requests, directory } = await fixture();
   let available = false;

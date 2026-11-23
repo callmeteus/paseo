@@ -25,6 +25,12 @@ const MOBILE_CONTENT_16_MIGRATION = "mobile-content-16";
 const ALLO_UI_FONT_MIGRATION = "allo-ui-font";
 
 /**
+ * Usage was briefly opt-in and a stored `visible: false` was materialized on those installs.
+ * Usage is visible by default again; dropping the entry lets the new default apply.
+ */
+const USAGE_SIDEBAR_VISIBLE_MIGRATION = "usage-sidebar-visible";
+
+/**
  * Brings stored settings up to date, returning what the caller should use. Owns both writes so
  * the marker can only ever be written after the settings it describes: a failed marker write
  * leaves the migration to re-run harmlessly, while a failed settings write must leave the marker
@@ -58,6 +64,17 @@ export async function migrateAppSettings(
         ? { ...migrated, uiFontFamily: DEFAULT_UI_FONT_FAMILY }
         : migrated;
     applied.add(ALLO_UI_FONT_MIGRATION);
+    addedMigration = true;
+  }
+
+  if (!applied.has(USAGE_SIDEBAR_VISIBLE_MIGRATION)) {
+    if (migrated.sidebarFooterItems.some((item) => item.key === "usage")) {
+      migrated = {
+        ...migrated,
+        sidebarFooterItems: migrated.sidebarFooterItems.filter((item) => item.key !== "usage"),
+      };
+    }
+    applied.add(USAGE_SIDEBAR_VISIBLE_MIGRATION);
     addedMigration = true;
   }
 

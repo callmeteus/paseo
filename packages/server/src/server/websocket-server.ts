@@ -812,7 +812,20 @@ export class VoiceAssistantWebSocketServer {
           "Agent message batch dispatch failed",
         ),
     });
-    this.messageReceipts = new MessageReceipts(join(paseoHome, "agent-requests"));
+    this.messageReceipts = new MessageReceipts(
+      join(paseoHome, "agent-requests"),
+      async (agentId, messageId) => {
+        try {
+          const rows = await agentManager.getTimelineRows(agentId);
+          return rows.some(
+            (row) => row.item.type === "user_message" && row.item.clientMessageId === messageId,
+          );
+        } catch {
+          // Agent gone or timeline unavailable: keep the ambiguous delivery unresolved.
+          return false;
+        }
+      },
+    );
     this.creationService = new CreationService(
       join(paseoHome, "creations"),
       this.logger.child({ module: "creation" }),
