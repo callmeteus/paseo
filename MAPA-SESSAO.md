@@ -113,9 +113,36 @@ Feito em 2026-11-22, direto no notebook (Ubuntu 24.04, nao container):
 - Avisos nao-fatais no log: rota `pair-scan` (presente no develop), `useNativeDriver` e `console-message` deprecado.
 - Limpeza: processos encerrados, `/home/server/paseo-verify` removido. Node.js mantido instalado.
 
-## 10. Estado final
+## 10. Teste funcional real com modelo free (2026-11-23)
+
+Feito apos a insistencia do usuario para nao ser smoke test:
+
+- OpenCode CLI v2.2.0 (`@opencode/cli`) instalado no notebook (o `opencode-ai` 1.x nao serve).
+- Credencial OAuth do OpenCode Console importada (`opencode auth import`, somente integration `opencode`, da conta atual, sem criar conta nova).
+- Hy4 Flash Free (`opencode-go/hy4-flash-free`) selecionado no app; provider detectou 66 modelos.
+- **Prompt real no app: "Diga PING-OK" → resposta "PING-OK" em 4s**, com aviso "This chat uses OpenCode v2".
+- **Tool call real: agente executou Shell, criou `/tmp/paseo-verify-test.txt` com `TOOLCALL-OK`**, renderizado na UI.
+- **Workspace virtual** (feature mesclada) com prompt real: "Diga VIRTUAL-OK" → "VIRTUAL-OK" em 3s. Seletor mostra "Diretorio do projeto" e "Virtual" coexistingo.
+- Composer: slash commands com skills destacados, @files, controle de reasoning effort (None/High).
+- Rewind: menu "Reverter conversa e arquivos".
+- Command Center/Buscar: abas Tudo/Espacos/Arquivos/Acoes com resultados reais.
+- Agendamentos e Automacoes/Hub: telas funcionando.
+- Configuracoes: Cluster (toggles do fork), Agentes, Servidores MCP, Visao geral (daemon Online PID, logs).
+- Nenhum erro fatal no log do app/daemon.
+
+### Correcao encontrada durante o teste
+
+- Erro "Custom OpenCode MCP servers or process environment require an isolated server..." apareceu porque havia `opencode serve` externo (usuario `gio` e um manual na 4096) sendo detectado como servico compartilhado. Resolvido matando os processos externos para o Paseo usar o proprio servidor (owned). Isso e comportamento do codigo mesclado (`v2/runtime.ts:assertSharedConfiguration`), nao regressao.
+- Toggle "Ativar ferramentas do Paseo" nao ligou na UI (clique nao persistiu); nao investigado a fundo.
+
+### Nao totalmente exercitado
+
+- Worktree real com repo git (o diretorio copiado nao tem `.git`).
+- Cards de Usage/cotas e layout mobile/compact (web) nao localizados na navegacao desktop.
+
+## 11. Estado final
 
 - PR #2: `OPEN`, `MERGEABLE`, `CLEAN`.
 - Worktree limpo, branch sincronizada com `origin/sync/original-main`.
-- Notebook: validado, limpo, sem processos Paseo rodando.
+- Notebook: usado para teste funcional; limpeza pendente no fim desta tarefa.
 - h-server-1: VM de teste removida, nada rodando.
