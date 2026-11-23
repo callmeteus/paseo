@@ -67,19 +67,27 @@ export function useWorkspaceLabelManager(active: boolean) {
   const save = useCallback(() => {
     void model.save();
   }, [model]);
-  const remove = useCallback((): void => {
-    const editing = state.editing;
-    if (!editing) return;
-    const name = editing.name;
-    void model.delete((affected) =>
+  const confirmRemove = useCallback(
+    (name: string) => (affected: number) =>
       confirmDialog({
         title: t("workspaceLabels.manage.deleteTitle", { name }),
         message: t("workspaceLabels.manage.deleteMessage", { count: affected }),
         confirmLabel: t("workspaceLabels.manage.delete"),
         destructive: true,
       }),
-    );
-  }, [model, state.editing, t]);
+    [t],
+  );
+  const remove = useCallback((): void => {
+    const editing = state.editing;
+    if (!editing) return;
+    void model.delete(confirmRemove(editing.name));
+  }, [confirmRemove, model, state.editing]);
+  const removeLabel = useCallback(
+    (label: WorkspaceLabelDefinition): void => {
+      void model.delete(confirmRemove(label.name), label);
+    },
+    [confirmRemove, model],
+  );
 
   return {
     state,
@@ -92,5 +100,6 @@ export function useWorkspaceLabelManager(active: boolean) {
     setDraftColor,
     save,
     remove,
+    removeLabel,
   };
 }

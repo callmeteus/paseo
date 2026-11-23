@@ -371,4 +371,43 @@ describe("workspace label projection", () => {
     expect(deleted).toEqual(["host-a:Urgent"]);
     expect(model.snapshot()).toMatchObject({ serverId: "host-a", draft: null });
   });
+
+  test("manager deletes the row's label without opening a draft and leaves an unrelated draft alone", async () => {
+    const inspected: string[] = [];
+    const deleted: string[] = [];
+    const model = createWorkspaceLabelManagerModel({
+      update: async () => ({}),
+      inspectDelete: async ({ serverId, name }) => {
+        inspected.push(`${serverId}:${name}`);
+        return { affectedWorkspaceCount: 2 };
+      },
+      delete: async ({ serverId, name }) => {
+        deleted.push(`${serverId}:${name}`);
+      },
+    });
+    model.syncHosts([
+      {
+        serverId: "host-a",
+        label: "Alpha",
+        status: "online",
+        labels: [
+          { name: "Urgent", color: "red" },
+          { name: "Later", color: "sky" },
+        ],
+      },
+    ]);
+    model.edit({ name: "Urgent", color: "red" });
+
+    await model.delete(async () => true, { name: "Later", color: "sky" });
+    expect(inspected).toEqual(["host-a:Later"]);
+    expect(deleted).toEqual(["host-a:Later"]);
+    expect(model.snapshot()).toMatchObject({
+      draft: { name: "Urgent" },
+      editing: { name: "Urgent" },
+    });
+
+    await model.delete(async () => true, { name: "Urgent", color: "red" });
+    expect(deleted).toEqual(["host-a:Later", "host-a:Urgent"]);
+    expect(model.snapshot().draft).toBeNull();
+  });
 });

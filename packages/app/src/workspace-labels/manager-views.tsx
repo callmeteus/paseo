@@ -1,6 +1,6 @@
-import { useCallback, useState, type ReactElement } from "react";
+import { useCallback, useRef, type ReactElement } from "react";
 import { Text, View, type PressableStateCallbackType } from "react-native";
-import { Pencil } from "lucide-react-native";
+import { Pencil, Trash2 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type {
@@ -11,7 +11,6 @@ import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { isNative } from "@/constants/platform";
 import type { Theme } from "@/styles/theme";
 import type { WorkspaceLabelManagerDraft } from "./internal/workflow-model";
 import { WorkspaceLabelDot, WorkspaceLabelSwatchRow } from "./swatch";
@@ -23,63 +22,85 @@ const EDIT_ICON_SIZE = 14;
 const EDIT_HIT_SLOP = (44 - EDIT_ICON_SIZE) / 2;
 
 const ThemedPencil = withUnistyles(Pencil);
+const ThemedTrash = withUnistyles(Trash2);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
+/** Two presses inside this window count as a double click on the name. */
+const DOUBLE_PRESS_MS = 350;
+
 /**
- * One label: its colour, its name, and the pencil that opens it.
+ * One label: its colour, its name, and always-visible edit and delete actions.
  *
- * Hover lives on the plain outer `View` and press on the inner `Pressable`, which is the one
- * shape that survives a pressable inside a hover target (docs/hover.md). The pencil fades rather
- * than mounts, so revealing it cannot move the row out from under the pointer.
+ * Double-pressing the name opens the same edit view as the pencil. Both actions stay mounted so a
+ * row never changes shape under the pointer, and so touch users get the same affordance as web.
  */
 export function WorkspaceLabelManagerRow({
   label,
   disabled,
   onEdit,
+  onDelete,
 }: {
   label: WorkspaceLabelDefinition;
   disabled: boolean;
   onEdit: (label: WorkspaceLabelDefinition) => void;
+  onDelete: (label: WorkspaceLabelDefinition) => void;
 }): ReactElement {
   const { t } = useTranslation();
-  const isCompact = useIsCompactFormFactor();
-  const [isHovered, setIsHovered] = useState(false);
-  const handlePointerEnter = useCallback(() => setIsHovered(true), []);
-  const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  const lastPressAt = useRef(0);
   const edit = useCallback(() => onEdit(label), [label, onEdit]);
-  const revealed = isHovered || isNative || isCompact;
-  const editStyle = useCallback(
+  const remove = useCallback(() => onDelete(label), [label, onDelete]);
+  const handleNamePress = useCallback(() => {
+    const now = Date.now();
+    if (now - lastPressAt.current < DOUBLE_PRESS_MS) {
+      lastPressAt.current = 0;
+      onEdit(label);
+      return;
+    }
+    lastPressAt.current = now;
+  }, [label, onEdit]);
+  const iconStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
-      managerStyles.rowEdit,
-      !revealed && managerStyles.rowEditHidden,
-      pressed && managerStyles.rowEditPressed,
+      managerStyles.rowIcon,
+      pressed && managerStyles.rowIconPressed,
     ],
-    [revealed],
+    [],
   );
 
   return (
-    <View
-      style={managerStyles.row}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-      testID={`workspace-label-manager-label-${label.name}`}
-    >
+    <View style={managerStyles.row} testID={`workspace-label-manager-label-${label.name}`}>
       <WorkspaceLabelDot color={label.color} />
-      <Text style={managerStyles.rowName} numberOfLines={1}>
+      <Text
+        style={managerStyles.rowName}
+        numberOfLines={1}
+        onPress={handleNamePress}
+        testID={`workspace-label-manager-name-${label.name}`}
+      >
         {label.name}
       </Text>
-      <PressHighlight
-        accessibilityRole="button"
-        accessibilityLabel={t("workspaceLabels.manage.editLabel", { name: label.name })}
-        disabled={disabled}
-        hitSlop={EDIT_HIT_SLOP}
-        onPress={edit}
-        pointerEvents={revealed ? "auto" : "none"}
-        style={editStyle}
-        testID={`workspace-label-manager-edit-${label.name}`}
-      >
-        <ThemedPencil size={EDIT_ICON_SIZE} uniProps={mutedMapping} />
-      </PressHighlight>
+      <View style={managerStyles.rowActions}>
+        <PressHighlight
+          accessibilityRole="button"
+          accessibilityLabel={t("workspaceLabels.manage.editLabel", { name: label.name })}
+          disabled={disabled}
+          hitSlop={EDIT_HIT_SLOP}
+          onPress={edit}
+          style={iconStyle}
+          testID={`workspace-label-manager-edit-${label.name}`}
+        >
+          <ThemedPencil size={EDIT_ICON_SIZE} uniProps={mutedMapping} />
+        </PressHighlight>
+        <PressHighlight
+          accessibilityRole="button"
+          accessibilityLabel={t("workspaceLabels.manage.delete")}
+          disabled={disabled}
+          hitSlop={EDIT_HIT_SLOP}
+          onPress={remove}
+          style={iconStyle}
+          testID={`workspace-label-manager-delete-${label.name}`}
+        >
+          <ThemedTrash size={EDIT_ICON_SIZE} uniProps={mutedMapping} />
+        </PressHighlight>
+      </View>
     </View>
   );
 }
@@ -145,9 +166,8 @@ export const managerStyles = StyleSheet.create((theme) => ({
   list: {
     gap: theme.spacing[1],
   },
-  // Fixed height so the pencil appearing cannot resize the row under the pointer. The dot leads
-  // at the content inset and the pencil ends on it; nothing here indents, so the list holds one
-  // rail down its whole length.
+  // The dot leads at the content inset and the two icons end on it; nothing here indents, so the
+  // list holds one rail down its whole length.
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -160,16 +180,18 @@ export const managerStyles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
   },
-  rowEdit: {
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  rowIcon: {
     // The glyph is the whole control — its 44pt target comes from hitSlop, which grows outward
     // and leaves the trailing rail where it is.
     alignItems: "center",
     justifyContent: "center",
   },
-  rowEditHidden: {
-    opacity: 0,
-  },
-  rowEditPressed: {
+  rowIconPressed: {
     opacity: 0.6,
   },
   muted: {

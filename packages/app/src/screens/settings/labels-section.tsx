@@ -23,8 +23,18 @@ import { useWorkspaceLabelManager } from "@/workspace-labels/use-label-manager";
  */
 export function LabelsSection(): ReactElement {
   const { t } = useTranslation();
-  const { state, hosts, selectHost, edit, cancelEdit, setDraftName, setDraftColor, save, remove } =
-    useWorkspaceLabelManager(true);
+  const {
+    state,
+    hosts,
+    selectHost,
+    edit,
+    cancelEdit,
+    setDraftName,
+    setDraftColor,
+    save,
+    remove,
+    removeLabel,
+  } = useWorkspaceLabelManager(true);
   const disabled = state.host?.status !== "online" || state.pending;
   const isEditing = state.draft !== null && state.editing !== null;
   const hostOptionTestID = useCallback(
@@ -99,6 +109,7 @@ export function LabelsSection(): ReactElement {
             label={label}
             disabled={disabled}
             onEdit={edit}
+            onDelete={removeLabel}
           />
         ))}
         {state.labels.length === 0 ? (

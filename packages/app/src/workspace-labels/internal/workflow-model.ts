@@ -245,15 +245,28 @@ export class WorkspaceLabelManagerModel extends ObservableModel {
     });
   }
 
-  delete(confirm: (affectedWorkspaceCount: number) => Promise<boolean>): Promise<void> {
+  /**
+   * Delete either the open draft's label or, when a row asks directly, that row's label.
+   *
+   * The target and host are captured before confirmation so a host switch mid-dialog cannot move
+   * the deletion. A draft stays open when a different row is deleted, and closes only when the
+   * label being edited is the one that was removed.
+   */
+  delete(
+    confirm: (affectedWorkspaceCount: number) => Promise<boolean>,
+    label?: WorkspaceLabelDefinition,
+  ): Promise<void> {
     const editing = this.currentSnapshot.editing;
-    if (!editing) return Promise.resolve();
-    const target = { serverId: this.serverId, name: editing.name };
+    const targetLabel = label ?? editing;
+    if (!targetLabel) return Promise.resolve();
+    const target = { serverId: this.serverId, name: targetLabel.name };
     return this.run(async () => {
       const inspected = await this.dependencies.inspectDelete(target);
       if (!(await confirm(inspected.affectedWorkspaceCount))) return;
       await this.dependencies.delete(target);
-      this.draft = null;
+      if (editing && workspaceLabelKey(editing.name) === workspaceLabelKey(targetLabel.name)) {
+        this.draft = null;
+      }
     });
   }
 

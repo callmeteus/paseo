@@ -34,6 +34,7 @@ export function WorkspaceLabelManagerModal({
     setDraftColor,
     save,
     remove,
+    removeLabel,
   } = useWorkspaceLabelManager(visible);
   const draft = state.draft;
   const editing = state.editing;
@@ -126,6 +127,7 @@ export function WorkspaceLabelManagerModal({
                 label={label}
                 disabled={disabled}
                 onEdit={edit}
+                onDelete={removeLabel}
               />
             ))}
             {state.labels.length === 0 ? (
