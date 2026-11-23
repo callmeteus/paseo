@@ -74,7 +74,10 @@ const styles = StyleSheet.create((theme) => ({
   // A wide row's min-content width otherwise becomes the dock's scroll width.
   // End then slides the chat and the composer together, leaving a gap by the sidebar.
   content: { flex: 1, justifyContent: "flex-end", minWidth: 0 },
-  composer: { width: "100%", flexShrink: 1, minWidth: 0 },
+  // Rest the composer above the window edge. The native dock applies the same spacing
+  // through resolveComposerBottomPlacement; without it the web composer sits flush on
+  // the bottom (and on the Windows taskbar in the Electron desktop).
+  composer: { width: "100%", flexShrink: 1, minWidth: 0, paddingBottom: theme.spacing[4] },
   // Fixed, not absolute: a touch pan that starts inside an overflow-hidden ancestor
   // never reaches the zoomed visual viewport, while a fixed box chains to the viewport
   // directly. React Native Web renders `fixed`; React Native's style type omits it.
