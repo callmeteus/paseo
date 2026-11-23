@@ -17,6 +17,10 @@ export interface PluginTheme {
     readonly statusSuccess: string;
     readonly statusWarning: string;
     readonly statusDanger: string;
+    readonly statusDotSuccess: string;
+    readonly statusDotDanger: string;
+    readonly statusDotWarning: string;
+    readonly statusDotRunning: string;
   };
 }
 
