@@ -1,9 +1,11 @@
 import { useCallback, type ReactElement } from "react";
+import { usePathname } from "expo-router";
 import { HostTabsRow } from "@/components/hosts/host-tabs-row";
 import { useActiveHostServerId } from "@/hooks/use-active-host-server-id";
 import { selectHostFromTab } from "@/navigation/host-tab-navigation";
 import { useHosts } from "@/runtime/host-runtime";
 import { useSidebarViewStore, type SidebarGroupMode } from "@/stores/sidebar-view-store";
+import { parseServerIdFromPathname } from "@/utils/host-routes";
 
 export function isHostTabsRailVisible(input: {
   groupMode: SidebarGroupMode;
@@ -28,13 +30,17 @@ export function HostTabsRail(): ReactElement | null {
   const clearHostFilters = useSidebarViewStore((state) => state.clearHostFilters);
   const showAllActive = hostFilters.length === 0;
   const activeServerId = useActiveHostServerId();
+  const pathname = usePathname();
 
   const handleSelectHost = useCallback(
     (serverId: string) => {
       setHostFilter(serverId);
-      selectHostFromTab(serverId, activeServerId);
+      // Decide navigation from the route, not from the sidebar filter. The filter can already
+      // point at this host from a deep link while the route still shows the previous one, which
+      // used to suppress navigation and leave every route-bound panel on the old host.
+      selectHostFromTab(serverId, parseServerIdFromPathname(pathname));
     },
-    [activeServerId, setHostFilter],
+    [pathname, setHostFilter],
   );
 
   if (!isHostTabsRailVisible({ groupMode, hostCount })) {
