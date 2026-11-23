@@ -18,7 +18,9 @@ export function useUsageSetting(serverId: string | null) {
     supported,
     error: mutation.error,
     // COMPAT(usageSetting): added in v0.14, remove after 2027-05-01.
-    enabled: !supported || (config !== null && config.usage?.enabled !== false),
+    // Fail open while the config replica loads: a null config means "not loaded yet", not "off".
+    // Waiting for it used to hide the whole sidebar summary on hosts that do report usage.
+    enabled: !supported || config === null || config.usage?.enabled !== false,
     ready: !supported || config !== null,
     setEnabled,
     turnOn,
