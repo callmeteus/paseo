@@ -22,7 +22,6 @@ import {
   Tag,
   Trash2,
 } from "lucide-react-native";
-import { PressHighlight } from "@/components/ui/press-highlight";
 import { getIsElectron, isWeb } from "@/constants/platform";
 import {
   isWorkspaceMenuSeparator,
@@ -164,10 +163,6 @@ function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
   return <ThemedMoreVertical uniProps={hovered ? triggerIconHoveredProps : triggerIconProps} />;
 }
 
-function renderArchiveIcon({ hovered }: PressableStateCallbackType & { hovered?: boolean }) {
-  return <ThemedArchive uniProps={hovered ? triggerIconHoveredProps : triggerIconProps} />;
-}
-
 /** One-click archive beside the kebab, for pointer rows that reveal it on hover. */
 export function SidebarWorkspaceArchiveButton({
   workspaceKey,
@@ -178,16 +173,14 @@ export function SidebarWorkspaceArchiveButton({
 }) {
   const { t } = useTranslation();
   return (
-    <PressHighlight
-      hitSlop={4}
-      style={archiveButtonStyle}
+    <ToolbarButton
+      label={t("sidebar.workspace.actions.archiveWorkspace")}
       onPress={onArchive}
-      accessibilityRole={isWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.workspace.actions.archiveWorkspace")}
+      style={styles.hoverIconButton}
       testID={`sidebar-workspace-archive-button-${workspaceKey}`}
     >
-      {renderArchiveIcon}
-    </PressHighlight>
+      <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />
+    </ToolbarButton>
   );
 }
 
@@ -723,12 +716,6 @@ function triggerStyle({ hovered = false }: PressableStateCallbackType & { hovere
   return [styles.trigger, hovered && styles.triggerHovered];
 }
 
-function archiveButtonStyle({
-  hovered = false,
-}: PressableStateCallbackType & { hovered?: boolean }) {
-  return [styles.archiveButton, hovered && styles.triggerHovered];
-}
-
 const styles = StyleSheet.create((theme) => ({
   trigger: {
     // Larger on touch so the kebab is an easy tap target.
@@ -753,15 +740,5 @@ const styles = StyleSheet.create((theme) => ({
   hoverIconButton: {
     width: 24,
     height: 24,
-  },
-  // The kebab's box without its offsets: the archive glyph fills its view box, so it needs
-  // none of the nudging the three dots do.
-  archiveButton: {
-    width: ARCHIVE_BUTTON_SIZE,
-    height: ARCHIVE_BUTTON_SIZE,
-    marginRight: ARCHIVE_BUTTON_KEBAB_GAP,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 4,
   },
 }));
