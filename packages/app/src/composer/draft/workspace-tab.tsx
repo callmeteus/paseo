@@ -901,7 +901,9 @@ export function WorkspaceDraftAgentTab({
   // the thumb on compact ones. Mirror that when this tab is used as a full screen.
   const centeredSetup = setupPresentation && !isCompactFormFactor;
   const renderDraftStream = useCallback(() => {
-    if (!draftAgent) {
+    // In a workspace tab the agent panel already renders the draft timeline. Rendering it here
+    // as well paints the first prompt twice. Only the full-screen new-agent route owns it here.
+    if (!setupPresentation || !draftAgent) {
       return null;
     }
     return (
@@ -925,6 +927,7 @@ export function WorkspaceDraftAgentTab({
     onOpenWorkspaceFile,
     pendingMessageSubmissions,
     serverId,
+    setupPresentation,
     submittedStreamItems,
     tabId,
     turnPresentation,
