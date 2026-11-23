@@ -763,6 +763,20 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         streamRenderStrategy,
       ],
     );
+    // The retry button needs the prompt that produced the turn even when the daemon
+    // never restored it to the composer draft (crash recovery, output after the prompt,
+    // an old replayed turn). Keep the last user message in the timeline as that fallback.
+    const lastUserPrompt = useMemo(() => {
+      const all = [...streamLayout.history, ...streamLayout.liveHead];
+      for (let index = all.length - 1; index >= 0; index -= 1) {
+        const item = all[index]?.item;
+        if (item?.kind === "user_message" && item.text.trim().length > 0) {
+          return item.text;
+        }
+      }
+      return undefined;
+    }, [streamLayout.history, streamLayout.liveHead]);
+
     const handleTimelineHistoryLoadError = useCallback(() => {
       toast?.error(t("agentStream.historyLoadFailed"));
     }, [t, toast]);
@@ -947,7 +961,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               readOnly={readOnly}
             >
               {!readOnly ? (
-                <ProviderErrorRetry serverId={resolvedServerId} agentId={agentId} />
+                <ProviderErrorRetry
+                  serverId={resolvedServerId}
+                  agentId={agentId}
+                  fallbackText={lastUserPrompt}
+                />
               ) : null}
               {item.id === limitResumeItemId ? (
                 <LimitResumeOffer
@@ -994,6 +1012,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         context.provider,
         context.runtimeInfo?.model,
         handleInlinePathPress,
+        lastUserPrompt,
         limitResumeItemId,
         readOnly,
         resolvedServerId,
