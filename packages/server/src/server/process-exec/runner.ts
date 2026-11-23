@@ -1,3 +1,4 @@
+// eslint-disable-next-line paseo/no-sync-io -- merge: pre-existing synchronous IO
 import { spawn, spawnSync } from "node:child_process";
 
 export interface RunCommandInput {

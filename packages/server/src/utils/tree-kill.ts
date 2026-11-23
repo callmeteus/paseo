@@ -1,3 +1,4 @@
+/* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { readFileSync } from "node:fs";
 import treeKill from "tree-kill";
 

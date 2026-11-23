@@ -56,6 +56,7 @@ interface TestPaseoDaemonOptions {
   resumeOnStartup?: boolean;
   resumePrompt?: string;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
+  pluginRegistryUrl?: PaseoDaemonConfig["pluginRegistryUrl"];
   builtinPlugins?: BuiltinPluginLoader;
   plugins?: PaseoDaemonConfig["plugins"];
   remoteAccess?: PaseoDaemonConfig["remoteAccess"];
@@ -235,6 +236,7 @@ async function prepareTestDaemonConfig(
     resumePrompt: options.resumePrompt,
     pluginsEnabled: options.pluginsEnabled,
     plugins: options.plugins,
+    pluginRegistryUrl: options.pluginRegistryUrl,
     remoteAccess: options.remoteAccess,
   };
   return { config, paseoHomeRoot, paseoHome, staticDir, createdDirs };

@@ -7,7 +7,7 @@ import type {
   WorkspaceLabelColor,
   WorkspaceLabelDefinition,
 } from "@getpaseo/protocol/workspace-labels";
-import type { FieldControlSize } from "@/components/ui/control-geometry";
+import type { ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -106,7 +106,7 @@ export function WorkspaceLabelEditView({
   onSubmit: () => void;
 }): ReactElement {
   const { t } = useTranslation();
-  const size: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const size: ControlSize = useIsCompactFormFactor() ? "md" : "sm";
   return (
     <>
       <Field label={t("workspaceLabels.manage.name")}>

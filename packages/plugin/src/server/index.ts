@@ -11,10 +11,18 @@ export type {
   PluginServerContribution,
   PluginSettings,
   PluginSettingsState,
+  PluginSubscriptionContext,
 } from "./contracts.js";
 export type {
+  PluginHooks,
+  PluginHookEvents,
+  PluginHookRequests,
+  PluginHookPayload,
+  PluginHookResult,
   PluginHookContext,
   PluginHookWorkspace,
+  PluginHookWorktree,
+  PluginWorktreeCreateRequest,
   PluginHookAgent,
   PluginSessionOpenRequest,
   PluginTurnOutcome,
@@ -34,3 +42,17 @@ export {
   mergeAutoProviderRouters,
 } from "@getpaseo/protocol/auto-provider-routers";
 export { disabledModelIdsByProviderFromConfig } from "@getpaseo/protocol/disabled-models";
+
+export { defineAgentTool } from "./agent-tools.js";
+export type { AgentToolDefinition, AgentToolResult, AgentToolContext } from "./agent-tools.js";
+export type {
+  PluginWorktreeContext,
+  PluginWorktreeCreateInput,
+  PluginWorktreeCreateResult,
+  PluginWorktreeRemoveRequest,
+  PluginWorktreeRemoveResult,
+  PluginWorktreeRestoreTarget,
+  PluginWorktreeRestoreRequest,
+  PluginWorktreeRestoreResult,
+  WorktreeManagerRegistration,
+} from "./worktree.js";

@@ -7,10 +7,12 @@ import { z } from "zod";
 import {
   createHostClient,
   createHostChannelTransport,
+  createHostTransportFactory,
   parseHostTarget,
   HostTransportBudget,
 } from "@getpaseo/client/node";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonTransportFactory } from "@getpaseo/client/internal/daemon-client-transport-types";
 import {
   HostSummarySchema,
   HostAddSchema,
@@ -23,6 +25,7 @@ import {
 } from "@getpaseo/protocol/hosts";
 import type { ClusterConfig } from "@getpaseo/protocol/messages";
 import type { DaemonPermission, WSHelloMessage } from "@getpaseo/protocol/messages";
+import { webSocketProxyAgent } from "../network/index.js";
 
 export class HostError extends Error {
   constructor(
@@ -344,22 +347,30 @@ export class ConnectedHosts {
       if (route.registrationId === id)
         route.close(code, "Host access was disabled, replaced or removed");
   }
-  private start(row: Saved): void {
+  private start(
+    row: Saved,
+    resume?: { failures: number; transports: DaemonTransportFactory },
+  ): void {
     if (!row.enabled || this.closed) return;
+    const transports =
+      resume?.transports ??
+      createHostTransportFactory(row.connection, this.budget, {
+        webSocketAgent: webSocketProxyAgent,
+      });
     let stopped = false;
-    const client = createHostClient(
-      row.connection,
-      {
-        clientId: `host-link-${this.self.serverId}-${row.registrationId}`,
-        connectTimeoutMs: 10000,
-      },
-      this.budget,
-    );
+    let attempts = resume?.failures ?? 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const client = createHostClient(row.connection, {
+      clientId: `host-link-${this.self.serverId}-${row.registrationId}`,
+      connectTimeoutMs: 10000,
+      transportFactory: transports,
+    });
     const live: Live = {
       client,
       accepted: false,
       stop: () => {
         stopped = true;
+        clearTimeout(retry);
         void client.close();
       },
     };
@@ -393,7 +404,7 @@ export class ConnectedHosts {
         if (info.features?.connectedHosts !== true || info.features?.hostMultiplexing !== true)
           throw new HostError(
             "unsupported_capability",
-            "Update the destination daemon to use connected hosts.",
+            "Update the destination daemon to use connected hosts; retrying automatically.",
           );
         // Pin and persist under the same writer as management to prevent discovery races.
         await this.mutate(async () => {
@@ -414,16 +425,22 @@ export class ConnectedHosts {
           live.accepted = true;
           this.liveVia.set(live, info.serverId);
           if (this.readClusterConfig()?.announceHosts === true) this.startAnnouncing(live);
+          attempts = 0;
           this.changed();
         });
       } catch (error) {
         if (stopped) return;
-        row.status = "error";
         row.error = connectionFailure(error, client.authFailureReason !== null) ?? {
           code: "host_offline",
           message: "Host connection failed",
         };
-        row.nextRetryAt = null;
+        if (terminalFailures.has(row.error.code)) {
+          row.status = "error";
+          row.nextRetryAt = null;
+        } else {
+          stopped = true;
+          retry = this.scheduleAcceptanceRetry(row, attempts, transports);
+        }
         this.changed();
         await client.close();
       }
@@ -445,18 +462,17 @@ export class ConnectedHosts {
         if (route.registrationId === row.registrationId) route.close();
       row.status = state.status === "connecting" ? "connecting" : "offline";
       row.nextRetryAt = state.status === "disconnected" ? (state.nextRetryAt ?? null) : null;
-      row.error =
-        state.status === "disconnected"
-          ? (connectionFailure(
-              Object.assign(new Error("Check the SSH configuration and daemon credentials"), {
-                code: state.failureCode,
-              }),
-              client.authFailureReason !== null,
-            ) ?? {
-              code: "host_offline",
-              message: "Cannot reach host. Check the connection; retrying automatically.",
-            })
-          : null;
+      if (state.status === "disconnected")
+        row.error = connectionFailure(
+          Object.assign(new Error("Check the SSH configuration and daemon credentials"), {
+            code: state.failureCode,
+          }),
+          client.authFailureReason !== null,
+        ) ?? {
+          code: "host_offline",
+          message: "Cannot reach host. Check the connection; retrying automatically.",
+        };
+      else if (row.error?.code !== "unsupported_capability") row.error = null;
       if (row.error?.code === "authentication_failed") {
         row.status = "error";
         row.nextRetryAt = null;
@@ -514,6 +530,19 @@ export class ConnectedHosts {
     }
   }
 
+  private scheduleAcceptanceRetry(
+    row: Saved,
+    failures: number,
+    transports: DaemonTransportFactory,
+  ): ReturnType<typeof setTimeout> {
+    const delay = acceptanceRetryDelayMs(failures);
+    row.status = "offline";
+    row.nextRetryAt = new Date(Date.now() + delay).toISOString();
+    const retry = setTimeout(() => this.start(row, { failures: failures + 1, transports }), delay);
+    retry.unref();
+    return retry;
+  }
+
   async openRoute(input: {
     serverId: string;
     scopeId: string;
@@ -524,7 +553,7 @@ export class ConnectedHosts {
     maxHops?: number;
     permissions: readonly DaemonPermission[];
     signal: AbortSignal;
-    frame(data: string | Uint8Array): void;
+    frame(data: string | Uint8Array): void | Promise<void>;
     ended(code: string, message: string): void;
   }): Promise<{ send(data: string | Uint8Array): void; close(): void }> {
     await this.ready;
@@ -647,7 +676,7 @@ export class ConnectedHosts {
           return;
         }
       }
-      input.frame(binary ? (data as Uint8Array) : String(data));
+      return input.frame(binary ? (data as Uint8Array) : String(data));
     });
     await ready;
     if (closed) throw new HostError("host_offline", "Host closed during connection");
@@ -687,10 +716,13 @@ export class ConnectedHosts {
           return;
         }
         if (!verified) throw new HostError("host_offline", "Host identity has not been verified");
-        try {
-          transport.send(data);
-        } catch {
+        const rejectWrite = () =>
           route.close("resource_limit", "Host buffer limit reached or transport unavailable");
+        try {
+          const write = transport.send(data);
+          if (write) void write.catch(rejectWrite);
+        } catch {
+          rejectWrite();
         }
       },
     };
@@ -704,6 +736,20 @@ export class ConnectedHosts {
     this.listeners.clear();
   }
 }
+
+const ACCEPTANCE_RETRY_BASE_MS = 1500;
+const ACCEPTANCE_RETRY_MAX_MS = 30_000;
+
+function acceptanceRetryDelayMs(failures: number): number {
+  return Math.min(ACCEPTANCE_RETRY_BASE_MS * 2 ** failures, ACCEPTANCE_RETRY_MAX_MS);
+}
+
+const terminalFailures = new Set([
+  "server_id_mismatch",
+  "self_host",
+  "duplicate_host",
+  "authentication_failed",
+]);
 
 function connectionFailure(error: unknown, authenticationFailed: boolean): HostSummary["error"] {
   if (error instanceof HostError) return { code: error.code, message: error.message };

@@ -9,7 +9,7 @@ export interface WorkspaceDraftTabSetup {
   workflowModeId?: string | null;
   model: string | null;
   thinkingOptionId: string | null;
-  featureValues: Record<string, unknown>;
+  providerOptions: Record<string, unknown>;
 }
 
 export interface WorkspaceWorkingDiffTabTarget {

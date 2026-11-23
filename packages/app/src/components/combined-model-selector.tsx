@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Pressable,
   Text,
@@ -25,8 +33,16 @@ import { resolveChoiceIconId, shouldHideRedundantModelGlyph } from "@/model-icon
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import { useActiveRouter } from "@/model-routers/use-router-picker";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import {
+  TOOLBAR_GLYPH_SIZES,
+  toolbarContentSlot,
+  type ToolbarGlyph,
+} from "@/components/ui/control-geometry";
+
+import { useKeyboardToggle, type KeyboardToggleAction } from "@/hooks/use-keyboard-toggle";
 
 const EMPTY_COMBOBOX_OPTIONS: ComboboxOption[] = [];
+const DEFAULT_TRIGGER_DECORATION = { showCaret: true, tooltip: undefined };
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 
 const foregroundMutedMapping = (theme: Theme) => ({
@@ -54,6 +70,7 @@ interface CombinedModelSelectorProps {
     hovered: boolean;
     pressed: boolean;
   }) => React.ReactNode;
+  toggleAction?: KeyboardToggleAction;
   onOpen?: () => void;
   onClose?: () => void;
   onRetryProvider?: (provider: AgentProvider) => void;
@@ -72,8 +89,11 @@ interface CombinedModelSelectorProps {
    */
   triggerFill?: boolean;
   toolbar?: {
-    glyphSize: number;
+    /** Upstream toolbar geometry. Optional so our numeric `glyphSize` callers still work. */
+    glyph?: ToolbarGlyph;
+    glyphSize?: number;
     showCaret: boolean;
+    tooltip?: ReactNode;
   };
   /** Called after the user picks (or clears) a router in the browser. */
   onRouterPicked?: (routerId: string | null) => void;
@@ -93,7 +113,7 @@ interface CombinedModelSelectorProps {
  */
 function withModelSelectorTooltip(
   trigger: ReactElement,
-  tooltip: string | undefined,
+  tooltip: ReactNode | undefined,
   isOpen: boolean,
 ): ReactElement {
   if (!tooltip || isOpen) return trigger;
@@ -103,7 +123,7 @@ function withModelSelectorTooltip(
         {trigger}
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
-        <Text style={styles.tooltipText}>{tooltip}</Text>
+        {typeof tooltip === "string" ? <Text style={styles.tooltipText}>{tooltip}</Text> : tooltip}
       </TooltipContent>
     </Tooltip>
   );
@@ -127,19 +147,19 @@ function DefaultModelSelectorTrigger({
   onPress: () => void;
   style: (state: { pressed: boolean; hovered: boolean; focused: boolean }) => StyleProp<ViewStyle>;
   accessibilityLabel: string;
-  toolbar?: { glyphSize: number; showCaret: boolean };
+  toolbar?: { glyph?: ToolbarGlyph; glyphSize?: number; showCaret?: boolean };
   selectedProvider: string;
   serverId: string | null;
   label: string;
   activeRouterName: string | null;
   iconId: ModelIconId | null;
 }): ReactElement {
-  const glyphSize = toolbar?.glyphSize ?? ICON_SIZE.md;
+  const glyphSize = toolbar?.glyphSize ?? toolbar?.glyph?.size ?? ICON_SIZE.md;
   const hasProvider = selectedProvider.trim().length > 0;
   const showModelGlyph =
     iconId !== null && !shouldHideRedundantModelGlyph(selectedProvider, iconId);
   const showGlyph = showModelGlyph || hasProvider;
-  const glyphBoxStyle = toolbar?.glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16;
+  const glyphBoxStyle = glyphSize === 20 ? styles.toolbarGlyph20 : styles.toolbarGlyph16;
   return (
     <ComboboxTrigger
       ref={anchorRef}
@@ -160,6 +180,8 @@ function DefaultModelSelectorTrigger({
                 provider={selectedProvider}
                 serverId={serverId}
                 size={glyphSize}
+                strokeWidth={toolbar?.glyph?.strokeWidth}
+                tone={toolbar?.glyph?.tone}
               />
             </View>
           ) : null}
@@ -196,6 +218,7 @@ export function CombinedModelSelector({
   onCreateProfile,
   onEditProfile,
   renderTrigger,
+  toggleAction,
   onOpen,
   onClose,
   onRetryProvider,
@@ -280,6 +303,14 @@ export function CombinedModelSelector({
     handleOpenChange(true);
   }, [handleOpenChange, openRequestNonce]);
 
+  useKeyboardToggle({
+    action: toggleAction,
+    disabled,
+    open: isOpen,
+    searchFocused: browser.isSearchFocused,
+    onToggle: handleTriggerPress,
+  });
+
   const triggerStyle = useCallback(
     ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
       if (triggerFill) {
@@ -356,6 +387,7 @@ export function CombinedModelSelector({
     t("modelSelector.selectedModel", {
       model: browser.selectedModelLabel,
     });
+  const { tooltip: toolbarTooltip } = toolbar ?? DEFAULT_TRIGGER_DECORATION;
   const trigger = renderTrigger ? (
     <Pressable
       ref={anchorRef}
@@ -397,7 +429,7 @@ export function CombinedModelSelector({
       })}
     />
   );
-  const triggerWithTooltip = withModelSelectorTooltip(trigger, tooltip, isOpen);
+  const triggerWithTooltip = withModelSelectorTooltip(trigger, toolbarTooltip ?? tooltip, isOpen);
 
   return (
     <>
@@ -436,6 +468,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     backgroundColor: "transparent",
     gap: theme.spacing[1],
+    ...toolbarContentSlot(),
     paddingHorizontal: theme.spacing[2],
     paddingVertical: 2,
     borderRadius: theme.borderRadius["2xl"],
@@ -462,8 +495,18 @@ const styles = StyleSheet.create((theme) => ({
     height: 20,
     flexShrink: 0,
   },
+  glyph: {
+    width: ICON_SIZE.md,
+    height: ICON_SIZE.md,
+    flexShrink: 0,
+  },
+  toolbarGlyph: {
+    width: TOOLBAR_GLYPH_SIZES.label,
+    height: TOOLBAR_GLYPH_SIZES.label,
+    flexShrink: 0,
+  },
   triggerPressed: {
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surface2,
   },
   triggerDisabled: {
     opacity: 0.5,
@@ -486,6 +529,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize["2xs"],
     fontWeight: theme.fontWeight.normal,
   },
+  // A custom trigger, such as a form field, owns its own box: none of the toolbar slot applies.
   customTriggerWrapper: {
     paddingHorizontal: 0,
     paddingVertical: 0,

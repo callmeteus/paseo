@@ -1,17 +1,22 @@
+import type { TFunction } from "i18next";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
   formatDisplayPct,
+  formatPct,
   formatProviderUsageLabel,
   formatResetLabel,
+  formatResetTime,
   formatRunsOutLabel,
 } from "./format";
 import { UsageMeter } from "./meter";
 import { displayPercent, usageWindowRowLabel } from "./model";
-import type { UsageDisplayAs } from "./preferences";
+import { usagePace } from "./pace";
 import { UsagePinGlyph } from "./pin-glyph";
+import type { UsageDisplayAs } from "./preferences";
+import { UsageResetLine } from "./reset-line";
 import { windowTone } from "./tone";
 import type { UsageTone, UsageWindow } from "./types";
 import { useRelativeTimeTick } from "./use-relative-time-tick";
@@ -33,8 +38,13 @@ export function UsageWindowBar({
   pinTestID,
   retained = false,
   shortReset = false,
+  forecastAt,
 }: {
   retained?: boolean;
+  /** "in 2h" instead of "resets in 2h". The usage tab keeps the full phrase. */
+  shortReset?: boolean;
+  /** When the quota reading was observed. Optional for callers that have no observation time. */
+  forecastAt?: string | null;
   window: UsageWindow;
   displayAs: UsageDisplayAs;
   /** Whether the row pins the window to the sidebar. When false the row is a plain bar. */
@@ -44,21 +54,15 @@ export function UsageWindowBar({
   /** What the row pins, naming the source and window: "Pin Claude Session". */
   pinLabel: string;
   pinTestID: string;
-  /** "in 2h" instead of "resets in 2h". The usage tab keeps the full phrase. */
-  shortReset?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const shownPct = displayPercent(window, displayAs);
   const tone = windowTone(window);
-
   const now = useRelativeTimeTick({ enabled: window.runsOutAt != null || window.resetsAt != null });
-  const isAtRisk =
-    window.runsOutAt != null &&
-    window.shortfallPct != null &&
-    (!retained || Date.parse(window.runsOutAt) > now);
-  const trailing = isAtRisk
-    ? formatRunsOutLabel(window.runsOutAt, now, t)
-    : formatResetLabel(window.resetsAt, retained, now, t, shortReset);
+  const pace = usagePace(window, forecastAt ?? null, now);
+  const forecast = formatPace(pace, now, t);
+  const countdown = formatResetLabel(window.resetsAt, retained, now, t, shortReset);
+  const exactTime = formatResetTime(window.resetsAt, now, t);
 
   const value =
     shownPct != null ? formatDisplayPct(shownPct, displayAs, i18n.resolvedLanguage, t) : "—";
@@ -66,14 +70,14 @@ export function UsageWindowBar({
   const content = {
     label: formatProviderUsageLabel(window.id, window.label, t),
     value,
-    trailing,
-    isAtRisk,
+    countdown,
+    exactTime,
+    forecast,
     percent: shownPct ?? 0,
-    tone,
+    tone: forecast?.tone ?? tone,
     pinned,
   };
 
-  // Same padding as the pinnable row, so bars line up in both modes.
   if (!pinnable) {
     return (
       <View style={styles.row}>
@@ -88,7 +92,11 @@ export function UsageWindowBar({
     <Pressable
       onPress={onTogglePin}
       accessibilityRole="checkbox"
-      accessibilityLabel={usageWindowRowLabel({ pinLabel, value, trailing })}
+      accessibilityLabel={usageWindowRowLabel({
+        pinLabel,
+        value,
+        trailing: [countdown, exactTime, forecast?.label].filter(Boolean).join(" · "),
+      })}
       accessibilityState={accessibilityState}
       aria-checked={pinned}
       style={styles.row}
@@ -109,8 +117,9 @@ function WindowRowContent({
   highlight,
   label,
   value,
-  trailing,
-  isAtRisk,
+  countdown,
+  exactTime,
+  forecast,
   percent,
   tone,
   pinnable,
@@ -119,8 +128,9 @@ function WindowRowContent({
   highlight: StyleProp<ViewStyle>;
   label: string;
   value: string;
-  trailing: string | null | undefined;
-  isAtRisk: boolean;
+  countdown: string | null;
+  exactTime: string | null;
+  forecast: PaceLabel | null;
   percent: number;
   tone: UsageTone;
   pinnable: boolean;
@@ -129,21 +139,13 @@ function WindowRowContent({
   return (
     <>
       <View style={highlight} pointerEvents="none" />
-      <View style={styles.contentRow}>
-        <View style={styles.windowContent}>
-          <View style={styles.labelRow}>
-            <Text style={styles.label} numberOfLines={1}>
-              {label}
-            </Text>
-            <Text style={styles.value} numberOfLines={1} ellipsizeMode="tail">
-              {value}
-              {trailing ? (
-                <Text style={isAtRisk ? styles.atRisk : styles.reset}>{` · ${trailing}`}</Text>
-              ) : null}
-            </Text>
-          </View>
-          <UsageMeter percent={percent} tone={tone} />
-        </View>
+      <View style={styles.labelRow}>
+        <Text style={styles.label} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.value} numberOfLines={1}>
+          {value}
+        </Text>
         {pinnable ? (
           <UsagePinGlyph
             pinned={pinned}
@@ -151,13 +153,67 @@ function WindowRowContent({
           />
         ) : null}
       </View>
+      <UsageMeter percent={percent} tone={tone} />
+      {countdown || forecast ? (
+        <View style={styles.timingRow}>
+          <View style={styles.resetTiming}>
+            <UsageResetLine countdown={countdown} exactTime={exactTime} />
+          </View>
+          {forecast ? <Text style={styles.forecast(forecast.tone)}>{forecast.label}</Text> : null}
+        </View>
+      ) : null}
     </>
   );
 }
 
+interface PaceLabel {
+  label: string;
+  tone: UsageTone;
+}
+
+function formatPace(
+  pace: ReturnType<typeof usagePace>,
+  now: number,
+  t: TFunction,
+): PaceLabel | null {
+  switch (pace.kind) {
+    case "reached":
+      return { label: t("providerUsage.timing.limitReached"), tone: "danger" };
+    case "runsOut": {
+      const label =
+        Date.parse(pace.at) <= now
+          ? t("providerUsage.timing.mayHaveRunOut")
+          : formatRunsOutLabel(pace.at, now, t);
+      return label ? { label, tone: "danger" } : null;
+    }
+    case "remaining":
+      return {
+        label: t("providerUsage.timing.projectedLeftAtReset", {
+          percentage: formatPct(pace.remainingAtResetPct),
+        }),
+        tone: pace.remainingAtResetPct <= 10 ? "warning" : "default",
+      };
+    case "unknown":
+      return null;
+  }
+}
+
 const styles = StyleSheet.create((theme) => ({
-  contentRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
-  windowContent: { flex: 1, gap: 3 },
+  // The pinned surface at half strength: a separate layer, so the text keeps full opacity.
+  highlightNone: { display: "none" },
+  highlightPinned: {
+    ...StyleSheet.absoluteFill,
+    zIndex: -1,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+  },
+  highlightHovered: {
+    ...StyleSheet.absoluteFill,
+    zIndex: -1,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    opacity: theme.opacity[50],
+  },
   row: {
     gap: 3,
     // The highlight bleeds into the card padding so the label and bar stay on the card's rail.
@@ -167,46 +223,37 @@ const styles = StyleSheet.create((theme) => ({
     // Its own stacking context, so the highlight layer paints above the card and below the text.
     zIndex: 0,
   },
-  highlightNone: {
-    display: "none",
-  },
-  highlightPinned: {
-    ...StyleSheet.absoluteFill,
-    zIndex: -1,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
-  },
-  // The pinned surface at half strength: a separate layer, so the text keeps full opacity.
-  highlightHovered: {
-    ...StyleSheet.absoluteFill,
-    zIndex: -1,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
-    opacity: theme.opacity[50],
-  },
   labelRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     gap: theme.spacing[2],
   },
   label: {
     flex: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  value: {
-    flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
-  reset: {
-    color: theme.colors.foregroundMuted,
-    fontWeight: theme.fontWeight.normal,
+  value: {
+    flexShrink: 0,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
   },
-  atRisk: {
-    color: theme.colors.statusDanger,
-    fontWeight: theme.fontWeight.normal,
+  timingRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[2],
   },
+  resetTiming: { flex: 1, minWidth: 0 },
+  forecast: (tone: UsageTone) => ({
+    color: {
+      danger: theme.colors.statusDanger,
+      warning: theme.colors.statusWarning,
+      default: theme.colors.foregroundMuted,
+      ok: theme.colors.statusSuccess,
+    }[tone],
+    fontSize: theme.fontSize.sm,
+    maxWidth: "50%",
+    textAlign: "right",
+  }),
 }));

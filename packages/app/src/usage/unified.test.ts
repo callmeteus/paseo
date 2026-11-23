@@ -20,6 +20,7 @@ function window(
     key,
     label: key,
     shortLabel: "5h",
+    compactLabel: "5h",
     percent,
     percentText: `${percent}%`,
     tone: "default",
@@ -37,7 +38,7 @@ function window(
 }
 
 function source(windows: PinnedUsageWindow[], key = "source"): PinnedUsageSource {
-  return { key, icon: null, windows };
+  return { key, icon: null, hasError: false, windows };
 }
 
 describe("resolveUnifiedUsage", () => {
@@ -141,7 +142,9 @@ describe("resolveUnifiedUsage", () => {
     expect(maxUsedPercent([])).toBeNull();
     expect(maxUsedPercent([])).not.toBe(100);
     expect(resolveUnifiedUsage([])).toBeNull();
-    expect(resolveUnifiedUsage([{ key: "source", icon: null, windows: [] }])).toBeNull();
+    expect(
+      resolveUnifiedUsage([{ key: "source", icon: null, hasError: false, windows: [] }]),
+    ).toBeNull();
   });
 });
 

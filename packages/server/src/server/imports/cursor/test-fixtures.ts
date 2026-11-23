@@ -1,3 +1,4 @@
+/* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";

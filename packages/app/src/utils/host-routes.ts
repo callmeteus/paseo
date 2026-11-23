@@ -591,10 +591,6 @@ export function buildSettingsSectionRoute(section: SettingsSectionSlug) {
   return `/settings/${section}` as const;
 }
 
-export function buildSettingsAddHostRoute(intentId: string | number = "1") {
-  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
-}
-
 export function buildSettingsHostRoute(serverId: string) {
   const normalized = trimNonEmpty(serverId);
   if (!normalized) {
@@ -626,7 +622,18 @@ export function buildProjectSettingsRoute(serverId: string, projectId: string) {
   return `/settings/hosts/${encodeSegment(serverId)}/projects/${encodeSegment(projectId)}` as const;
 }
 
+export function buildProviderSettingsRoute(serverId: string, providerId: string) {
+  if (!serverId.trim() || !providerId.trim()) {
+    throw new Error("buildProviderSettingsRoute requires a serverId and providerId");
+  }
+  return `/settings/hosts/${encodeSegment(serverId)}/providers/${encodeSegment(providerId)}` as const;
+}
+
 export function normalizeProjectSettingsRouteId(value: string | string[] | undefined): string {
   const id = Array.isArray(value) ? value[0] : value;
   return typeof id === "string" ? id : "";
+}
+
+export function buildSettingsAddHostRoute(intentId: string | number = "1") {
+  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
 }

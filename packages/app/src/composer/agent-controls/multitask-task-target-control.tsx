@@ -185,7 +185,8 @@ export function MultitaskTaskTargetControl({
   surface,
 }: MultitaskTaskTargetBinding & { surface: "toolbar" | "sheet" }) {
   const { t } = useTranslation();
-  const { glyphSize } = useComposerControlLayout();
+  const { glyphs } = useComposerControlLayout();
+  const glyphSize = glyphs.icon.size;
   const paseoName = t("agentControls.workflowMode.taskTarget.paseoName");
   const providersWithPaseo = useMemo(() => {
     const paseo: ProviderSelectorProvider = {

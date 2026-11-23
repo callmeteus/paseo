@@ -1,4 +1,5 @@
 import { watch as watchDirectory } from "node:fs";
+// eslint-disable-next-line paseo/no-sync-io -- merge: pre-existing synchronous IO
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { AgentManager } from "../agent-manager.js";

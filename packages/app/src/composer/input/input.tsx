@@ -29,10 +29,11 @@ import {
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { controlSizingForLayout } from "@/components/ui/control-geometry";
 import { ArrowUp, Mic, MicOff, CornerDownLeft, Plus, Square } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useDictation } from "@/hooks/use-dictation";
-import { hasFinePointer } from "@/hooks/use-fine-pointer";
+import { hasFinePointer } from "@/hooks/pointer-capabilities";
 import { DictationOverlay } from "@/components/dictation-controls";
 import { RealtimeVoiceOverlay } from "@/components/realtime-voice-overlay";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -222,6 +223,8 @@ export interface MessageInputProps {
   rightContent?: React.ReactNode;
   /** Primary action to render when the agent is active and the composer has no sendable content. */
   activeActionContent?: React.ReactNode;
+  /** The realtime voice mode button, which takes the trailing disc while there is nothing to send. */
+  voiceModeContent?: React.ReactNode;
   voiceServerId?: string;
   voiceAgentId?: string;
   /** When true and there's sendable content, calls onQueue instead of onSubmit */
@@ -259,9 +262,12 @@ export interface MessageInputProps {
 export interface MessageInputRef {
   focus: () => void;
   blur: () => void;
+  isFocused: () => boolean;
   getText: () => string;
   getInputSnapshot: () => ComposerInputSnapshot;
   replaceText: (text: string, selection?: { start: number; end: number }) => void;
+  /** Clamped to the text the input holds. */
+  setSelection: (selection: { start: number; end: number }) => void;
   runKeyboardAction: (action: MessageInputKeyboardActionKind) => boolean;
   /**
    * Web-only: return the underlying DOM element for focus assertions/retries.
@@ -1167,7 +1173,7 @@ function SendButtonTooltip({
   );
 }
 
-type PrimaryActionKind = "send" | "active" | "none";
+type PrimaryActionKind = "send" | "active" | "voiceMode" | "none";
 
 function hasSendableComposerContent(input: {
   hasText: boolean;
@@ -1182,22 +1188,27 @@ function resolvePrimaryActionKind(input: {
   allowEmptySubmit: boolean;
   isAgentRunning: boolean;
   isSubmitLoading: boolean;
+  offersVoiceMode: boolean;
 }): PrimaryActionKind {
   if (input.hasSendableContent || input.allowEmptySubmit) return "send";
   if (input.isAgentRunning) return "active";
   if (input.isSubmitLoading) return "send";
+  if (input.offersVoiceMode) return "voiceMode";
   return "none";
 }
 
 function PrimaryAction({
   kind,
   activeActionContent,
+  voiceModeContent,
   ...sendButtonProps
 }: {
   kind: PrimaryActionKind;
   activeActionContent: React.ReactNode;
+  voiceModeContent: React.ReactNode;
 } & React.ComponentProps<typeof SendButtonTooltip>) {
   if (kind === "active") return activeActionContent;
+  if (kind === "voiceMode") return voiceModeContent;
   if (kind === "send") return <SendButtonTooltip {...sendButtonProps} />;
   return null;
 }
@@ -1451,6 +1462,7 @@ interface ResolvedMessageInputProps {
   beforeVoiceContent: React.ReactNode;
   rightContent: React.ReactNode;
   activeActionContent: React.ReactNode;
+  voiceModeContent: React.ReactNode;
   voiceServerId: string | undefined;
   voiceAgentId: string | undefined;
   isAgentRunning: boolean;
@@ -1499,6 +1511,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     beforeVoiceContent: props.beforeVoiceContent,
     rightContent: props.rightContent,
     activeActionContent: props.activeActionContent,
+    voiceModeContent: props.voiceModeContent,
     voiceServerId: props.voiceServerId,
     voiceAgentId: props.voiceAgentId,
     isAgentRunning: props.isAgentRunning ?? false,
@@ -1577,6 +1590,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       beforeVoiceContent,
       rightContent,
       activeActionContent,
+      voiceModeContent,
       voiceServerId,
       voiceAgentId,
       isAgentRunning,
@@ -1808,10 +1822,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       blur: () => {
         textInputRef.current?.blur();
       },
+      isFocused: () => textInputRef.current?.isFocused() ?? false,
       getText: () => textInputRef.current?.getText() ?? valueRef.current,
       getInputSnapshot: () =>
         getComposerInputSnapshot(textInputRef.current, valueRef.current, selectionRef.current),
       replaceText,
+      setSelection: (selection) => {
+        const text = textInputRef.current?.getText() ?? valueRef.current;
+        const clamped = resolveRetainedSelection(selection, text.length);
+        selectionRef.current = clamped;
+        textInputRef.current?.setSelection(clamped);
+      },
       runKeyboardAction: (action) =>
         runMessageInputKeyboardAction(action, {
           focusInput: () => textInputRef.current?.focus(),
@@ -2254,6 +2275,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       allowEmptySubmit,
       isAgentRunning,
       isSubmitLoading,
+      offersVoiceMode: voiceModeContent != null,
     });
     const { canPressLoadingButton, isSendButtonDisabled, defaultActionQueues } =
       computeSendButtonState({
@@ -2450,6 +2472,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         <PrimaryAction
           kind={isFullscreen ? "send" : primaryActionKind}
           activeActionContent={activeActionContent}
+          voiceModeContent={voiceModeContent}
           shouldShow
           canPressLoadingButton={canPressLoadingButton}
           onSubmitLoadingPress={onSubmitLoadingPress}
@@ -2472,6 +2495,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         isFullscreen,
         primaryActionKind,
         activeActionContent,
+        voiceModeContent,
         canPressLoadingButton,
         onSubmitLoadingPress,
         handleDefaultSendAction,
@@ -2684,7 +2708,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         />
         <ComposerInputPresentation
           fullscreen={isFullscreen}
-          sendIconSize={buttonIconSize}
+          controlSizing={controlSizingForLayout(isCompact)}
           surface={textSurface}
           toolbar={toolbar}
           send={sendButton}

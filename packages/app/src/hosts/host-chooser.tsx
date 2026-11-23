@@ -1,16 +1,16 @@
-import { usePanelStore } from "@/stores/panel-store";
+import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
+import { useAddHost } from "@/hosts/add-host";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
-import { router } from "expo-router";
 import { Server } from "lucide-react-native";
 import { create } from "zustand";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { CommandPanel } from "@/components/ui/command-panel";
 import { HostStatusDotSlot } from "@/components/hosts/host-picker";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
+import { OverlayLayerProvider, useGlobalOverlayLayer } from "@/lib/overlay-root";
 import { useHosts } from "@/runtime/host-runtime";
 import { orderHostsLocalFirst, type HostProfile } from "@/types/host-connection";
-import { buildSettingsAddHostRoute } from "@/utils/host-routes";
 
 type HostFilter = (host: HostProfile) => boolean;
 type HostChoiceHandler = (serverId: string) => void | Promise<void>;
@@ -55,6 +55,7 @@ function matchesHostQuery(host: HostProfile, query: string): boolean {
 }
 
 export function useHostChooser() {
+  const addHost = useAddHost();
   const hosts = useHosts();
   const localServerId = useLocalDaemonServerId();
   const open = useHostChooserStore((state) => state.open);
@@ -66,13 +67,7 @@ export function useHostChooser() {
       );
 
       if (availableHosts.length === 0) {
-        (
-          input.onNoHosts ??
-          (() => {
-            usePanelStore.getState().showMobileAgent();
-            router.push(buildSettingsAddHostRoute(Date.now()));
-          })
-        )();
+        (input.onNoHosts ?? addHost)();
         return false;
       }
 
@@ -88,7 +83,7 @@ export function useHostChooser() {
       });
       return true;
     },
-    [hosts, localServerId, open],
+    [hosts, localServerId, open, addHost],
   );
 }
 
@@ -140,6 +135,7 @@ export function HostChooserModal() {
   const close = useHostChooserStore((state) => state.close);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const modalLayer = useGlobalOverlayLayer("modal", request != null);
 
   const requestHosts = useMemo(() => {
     if (!request) return [];
@@ -177,8 +173,8 @@ export function HostChooserModal() {
     [close, request],
   );
 
-  const handleWebOverlayKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+  const handleOverlayKeyDown = useCallback(
+    (event: KeyboardInputEvent) => {
       if (
         event.key !== "ArrowDown" &&
         event.key !== "ArrowUp" &&
@@ -232,34 +228,46 @@ export function HostChooserModal() {
     [handleQueryChange, request],
   );
 
+  // The cross-platform registry drives hardware keys on native and desktop.
+  // CommandPanel owns the web overlay and routes its keys through the same handler,
+  // so arrow / Enter / Escape navigation has one source of truth on every surface.
+  useOverlayRegistration({
+    keys: ["Escape", "Enter", "ArrowUp", "ArrowDown"],
+    active: request != null,
+    layer: modalLayer,
+    onKeyDown: handleOverlayKeyDown,
+  });
+
   if (!request || !search) return null;
 
   return (
-    <CommandPanel
-      visible
-      onClose={close}
-      title={request.title}
-      onKeyDown={handleWebOverlayKeyDown}
-      testID="host-chooser"
-      search={search}
-    >
-      <ScrollView
-        style={styles.results}
-        contentContainerStyle={styles.resultsContent}
-        keyboardShouldPersistTaps="always"
-        showsVerticalScrollIndicator={false}
+    <OverlayLayerProvider layer={modalLayer}>
+      <CommandPanel
+        visible
+        onClose={close}
+        title={request.title}
+        onKeyDown={handleOverlayKeyDown}
+        testID="host-chooser"
+        search={search}
       >
-        {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
-        {options.map((host, index) => (
-          <HostChooserRow
-            key={host.serverId}
-            host={host}
-            active={index === activeOptionIndex}
-            onChooseHost={chooseHost}
-          />
-        ))}
-      </ScrollView>
-    </CommandPanel>
+        <ScrollView
+          style={styles.results}
+          contentContainerStyle={styles.resultsContent}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+        >
+          {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
+          {options.map((host, index) => (
+            <HostChooserRow
+              key={host.serverId}
+              host={host}
+              active={index === activeOptionIndex}
+              onChooseHost={chooseHost}
+            />
+          ))}
+        </ScrollView>
+      </CommandPanel>
+    </OverlayLayerProvider>
   );
 }
 

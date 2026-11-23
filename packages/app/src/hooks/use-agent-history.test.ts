@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it as vitestIt } from "vitest";
+import { describe, expect, it as vitestIt } from "vitest";
 
 // Playwright's browser binary is unavailable on the Forgejo runner.
 const it =
@@ -21,18 +21,8 @@ import { allAgentHistoryQueryKey } from "./agent-history-query-key";
   }
 ).__DEV__ = false;
 
-type UseAgentHistoryModule = typeof import("./use-agent-history");
-
-let fetchAgentHistoryBatch: UseAgentHistoryModule["fetchAgentHistoryBatch"];
-let fetchAgentHistoryPage: UseAgentHistoryModule["fetchAgentHistoryPage"];
-let collectAgentHistoryHostErrors: UseAgentHistoryModule["collectAgentHistoryHostErrors"];
-
-beforeAll(async () => {
-  const module = await import("./use-agent-history");
-  fetchAgentHistoryBatch = module.fetchAgentHistoryBatch;
-  fetchAgentHistoryPage = module.fetchAgentHistoryPage;
-  collectAgentHistoryHostErrors = module.collectAgentHistoryHostErrors;
-});
+const { fetchAgentHistoryBatch, fetchAgentHistoryPage, collectAgentHistoryHostErrors } =
+  await import("./use-agent-history");
 
 type FetchAgentHistory = DaemonClient["fetchAgentHistory"];
 type FetchAgentHistoryResult = Awaited<ReturnType<FetchAgentHistory>>;

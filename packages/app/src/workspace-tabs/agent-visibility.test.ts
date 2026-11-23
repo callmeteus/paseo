@@ -5,6 +5,7 @@ import {
   startPortingActivity,
 } from "@/composer/agent-controls/porting-activity";
 import { useSessionStore, type Agent } from "@/stores/session-store";
+import { createWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import {
   buildWorkspaceTabSnapshot,
   createWorkspaceAgentVisibilitySelector,
@@ -23,6 +24,7 @@ function makeAgent(input: {
   lastActivityAt?: Date;
   lastUserMessageAt?: Date | null;
   migratedFrom?: Agent["migratedFrom"];
+  background?: boolean;
 }): Agent {
   const createdAt = input.createdAt ?? new Date("2026-03-04T00:00:00.000Z");
   const lastActivityAt = input.lastActivityAt ?? createdAt;
@@ -64,12 +66,152 @@ function makeAgent(input: {
     attentionTimestamp: null,
     archivedAt: input.archivedAt ?? null,
     ...(input.migratedFrom ? { migratedFrom: input.migratedFrom } : {}),
+    background: input.background ?? false,
   };
 }
 
 const WORKSPACE_ID = "ws-1";
 
 describe("workspace agent visibility", () => {
+  it("removes a restored pinned tab from an unrelated workspace once its owner is known", async () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        values.set(key, value);
+      },
+      removeItem: async (key: string) => {
+        values.delete(key);
+      },
+    };
+    const original = createWorkspaceLayoutStore(undefined, storage);
+    await original.persist.rehydrate();
+    const agent = makeAgent({ id: "restored-agent", cwd: "/project-a", workspaceId: "ws-a" });
+    for (const workspaceId of ["ws-a", "ws-b"]) {
+      original.getState().openTab({
+        workspaceKey: `srv:${workspaceId}`,
+        target: { kind: "agent", agentId: agent.id },
+        intent: "reveal",
+        pin: true,
+      });
+    }
+    const restored = createWorkspaceLayoutStore(undefined, storage);
+    await restored.persist.rehydrate();
+    const sessionAgents = new Map([[agent.id, agent]]);
+    const beforeHydration = buildWorkspaceTabSnapshot({
+      agentVisibility: deriveWorkspaceAgentVisibility({ sessionAgents, workspaceId: "ws-b" }),
+      agentsHydrated: false,
+      terminalsHydrated: true,
+      knownTerminalIds: [],
+      standaloneTerminalIds: [],
+      hasActivePendingTerminalCreate: false,
+      hasActivePendingDraftCreate: false,
+    });
+    restored.getState().reconcileTabs("srv:ws-b", beforeHydration);
+    expect(restored.getState().pinnedAgentIdsByWorkspace["srv:ws-b"]).toEqual(new Set([agent.id]));
+    for (const workspaceId of ["ws-a", "ws-b"]) {
+      restored.getState().reconcileTabs(
+        `srv:${workspaceId}`,
+        buildWorkspaceTabSnapshot({
+          agentVisibility: deriveWorkspaceAgentVisibility({ sessionAgents, workspaceId }),
+          agentsHydrated: true,
+          terminalsHydrated: true,
+          knownTerminalIds: [],
+          standaloneTerminalIds: [],
+          hasActivePendingTerminalCreate: false,
+          hasActivePendingDraftCreate: false,
+        }),
+      );
+    }
+
+    expect(
+      restored
+        .getState()
+        .getWorkspaceTabs("srv:ws-a")
+        .filter((tab) => tab.target.kind === "agent")
+        .map((tab) => tab.target),
+    ).toEqual([{ kind: "agent", agentId: agent.id }]);
+    expect(
+      restored
+        .getState()
+        .getWorkspaceTabs("srv:ws-b")
+        .filter((tab) => tab.target.kind === "agent"),
+    ).toEqual([]);
+    expect(restored.getState().pinnedAgentIdsByWorkspace["srv:ws-b"]).toBeUndefined();
+  });
+
+  it("keeps a background agent active without auto-opening its tab", () => {
+    const visible = makeAgent({ id: "visible", cwd: "/repo", workspaceId: WORKSPACE_ID });
+    const classifier = makeAgent({
+      id: "classifier",
+      cwd: "/repo",
+      workspaceId: WORKSPACE_ID,
+      background: true,
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      workspaceId: WORKSPACE_ID,
+      sessionAgents: new Map([
+        [visible.id, visible],
+        [classifier.id, classifier],
+      ]),
+    });
+
+    expect(result.autoOpenAgentIds).toEqual(new Set([visible.id]));
+    expect(result.activeAgentIds).toEqual(new Set([visible.id, classifier.id]));
+    expect(
+      shouldPruneWorkspaceAgentTab({
+        agentId: classifier.id,
+        agentsHydrated: true,
+        activeAgentIds: result.activeAgentIds,
+      }),
+    ).toBe(false);
+  });
+
+  it("uses directory ownership before historical details when identifying foreign agents", () => {
+    const own = makeAgent({ id: "own", cwd: "/repo", workspaceId: WORKSPACE_ID });
+    const foreign = makeAgent({ id: "foreign", cwd: "/repo", workspaceId: "ws-2" });
+    const unknown = makeAgent({ id: "unknown", cwd: "/repo" });
+    const result = deriveWorkspaceAgentVisibility({
+      workspaceId: WORKSPACE_ID,
+      sessionAgents: new Map([
+        [own.id, own],
+        [foreign.id, foreign],
+        [unknown.id, unknown],
+      ]),
+      agentDetails: new Map([
+        [own.id, { ...own, workspaceId: "ws-2" }],
+        [foreign.id, { ...foreign, workspaceId: WORKSPACE_ID }],
+        [unknown.id, { ...unknown, workspaceId: "ws-2" }],
+      ]),
+    });
+
+    expect(result.activeAgentIds).toEqual(new Set([own.id]));
+    expect(result.foreignAgentIds).toEqual(new Set([foreign.id]));
+  });
+
+  it("recognizes foreign historical ownership without making archived or unknown agents foreign", () => {
+    const archived = makeAgent({
+      id: "archived",
+      cwd: "/repo",
+      workspaceId: WORKSPACE_ID,
+      archivedAt: new Date("2026-03-04T00:01:00.000Z"),
+    });
+    const foreign = { ...archived, id: "foreign", workspaceId: "ws-2" };
+    const unknown = { ...archived, id: "unknown", workspaceId: undefined };
+    const result = deriveWorkspaceAgentVisibility({
+      workspaceId: WORKSPACE_ID,
+      sessionAgents: new Map(),
+      agentDetails: new Map([
+        [archived.id, archived],
+        [foreign.id, foreign],
+        [unknown.id, unknown],
+      ]),
+    });
+
+    expect(result.activeAgentIds).toEqual(new Set());
+    expect(result.foreignAgentIds).toEqual(new Set([foreign.id]));
+  });
+
   it("keeps subagents active while excluding them from auto-open", () => {
     const parent = makeAgent({
       id: "parent-agent",
@@ -93,6 +235,7 @@ describe("workspace agent visibility", () => {
 
     expect(result.activeAgentIds).toEqual(new Set(["parent-agent", "child-agent"]));
     expect(result.autoOpenAgentIds).toEqual(new Set(["parent-agent"]));
+    expect(result.foreignAgentIds).toEqual(new Set());
   });
 
   it("excludes archived subagents from active and auto-open", () => {
@@ -302,6 +445,7 @@ describe("workspace agent visibility", () => {
     });
 
     expect(result.activeAgentIds).toEqual(new Set<string>());
+    expect(result.foreignAgentIds).toEqual(new Set(["other-ws-agent"]));
   });
 
   it("excludes agents without a workspaceId", () => {
@@ -315,12 +459,14 @@ describe("workspace agent visibility", () => {
     });
 
     expect(result.activeAgentIds).toEqual(new Set<string>());
+    expect(result.foreignAgentIds).toEqual(new Set<string>());
   });
 
   it("builds the tab reconciliation snapshot without callers unpacking agent visibility", () => {
     const agentVisibility = {
       activeAgentIds: new Set(["active-agent"]),
       autoOpenAgentIds: new Set(["root-agent"]),
+      foreignAgentIds: new Set(["foreign-agent"]),
       hiddenAgentIds: new Set(["hidden-agent"]),
       openedAgentIds: new Set(["open-agent"]),
       hiddenAgentUpdatedAtById: new Map([["hidden-agent", 1]]),
@@ -341,6 +487,7 @@ describe("workspace agent visibility", () => {
       terminalsHydrated: true,
       activeAgentIds: agentVisibility.activeAgentIds,
       autoOpenAgentIds: agentVisibility.autoOpenAgentIds,
+      foreignAgentIds: agentVisibility.foreignAgentIds,
       hiddenAgentIds: agentVisibility.hiddenAgentIds,
       openedAgentIds: agentVisibility.openedAgentIds,
       hiddenAgentUpdatedAtById: agentVisibility.hiddenAgentUpdatedAtById,
@@ -482,6 +629,24 @@ describe("workspace agent visibility", () => {
       expect(after.activeAgentIds).toEqual(new Set([child.id]));
       expect(after.autoOpenAgentIds).toEqual(new Set([child.id]));
     });
+
+    it("recomputes when only a previously unknown agent's foreign ownership becomes known", () => {
+      seedSession(new Map([[parent.id, parent]]));
+      const select = createWorkspaceAgentVisibilitySelector({
+        serverId: SERVER_ID,
+        workspaceId: WORKSPACE_ID,
+      });
+      const before = select(useSessionStore.getState());
+      useSessionStore
+        .getState()
+        .setAgentDetails(SERVER_ID, new Map([[otherWorkspace.id, otherWorkspace]]));
+      const after = select(useSessionStore.getState());
+
+      expect(after).not.toBe(before);
+      expect(after.activeAgentIds).toEqual(before.activeAgentIds);
+      expect(after.autoOpenAgentIds).toEqual(before.autoOpenAgentIds);
+      expect(after.foreignAgentIds).toEqual(new Set([otherWorkspace.id]));
+    });
   });
 
   describe("workspaceAgentVisibilityEqual", () => {
@@ -491,9 +656,11 @@ describe("workspace agent visibility", () => {
       hidden?: string[];
       opened?: string[];
       hiddenAt?: Array<[string, number]>;
+      foreign?: string[];
     }) => ({
       activeAgentIds: new Set(input.active),
       autoOpenAgentIds: new Set(input.autoOpen),
+      foreignAgentIds: new Set(input.foreign ?? []),
       hiddenAgentIds: new Set(input.hidden ?? []),
       openedAgentIds: new Set(input.opened ?? []),
       hiddenAgentUpdatedAtById: new Map(input.hiddenAt ?? []),
@@ -530,6 +697,15 @@ describe("workspace agent visibility", () => {
       expect(
         workspaceAgentVisibilityEqual(
           visibility({ active: ["a"], autoOpen: ["a"], hidden: ["a"] }),
+          visibility({ active: ["a"], autoOpen: ["a"] }),
+        ),
+      ).toBe(false);
+    });
+
+    it("returns false when foreignAgentIds differ", () => {
+      expect(
+        workspaceAgentVisibilityEqual(
+          visibility({ active: ["a"], autoOpen: ["a"], foreign: ["a"] }),
           visibility({ active: ["a"], autoOpen: ["a"] }),
         ),
       ).toBe(false);

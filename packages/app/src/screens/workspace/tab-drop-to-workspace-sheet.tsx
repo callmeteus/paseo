@@ -299,10 +299,8 @@ export function TabDropToWorkspaceSheet() {
 
   const buildCloneConfig = useCallback(() => {
     if (!agent) return null;
-    const featureValues: Record<string, unknown> = {};
-    for (const feature of agent.features ?? []) {
-      featureValues[feature.id] = feature.value;
-    }
+    // COMPAT(providerOptions): `features` became the agent's `options` record.
+    const providerOptions: Record<string, unknown> = { ...agent.options };
     const cwd = targetWorkspace?.workspaceDirectory?.trim() || agent.cwd;
     return {
       ...buildWorkspaceDraftAgentConfig({
@@ -312,7 +310,7 @@ export function TabDropToWorkspaceSheet() {
         ...(agent.workflowModeId ? { workflowModeId: agent.workflowModeId } : {}),
         ...(agent.model ? { model: agent.model } : {}),
         ...(agent.thinkingOptionId ? { thinkingOptionId: agent.thinkingOptionId } : {}),
-        featureValues,
+        providerOptions,
       }),
       ...(agent.title?.trim() ? { title: agent.title.trim() } : {}),
     };

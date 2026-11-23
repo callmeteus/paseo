@@ -17,6 +17,7 @@ interface Dependencies {
  * open, so a slow provider holds back only its own agent.
  */
 export function createRestartRecovery(deps: Dependencies) {
+  // Candidates are chosen at startup; each settles once its resume was sent or abandoned.
   const resuming = new Map<string, { promise: Promise<void>; resolve(): void }>();
 
   const eligible = async (record: StoredAgentRecord) =>
@@ -37,7 +38,8 @@ export function createRestartRecovery(deps: Dependencies) {
   return {
     /** Choose candidates before anything else reads or repairs persisted running status. */
     async prepareStartup(): Promise<void> {
-      for (const record of await deps.storage.list()) {
+      // Startup recovery repairs persisted running status once before agents are restored.
+      for (const record of await deps.storage.listAll()) {
         const busy = record.lastStatus === "running" || record.lastStatus === "initializing";
         const pending =
           deps.settings().enabled &&
@@ -62,14 +64,15 @@ export function createRestartRecovery(deps: Dependencies) {
     /** Record intent before runtimes close on a graceful shutdown. */
     async captureRunningAgents(): Promise<void> {
       await deps.storage.flush();
-      for (const record of await deps.storage.list()) {
+      // Shutdown recovery captures running state once before the daemon exits.
+      for (const record of await deps.storage.listAll()) {
         if (record.lastStatus !== "running" || !(await eligible(record))) continue;
         await deps.storage.upsert({ ...record, resumeOnStartup: deps.settings().enabled });
       }
       await deps.storage.flush();
     },
 
-    /** Resume every candidate in the background. */
+    /** Resume every candidate in the background; a slow provider holds back only its agent. */
     resumePending(): void {
       for (const [agentId, settled] of resuming) {
         void resume(agentId)

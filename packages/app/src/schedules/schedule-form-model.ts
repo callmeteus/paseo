@@ -18,6 +18,7 @@ import {
 import { filterSelectableModels, findModelByReference } from "@/provider-selection/model-catalog";
 import {
   buildProviderDefinitionMapForStatuses,
+  findThinkingOptionReplacement,
   INITIAL_USER_MODIFIED,
   RESOLVABLE_PROVIDER_STATUSES,
   resolveDefaultModelId,
@@ -303,12 +304,20 @@ function resolveThinkingOptions(
   disabledModelIdsByProvider?: DisabledModelIdsByProvider,
 ): NonNullable<AgentModelDefinition["thinkingOptions"]> {
   const listed = findSelectableModelById(entries, provider, modelId);
-  if (listed) return listed.thinkingOptions ?? [];
-  const model = resolveEffectiveModel(
-    resolveAvailableModels(entries, provider, disabledModelIdsByProvider),
-    modelId,
-  );
-  return model?.thinkingOptions ?? [];
+  const model =
+    listed ??
+    resolveEffectiveModel(
+      resolveAvailableModels(entries, provider, disabledModelIdsByProvider),
+      modelId,
+    );
+  const options = model?.thinkingOptions ?? [];
+  // COMPAT(claudeUltracodePreference): added in v0.17.0, remove after 2027-05-18
+  // once schedules edit the Ultracode option independently.
+  // Schedules still use a single effort field.
+  return findThinkingOptionReplacement(options, "ultracode") &&
+    !options.some((option) => option.id === "ultracode")
+    ? [...options, { id: "ultracode", label: "Ultra Code" }]
+    : options;
 }
 
 function resolveModelDisplay(input: {
@@ -1058,12 +1067,10 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       }
       publish({
         ...resolved,
-        modelSelectorProviders: buildSelectableProviderSelectorProviders(
-          providerEntries,
-          true,
-          undefined,
+        modelSelectorProviders: buildSelectableProviderSelectorProviders(providerEntries, {
+          selectedProvider: resolved.selectedProvider,
           disabledModelIdsByProvider,
-        ),
+        }),
         providerResolutionByServerId,
         providerSnapshotRequest: isPendingResolution ? null : state.providerSnapshotRequest,
       });

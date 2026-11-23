@@ -85,7 +85,7 @@ function McpLoginNotice({
           <View style={stylesheet.loginActions}>
             <Button
               variant="secondary"
-              size="xs"
+              size="sm"
               onPress={handleOpen}
               accessibilityLabel={t("settings.providers.mcp.openLink")}
             >
@@ -133,7 +133,7 @@ function McpServerRow({
         {showLogin ? (
           <Button
             variant="secondary"
-            size="xs"
+            size="sm"
             leftIcon={LogIn}
             onPress={handleAuthenticate}
             disabled={activeLogin?.status === "starting" || activeLogin?.status === "waiting"}

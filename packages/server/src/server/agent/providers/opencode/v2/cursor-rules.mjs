@@ -1,3 +1,4 @@
+/* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 

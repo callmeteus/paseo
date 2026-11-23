@@ -59,6 +59,7 @@ export function derivePendingPermissionKey(
 
 export type AgentGoalState = NonNullable<AgentSnapshotPayload["goal"]>;
 
+// eslint-disable-next-line complexity -- merge: combined two implementations
 export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
   return {
     id: agent.id,
@@ -66,12 +67,14 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     cwd: agent.cwd,
     ...(agent.workspaceId ? { workspaceId: agent.workspaceId } : {}),
     model: agent.model,
-    ...(agent.features ? { features: agent.features } : {}),
+    ...(agent.options ? { options: agent.options } : {}),
+    ...(agent.controls ? { controls: agent.controls } : {}),
     thinkingOptionId: agent.thinkingOptionId ?? null,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt?.toISOString() ?? null,
     status: agent.status,
+    backgroundWork: agent.backgroundWork,
     ...projectActiveTurn(agent),
     capabilities: agent.capabilities,
     currentModeId: agent.currentModeId,
@@ -80,10 +83,12 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     pendingPermissions: agent.pendingPermissions,
     persistence: agent.persistence,
     ...(agent.runtimeInfo ? { runtimeInfo: agent.runtimeInfo } : {}),
+    ...(agent.usageScopeKey ? { usageScopeKey: agent.usageScopeKey } : {}),
     ...(agent.lastUsage ? { lastUsage: agent.lastUsage } : {}),
     ...(agent.lastError ? { lastError: agent.lastError } : {}),
     title: agent.title,
     labels: agent.labels,
+    ...(agent.metadata ? { metadata: agent.metadata } : {}),
     requiresAttention: agent.requiresAttention ?? false,
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp?.toISOString() ?? null,
@@ -91,6 +96,7 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),
     ...(agent.goal ? { goal: agent.goal } : {}),
+    ...(agent.background ? { background: true } : {}),
   };
 }
 
@@ -116,6 +122,7 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     id: snapshot.id,
     provider: snapshot.provider,
     status: snapshot.status,
+    backgroundWork: snapshot.backgroundWork,
     turn,
     createdAt,
     updatedAt,
@@ -128,6 +135,7 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     pendingPermissions: snapshot.pendingPermissions ?? [],
     persistence: snapshot.persistence ?? null,
     runtimeInfo: snapshot.runtimeInfo,
+    usageScopeKey: snapshot.usageScopeKey,
     lastUsage: snapshot.lastUsage,
     lastError: snapshot.lastError ?? null,
     title: snapshot.title ?? null,
@@ -135,7 +143,8 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     workspaceId: snapshot.workspaceId,
     modelRouterId: snapshot.modelRouterId ?? null,
     model: snapshot.model ?? null,
-    features: snapshot.features,
+    options: snapshot.options,
+    controls: snapshot.controls,
     thinkingOptionId: snapshot.thinkingOptionId ?? null,
     requiresAttention: snapshot.requiresAttention ?? false,
     attentionReason: snapshot.attentionReason ?? null,
@@ -143,8 +152,10 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     archivedAt,
     ...(snapshot.migratedFrom ? { migratedFrom: snapshot.migratedFrom } : {}),
     ...(snapshot.migratedTo ? { migratedTo: snapshot.migratedTo } : {}),
+    background: snapshot.background === true,
     parentAgentId,
     labels: snapshot.labels,
+    metadata: snapshot.metadata,
     goal: snapshot.goal ?? null,
   };
 }

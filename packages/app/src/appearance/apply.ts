@@ -1,6 +1,6 @@
 import { UnistylesRuntime } from "react-native-unistyles";
 import { resolveSyntaxColors, type SyntaxThemeId } from "@getpaseo/highlight";
-import { FONT_SIZE, REGISTERED_THEMES, type Theme } from "@/styles/theme";
+import { FONT_SIZE, REGISTERED_THEMES, themeContentMaxWidth, type Theme } from "@/styles/theme";
 import { isNative } from "@/constants/platform";
 import { resolveMonoFontStack, resolveUiFontStack } from "./font-families";
 import { applyRootUiFont } from "./apply-root-font";
@@ -13,7 +13,7 @@ export interface AppearanceInput {
   uiBaseFontSize: number; // already clamped
   contentFontSize: number; // already clamped
   codeFontSize: number; // already clamped
-  contentMaxWidth: number; // already clamped, default resolved
+  contentMaxWidth: number | undefined; // undefined fills the available width
   syntaxTheme: SyntaxThemeId;
 }
 
@@ -61,6 +61,7 @@ export function applyAppearance(input: AppearanceInput): void {
   const ui = resolveUiFontStack(input.uiFontFamily, isNative);
   const mono = resolveMonoFontStack(input.monoFontFamily);
   const diffLineHeight = Math.round(input.codeFontSize * 1.5); // couple to code size
+  const contentMaxWidth = themeContentMaxWidth(input.contentMaxWidth);
   const activeTheme = UnistylesRuntime.themeName;
   // Unistyles web emits after each registry patch. Updating the mounted theme
   // first ensures subscribers receive its new numeric tokens in this render;
@@ -84,7 +85,7 @@ export function applyAppearance(input: AppearanceInput): void {
           fontFamily,
           fontSize,
           lineHeight,
-          contentMaxWidth: input.contentMaxWidth,
+          contentMaxWidth,
           colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
         };
       }
@@ -93,7 +94,7 @@ export function applyAppearance(input: AppearanceInput): void {
         fontFamily,
         fontSize,
         lineHeight,
-        contentMaxWidth: input.contentMaxWidth,
+        contentMaxWidth,
         colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
       };
     });

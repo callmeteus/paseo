@@ -21,7 +21,7 @@ interface RewindComposerRestoreProviderProps {
   setText: (text: string) => void;
   attachments: readonly UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
-  onRewindComplete: () => void;
+  onRewindComplete: (restoredComposerText: boolean) => void;
   children: ReactNode;
 }
 
@@ -60,7 +60,8 @@ export function RewindComposerRestoreProvider({
         currentText: currentText,
         rewoundText: input.text,
       });
-      if (nextText !== currentText) {
+      const restoredComposerText = nextText !== currentText;
+      if (restoredComposerText) {
         setText(nextText);
       }
       // A draft the user already started wins, text and attachments alike.
@@ -73,7 +74,7 @@ export function RewindComposerRestoreProvider({
           setAttachments((current) => mergeRewindAttachments(current, restored));
         }
       }
-      onRewindComplete();
+      onRewindComplete(restoredComposerText);
     },
     [attachments, onRewindComplete, setAttachments, setText, textSource],
   );

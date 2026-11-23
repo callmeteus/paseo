@@ -68,7 +68,6 @@ export function WorkspaceLabelManagerModal({
           <Button
             // Red belongs to the confirm dialog, not to the surface that opens it — docs/design.md.
             variant="outline"
-            size="md"
             disabled={disabled}
             onPress={remove}
             testID="workspace-label-manager-delete"
@@ -115,6 +114,7 @@ export function WorkspaceLabelManagerModal({
               selectedHost={state.serverId}
               onSelectHost={selectHost}
               includeAllHost={false}
+              hang
               triggerTestID="workspace-label-manager-host"
               hostOptionTestID={managerHostOptionTestID}
             />

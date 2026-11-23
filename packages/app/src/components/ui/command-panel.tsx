@@ -3,11 +3,8 @@ import { Modal, Pressable, Text, View, type PressableStateCallbackType } from "r
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { EditingTextInput, type EditingTextInputHandle } from "@/components/ui/text-input";
 import { isWeb } from "@/constants/platform";
-import {
-  OverlayLayerProvider,
-  useGlobalWebOverlayLayer,
-  useWebOverlayRegistration,
-} from "@/lib/overlay-root";
+import { useOverlayRegistration } from "@/keyboard";
+import { OverlayLayerProvider, useGlobalOverlayLayer } from "@/lib/overlay-root";
 
 /**
  * The command-center / host-chooser panel: a top-aligned surface, a borderless
@@ -51,7 +48,7 @@ export function CommandPanel({
   /** Return true when the key was handled. Escape still closes when this returns false. */
   onKeyDown?: (event: KeyboardEvent) => boolean;
 }) {
-  const modalLayer = useGlobalWebOverlayLayer("modal", isWeb && visible);
+  const modalLayer = useGlobalOverlayLayer("modal", isWeb && visible);
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (onKeyDown?.(event)) return true;
@@ -62,7 +59,8 @@ export function CommandPanel({
     },
     [onClose, onKeyDown],
   );
-  const setWebOverlayScope = useWebOverlayRegistration({
+  const setWebOverlayScope = useOverlayRegistration({
+    keys: ["Escape"],
     active: isWeb && visible,
     layer: modalLayer,
     onKeyDown: handleKeyDown,

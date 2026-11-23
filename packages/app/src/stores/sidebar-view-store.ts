@@ -71,6 +71,8 @@ interface SidebarViewStoreState {
   clearHostFilters: () => void;
   /** Pin the sidebar to exactly one host, or clear it with null. */
   setHostFilter: (serverId: string | null) => void;
+  // An explicit navigation target must not be hidden by another host's facets.
+  focusHost: (serverId: string) => void;
   toggleProjectFilter: (viewKey: string) => void;
   clearProjectFilters: () => void;
   toggleLabelFilter: (name: string) => void;
@@ -211,6 +213,9 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
         set((state) => ({ hostFilters: toggleFilterEntry(state.hostFilters, serverId) })),
       clearHostFilters: () => set({ hostFilters: [] }),
       setHostFilter: (serverId) => set({ hostFilters: serverId ? [serverId] : [] }),
+      // An explicit navigation target must not be hidden by another host's facets.
+      focusHost: (serverId) =>
+        set({ hostFilters: [serverId], projectFilters: [], labelFilter: emptyLabelFilter() }),
       toggleProjectFilter: (viewKey) =>
         set((state) => ({ projectFilters: toggleFilterEntry(state.projectFilters, viewKey) })),
       clearProjectFilters: () => set({ projectFilters: [] }),

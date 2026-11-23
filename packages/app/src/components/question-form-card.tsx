@@ -47,7 +47,8 @@ const OPTION_PREVIEW_MAX_HEIGHT = IS_WEB ? 240 : undefined;
 // Web clicks that must not answer: a link in the label, the second click of a double-click
 // (which would otherwise land on the next question's options), and the release of a drag that
 // selected text inside the row. A plain click anywhere else in the row answers, description
-// included — the whole box is the control, not just the label.
+// included, the whole box is the control, not just the label. Links are independent actions,
+// and ignoring repeat clicks makes double-click text selection toggle an option only once.
 function isNonAnsweringClick(event: GestureResponderEvent): boolean {
   if (!IS_WEB) return false;
   const click = event.nativeEvent as unknown as MouseEvent;
@@ -707,12 +708,8 @@ export function QuestionFormCard({
         });
         otherInputRef.current?.replaceText("");
       }
-
-      if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
-        setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
-      }
     },
-    [activeQuestionIndex, otherTexts, questions, selections],
+    [otherTexts, selections],
   );
 
   const setOtherText = useCallback(

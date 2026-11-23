@@ -34,6 +34,7 @@ export class V2Harness {
   readonly mcpAddFailures = new Set<string>();
   /** Servers that register but never reach the connected state. */
   readonly mcpConnectFailures = new Map<string, string>();
+  readonly instructions = new Map<string, string>();
   releases = 0;
   active = false;
   activeReads = 0;
@@ -97,6 +98,7 @@ export class V2Harness {
   readonly api: V2Api = {
     server: { info: unexpected },
     shell: {
+      remove: unexpected,
       list: async () => ({ location: { directory: this.info.location.directory }, data: [] }),
     },
     plugin: {
@@ -163,7 +165,17 @@ export class V2Harness {
       environment: async (input) => {
         this.environments.push(input);
       },
-      instructions: { entry: { list: unexpected, put: unexpected, remove: unexpected } },
+      instructions: {
+        entry: {
+          list: async () => [...this.instructions].map(([key, value]) => ({ key, value })),
+          put: async ({ key, value }) => {
+            this.instructions.set(key, String(value));
+          },
+          remove: async ({ key }) => {
+            this.instructions.delete(key);
+          },
+        },
+      },
       prompt: async (input, options) => {
         const before = this.executions.length;
         await this.prompt(input, options);
@@ -183,6 +195,9 @@ export class V2Harness {
     event: { subscribe: (options) => this.events(options?.signal) },
   };
   readonly connection: V2Connection = {
+    bindSession: async () => {},
+    unbindSession: async () => {},
+    refreshLocation: async () => {},
     client: this.api,
     release: async () => {
       this.releases += 1;

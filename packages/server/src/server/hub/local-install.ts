@@ -1,3 +1,4 @@
+/* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, closeSync, openSync, readFileSync } from "node:fs";
 import { access, mkdir } from "node:fs/promises";
