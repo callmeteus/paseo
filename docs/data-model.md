@@ -225,6 +225,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     mcpBridges: Record<string, { host: string; via?: string; server: string }>, // consumer-side bridge references
     git: { maxProcessesPerSecond: number, maxProcessConcurrency: number },
     appendSystemPrompt: string,    // appended to supported provider system/developer prompts
+    selfLabel: string,             // host label this daemon announces; defaults to the machine hostname
     terminalProfiles: TerminalProfile[],  // named shell commands; omitted means DEFAULT_TERMINAL_PROFILES
     agentProfiles: AgentProfile[],        // named agent launch bundles; omitted means none
     cors: { allowedOrigins: string[] },

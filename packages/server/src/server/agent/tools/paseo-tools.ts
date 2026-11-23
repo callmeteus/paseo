@@ -144,6 +144,8 @@ export interface PaseoToolHostDependencies {
   finishSubscriptions?: () => FinishSubscriptions;
   serverId?: string;
   hosts?: () => ToolHosts;
+  /** Renames the host label this daemon announces. Returns the applied label. */
+  setSelfLabel?: (label: string) => string;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   terminalManager?: TerminalManager | null;
@@ -1642,6 +1644,48 @@ function createToolCatalog(
       content: [],
       structuredContent: ensureValidJson(await hostResolver.directory()),
     }),
+  );
+
+  registerTool(
+    "get_self",
+    {
+      title: "Get this host",
+      description:
+        "Return this daemon's identity: its server ID and the host label other hosts see.",
+      inputSchema: {},
+    },
+    async () => {
+      const directory = await hostResolver.directory();
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ self: directory.self }),
+      };
+    },
+  );
+
+  registerTool(
+    "set_self_label",
+    {
+      title: "Rename this host",
+      description:
+        "Set the host label this daemon announces to clients and connected hosts. Persists across restarts.",
+      inputSchema: { label: z.string().trim().min(1).max(80) },
+    },
+    async (input: { label: string }) => {
+      if (!options.setSelfLabel) {
+        return {
+          content: [{ type: "text", text: "Host renaming is not configured" }],
+          isError: true,
+        };
+      }
+      const label = options.setSelfLabel(input.label);
+      return {
+        content: [],
+        structuredContent: ensureValidJson({
+          self: { serverId: options.serverId ?? null, label },
+        }),
+      };
+    },
   );
 
   registerTool(

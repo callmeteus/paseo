@@ -301,6 +301,8 @@ export const PersistedConfigSchema = z
         enableTerminalAgentHooks: z.boolean().optional(),
         remoteAccess: RemoteAccessConfigSchema.optional(),
         appendSystemPrompt: z.string().optional(),
+        // Name this daemon announces as its own host label (for example `@gio/home-pc`).
+        selfLabel: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),

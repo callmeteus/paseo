@@ -48,6 +48,7 @@ import {
   type MutableDaemonConfig,
 } from "./daemon-config-store.js";
 import { DaemonConfigRemoteAccessPolicy } from "./remote-access/policy.js";
+import { editPersistedConfig } from "./persisted-config.js";
 import {
   type ServerInfoStatusPayload,
   type ScriptStatusUpdateMessage,
@@ -208,6 +209,8 @@ interface WebSocketServerConfig {
   mcpBridgeAuthority?: McpBridgeAuthority;
   mcpCatalog?: McpCatalogService;
   messageQueueStore?: MessageQueueStore;
+  /** Label this daemon announces as its own host name. Defaults to the machine hostname. */
+  selfLabel?: string;
 }
 
 type WebSocketRuntimeMetrics = SessionRuntimeMetrics & CheckoutDiffMetrics;
@@ -583,6 +586,10 @@ function requireWebSocketServices(params: {
   return { scheduleService, checkoutDiffManager };
 }
 
+function resolveSelfLabel(selfLabel: string | undefined): string {
+  return selfLabel?.trim() || getHostName();
+}
+
 /**
  * WebSocket server that only accepts sockets + parses/forwards messages to the session layer.
  */
@@ -626,6 +633,14 @@ export class VoiceAssistantWebSocketServer {
 
   getConnectedHosts(): ConnectedHosts {
     return this.connectedHosts;
+  }
+
+  /** Renames the host label this daemon announces and persists it for the next start. */
+  setSelfLabel(label: string): string {
+    const normalized = label.trim();
+    if (!normalized) throw new Error("A host label is required");
+    this.connectedHosts.setSelfLabel(normalized);
+    return this.connectedHosts.getSelfLabel();
   }
 
   getServerId(): string {
@@ -855,8 +870,9 @@ export class VoiceAssistantWebSocketServer {
     this.paseoHome = paseoHome;
     this.connectedHosts = new ConnectedHosts(
       paseoHome,
-      { serverId, label: getHostName() },
+      { serverId, label: resolveSelfLabel(wsConfig.selfLabel) },
       () => this.daemonConfigStore.get().cluster,
+      (label) => editPersistedConfig(paseoHome, "daemon.selfLabel", { value: label }),
     );
 
     this.mcpBridgeAuthority = wsConfig.mcpBridgeAuthority;

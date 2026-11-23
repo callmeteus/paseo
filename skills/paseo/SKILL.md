@@ -7,7 +7,7 @@ Paseo is a remote daemon that manages coding agents, terminals. Control it throu
 
 ## Connected hosts
 
-Call `list_hosts` to discover the calling daemon (`self`) and its registered destinations (`hosts`). Use a destination's `serverId` for tool calls; labels are display names.
+Call `list_hosts` to discover the calling daemon (`self`) and its registered destinations (`hosts`). Use a destination's `serverId` for tool calls; labels are display names. `get_self` returns only the calling daemon's identity, and `set_self_label` renames it everywhere (`server_info.hostname`, `list_hosts.self`, and `get_self`).
 
 `create_workspace`, `list_workspaces`, `create_agent`, `send_agent_prompt`, `get_agent_status`, `get_agent_activity`, and `list_agents` accept `serverId`. Omit it for the calling daemon. Other MCP tools operate on the calling daemon.
 

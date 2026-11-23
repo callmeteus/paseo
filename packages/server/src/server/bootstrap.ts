@@ -475,6 +475,9 @@ export interface PaseoDaemonConfig {
   /** Origin other machines reach this computer's local Hub on. */
   hubPublicOrigin?: string;
   appendSystemPrompt?: string;
+  /** Label this daemon announces as its own host name. Defaults to the machine hostname. */
+  selfLabel?: string;
+
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   mcpServers?: Record<string, McpServerConfig>;
@@ -1837,6 +1840,10 @@ export async function createPaseoDaemon(
       if (!wsServer) throw new Error("Daemon is not accepting host operations");
       return wsServer.toolHosts();
     },
+    setSelfLabel: (label) => {
+      if (!wsServer) throw new Error("Daemon is not accepting host operations");
+      return wsServer.setSelfLabel(label);
+    },
     agentManager,
     agentStorage,
     terminalManager,
@@ -2185,6 +2192,7 @@ export async function createPaseoDaemon(
                 mcpBridgeAuthority: sharedMcpAuthority,
                 mcpCatalog,
                 messageQueueStore,
+                selfLabel: config.selfLabel,
               },
               workspaceAutoName,
               workspaceRuntimeStore,

@@ -244,6 +244,8 @@ export const PASEO_TOOL_CATALOG = {
     detail: { inputOrder: WORKSPACE_FIELDS, outputFields: ["workspaceId", "projectId"] },
   },
   list_hosts: { label: "List hosts", completedLabel: "Listed hosts" },
+  get_self: { label: "Get this host", completedLabel: "Got this host" },
+  set_self_label: { label: "Rename this host", completedLabel: "Renamed this host" },
   list_remote_files: {
     label: "List remote files",
     completedLabel: "Listed remote files",

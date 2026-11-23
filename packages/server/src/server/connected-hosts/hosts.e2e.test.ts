@@ -531,12 +531,12 @@ test("identity discovery failures remain inspectable and changing a pinned desti
   await paseo.hosts.remove(self.registrationId);
   const original = await paseo.hosts.add({ connection: `127.0.0.1:${b.port}` });
   const bId = (await online(paseo)).hosts[0]!.serverId;
-  const duplicate = await paseo.hosts.add({ connection: `ws://127.0.0.1:${b.port}/ws` });
-  await expect
-    .poll(async () => (await paseo.hosts.list()).hosts[1]!.error?.code)
-    .toBe("duplicate_host");
-  expect((await paseo.hosts.list()).hosts[1]!.serverId).toBe(bId);
-  await paseo.hosts.remove(duplicate.registrationId);
+  await paseo.hosts.add({ connection: `ws://127.0.0.1:${b.port}/ws` });
+  await expect.poll(async () => (await paseo.hosts.list()).hosts.length).toBe(1);
+  expect((await paseo.hosts.list()).hosts[0]).toMatchObject({
+    serverId: bId,
+    status: "online",
+  });
   await paseo.hosts.update(original.registrationId, { connection: `127.0.0.1:${c.port}` });
   await expect
     .poll(async () => (await paseo.hosts.list()).hosts[0]!.error?.code)
@@ -898,7 +898,7 @@ async function capabilityRetry(paseo: ReturnType<typeof createPaseoApi>): Promis
   return Date.parse(retryAt);
 }
 
-test("a destination updated past unsupported_capability keeps its guidance while retrying and comes online, while duplicate_host stays terminal", async () => {
+test("a destination updated past unsupported_capability keeps its guidance while retrying and comes online, while duplicate_host is pruned", async () => {
   const destination = await updatableDestination();
   const a = await daemon();
   const { paseo } = await api(a);
@@ -919,9 +919,12 @@ test("a destination updated past unsupported_capability keeps its guidance while
     error: null,
   });
   await paseo.hosts.add({ connection: `ws://127.0.0.1:${destination.port}/ws` });
-  await expect
-    .poll(async () => (await paseo.hosts.list()).hosts[1], { timeout: 5000 })
-    .toMatchObject({ status: "error", nextRetryAt: null, error: { code: "duplicate_host" } });
+  await expect.poll(async () => (await paseo.hosts.list()).hosts.length, { timeout: 5000 }).toBe(1);
+  expect((await paseo.hosts.list()).hosts[0]).toMatchObject({
+    registrationId: host.registrationId,
+    status: "online",
+    error: null,
+  });
 });
 
 test("disabling or removing a host cancels its pending capability retry", async () => {
@@ -1647,6 +1650,12 @@ test(
       expect(response.isError, JSON.stringify(response)).not.toBe(true);
       return z.record(z.string(), z.unknown()).parse(response.structuredContent);
     };
+    const selfIdentity = await call("get_self", {});
+    expect(selfIdentity).toMatchObject({ self: { serverId: directory.self.serverId } });
+    const renamed = await call("set_self_label", { label: "@gio/home-pc" });
+    expect(renamed).toMatchObject({ self: { label: "@gio/home-pc" } });
+    expect(await call("get_self", {})).toMatchObject({ self: { label: "@gio/home-pc" } });
+    expect(await call("list_hosts", {})).toMatchObject({ self: { label: "@gio/home-pc" } });
     const serverId = directory.hosts[0]!.serverId!;
     const destination = await call("create_workspace", {
       serverId,

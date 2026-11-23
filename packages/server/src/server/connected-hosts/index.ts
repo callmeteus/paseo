@@ -111,6 +111,7 @@ export class ConnectedHosts {
     private readonly home: string,
     private self: HostDirectory["self"],
     private readonly readClusterConfig: ReadClusterConfig = () => undefined,
+    private readonly persistSelfLabel: (label: string) => void = () => {},
   ) {
     this.ready = this.load();
     void this.ready.catch(() => {});
@@ -173,6 +174,7 @@ export class ConnectedHosts {
     const normalized = label.trim();
     if (!normalized || this.self.label === normalized) return;
     this.self = { ...this.self, label: normalized };
+    this.persistSelfLabel(normalized);
     this.changed();
   }
   observe(changed: () => void): () => void {
@@ -305,9 +307,7 @@ export class ConnectedHosts {
     if (this.readClusterConfig()?.syncHostNames !== true) return;
     const trimmed = label?.trim();
     if (!trimmed) return;
-    const registrationId = Array.from(this.live.entries()).find(
-      ([id]) => this.rows.find((row) => row.registrationId === id)?.serverId === serverId,
-    )?.[0];
+    const registrationId = this.registrationFor(serverId)?.registrationId;
     if (!registrationId) return;
     const live = this.live.get(registrationId);
     if (live?.accepted && live.client.isConnected)
@@ -333,6 +333,55 @@ export class ConnectedHosts {
     if (!row) throw new HostError("host_unknown", "Unknown host registration");
     return row;
   }
+
+  private registrationRank(row: Saved): number {
+    const live = this.live.get(row.registrationId);
+    if (row.status === "online" && live?.accepted && live.client.isConnected) return 5;
+    if (row.status === "online") return 4;
+    if (row.status === "connecting") return 3;
+    if (row.status === "offline") return 2;
+    if (row.status === "error") return 1;
+    return 0;
+  }
+
+  /** Picks the usable registration for a daemon, preferring a live accepted link. */
+  private registrationFor(serverId: string): Saved | undefined {
+    return this.rows
+      .filter((row) => row.serverId === serverId)
+      .sort(
+        (a, b) =>
+          this.registrationRank(b) - this.registrationRank(a) ||
+          (b.lastOnlineAt ?? "").localeCompare(a.lastOnlineAt ?? ""),
+      )[0];
+  }
+
+  /** Drops stale duplicate rows once another registration owns the daemon. */
+  private async pruneDuplicateRows(winner: Saved): Promise<void> {
+    if (winner.serverId === null) return;
+    const duplicates = this.rows.filter(
+      (row) =>
+        row !== winner && row.serverId === winner.serverId && row.error?.code === "duplicate_host",
+    );
+    await this.pruneRows(duplicates);
+  }
+
+  private pruneSelfIfDuplicate(row: Saved): Promise<void> {
+    if (row.error?.code !== "duplicate_host" || row.serverId === null) return Promise.resolve();
+    return this.mutate(async () => {
+      const owner = this.registrationFor(row.serverId ?? "");
+      if (!owner || owner === row || !owner.enabled || owner.status !== "online") return;
+      await this.pruneRows([row]);
+    });
+  }
+
+  private async pruneRows(rows: Saved[]): Promise<void> {
+    if (rows.length === 0) return;
+    const ids = new Set(rows.map((row) => row.registrationId));
+    await this.persist(this.rows.filter((row) => !ids.has(row.registrationId)));
+    this.rows = this.rows.filter((row) => !ids.has(row.registrationId));
+    for (const id of ids) this.stop(id, "host_unknown");
+    this.changed();
+  }
   private stop(id: string, code = "host_offline"): void {
     const live = this.live.get(id);
     live?.stop();
@@ -352,6 +401,8 @@ export class ConnectedHosts {
     resume?: { failures: number; transports: DaemonTransportFactory },
   ): void {
     if (!row.enabled || this.closed) return;
+    // A duplicate row can be pruned while a startup loop is still iterating the old list.
+    if (!this.rows.includes(row)) return;
     const transports =
       resume?.transports ??
       createHostTransportFactory(row.connection, this.budget, {
@@ -396,10 +447,11 @@ export class ConnectedHosts {
             "self_host",
             "This connection reaches this daemon. Remove it or replace the connection.",
           );
-        if (this.rows.find((entry) => entry.serverId === info.serverId) !== row)
+        const owner = this.registrationFor(info.serverId);
+        if (owner && owner !== row && owner.enabled)
           throw new HostError(
             "duplicate_host",
-            "Another registration already owns this daemon. Remove the duplicate registration.",
+            "Another registration already owns this daemon. The duplicate will be removed automatically once the owner is online.",
           );
         if (info.features?.connectedHosts !== true || info.features?.hostMultiplexing !== true)
           throw new HostError(
@@ -409,7 +461,8 @@ export class ConnectedHosts {
         // Pin and persist under the same writer as management to prevent discovery races.
         await this.mutate(async () => {
           if (stopped) return;
-          if (this.rows.find((entry) => entry.serverId === info.serverId) !== row)
+          const currentOwner = this.registrationFor(info.serverId);
+          if (currentOwner && currentOwner !== row && currentOwner.enabled)
             throw new HostError("duplicate_host", "Another registration already owns this daemon");
           const next = {
             ...row,
@@ -426,6 +479,7 @@ export class ConnectedHosts {
           this.liveVia.set(live, info.serverId);
           if (this.readClusterConfig()?.announceHosts === true) this.startAnnouncing(live);
           attempts = 0;
+          await this.pruneDuplicateRows(row);
           this.changed();
         });
       } catch (error) {
@@ -443,6 +497,7 @@ export class ConnectedHosts {
         }
         this.changed();
         await client.close();
+        await this.pruneSelfIfDuplicate(row);
       }
     };
     client.subscribeConnectionStatus((state) => {
@@ -565,7 +620,9 @@ export class ConnectedHosts {
       hopPath,
       maxHops,
     });
-    const row = this.rows.find((entry) => entry.serverId === input.serverId);
+    // Several registrations can reach the same daemon (direct link plus a duplicate or a
+    // route). Always pick the usable one instead of the first row that matches the id.
+    const row = this.registrationFor(input.serverId);
     if (!row) throw new HostError("host_unknown", `Unknown host ${input.serverId}`, input.serverId);
     if (!row.enabled)
       throw new HostError(

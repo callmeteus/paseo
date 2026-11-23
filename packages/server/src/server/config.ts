@@ -569,6 +569,10 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
+function resolveSelfLabel(persisted: ReturnType<typeof loadPersistedConfig>): string | undefined {
+  return persisted.daemon?.selfLabel?.trim() || undefined;
+}
+
 /**
  * Both profile lists stay `undefined` when absent rather than defaulting to an
  * empty array: for terminal profiles that is what selects the built-in
@@ -598,6 +602,7 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     remoteAccess: persisted.daemon?.remoteAccess,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
+    selfLabel: resolveSelfLabel(persisted),
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -664,6 +669,7 @@ export function resolveConfigFromPersisted(
     autoArchiveAfterMerge,
     remoteAccess,
     appendSystemPrompt,
+    selfLabel,
     terminalProfiles,
     agentProfiles,
     mcpServers,
@@ -702,6 +708,7 @@ export function resolveConfigFromPersisted(
     hubAllowHttp: resolveHubAllowHttp(persisted),
     hubPublicOrigin: resolveHubPublicOrigin(persisted),
     appendSystemPrompt,
+    selfLabel,
     terminalProfiles,
     agentProfiles,
     mcpServers,

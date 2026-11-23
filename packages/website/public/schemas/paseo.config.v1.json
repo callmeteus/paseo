@@ -298,6 +298,9 @@
         "appendSystemPrompt": {
           "type": "string"
         },
+        "selfLabel": {
+          "type": "string"
+        },
         "terminalProfiles": {
           "type": "array",
           "items": {
