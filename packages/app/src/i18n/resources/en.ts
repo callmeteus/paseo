@@ -843,6 +843,7 @@ export const en = {
       openAsTab: "Open as tab",
     },
     tabs: {
+      allHosts: "General",
       loading: "Loading...",
       modified: "Unsaved changes",
       loadingAgentTitle: "Loading agent title",

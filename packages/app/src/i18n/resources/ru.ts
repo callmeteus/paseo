@@ -855,6 +855,7 @@ export const ru: TranslationResources = {
       openAsTab: "Открыть во вкладке",
     },
     tabs: {
+      allHosts: "Общие",
       loading: "Загрузка...",
       modified: "Несохранённые изменения",
       loadingAgentTitle: "Загрузка названия агента",

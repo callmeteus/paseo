@@ -852,6 +852,7 @@ export const es: TranslationResources = {
       openAsTab: "Abrir como pestaña",
     },
     tabs: {
+      allHosts: "General",
       loading: "Cargando...",
       modified: "Cambios sin guardar",
       loadingAgentTitle: "Título del agente de carga",

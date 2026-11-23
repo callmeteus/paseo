@@ -848,6 +848,7 @@ export const ko: TranslationResources = {
       openAsTab: "탭으로 열기",
     },
     tabs: {
+      allHosts: "전체",
       loading: "불러오는 중...",
       modified: "저장되지 않은 변경사항",
       loadingAgentTitle: "에이전트 제목 불러오는 중",

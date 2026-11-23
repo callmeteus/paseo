@@ -3399,17 +3399,10 @@ function WorkspaceScreenContent({
       workspaceActionsInBar,
     ],
   );
-  // Commit stays the same action and moves onto the tab line, beside the explorer toggle.
-  // The IDE opener remains in the title row above.
+  // Commit lives in the title row only. Repeating it here paints a second git button.
   const tabLineTrailing = useMemo(
-    () =>
-      !isMobile && workspaceDirectory ? (
-        <>
-          <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
-          {explorerControls.headerAction}
-        </>
-      ) : null,
-    [explorerControls.headerAction, isMobile, normalizedServerId, workspaceDirectory],
+    () => (!isMobile && workspaceDirectory ? explorerControls.headerAction : null),
+    [explorerControls.headerAction, isMobile, workspaceDirectory],
   );
 
   const showScreenHeader = useMemo(

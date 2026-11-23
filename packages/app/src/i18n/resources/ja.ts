@@ -854,6 +854,7 @@ export const ja: TranslationResources = {
       openAsTab: "タブで開く",
     },
     tabs: {
+      allHosts: "すべて",
       loading: "読み込み中...",
       modified: "未保存の変更",
       loadingAgentTitle: "エージェントタイトルを読み込み中",

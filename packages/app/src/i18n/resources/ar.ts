@@ -842,6 +842,7 @@ export const ar: TranslationResources = {
       openAsTab: "فتح كعلامة تبويب",
     },
     tabs: {
+      allHosts: "عام",
       loading: "تحميل...",
       modified: "تغييرات غير محفوظة",
       loadingAgentTitle: "جارٍ تحميل عنوان الوكيل",

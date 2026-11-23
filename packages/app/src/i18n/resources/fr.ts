@@ -856,6 +856,7 @@ export const fr: TranslationResources = {
       openAsTab: "Ouvrir dans un onglet",
     },
     tabs: {
+      allHosts: "Général",
       loading: "Chargement…",
       modified: "Modifications non enregistrées",
       loadingAgentTitle: "Chargement du titre de l’agent…",

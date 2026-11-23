@@ -17,31 +17,35 @@ export function isHostTabsRailVisible(input: {
  * on every screen — including /new — instead of only inside a workspace.
  *
  * A host tab is both navigation and a sidebar filter: selecting one pins the
- * sidebar to that host, and selecting the already-selected one shows every host
- * again. The single-host filter is also what marks the tab as selected, so the
- * rail and the sidebar always agree on which host you are looking at.
+ * sidebar to that host. The "General" tab clears the filter and shows every host,
+ * so re-clicking a host no longer silently toggles it off.
  */
 export function HostTabsRail(): ReactElement | null {
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const hostCount = useHosts().length;
   const hostFilters = useSidebarViewStore((state) => state.hostFilters);
   const setHostFilter = useSidebarViewStore((state) => state.setHostFilter);
-  const filteredHostId = hostFilters.length === 1 ? hostFilters[0] : null;
+  const clearHostFilters = useSidebarViewStore((state) => state.clearHostFilters);
+  const showAllActive = hostFilters.length === 0;
   const activeServerId = useActiveHostServerId();
 
   const handleSelectHost = useCallback(
     (serverId: string) => {
-      const alreadySelected = filteredHostId === serverId;
-      setHostFilter(alreadySelected ? null : serverId);
-      if (!alreadySelected) {
-        selectHostFromTab(serverId, activeServerId);
-      }
+      setHostFilter(serverId);
+      selectHostFromTab(serverId, activeServerId);
     },
-    [activeServerId, filteredHostId, setHostFilter],
+    [activeServerId, setHostFilter],
   );
 
   if (!isHostTabsRailVisible({ groupMode, hostCount })) {
     return null;
   }
-  return <HostTabsRow activeServerId={activeServerId} onSelectHost={handleSelectHost} />;
+  return (
+    <HostTabsRow
+      activeServerId={activeServerId}
+      onSelectHost={handleSelectHost}
+      showAllActive={showAllActive}
+      onSelectAll={clearHostFilters}
+    />
+  );
 }

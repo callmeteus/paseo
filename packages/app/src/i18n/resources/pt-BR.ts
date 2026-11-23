@@ -854,6 +854,7 @@ export const ptBR: TranslationResources = {
       openAsTab: "Abrir como aba",
     },
     tabs: {
+      allHosts: "Geral",
       loading: "Carregando...",
       modified: "Alterações não salvas",
       loadingAgentTitle: "Carregando título do agente",

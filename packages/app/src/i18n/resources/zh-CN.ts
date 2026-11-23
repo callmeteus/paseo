@@ -842,6 +842,7 @@ export const zhCN: TranslationResources = {
       openAsTab: "作为标签页打开",
     },
     tabs: {
+      allHosts: "全部",
       loading: "正在加载...",
       modified: "未保存的更改",
       loadingAgentTitle: "正在加载 Agent 标题",
