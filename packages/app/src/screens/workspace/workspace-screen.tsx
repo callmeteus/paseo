@@ -3562,27 +3562,29 @@ function WorkspaceScreenContent({
           isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
           serverId={normalizedServerId}
         >
-          <MobileWorkspaceTabSwitcher
-            tabs={tabs}
-            activeTabKey={activeTabKey}
-            normalizedServerId={normalizedServerId}
-            normalizedWorkspaceId={normalizedWorkspaceId}
-            onSelectSwitcherTab={handleSelectSwitcherTab}
-            createTerminalDisabled={createTerminalDisabled}
-            onCreateDraftTab={openNewAgentScreen}
-            onCreateTerminal={handleCreateTerminal}
-            onCopyResumeCommand={handleCopyResumeCommand}
-            onCopyAgentId={handleCopyAgentId}
-            onCopyTerminalId={handleCopyTerminalId}
-            onCopyFilePath={handleCopyFilePath}
-            onReloadAgent={handleReloadAgent}
-            onDeleteAgent={handleDeleteAgentTab}
-            onRenameTab={handleRenameTab}
-            onCloseTab={handleCloseTabById}
-            onCloseTabsAbove={handleCloseTabsToLeft}
-            onCloseTabsBelow={handleCloseTabsToRight}
-            onCloseOtherTabs={handleCloseOtherTabs}
-          />
+          {actionsOnly || !tabSwitcher ? (
+            <MobileWorkspaceTabSwitcher
+              tabs={tabs}
+              activeTabKey={activeTabKey}
+              normalizedServerId={normalizedServerId}
+              normalizedWorkspaceId={normalizedWorkspaceId}
+              onSelectSwitcherTab={handleSelectSwitcherTab}
+              createTerminalDisabled={createTerminalDisabled}
+              onCreateDraftTab={openNewAgentScreen}
+              onCreateTerminal={handleCreateTerminal}
+              onCopyResumeCommand={handleCopyResumeCommand}
+              onCopyAgentId={handleCopyAgentId}
+              onCopyTerminalId={handleCopyTerminalId}
+              onCopyFilePath={handleCopyFilePath}
+              onReloadAgent={handleReloadAgent}
+              onDeleteAgent={handleDeleteAgentTab}
+              onRenameTab={handleRenameTab}
+              onCloseTab={handleCloseTabById}
+              onCloseTabsAbove={handleCloseTabsToLeft}
+              onCloseTabsBelow={handleCloseTabsToRight}
+              onCloseOtherTabs={handleCloseOtherTabs}
+            />
+          ) : null}
           <WorkspaceHeaderMenuMobile
             pane={paneTabs?.actions.pane}
             onExitFocusMode={isFocusModeEnabled ? toggleFocusMode : undefined}
