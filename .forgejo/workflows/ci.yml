@@ -17,7 +17,7 @@ env:
 jobs:
   changes:
     name: changes
-    runs-on: docker
+    runs-on: ci
     outputs:
       full: ${{ steps.filter.outputs.full }}
       format: ${{ steps.filter.outputs.format }}
@@ -44,7 +44,7 @@ jobs:
     name: quality
     needs: changes
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.format == 'true' || needs.changes.outputs.quality == 'true' }}
-    runs-on: docker
+    runs-on: ci
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,7 +65,7 @@ jobs:
     name: typecheck
     needs: changes
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.quality == 'true' }}
-    runs-on: docker
+    runs-on: ci
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,7 +83,7 @@ jobs:
     name: tests (${{ matrix.suite }})
     needs: changes
     if: ${{ needs.changes.outputs.full == 'true' || needs.changes.outputs.server == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.app == 'true' || needs.changes.outputs.sdk == 'true' }}
-    runs-on: docker
+    runs-on: ci
     env:
       PASEO_CI: "true"
       PLAYWRIGHT_BROWSERS_PATH: /workspace/paseo-browsers
