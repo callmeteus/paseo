@@ -112,36 +112,22 @@ export function SidebarWorkspaceHoverActions({
   workspaceKey,
   isPinned,
   onTogglePin,
-  onArchive,
-  archiveLabel,
-  archiveStatus,
   children,
 }: {
   workspaceKey: string;
   isPinned?: boolean;
   onTogglePin?: () => void;
-  onArchive?: () => void;
-  archiveLabel?: string;
-  archiveStatus?: "idle" | "pending" | "success";
   children: ReactNode;
 }) {
   const { t } = useTranslation();
   const pinAction = workspacePinAction(isPinned === true);
   const pinLabel = t(`sidebar.workspace.actions.${pinAction}`);
-  const archiveAccessibilityLabel = archiveLabel ?? t("sidebar.workspace.actions.archive");
   const handlePin = useCallback(
     (event: GestureResponderEvent) => {
       stopRowPress(event);
       onTogglePin?.();
     },
     [onTogglePin],
-  );
-  const handleArchive = useCallback(
-    (event: GestureResponderEvent) => {
-      stopRowPress(event);
-      onArchive?.();
-    },
-    [onArchive],
   );
   return (
     <View style={styles.hoverActions}>
@@ -157,17 +143,6 @@ export function SidebarWorkspaceHoverActions({
           ) : (
             <ThemedPin size={14} uniProps={foregroundMutedColorMapping} />
           )}
-        </ToolbarButton>
-      ) : null}
-      {onArchive ? (
-        <ToolbarButton
-          label={archiveAccessibilityLabel}
-          disabled={archiveStatus === "pending"}
-          onPress={handleArchive}
-          style={styles.hoverIconButton}
-          testID={`sidebar-workspace-archive-${workspaceKey}`}
-        >
-          <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />
         </ToolbarButton>
       ) : null}
       {children}

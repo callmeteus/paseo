@@ -818,9 +818,6 @@ function WorkspaceRowRightGroup({
                 workspaceKey={workspace.workspaceKey}
                 isPinned={isPinned}
                 onTogglePin={onTogglePin}
-                onArchive={onArchive}
-                archiveLabel={archiveLabel}
-                archiveStatus={archiveStatus}
               >
                 <SidebarWorkspaceMenu
                   {...kebab.menuProps}
