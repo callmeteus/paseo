@@ -123,6 +123,7 @@ Feito apos a insistencia do usuario para nao ser smoke test:
 - **Prompt real no app: "Diga PING-OK" → resposta "PING-OK" em 4s**, com aviso "This chat uses OpenCode v2".
 - **Tool call real: agente executou Shell, criou `/tmp/paseo-verify-test.txt` com `TOOLCALL-OK`**, renderizado na UI.
 - **Workspace virtual** (feature mesclada) com prompt real: "Diga VIRTUAL-OK" → "VIRTUAL-OK" em 3s. Seletor mostra "Diretorio do projeto" e "Virtual" coexistingo.
+- **Worktree real** (feature mesclada): repo git `/home/server/repo-worktree-test`, opcao "Novo worktree" no seletor, branch `snotty-dingo` criada em `~/.paseo/worktrees/1ke7ajvg/snotty-dingo` (confirmado por `git worktree list`). Prompt real no worktree: "Diga WORKTREE-OK" → "WORKTREE-OK" em 3s.
 - Composer: slash commands com skills destacados, @files, controle de reasoning effort (None/High).
 - Rewind: menu "Reverter conversa e arquivos".
 - Command Center/Buscar: abas Tudo/Espacos/Arquivos/Acoes com resultados reais.
@@ -137,8 +138,9 @@ Feito apos a insistencia do usuario para nao ser smoke test:
 
 ### Nao totalmente exercitado
 
-- Worktree real com repo git (o diretorio copiado nao tem `.git`).
-- Cards de Usage/cotas e layout mobile/compact (web) nao localizados na navegacao desktop.
+- Cards de Usage/cotas: item `UsageSidebarItem` so aparece com fontes de uso com dados; o modelo free tem custo 0 e nao gerou dados de cota na sessao.
+- Layout mobile/compact (web): nao exercitado porque o teste foi no desktop Linux (Xvfb).
+- Toggle "Ativar ferramentas do Paseo" tambem nao ligou na UI.
 
 ## 11. Estado final
 
