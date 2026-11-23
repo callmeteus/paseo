@@ -104,17 +104,7 @@ export class V2Runtime {
     }
     this.assertBridgePort();
     const selection = await raceProviderRefreshAbort(input.signal, this.selection);
-    let pending: Promise<Generation>;
-    if (selection.kind !== "owned") {
-      this.assertSharedConfiguration(input, selection);
-      this.current ??= this.startTracked();
-      pending = this.current;
-    } else if (input.env || input.dedicated) {
-      pending = this.startTracked(input.env);
-    } else {
-      if (!this.current) this.current = this.startTracked();
-      pending = this.current;
-    }
+    const pending = this.pendingFor(input, selection);
     let generation: Generation;
     try {
       generation = await raceProviderRefreshAbort(input.signal, pending);
@@ -148,6 +138,32 @@ export class V2Runtime {
       throw new Error("OpenCode runtime is closed");
     }
     return connection;
+  }
+
+  private pendingFor(
+    input: V2RuntimeAcquireOptions,
+    selection: OpenCodeServiceSelection,
+  ): Promise<Generation> {
+    if (selection.kind === "owned") {
+      if (input.env || input.dedicated) return this.startTracked(input.env);
+      this.current ??= this.startTracked();
+      return this.current;
+    }
+    const { needsIsolation } = this.sharedConfiguration(input, selection);
+    if (selection.kind === "discovered" && needsIsolation) {
+      // A discovered service is shared with sessions this agent does not own. Custom MCP
+      // and process environment are location-scoped, so they cannot be applied there.
+      // Prefer a Paseo-owned helper instead of failing the agent. An explicit URL stays
+      // authoritative: the user chose that server, so an incompatible request still fails.
+      this.options.logger.info(
+        { url: selection.server.url },
+        "Discovered OpenCode service cannot run custom MCP; starting an isolated helper",
+      );
+      return this.startTracked(input.env, true);
+    }
+    this.assertSharedConfiguration(input, selection);
+    this.current ??= this.startTracked();
+    return this.current;
   }
 
   private async acquireExternal(
@@ -184,10 +200,10 @@ export class V2Runtime {
       throw new Error("PASEO_OPENCODE_BRIDGE_PORT changed; restart Paseo to apply the bridge port");
   }
 
-  private assertSharedConfiguration(
+  private sharedConfiguration(
     input: V2RuntimeAcquireOptions,
     selection: OpenCodeServiceSelection,
-  ): void {
+  ): { needsIsolation: boolean; processOverrides: string[] } {
     const connectionEnv = new Set([
       "PASEO_OPENCODE_SERVER_URL",
       "PASEO_OPENCODE_SERVER_PASSWORD",
@@ -202,7 +218,18 @@ export class V2Runtime {
     const processOverrides = Object.keys(this.options.settings?.env ?? {}).filter(
       (key) => !connectionEnv.has(key),
     );
-    if (input.env || input.dedicated || processOverrides.length) {
+    return {
+      needsIsolation: Boolean(input.env || input.dedicated || processOverrides.length),
+      processOverrides,
+    };
+  }
+
+  private assertSharedConfiguration(
+    input: V2RuntimeAcquireOptions,
+    selection: OpenCodeServiceSelection,
+  ): void {
+    const { needsIsolation, processOverrides } = this.sharedConfiguration(input, selection);
+    if (needsIsolation) {
       throw new Error(
         `Custom OpenCode MCP servers or process environment require an isolated server and cannot be used with a shared OpenCode service${processOverrides.length ? `: ${processOverrides.join(", ")}` : ""}.`,
       );
@@ -276,8 +303,8 @@ export class V2Runtime {
     return generation;
   }
 
-  private startTracked(env?: Record<string, string>): Promise<Generation> {
-    const pending = this.start(env);
+  private startTracked(env?: Record<string, string>, forceOwned = false): Promise<Generation> {
+    const pending = this.start(env, forceOwned);
     this.starts.add(pending);
     void pending.then(
       (generation) =>
@@ -294,9 +321,9 @@ export class V2Runtime {
     return pending;
   }
 
-  private async start(env: Record<string, string> = {}): Promise<Generation> {
+  private async start(env: Record<string, string> = {}, forceOwned = false): Promise<Generation> {
     const selection = await this.selection;
-    if (selection.kind !== "owned") {
+    if (selection.kind !== "owned" && !forceOwned) {
       const generation: Generation = {
         ...(await connectSharedService(selection, this.options)),
         users: 0,

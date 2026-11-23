@@ -56,6 +56,49 @@ test("an owned helper uses an installed bridge once and survives catalog refresh
   }
 }, 15_000);
 
+test("uses an owned helper when a discovered service cannot run custom MCP", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-discovered-fallback-"));
+  const config = path.join(root, "config", "opencode");
+  const script = path.join(root, "server.cjs");
+  const record = path.join(root, "env.json");
+  await writeFile(
+    script,
+    `
+    const http = require('node:http');
+    require('node:fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify({
+      custom: process.env.CUSTOM_VALUE,
+      configHome: process.env.XDG_CONFIG_HOME,
+    }));
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ version: '2.0.10', pid: process.pid, urls: [], paths: { tmp: '/tmp' } }));
+    });
+    server.listen(0, '127.0.0.1', () => console.log('server listening on http://127.0.0.1:' + server.address().port));
+  `,
+  );
+  const runtime = new V2Runtime({
+    logger: createTestLogger(),
+    selection: { kind: "discovered", server: { url: "http://127.0.0.1:1" } },
+    settings: {
+      command: { mode: "replace", argv: [process.execPath, script] },
+      env: { XDG_CONFIG_HOME: config },
+    },
+  });
+  try {
+    const connection = await runtime.acquire({ dedicated: true, env: { CUSTOM_VALUE: "ok" } });
+    const pid = (await connection.client.server.info()).pid;
+    expect(pid).toBeGreaterThan(0);
+    expect(JSON.parse(await readFile(record, "utf8"))).toEqual({
+      custom: "ok",
+      configHome: config,
+    });
+    await connection.release();
+  } finally {
+    await runtime.shutdown();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15_000);
+
 test("reports a bridge port change that has not been applied", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-opencode-port-"));
   const bridge = new OpenCodeBridge({ paseoHome: root, logger: createTestLogger() });
