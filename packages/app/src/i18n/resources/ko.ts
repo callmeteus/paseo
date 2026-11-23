@@ -2565,12 +2565,30 @@ export const ko: TranslationResources = {
         one: "파일 {{count}}개",
         other: "파일 {{count}}개",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "파일 {{count}}개 탐색",
+        other: "파일 {{count}}개 탐색",
+      },
+      searches: {
+        one: "검색 {{count}}회",
+        other: "검색 {{count}}회",
+      },
+      fetches: {
+        one: "가져오기 {{count}}회",
+        other: "가져오기 {{count}}회",
+      },
+      commands: {
+        one: "명령 {{count}}개 실행",
+        other: "명령 {{count}}개 실행",
+      },
+      tools: {
+        one: "도구 {{count}}개",
+        other: "도구 {{count}}개",
+      },
+      agents: {
+        one: "에이전트 {{count}}개",
+        other: "에이전트 {{count}}개",
+      },
     },
     thought: "사고",
     briefly: "잠시",

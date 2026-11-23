@@ -165,7 +165,9 @@ export function buildOverviewSummaryDisplay(
     if (namedActions.length === 0) {
       return groupSentence;
     }
-    const text = [lowercaseFirst(groupSentence.text), ...namedActions].join(` ${conjunction} `);
+    // With no leading part this sentence starts the line, so keep its initial capital. Lowercasing
+    // only makes sense when the group sentence follows another section.
+    const text = [groupSentence.text, ...namedActions].join(` ${conjunction} `);
     return { text, segments: [{ text }] };
   }
 

@@ -2593,12 +2593,30 @@ export const ptBR: TranslationResources = {
         one: "{{count}} arquivo",
         other: "{{count}} arquivos",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "explorei {{count}} arquivo",
+        other: "explorei {{count}} arquivos",
+      },
+      searches: {
+        one: "{{count}} busca",
+        other: "{{count}} buscas",
+      },
+      fetches: {
+        one: "{{count}} requisição",
+        other: "{{count}} requisições",
+      },
+      commands: {
+        one: "rodei {{count}} comando",
+        other: "rodei {{count}} comandos",
+      },
+      tools: {
+        one: "{{count}} ferramenta",
+        other: "{{count}} ferramentas",
+      },
+      agents: {
+        one: "{{count}} agente",
+        other: "{{count}} agentes",
+      },
     },
     thought: "Pensei",
     briefly: "um instante",

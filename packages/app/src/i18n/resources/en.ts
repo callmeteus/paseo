@@ -2582,12 +2582,30 @@ export const en = {
         one: "{{count}} file",
         other: "{{count}} files",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "explored {{count}} file",
+        other: "explored {{count}} files",
+      },
+      searches: {
+        one: "{{count}} search",
+        other: "{{count}} searches",
+      },
+      fetches: {
+        one: "{{count}} fetch",
+        other: "{{count}} fetches",
+      },
+      commands: {
+        one: "ran {{count}} command",
+        other: "ran {{count}} commands",
+      },
+      tools: {
+        one: "{{count}} tool",
+        other: "{{count}} tools",
+      },
+      agents: {
+        one: "{{count}} agent",
+        other: "{{count}} agents",
+      },
     },
     thought: "Thought",
     briefly: "briefly",

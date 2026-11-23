@@ -2549,12 +2549,30 @@ export const ar: TranslationResources = {
         one: "{{count}} ملف",
         other: "{{count}} ملفات",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "استكشفت {{count}} ملف",
+        other: "استكشفت {{count}} ملفات",
+      },
+      searches: {
+        one: "{{count}} بحث",
+        other: "{{count}} عمليات بحث",
+      },
+      fetches: {
+        one: "{{count}} جلب",
+        other: "{{count}} عمليات جلب",
+      },
+      commands: {
+        one: "شغّلت {{count}} أمر",
+        other: "شغّلت {{count}} أوامر",
+      },
+      tools: {
+        one: "{{count}} أداة",
+        other: "{{count}} أدوات",
+      },
+      agents: {
+        one: "{{count}} وكيل",
+        other: "{{count}} وكلاء",
+      },
     },
     thought: "تفكير",
     briefly: "للحظة",

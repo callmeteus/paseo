@@ -2606,12 +2606,30 @@ export const es: TranslationResources = {
         one: "{{count}} archivo",
         other: "{{count}} archivos",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "exploré {{count}} archivo",
+        other: "exploré {{count}} archivos",
+      },
+      searches: {
+        one: "{{count}} búsqueda",
+        other: "{{count}} búsquedas",
+      },
+      fetches: {
+        one: "{{count}} petición",
+        other: "{{count}} peticiones",
+      },
+      commands: {
+        one: "ejecuté {{count}} comando",
+        other: "ejecuté {{count}} comandos",
+      },
+      tools: {
+        one: "{{count}} herramienta",
+        other: "{{count}} herramientas",
+      },
+      agents: {
+        one: "{{count}} agente",
+        other: "{{count}} agentes",
+      },
     },
     thought: "Pensé",
     briefly: "un instante",

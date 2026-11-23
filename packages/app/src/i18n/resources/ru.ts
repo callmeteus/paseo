@@ -2592,12 +2592,30 @@ export const ru: TranslationResources = {
         one: "{{count}} файл",
         other: "{{count}} файлов",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "изучен {{count}} файл",
+        other: "изучено {{count}} файлов",
+      },
+      searches: {
+        one: "{{count}} поиск",
+        other: "{{count}} поисков",
+      },
+      fetches: {
+        one: "{{count}} запрос",
+        other: "{{count}} запросов",
+      },
+      commands: {
+        one: "выполнена {{count}} команда",
+        other: "выполнено {{count}} команд",
+      },
+      tools: {
+        one: "{{count}} инструмент",
+        other: "{{count}} инструментов",
+      },
+      agents: {
+        one: "{{count}} агент",
+        other: "{{count}} агентов",
+      },
     },
     thought: "Размышление",
     briefly: "ненадолго",

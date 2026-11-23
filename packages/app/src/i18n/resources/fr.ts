@@ -2610,12 +2610,30 @@ export const fr: TranslationResources = {
         one: "{{count}} fichier",
         other: "{{count}} fichiers",
       },
-      exploredFiles: {},
-      searches: {},
-      fetches: {},
-      commands: {},
-      tools: {},
-      agents: {},
+      exploredFiles: {
+        one: "exploré {{count}} fichier",
+        other: "exploré {{count}} fichiers",
+      },
+      searches: {
+        one: "{{count}} recherche",
+        other: "{{count}} recherches",
+      },
+      fetches: {
+        one: "{{count}} requête",
+        other: "{{count}} requêtes",
+      },
+      commands: {
+        one: "exécuté {{count}} commande",
+        other: "exécuté {{count}} commandes",
+      },
+      tools: {
+        one: "{{count}} outil",
+        other: "{{count}} outils",
+      },
+      agents: {
+        one: "{{count}} agent",
+        other: "{{count}} agents",
+      },
     },
     thought: "Réflexion",
     briefly: "un instant",
