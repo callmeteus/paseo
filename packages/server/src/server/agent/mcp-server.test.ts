@@ -3518,6 +3518,53 @@ describe("create_agent MCP tool", () => {
     );
   });
 
+  it("inherits auto_accept across providers so an automated child can finish unattended", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const parentAgent = {
+      id: "parent-agent",
+      labels: {},
+      config: { providerOptions: { auto_accept: true } },
+      effectiveOptions: { auto_accept: true, parent_only_feature: "keep-out" },
+      cwd: existingCwd,
+      workspaceId: "wks_parent",
+      provider: "claude",
+      currentModeId: "bypassPermissions",
+    } as ManagedAgent;
+    spies.agentManager.getAgent.mockReturnValue(parentAgent);
+    spies.agentManager.createAgent.mockResolvedValue({
+      id: "child-agent",
+      cwd: existingCwd,
+      lifecycle: "idle",
+      currentModeId: "build",
+      availableModes: [],
+      config: { title: "Child" },
+    } as ManagedAgent);
+    const providerSnapshot = createOpenCodeManager();
+    providerSnapshot.stub.resolveCreateConfig.mockResolvedValue({
+      modeId: "build",
+      providerOptions: { auto_accept: true },
+    });
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      callerAgentId: "parent-agent",
+      providerSnapshotManager: providerSnapshot.manager,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+    await tool.handler({
+      ...subagentCurrentWorkspace(),
+      title: "Child",
+      provider: "opencode/gpt-5.4",
+      initialPrompt: "Do work",
+    });
+
+    expect(providerSnapshot.stub.resolveCreateConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ providerOptions: { auto_accept: true } }),
+    );
+  });
+
   it("accepts an explicit valid mode across providers", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({

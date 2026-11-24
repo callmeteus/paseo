@@ -1098,10 +1098,20 @@ function createToolCatalog(
     selectedProvider: string,
   ): Pick<AgentSessionConfig, "providerOptions"> | undefined => {
     const callerAgent = resolveCallerAgent();
-    if (callerAgent?.provider !== selectedProvider || !callerAgent.config?.providerOptions) {
-      return undefined;
+    if (!callerAgent) return undefined;
+    // Use the live options: the caller may have toggled Auto Accept after its own start.
+    const effective = callerAgent.effectiveOptions ?? callerAgent.config?.providerOptions;
+    if (!effective) return undefined;
+    if (callerAgent.provider === selectedProvider) {
+      return { providerOptions: effective };
     }
-    return { providerOptions: callerAgent.config.providerOptions };
+    // A child launched by a different provider still inherits the one option that lets it
+    // run unattended. Without auto_accept, every permission becomes a card in the child's
+    // chat and an automated child never finishes its task. Only this option crosses the
+    // provider boundary; other options are provider-specific and must not leak.
+    const autoAccept = effective["auto_accept"];
+    if (autoAccept === undefined) return undefined;
+    return { providerOptions: { auto_accept: autoAccept } };
   };
 
   const resolveScopedCwd = (requestedCwd?: string, opts?: { required?: boolean }): string => {
