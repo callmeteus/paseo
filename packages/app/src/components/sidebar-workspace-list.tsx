@@ -141,6 +141,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Shortcut } from "@/components/ui/shortcut";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import type { KeyboardActionId } from "@/keyboard/keyboard-action-dispatcher";
 import { useWorkspaceReadState } from "@/hooks/use-workspace-read-state";
 import type { PrHint } from "@/git/use-pr-status-query";
 import {
@@ -677,6 +679,25 @@ function ProjectMenuItems({
     if (!settingsTarget) return;
     router.navigate(buildProjectSettingsRoute(settingsTarget.serverId, settingsTarget.projectId));
   }, [settingsTarget]);
+  // This component is mounted only while its menu is open. Take the Delete shortcut at
+  // a higher priority than the global workspace handler, so Del removes this project
+  // instead of the active workspace while the project menu is on screen. The item still
+  // goes through the same confirmation as a press on the menu row.
+  const deleteShortcutKeys = useShortcutKeys("delete-workspace");
+  const deleteTrailing = useMemo(
+    () => (deleteShortcutKeys ? <Shortcut chord={deleteShortcutKeys} /> : null),
+    [deleteShortcutKeys],
+  );
+  useKeyboardActionHandler({
+    handlerId: `project-menu-delete-${projectViewKey}`,
+    actions: ["workspace.delete" as KeyboardActionId],
+    enabled: Boolean(onRemoveProject),
+    priority: 10,
+    handle: () => {
+      onRemoveProject();
+      return true;
+    },
+  });
   const canOpenInNewWindow = getIsElectron() && projectPath.trim().length > 0;
   const handleOpenInNewWindow = useCallback(() => {
     const trimmedPath = projectPath.trim();
@@ -720,6 +741,7 @@ function ProjectMenuItems({
         surface={surface}
         testID={`sidebar-project-menu-remove-${projectViewKey}`}
         leading={trash2LeadingIcon}
+        trailing={deleteTrailing}
         status={removeProjectStatus}
         pendingLabel={t("sidebar.project.actions.removing")}
         onSelect={onRemoveProject}

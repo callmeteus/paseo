@@ -54,6 +54,8 @@ import {
 } from "@/components/ui/context-menu";
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { Shortcut } from "@/components/ui/shortcut";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import type { KeyboardActionId } from "@/keyboard/keyboard-action-dispatcher";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { bySizing } from "@/components/ui/control-geometry";
@@ -327,6 +329,19 @@ function SidebarWorkspaceMenuItems({
     () => (deleteShortcutKeys ? <Shortcut chord={deleteShortcutKeys} /> : null),
     [deleteShortcutKeys],
   );
+  // The items are mounted only while the menu is open. Claim Delete here at a higher
+  // priority than the global handler so the key acts on the row whose menu is on screen,
+  // not on whichever workspace happens to be routed. It opens the same confirmation.
+  useKeyboardActionHandler({
+    handlerId: `workspace-menu-delete-${workspaceKey}`,
+    actions: ["workspace.delete" as KeyboardActionId],
+    enabled: Boolean(onDelete),
+    priority: 10,
+    handle: () => {
+      onDelete?.();
+      return true;
+    },
+  });
   const labelLeading = useMemo(
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
     [],
