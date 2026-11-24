@@ -31,6 +31,14 @@ const ALLO_UI_FONT_MIGRATION = "allo-ui-font";
 const USAGE_SIDEBAR_VISIBLE_MIGRATION = "usage-sidebar-visible";
 
 /**
+ * The first usage migration dropped `visible: false` from memory but `patchStoredSettings`
+ * did not write `sidebarFooterItems` back, so the old entry returned on the next launch.
+ * Re-run the same cleanup and persist it. Affected installs already carry the first marker,
+ * which is why this needs its own id.
+ */
+const USAGE_SIDEBAR_VISIBLE_PERSIST_MIGRATION = "usage-sidebar-visible-persist";
+
+/**
  * Brings stored settings up to date, returning what the caller should use. Owns both writes so
  * the marker can only ever be written after the settings it describes: a failed marker write
  * leaves the migration to re-run harmlessly, while a failed settings write must leave the marker
@@ -78,6 +86,17 @@ export async function migrateAppSettings(
     addedMigration = true;
   }
 
+  if (!applied.has(USAGE_SIDEBAR_VISIBLE_PERSIST_MIGRATION)) {
+    if (migrated.sidebarFooterItems.some((item) => item.key === "usage")) {
+      migrated = {
+        ...migrated,
+        sidebarFooterItems: migrated.sidebarFooterItems.filter((item) => item.key !== "usage"),
+      };
+    }
+    applied.add(USAGE_SIDEBAR_VISIBLE_PERSIST_MIGRATION);
+    addedMigration = true;
+  }
+
   if (options.native && !applied.has(MOBILE_CONTENT_16_MIGRATION)) {
     migrated = migrated.contentFontSize === 15 ? { ...migrated, contentFontSize: 16 } : migrated;
     applied.add(MOBILE_CONTENT_16_MIGRATION);
@@ -115,6 +134,9 @@ async function patchStoredSettings(
   }
   if (migrated.contentFontSize !== previous.contentFontSize) {
     base.contentFontSize = migrated.contentFontSize;
+  }
+  if (migrated.sidebarFooterItems !== previous.sidebarFooterItems) {
+    base.sidebarFooterItems = migrated.sidebarFooterItems;
   }
   return base;
 }

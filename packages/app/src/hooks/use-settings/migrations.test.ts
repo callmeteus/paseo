@@ -46,7 +46,12 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("steer");
     expect(storedSendBehavior(storage)).toBe("steer");
-    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font", "usage-sidebar-visible"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "allo-ui-font",
+      "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
+    ]);
   });
 
   it("leaves interrupt alone once the migration has run", async () => {
@@ -65,7 +70,12 @@ describe("migrateAppSettings", () => {
 
     expect(result.sendBehavior).toBe("queue");
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font", "usage-sidebar-visible"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "allo-ui-font",
+      "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
+    ]);
   });
 
   it("marks itself applied on a fresh install without rewriting settings", async () => {
@@ -74,7 +84,12 @@ describe("migrateAppSettings", () => {
     await migrateAppSettings(settingsWith("steer"), storage);
 
     expect(storage.entries.has(APP_SETTINGS_KEY)).toBe(false);
-    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font", "usage-sidebar-visible"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "allo-ui-font",
+      "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
+    ]);
   });
 
   it("keeps unknown migration ids written by a newer client", async () => {
@@ -89,6 +104,7 @@ describe("migrateAppSettings", () => {
       "steer-default",
       "allo-ui-font",
       "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
     ]);
   });
 
@@ -104,6 +120,7 @@ describe("migrateAppSettings", () => {
       "steer-default",
       "allo-ui-font",
       "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
       "mobile-content-16",
     ]);
   });
@@ -116,7 +133,12 @@ describe("migrateAppSettings", () => {
 
     expect(result.contentFontSize).toBe(15);
     expect(storedContentFontSize(storage)).toBeUndefined();
-    expect(appliedIds(storage)).toEqual(["steer-default", "allo-ui-font", "usage-sidebar-visible"]);
+    expect(appliedIds(storage)).toEqual([
+      "steer-default",
+      "allo-ui-font",
+      "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
+    ]);
   });
 
   it("lets a mobile user choose 15px after the default migration ran", async () => {
@@ -159,7 +181,29 @@ describe("migrateAppSettings", () => {
       "steer-default",
       "allo-ui-font",
       "usage-sidebar-visible",
+      "usage-sidebar-visible-persist",
     ]);
+  });
+
+  it("persists the usage footer cleanup so an old visible: false does not return on relaunch", async () => {
+    const stored = { sidebarFooterItems: [{ key: "usage", visible: false }] };
+    const storage = createInMemoryKeyValueStorage({
+      [APP_SETTINGS_KEY]: JSON.stringify(stored),
+    });
+    const settings: AppSettings = {
+      ...DEFAULT_CLIENT_SETTINGS,
+      sidebarFooterItems: [{ key: "usage", visible: false }],
+    };
+
+    const first = await migrateAppSettings(settings, storage);
+    expect(first.sidebarFooterItems).toEqual([]);
+    expect(JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "{}").sidebarFooterItems).toEqual(
+      [],
+    );
+
+    const persisted = JSON.parse(storage.entries.get(APP_SETTINGS_KEY) ?? "{}");
+    const second = await migrateAppSettings({ ...DEFAULT_CLIENT_SETTINGS, ...persisted }, storage);
+    expect(second.sidebarFooterItems).toEqual([]);
   });
 
   it("moves an unset interface font to Allo once, then keeps a later system choice", async () => {

@@ -301,7 +301,7 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarNavItems).toEqual([]);
   });
 
-  it("loads stored sidebar footer items in order and defaults them to empty", async () => {
+  it("loads stored sidebar footer items in order, dropping the migrated usage entry", async () => {
     expect((await loadAppSettingsFromStorage(makeDeps())).sidebarFooterItems).toEqual([]);
 
     const deps = makeDeps({
@@ -322,7 +322,6 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarFooterItems).toEqual([
       { key: "help", visible: false },
       { key: "plugin:sync:status", visible: true },
-      { key: "usage", visible: false },
     ]);
   });
 
