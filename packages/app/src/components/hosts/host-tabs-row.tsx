@@ -8,7 +8,7 @@ import { PressHighlight } from "@/components/ui/press-highlight";
 import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHostTabOrderStore } from "@/stores/host-tab-order-store";
-import { connectionLabelKey, HostStatusDot } from "@/components/host-status-dot";
+import { connectionLabelKey } from "@/components/host-status-dot";
 import { StatusIcon } from "@/components/status-icon";
 import { useTranslation } from "react-i18next";
 import { useHostRuntimeConnectionStatus, useHostRuntimeLastError } from "@/runtime/host-runtime";
@@ -232,7 +232,6 @@ function HostTabChip({
               uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
             />
           </StatusIcon>
-          <HostStatusDot serverId={host.serverId} status={hostStatus} />
           <Text
             style={[styles.label, active ? styles.labelActive : null]}
             numberOfLines={1}
