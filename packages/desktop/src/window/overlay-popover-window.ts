@@ -93,6 +93,9 @@ export function createPopoverWindow(input: CreatePopoverWindowInput): BrowserWin
     nativeOptions.transparent = true;
   } else if (input.appearance.platform === "win32") {
     nativeOptions.backgroundMaterial = "acrylic";
+  } else {
+    // Without a native material, the rounded CSS card needs a transparent window.
+    nativeOptions.transparent = true;
   }
 
   const win = new BrowserWindow({

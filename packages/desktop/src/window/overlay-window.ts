@@ -47,6 +47,8 @@ export interface LoadOverlayRouteInput {
   pluginId: string;
   surfaceId: string;
   mode: OverlayMode;
+  /** Query params extras, such as the popover kind and agent id. */
+  extra?: string;
 }
 
 const MAX_MARGIN = 320;
@@ -200,6 +202,23 @@ export function resizeOverlayWindow(
 }
 
 /**
+ * Monta a URL da screen do plugin na janela da tira ou do popover.
+ *
+ * @param input Identificadores da screen, modo e query params extras.
+ * @returns A URL final carregada pela janela.
+ */
+export function buildOverlayUrl(
+  input: Omit<LoadOverlayRouteInput, "extra"> & { extra?: string },
+): string {
+  const route = `/h/${encodeURIComponent(input.serverId)}/plugin/${encodeURIComponent(
+    input.pluginId,
+  )}/sidebar/${encodeURIComponent(input.surfaceId)}?overlay=${input.mode}${input.extra ?? ""}`;
+  return input.isPackaged
+    ? `paseo://app${route}`
+    : new URL(route, `${input.devServerUrl}/`).toString();
+}
+
+/**
  * Carrega a screen do plugin na janela da tira ou do popover.
  *
  * @param win Janela de destino.
@@ -210,13 +229,7 @@ export async function loadOverlayRoute(
   win: BrowserWindow,
   input: LoadOverlayRouteInput,
 ): Promise<void> {
-  const route = `/h/${encodeURIComponent(input.serverId)}/plugin/${encodeURIComponent(
-    input.pluginId,
-  )}/sidebar/${encodeURIComponent(input.surfaceId)}?overlay=${input.mode}`;
-  const url = input.isPackaged
-    ? `paseo://app${route}`
-    : new URL(route, `${input.devServerUrl}/`).toString();
-  await win.loadURL(url);
+  await win.loadURL(buildOverlayUrl(input));
 }
 
 /**

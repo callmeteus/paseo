@@ -54,6 +54,25 @@ O plugin nunca produz scroll: a `FlatList` da tira usa `scrollEnabled={false}` (
 
 Estado não verificável visualmente na VM: nenhum provider está autenticado (`paseo status` mostra `available: false` para todos), então não há agentes reais para renderizar as bolinhas. Esses estados foram checados pela lógica de render, não por screenshot.
 
+## Correções de fundo opaco e tooltip vazio (24/11/2026)
+
+Você reportou que no Acer o overlay ainda tinha fundo e o tooltip abria vazio. Ambos confirmados e corrigidos:
+
+**Fundo opaco.** O `app.asar` do teste Linux era de 23/11 03:37, mas o CSS de transparência do `_layout.tsx` entrou em 24/11 10:57. O build estava desatualizado, então `#paseo-overlay-transparency` não existia no DOM e `html`/`body` ficavam em `rgb(24,27,26)`. Rebuildado, transferido e validado: `hasStyle: true` e `rgba(0,0,0,0)` em toda a cadeia (strip e popover). Também garanti `transparent: true` no popover em plataformas sem material nativo (`overlay-popover-window.ts`).
+
+**Tooltip vazio.** A URL do popover era montada com `&kind=...&agentId=...`, mas o app lê screen params com o prefixo `param.` (`SCREEN_PARAM_PREFIX` em `plugins/routes.ts`). Sem o prefixo, `pluginScreenParamsFromRoute` descartava os dois, `PopoverScreen` recebia `agentId=""` e `useAgent("")` retornava null. Corrigido para `&param.kind=...&param.agentId=...` em `overlay-manager.ts`. Unifiquei a montagem da URL em `buildOverlayUrl()` (`overlay-window.ts`) para a comparação de URL usar exatamente a mesma string carregada, e adicionei 3 testes unitários.
+
+Validação no Acer após rebuild: o popover abre com `?overlay=popover&param.kind=tooltip&param.agentId=...` e renderiza o cartão completo (`Overlay Demo`, Branch, Repo, Local, Host), com fundo transparente. Evidência: `tooltip-fixed.png`.
+
+## Correções de fundo e tooltip (24/11/2026)
+
+Duas falhas reais apareceram no teste Linux do Acer após o rebuild:
+
+- **Fundo opaco:** o CSS de transparência do `_layout.tsx` (#paseo-overlay-transparency) não existia no DOM (`hasStyle: false`) porque o `app.asar` do teste era de 23/11, anterior à correção. Depois do rebuild e deploy, `hasStyle: true` e `html/body/#root` reportam `rgba(0, 0, 0, 0)`. A janela do popover também passou a usar `transparent: true` em plataformas sem material nativo (Linux).
+- **Tooltip vazio:** `overlay-manager.ts` montava a URL do popover com `&kind=...&agentId=...`, mas `pluginScreenParamsFromRoute` só aceita chaves com o prefixo `param.`. Os parâmetros eram descartados, `params.agentId` chegava vazio, `useAgent("")` retornava null e o cartão renderizava vazio. Corrigido para `&param.kind=...&param.agentId=...`. Também unifiquei a montagem da URL em `buildOverlayUrl` para que a comparação `webContents.getURL()` use exatamente a mesma URL carregada.
+
+**Validação no Acer:** com um agente real (`Overlay Demo`), o popover agora mostra título, Branch, Repo, Local, Host e labels (`tooltip-fixed.png`). A URL do target contém `?overlay=popover&param.kind=tooltip&param.agentId=...`. Testes unitários de `buildOverlayUrl` passam (10 testes). Typecheck e lint passaram localmente.
+
 ## Como foi montado
 
 - Build Linux gerado no checkout com `npm run build:desktop -- --linux --dir` em `packages/desktop/release/linux-unpacked/`.
@@ -75,6 +94,8 @@ Estado não verificável visualmente na VM: nenhum provider está autenticado (`
 - As janelas do overlay eram criadas com `resizable: false`, o que impedia `setBounds` no Linux. Alterado para `resizable: true` em `overlay-window.ts` e `overlay-popover-window.ts`.
 - O `<DesktopWindowControls />` do root layout renderizava minimizar/maximizar/fechar em todas as janelas, inclusive no overlay. Agora é suprimido quando `window.location.search` contém `overlay=strip|popover|1`.
 - O plugin mede o tamanho da tira de forma determinística (número de chats + gaps + botão) e chama `resizeStrip` num `useEffect`.
+- A URL do popover não passava `kind`/`agentId` para `loadOverlayRoute`, e quando passava, usava chaves sem o prefixo `param.` exigido por `pluginScreenParamsFromRoute`. Corrigido em `overlay-manager.ts` e centralizado em `buildOverlayUrl` (`overlay-window.ts`), com testes unitários.
+- O popover não era transparente em plataformas sem material nativo. Adicionado `transparent: true` no分支 Linux em `overlay-popover-window.ts`.
 
 ## Evidência
 
@@ -84,6 +105,8 @@ Estado não verificável visualmente na VM: nenhum provider está autenticado (`
 - `scrollbar-before.png`: ampliação da tira com a rota inválida, texto "A d d" quebrado e seta de scroll.
 - `scrollbar-after.png`: mesma ampliação após corrigir `serverId`, com "sem chats" e sem scroll.
 - `vm-overlay-no-scrollbar.png`: tela da VM com a tira correta flutuando sobre o Edge.
+- `tooltip-fixed.png`: cartão do tooltip no Acer após corrigir o prefixo `param.`, com `Overlay Demo`, Branch, Repo, Local, Host e labels.
+- `tooltip-fixed.png`: cartão do tooltip com conteúdo real (título, branch, repo, local, host e labels) e fundo transparente, após o rebuild no Acer.
 
 ## Estado
 

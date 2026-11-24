@@ -15,6 +15,7 @@ import {
 import {
   type OverlayMode,
   type OverlayPreset,
+  buildOverlayUrl,
   createOverlayWindow,
   destroyOverlayWindow,
   hideOverlayWindow,
@@ -144,11 +145,16 @@ export function createOverlayManager(input: OverlayManagerDeps) {
     return input.settings.get().then((settings) => settings.overlay);
   }
 
-  async function route(serverId: string, mode: OverlayMode, extra = ""): Promise<string> {
-    const base = `/h/${encodeURIComponent(serverId)}/plugin/${encodeURIComponent(
-      input.pluginId,
-    )}/sidebar/${encodeURIComponent(input.surfaceId)}?overlay=${mode}`;
-    return input.isPackaged ? `paseo://app${base}${extra}` : `${input.devServerUrl}${base}${extra}`;
+  function overlayUrl(serverId: string, mode: OverlayMode, extra = ""): string {
+    return buildOverlayUrl({
+      devServerUrl: input.devServerUrl,
+      isPackaged: input.isPackaged,
+      serverId,
+      pluginId: input.pluginId,
+      surfaceId: input.surfaceId,
+      mode,
+      extra,
+    });
   }
 
   async function ensureStrip(): Promise<BrowserWindow> {
@@ -228,8 +234,11 @@ export function createOverlayManager(input: OverlayManagerDeps) {
     }
     const settings = await config();
     const serverId = settings.serverId ?? "local";
-    const extra = `&kind=${encodeURIComponent(next.kind)}&agentId=${encodeURIComponent(next.agentId)}`;
-    const target = await route(serverId, "popover", extra);
+    // Screen params use the "param." prefix recognized by pluginScreenParamsFromRoute.
+    const extra = `&param.kind=${encodeURIComponent(next.kind)}&param.agentId=${encodeURIComponent(
+      next.agentId,
+    )}`;
+    const target = overlayUrl(serverId, "popover", extra);
     if (activePopover.webContents.getURL() !== target) {
       await loadOverlayRoute(activePopover, {
         devServerUrl: input.devServerUrl,
@@ -238,6 +247,7 @@ export function createOverlayManager(input: OverlayManagerDeps) {
         pluginId: input.pluginId,
         surfaceId: input.surfaceId,
         mode: "popover",
+        extra,
       });
     }
     showPopoverWindow(activePopover, next.kind === "awaitingInput");

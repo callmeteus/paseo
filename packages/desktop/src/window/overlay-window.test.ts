@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   OVERLAY_PRESETS,
+  buildOverlayUrl,
   isOverlayPreset,
   readOverlayPreset,
   resolveOverlayBounds,
@@ -44,6 +45,44 @@ describe("overlay window presets", () => {
     expect(readOverlayPreset(42)).toBeNull();
     expect(isOverlayPreset("bottom-center")).toBe(true);
     expect(isOverlayPreset("nope")).toBe(false);
+  });
+});
+
+describe("buildOverlayUrl", () => {
+  const base = {
+    devServerUrl: "http://localhost:19006",
+    isPackaged: false,
+    serverId: "srv_123",
+    pluginId: "floating-chats",
+    surfaceId: "overlay",
+  };
+
+  it("includes the popover kind and agent id with the param prefix", () => {
+    const url = buildOverlayUrl({
+      ...base,
+      mode: "popover",
+      extra: "&param.kind=tooltip&param.agentId=agent_42",
+    });
+    expect(url).toContain("?overlay=popover&param.kind=tooltip&param.agentId=agent_42");
+  });
+
+  it("keeps the strip url free of popover params", () => {
+    const url = buildOverlayUrl({ ...base, mode: "strip" });
+    expect(url).toContain("?overlay=strip");
+    expect(url).not.toContain("kind=");
+    expect(url).not.toContain("agentId=");
+  });
+
+  it("uses the paseo scheme when packaged", () => {
+    const url = buildOverlayUrl({
+      ...base,
+      isPackaged: true,
+      mode: "popover",
+      extra: "&param.kind=message&param.agentId=agent_9",
+    });
+    expect(url).toBe(
+      "paseo://app/h/srv_123/plugin/floating-chats/sidebar/overlay?overlay=popover&param.kind=message&param.agentId=agent_9",
+    );
   });
 });
 
