@@ -221,7 +221,11 @@ export function registerWindowManager(input: { mode: DesktopWindowChromeMode }):
       return;
     }
 
-    if (nextUpdate.backgroundColor) {
+    // Overlay windows are transparent by design; the app theme color must not
+    // repaint them opaque when the renderer reports its chrome update.
+    const url = win.webContents.getURL();
+    const isOverlay = url.includes("overlay=");
+    if (nextUpdate.backgroundColor && !isOverlay) {
       win.setBackgroundColor(nextUpdate.backgroundColor);
     }
 

@@ -68,7 +68,7 @@ Validação no Acer após rebuild: o popover abre com `?overlay=popover&param.ki
 
 Duas falhas reais apareceram no teste Linux do Acer após o rebuild:
 
-- **Fundo opaco:** o CSS de transparência do `_layout.tsx` (#paseo-overlay-transparency) não existia no DOM (`hasStyle: false`) porque o `app.asar` do teste era de 23/11, anterior à correção. Depois do rebuild e deploy, `hasStyle: true` e `html/body/#root` reportam `rgba(0, 0, 0, 0)`. A janela do popover também passou a usar `transparent: true` em plataformas sem material nativo (Linux).
+- **Fundo opaco:** o CSS de transparência do `_layout.tsx` (#paseo-overlay-transparency) não existia no DOM (`hasStyle: false`) porque o `app.asar` do teste era de 23/11, anterior à correção. Depois do rebuild e deploy, `hasStyle: true` e `html/body/#root` reportam `rgba(0, 0, 0, 0)`. A janela do popover também passou a usar `transparent: true` em plataformas sem material nativo (Linux). Even with that, a captura CDP ainda mostrava canto `rgb(24,27,26)` alpha 255. A causa real estava no `window-manager.ts`: o renderer chama `paseo:window:updateChrome` com a cor do tema (`#181b1a` = rgb(24,27,26)) e `win.setBackgroundColor()` repintava **todas** as janelas, inclusive as do overlay, tornando-as opacas. Corrigido para ignorar janelas cuja URL contém `overlay=`. Também removido o `backgroundColor: "#00000000"` explícito das janelas overlay, que competia com `transparent: true`. Prova final via CDP `Page.captureScreenshot` com `omitBackground`: canto `(0,0,0,0)` alpha 0 na strip e no popover (`strip-transparent.png`).
 - **Tooltip vazio:** `overlay-manager.ts` montava a URL do popover com `&kind=...&agentId=...`, mas `pluginScreenParamsFromRoute` só aceita chaves com o prefixo `param.`. Os parâmetros eram descartados, `params.agentId` chegava vazio, `useAgent("")` retornava null e o cartão renderizava vazio. Corrigido para `&param.kind=...&param.agentId=...`. Também unifiquei a montagem da URL em `buildOverlayUrl` para que a comparação `webContents.getURL()` use exatamente a mesma URL carregada.
 
 **Validação no Acer:** com um agente real (`Overlay Demo`), o popover agora mostra título, Branch, Repo, Local, Host e labels (`tooltip-fixed.png`). A URL do target contém `?overlay=popover&param.kind=tooltip&param.agentId=...`. Testes unitários de `buildOverlayUrl` passam (10 testes). Typecheck e lint passaram localmente.
@@ -96,6 +96,7 @@ Duas falhas reais apareceram no teste Linux do Acer após o rebuild:
 - O plugin mede o tamanho da tira de forma determinística (número de chats + gaps + botão) e chama `resizeStrip` num `useEffect`.
 - A URL do popover não passava `kind`/`agentId` para `loadOverlayRoute`, e quando passava, usava chaves sem o prefixo `param.` exigido por `pluginScreenParamsFromRoute`. Corrigido em `overlay-manager.ts` e centralizado em `buildOverlayUrl` (`overlay-window.ts`), com testes unitários.
 - O popover não era transparente em plataformas sem material nativo. Adicionado `transparent: true` no分支 Linux em `overlay-popover-window.ts`.
+- O `window-manager.ts` repintava todas as janelas com a cor do tema via `setBackgroundColor` ao receber `paseo:window:updateChrome`, incluindo as janelas do overlay. Agora janelas com `overlay=` na URL são ignoradas. Também removido o `backgroundColor` explícito das janelas overlay, que competia com `transparent: true`.
 
 ## Evidência
 
@@ -106,6 +107,7 @@ Duas falhas reais apareceram no teste Linux do Acer após o rebuild:
 - `scrollbar-after.png`: mesma ampliação após corrigir `serverId`, com "sem chats" e sem scroll.
 - `vm-overlay-no-scrollbar.png`: tela da VM com a tira correta flutuando sobre o Edge.
 - `tooltip-fixed.png`: cartão do tooltip no Acer após corrigir o prefixo `param.`, com `Overlay Demo`, Branch, Repo, Local, Host e labels.
+- `strip-transparent.png`: captura CDP com `omitBackground` mostrando canto `(0,0,0,0)` (fundo transparente de verdade) na tira.
 - `tooltip-fixed.png`: cartão do tooltip com conteúdo real (título, branch, repo, local, host e labels) e fundo transparente, após o rebuild no Acer.
 
 ## Estado

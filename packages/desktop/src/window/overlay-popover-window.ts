@@ -103,7 +103,7 @@ export function createPopoverWindow(input: CreatePopoverWindowInput): BrowserWin
     height: 200,
     show: false,
     frame: false,
-    backgroundColor: input.backgroundColor,
+    ...(nativeOptions.transparent ? {} : { backgroundColor: input.backgroundColor }),
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,

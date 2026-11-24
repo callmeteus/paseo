@@ -144,7 +144,6 @@ export function createOverlayWindow(input: CreateOverlayWindowInput): BrowserWin
     show: false,
     frame: false,
     transparent: true,
-    backgroundColor: input.backgroundColor,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
