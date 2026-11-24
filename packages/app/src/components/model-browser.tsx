@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useReducer, useState } from "react";
+import {
+  createContext,
+  forwardRef,
+  useCallback,
+  useContext,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   FlatList,
@@ -777,31 +785,43 @@ function ModelRowProfileAction({
   );
 }
 
-function ModelRowInteractiveSurface({
-  row,
-  isSelected,
-  description,
-  leadingSlot,
-  profileAction,
-  onPress,
-  onPointerEnter,
-  onPointerLeave,
-  pressableStyle,
-}: {
-  row: ProviderSelectionModelRow;
-  isSelected: boolean;
-  description?: string;
-  leadingSlot: React.ReactNode;
-  profileAction: React.ReactNode;
-  onPress: () => void;
-  onPointerEnter: () => void;
-  onPointerLeave: () => void;
-  pressableStyle: (
-    state: PressableStateCallbackType & { hovered?: boolean },
-  ) => StyleProp<ViewStyle>;
-}) {
+/**
+ * The tooltip trigger needs a ref on the outer hover boundary to measure its
+ * position. Without forwardRef the ref never attaches and the tooltip renders
+ * off-screen at -9999px.
+ */
+const ModelRowInteractiveSurface = forwardRef<
+  View,
+  {
+    row: ProviderSelectionModelRow;
+    isSelected: boolean;
+    description?: string;
+    leadingSlot: React.ReactNode;
+    profileAction: React.ReactNode;
+    onPress: () => void;
+    onPointerEnter: () => void;
+    onPointerLeave: () => void;
+    pressableStyle: (
+      state: PressableStateCallbackType & { hovered?: boolean },
+    ) => StyleProp<ViewStyle>;
+  }
+>(function ModelRowInteractiveSurface(
+  {
+    row,
+    isSelected,
+    description,
+    leadingSlot,
+    profileAction,
+    onPress,
+    onPointerEnter,
+    onPointerLeave,
+    pressableStyle,
+  },
+  ref,
+) {
   return (
     <View
+      ref={ref}
       style={[styles.modelRowHoverBoundary, styles.browserModelRow]}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
@@ -827,7 +847,7 @@ function ModelRowInteractiveSurface({
       ) : null}
     </View>
   );
-}
+});
 
 function ModelRowMain({
   row,
