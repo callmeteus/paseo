@@ -120,6 +120,31 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     setCapturingShortcut: (capturing: boolean) =>
       ipcRenderer.invoke("paseo:menu:set-capturing-shortcut", capturing),
   },
+  overlay: {
+    show: () => ipcRenderer.invoke("paseo:overlay:show") as Promise<void>,
+    hide: () => ipcRenderer.invoke("paseo:overlay:hide") as Promise<void>,
+    toggle: () => ipcRenderer.invoke("paseo:overlay:toggle") as Promise<boolean>,
+    getConfig: () => ipcRenderer.invoke("paseo:overlay:getConfig"),
+    setConfig: (patch: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:overlay:setConfig", patch),
+    setPosition: (preset: string) => ipcRenderer.invoke("paseo:overlay:setPosition", preset),
+    resizeStrip: (size: { width: number; height: number }) =>
+      ipcRenderer.invoke("paseo:overlay:resizeStrip", size),
+    openPopover: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:overlay:openPopover", input),
+    resizePopover: (size: { width: number; height: number }) =>
+      ipcRenderer.invoke("paseo:overlay:resizePopover", size),
+    closePopover: () => ipcRenderer.invoke("paseo:overlay:closePopover") as Promise<void>,
+    openAgent: (input: { serverId: string; agentId: string }) =>
+      ipcRenderer.invoke("paseo:overlay:openAgent", input),
+    openNewChat: () => ipcRenderer.invoke("paseo:overlay:openNewChat") as Promise<void>,
+    getAppearance: () => ipcRenderer.invoke("paseo:overlay:getAppearance"),
+    onAppearanceChanged: (handler: (payload: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => handler(payload);
+      ipcRenderer.on("paseo:overlay:appearanceChanged", listener);
+      return () => ipcRenderer.removeListener("paseo:overlay:appearanceChanged", listener);
+    },
+  },
   browser: {
     setShortcutPolicy: (input: BrowserKeyboardPolicy) =>
       ipcRenderer.invoke("paseo:browser:set-shortcut-policy", input),

@@ -243,6 +243,18 @@ Agent browser_keypress -> guest sendInputEvent(skipIfUnhandled)
   `-- guest does not handle ----> stop; never redispatch to the host window
 ```
 
+**Floating chat overlay.** The overlay is desktop-only and split across two native windows owned by
+`main.ts` through `createOverlayManager()`: the strip and the popover, both always-on-top and
+out of the taskbar. The strip is transparent with a CSS pill and no native material so its
+rounded shape is exact; the popover is a single rounded window with the system material (vibrancy
+on macOS, Acrylic on Windows 11, opaque on Linux and Windows 10), resized and anchored to the
+bubble on each open inside the primary display's `workArea`. Only the popover uses a native
+material, because a material blurs the entire window and cannot be cut to a CSS pill. The renderer
+of both windows is the same plugin screen opened in bare mode by `?overlay=strip` or
+`?overlay=popover`, which drops the header and host picker. All window control crosses
+`paseo:overlay:*` IPC; the plugin reads `window.paseoDesktop.overlay` only from its `client/web.ts`.
+Clicking a bubble focuses the main window on that agent through the existing agent deep-link path.
+
 ### `packages/website` — Marketing site
 
 TanStack Router + Cloudflare Workers. Serves paseo.sh.

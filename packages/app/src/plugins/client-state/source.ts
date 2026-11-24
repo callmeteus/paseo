@@ -4,6 +4,7 @@ import type { PluginTerminalSnapshot } from "@getpaseo/plugin";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useSessionStore, type SessionState } from "@/stores/session-store";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
+import { useWorkspaceLabels } from "@/workspace-labels";
 import { connectedPluginHosts } from "./connected-hosts";
 import { pluginTerminals } from "./terminals";
 import { entityRefs } from "./refs";
@@ -93,9 +94,14 @@ function projectHost(hostId: string): HostProjection | null {
   const workspaces = Array.from(session.workspaces.values(), (workspace) => {
     const activity = session.workspaceAgentActivity.get(workspace.id);
     const root = activity ? session.agents.get(activity.agentId) : undefined;
+    const labelColors: Record<string, string> = {};
+    for (const label of useWorkspaceLabels.getState().hosts[hostId]?.labels ?? []) {
+      labelColors[label.name] = label.color;
+    }
     return createPluginWorkspaceSnapshot(workspace, hostId, {
       pendingCreateAttempts: pending,
       workspaceAgentActivity: session.workspaceAgentActivity,
+      labelColors,
       parentAgent: root ? createPluginAgentSnapshot(root, workspace.id).parentAgent : null,
     });
   });

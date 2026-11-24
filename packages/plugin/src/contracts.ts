@@ -34,6 +34,8 @@ export interface PluginWorkspaceSnapshot {
   readonly labels: readonly string[];
   readonly background: boolean;
   readonly branch: string | null;
+  readonly remoteUrl: string | null;
+  readonly labelColors: Readonly<Record<string, string>>;
   /** Null when an older host has not supplied the workspace creation time. */
   readonly createdAt: string | null;
   readonly lastPromptAt: string | null;

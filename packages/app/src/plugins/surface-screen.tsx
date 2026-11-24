@@ -150,12 +150,21 @@ export function PluginSurfaceScreen() {
     pluginId?: string | string[];
     contributionKind?: string | string[];
     contributionId?: string | string[];
+    overlay?: string | string[];
   }>();
   const serverId = routeParam(routeParams.serverId);
   const pluginId = routeParam(routeParams.pluginId);
   const contributionKind = routeParam(routeParams.contributionKind);
   const contributionId = routeParam(routeParams.contributionId);
-  const paramsKey = JSON.stringify(pluginScreenParamsFromRoute(routeParams));
+  const overlayRaw = routeParam(routeParams.overlay);
+  const isBareOverlay = overlayRaw === "strip" || overlayRaw === "popover" || overlayRaw === "1";
+  let overlayParam: string | null = null;
+  if (overlayRaw === "1") overlayParam = "strip";
+  if (overlayRaw === "strip" || overlayRaw === "popover") overlayParam = overlayRaw;
+  const paramsKey = JSON.stringify({
+    ...pluginScreenParamsFromRoute(routeParams),
+    ...(overlayParam ? { overlay: overlayParam } : {}),
+  });
   // Keyed by content: the route hands back a new object on every render.
   const params = useMemo<PluginScreenParams>(() => JSON.parse(paramsKey), [paramsKey]);
   const identity = useMemo<PluginSurfaceContributionIdentity | null>(() => {
@@ -241,6 +250,33 @@ export function PluginSurfaceScreen() {
     [close, hostFilter],
   );
 
+  const surfaceBody = (
+    <View style={styles.body}>
+      {plugin && surface && client ? (
+        <SurfaceErrorBoundary
+          key={`${serverId}/${pluginId}/${identity?.kind}/${contributionId}`}
+          installation={plugin}
+          Surface={surface.Component}
+        >
+          <ThemedSurfaceRenderer
+            Surface={surface.Component}
+            plugin={plugin}
+            host={host}
+            layout={layout}
+            params={params}
+            uniProps={pluginThemeMapping}
+          />
+        </SurfaceErrorBoundary>
+      ) : (
+        <PluginSurfacePlaceholder status={placeholderStatus} />
+      )}
+    </View>
+  );
+
+  if (isBareOverlay) {
+    return <View style={styles.overlayRoot}>{surfaceBody}</View>;
+  }
+
   return (
     <View style={styles.screen}>
       {compact ? (
@@ -254,26 +290,7 @@ export function PluginSurfaceScreen() {
       ) : (
         <ScreenHeader left={headerLeft} right={headerRight} />
       )}
-      <View style={styles.body}>
-        {plugin && surface && client ? (
-          <SurfaceErrorBoundary
-            key={`${serverId}/${pluginId}/${identity?.kind}/${contributionId}`}
-            installation={plugin}
-            Surface={surface.Component}
-          >
-            <ThemedSurfaceRenderer
-              Surface={surface.Component}
-              plugin={plugin}
-              host={host}
-              layout={layout}
-              params={params}
-              uniProps={pluginThemeMapping}
-            />
-          </SurfaceErrorBoundary>
-        ) : (
-          <PluginSurfacePlaceholder status={placeholderStatus} />
-        )}
-      </View>
+      {surfaceBody}
     </View>
   );
 }
@@ -282,6 +299,10 @@ const styles = StyleSheet.create((theme) => ({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.surface0,
+  },
+  overlayRoot: {
+    flex: 1,
+    backgroundColor: "transparent",
   },
   body: {
     flex: 1,

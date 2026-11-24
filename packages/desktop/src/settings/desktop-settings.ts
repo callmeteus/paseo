@@ -5,6 +5,20 @@ import path from "node:path";
 import { z } from "zod";
 
 import type { AppReleaseChannel } from "../features/auto-updater.js";
+import type { OverlayPreset } from "../window/overlay-window.js";
+
+/** Configuração persistida do overlay de chats flutuantes. */
+export interface OverlaySettings {
+  enabled: boolean;
+  position: OverlayPreset;
+  margin: number;
+  cornerOffset: number;
+  animations: boolean;
+  messagePreviews: boolean;
+  stickyAwaitingInput: boolean;
+  serverId: string | null;
+  hiddenAgentIds: string[];
+}
 
 export interface DesktopSettings {
   releaseChannel: AppReleaseChannel;
@@ -15,12 +29,14 @@ export interface DesktopSettings {
     manageBuiltInDaemon: boolean;
     keepRunningAfterQuit: boolean;
   };
+  overlay: OverlaySettings;
 }
 
 interface DesktopSettingsPatch {
   releaseChannel?: AppReleaseChannel;
   notifications?: Partial<DesktopSettings["notifications"]>;
   daemon?: Partial<DesktopSettings["daemon"]>;
+  overlay?: Partial<OverlaySettings>;
 }
 
 export interface DesktopSettingsStore {
@@ -37,6 +53,17 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   daemon: {
     manageBuiltInDaemon: true,
     keepRunningAfterQuit: false,
+  },
+  overlay: {
+    enabled: false,
+    position: "top-right",
+    margin: 24,
+    cornerOffset: 72,
+    animations: true,
+    messagePreviews: true,
+    stickyAwaitingInput: true,
+    serverId: null,
+    hiddenAgentIds: [],
   },
 };
 
@@ -57,11 +84,40 @@ const DaemonSchema = z
   })
   .catch(() => ({ ...DEFAULT_DESKTOP_SETTINGS.daemon }));
 
+const OVERLAY_PRESET_VALUES = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+  "top-center",
+  "bottom-center",
+] as const;
+
+const OverlaySchema = z
+  .looseObject({
+    enabled: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.overlay.enabled),
+    position: z.enum(OVERLAY_PRESET_VALUES).catch(DEFAULT_DESKTOP_SETTINGS.overlay.position),
+    margin: z.number().int().min(0).max(320).catch(DEFAULT_DESKTOP_SETTINGS.overlay.margin),
+    cornerOffset: z
+      .number()
+      .int()
+      .min(0)
+      .max(600)
+      .catch(DEFAULT_DESKTOP_SETTINGS.overlay.cornerOffset),
+    animations: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.overlay.animations),
+    messagePreviews: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.overlay.messagePreviews),
+    stickyAwaitingInput: z.boolean().catch(DEFAULT_DESKTOP_SETTINGS.overlay.stickyAwaitingInput),
+    serverId: z.string().nullable().catch(DEFAULT_DESKTOP_SETTINGS.overlay.serverId),
+    hiddenAgentIds: z.array(z.string()).catch([]),
+  })
+  .catch(() => ({ ...DEFAULT_DESKTOP_SETTINGS.overlay, hiddenAgentIds: [] }));
+
 const DesktopSettingsSchema = z
   .looseObject({
     releaseChannel: ReleaseChannelSchema.catch(DEFAULT_DESKTOP_SETTINGS.releaseChannel),
     notifications: NotificationsSchema,
     daemon: DaemonSchema,
+    overlay: OverlaySchema,
   })
   .catch(() => buildDefaultSettings());
 
@@ -103,11 +159,69 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
 }
 
+function isOverlayPresetValue(value: string): value is OverlayPreset {
+  return OVERLAY_PRESET_VALUES.some((preset) => preset === value);
+}
+
+function coerceBoundedNumber(value: unknown, minimum: number, maximum: number): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) {
+    return null;
+  }
+  return Math.round(value);
+}
+
+function coerceOverlayPatch(input: unknown): Partial<OverlaySettings> {
+  if (!isRecord(input)) {
+    return {};
+  }
+
+  const patch: Partial<OverlaySettings> = {};
+  const enabled = coerceBoolean(input.enabled);
+  if (enabled !== null) {
+    patch.enabled = enabled;
+  }
+  if (typeof input.position === "string" && isOverlayPresetValue(input.position)) {
+    patch.position = input.position;
+  }
+  const margin = coerceBoundedNumber(input.margin, 0, 320);
+  if (margin !== null) {
+    patch.margin = margin;
+  }
+  const cornerOffset = coerceBoundedNumber(input.cornerOffset, 0, 600);
+  if (cornerOffset !== null) {
+    patch.cornerOffset = cornerOffset;
+  }
+  const animations = coerceBoolean(input.animations);
+  if (animations !== null) {
+    patch.animations = animations;
+  }
+  const messagePreviews = coerceBoolean(input.messagePreviews);
+  if (messagePreviews !== null) {
+    patch.messagePreviews = messagePreviews;
+  }
+  const stickyAwaitingInput = coerceBoolean(input.stickyAwaitingInput);
+  if (stickyAwaitingInput !== null) {
+    patch.stickyAwaitingInput = stickyAwaitingInput;
+  }
+  if (input.serverId === null || typeof input.serverId === "string") {
+    patch.serverId = input.serverId;
+  }
+  if (
+    Array.isArray(input.hiddenAgentIds) &&
+    input.hiddenAgentIds.every((id) => typeof id === "string")
+  ) {
+    patch.hiddenAgentIds = [...input.hiddenAgentIds];
+  }
+
+  return patch;
+}
+
 function buildDefaultSettings(): StoredDesktopSettings {
   return {
     releaseChannel: DEFAULT_DESKTOP_SETTINGS.releaseChannel,
     notifications: { ...DEFAULT_DESKTOP_SETTINGS.notifications },
     daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon },
+    overlay: { ...DEFAULT_DESKTOP_SETTINGS.overlay, hiddenAgentIds: [] },
   };
 }
 
@@ -129,6 +243,17 @@ function toDesktopSettings(stored: StoredDesktopSettings): DesktopSettings {
     daemon: {
       manageBuiltInDaemon: stored.daemon.manageBuiltInDaemon,
       keepRunningAfterQuit: stored.daemon.keepRunningAfterQuit,
+    },
+    overlay: {
+      enabled: stored.overlay.enabled,
+      position: stored.overlay.position,
+      margin: stored.overlay.margin,
+      cornerOffset: stored.overlay.cornerOffset,
+      animations: stored.overlay.animations,
+      messagePreviews: stored.overlay.messagePreviews,
+      stickyAwaitingInput: stored.overlay.stickyAwaitingInput,
+      serverId: stored.overlay.serverId,
+      hiddenAgentIds: [...stored.overlay.hiddenAgentIds],
     },
   };
 }
@@ -166,6 +291,11 @@ function coerceDesktopSettingsPatch(input: unknown): DesktopSettingsPatch {
     }
   }
 
+  const overlayPatch = coerceOverlayPatch(input.overlay);
+  if (Object.keys(overlayPatch).length > 0) {
+    patch.overlay = overlayPatch;
+  }
+
   return patch;
 }
 
@@ -199,6 +329,11 @@ function mergeDesktopSettings(
     releaseChannel: patch.releaseChannel ?? current.releaseChannel,
     notifications: { ...current.notifications, ...patch.notifications },
     daemon: { ...current.daemon, ...patch.daemon },
+    overlay: {
+      ...current.overlay,
+      ...patch.overlay,
+      hiddenAgentIds: patch.overlay?.hiddenAgentIds ?? current.overlay.hiddenAgentIds,
+    },
   };
 }
 

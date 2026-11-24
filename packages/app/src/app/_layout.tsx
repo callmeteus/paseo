@@ -415,6 +415,12 @@ function workspaceBelowHostTabs(input: {
   );
 }
 
+function isOverlayWindowRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const overlay = new URLSearchParams(window.location.search).get("overlay");
+  return overlay === "strip" || overlay === "popover" || overlay === "1";
+}
+
 function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppContainerProps) {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
   const daemons = useHosts();
@@ -448,6 +454,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const isCompactLayout = useIsCompactFormFactor();
   useCompactWebViewportZoomLock(isCompactLayout);
   const pathname = usePathname();
+  const isOverlayWindow = isOverlayWindowRoute();
   const isWorkspaceRoute = parseHostWorkspaceRouteFromPathname(pathname) !== null;
   const isWorkspaceFocusModeEnabled = isWorkspaceRoute && isFocusModeEnabled;
   const chromeEnabled = chromeEnabledOverride ?? daemons.length > 0;
@@ -583,7 +590,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
             </WindowChromeSafeArea>
           </WindowChromeRegion>
         ) : null}
-        <DesktopWindowControls />
+        {!isOverlayWindow ? <DesktopWindowControls /> : null}
         <FloatingPanelPortalHost />
         <LinkContextMenu />
       </AppearanceStyleBoundary>
@@ -1068,9 +1075,22 @@ function RootProviders({ children }: { children: ReactNode }) {
 }
 
 function RootAppTree() {
+  const overlayWindow = isOverlayWindowRoute();
+  useEffect(() => {
+    if (!overlayWindow || typeof document === "undefined") return;
+    const style = document.createElement("style");
+    style.id = "paseo-overlay-transparency";
+    style.textContent = `
+      html, body, #root { background-color: transparent !important; }
+      #root [class*="unistyles_"]:not([aria-label]) { background-color: transparent !important; }
+      #root [class*="css-"]:not([aria-label]) { background-color: transparent !important; }
+    `;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, [overlayWindow]);
   return (
     <GestureHandlerRootView style={flexStyle}>
-      <View style={layoutStyles.surfaceFill}>
+      <View style={overlayWindow ? flexStyle : layoutStyles.surfaceFill}>
         <LucideProvider strokeWidth={ICON_STROKE_WIDTH}>
           <AddHostProvider>
             <RootProviders>

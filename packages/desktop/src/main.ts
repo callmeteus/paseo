@@ -119,6 +119,7 @@ import {
   type AgentDeepLinkTarget,
 } from "@getpaseo/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
+import { createOverlayManager } from "./window/overlay-manager.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
@@ -1006,6 +1007,20 @@ async function bootstrap(): Promise<void> {
   void syncCurrentDaemonHubLogin();
   void ensureDesktopDaemonStarted();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
+  createOverlayManager({
+    settings: getDesktopSettingsStore(),
+    preloadPath: getPreloadPath(),
+    additionalArguments: [windowChromeModeArgument(DESKTOP_WINDOW_CHROME_MODE)],
+    backgroundColor: "#00000000",
+    devServerUrl: DEV_SERVER_URL,
+    isPackaged: app.isPackaged,
+    pluginId: "floating-chats",
+    surfaceId: "overlay",
+    openAgent: (target) => desktopWindowOwner.openOrFocusAgent(target),
+    openNewChat: async () => {
+      await desktopWindowOwner.openPrimary({ initialRoute: "/new-agent" });
+    },
+  });
   registerDialogHandlers();
   registerNotificationHandlers();
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });

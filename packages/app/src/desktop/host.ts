@@ -172,6 +172,64 @@ export interface DesktopInvokeBridge {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
+/** Retângulo usado para ancorar o popover na bolinha. */
+export interface DesktopOverlayRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Configuração persistida do overlay. */
+export interface DesktopOverlayConfig {
+  enabled: boolean;
+  position:
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right"
+    | "top-center"
+    | "bottom-center";
+  margin: number;
+  cornerOffset: number;
+  animations: boolean;
+  messagePreviews: boolean;
+  stickyAwaitingInput: boolean;
+  serverId: string | null;
+  hiddenAgentIds: string[];
+}
+
+/** Aparência nativa usada pelas peles do popover. */
+export interface DesktopOverlayAppearance {
+  platform: string;
+  material: "vibrancy" | "acrylic" | "none";
+  accentColor: string;
+  prefersReducedMotion: boolean;
+}
+
+/** Ponte IPC do overlay de chats flutuantes. */
+export interface DesktopOverlayBridge {
+  show?: () => Promise<void>;
+  hide?: () => Promise<void>;
+  toggle?: () => Promise<boolean>;
+  getConfig?: () => Promise<DesktopOverlayConfig>;
+  setConfig?: (patch: Partial<DesktopOverlayConfig>) => Promise<DesktopOverlayConfig>;
+  setPosition?: (preset: DesktopOverlayConfig["position"]) => Promise<DesktopOverlayConfig>;
+  resizeStrip?: (size: { width: number; height: number }) => Promise<void>;
+  openPopover?: (input: {
+    kind: "tooltip" | "message" | "awaitingInput";
+    agentId: string;
+    anchor: DesktopOverlayRect;
+    size: { width: number; height: number };
+  }) => Promise<void>;
+  resizePopover?: (size: { width: number; height: number }) => Promise<void>;
+  closePopover?: () => Promise<void>;
+  openAgent?: (input: { serverId: string; agentId: string }) => Promise<void>;
+  openNewChat?: () => Promise<void>;
+  getAppearance?: () => Promise<DesktopOverlayAppearance>;
+  onAppearanceChanged?: (handler: (appearance: DesktopOverlayAppearance) => void) => () => void;
+}
+
 export interface DesktopHostBridge {
   platform?: string;
   windowChromeMode?: string;
@@ -189,6 +247,7 @@ export interface DesktopHostBridge {
   webUtils?: DesktopWebUtilsBridge;
   menu?: DesktopMenuBridge;
   browser?: DesktopBrowserBridge;
+  overlay?: DesktopOverlayBridge;
 }
 
 declare global {

@@ -22,6 +22,8 @@ const workspace: PluginWorkspaceSnapshot = {
   labels: [],
   background: false,
   branch: null,
+  remoteUrl: null,
+  labelColors: {},
   createdAt: null,
   lastPromptAt: null,
   parentAgent: null,

@@ -2,6 +2,15 @@
 
 ## Backlog
 
+- [ ] **R-015** Floating chats overlay: inline replies and placement refinement
+      priority: medium · status: planned · added: 2026-11-23
+      O overlay de chats flutuantes entrega nesta versão as bolinhas com anel de status, ping, arco de running, prévia de mensagem, balão de aguardando resposta, tooltip, peles nativas e as seis posições. O clique abre o Paseo no chat. Falta responder dentro do overlay usando a mesma interface de chat, incluindo respostas rápidas de pergunta e permissão quando o SDK as expuser. Também ficam para depois o reposicionamento por arraste, a escolha de monitor em multi-display, o agrupamento de chats de vários hosts, a animação de reordenação e o equivalente fora do desktop.
+  - Responder em um chat sem sair do overlay, reaproveitando a interface de chat do Paseo.
+  - Respostas rápidas para perguntas e pedidos de permissão no balão de aguardando resposta.
+  - Arrastar a tira para reposicionar, com persistência da posição.
+  - Escolher o monitor em configurações multi-display.
+  - Agrupar chats de vários hosts em uma única tira.
+
 - [ ] **R-014** Reap idle and orphaned opencode runtime processes
       priority: high · status: planned · added: 2026-11-20
       Paseo leaves spawned opencode runtimes behind. A sample found 15 `opencode serve --hostname 127.0.0.1 --port 0` processes under the daemon node runner, using 5,115 MB working set and 7,878 MB private bytes with 170 s of accumulated CPU, plus 18 `browse` MCP pairs. They sit idle after their turn ends and are not tied to the lifetime of the owning session, so they accumulate and can be orphaned when a parent exits. Bind each spawned runtime to its session or agent, terminate the whole process tree when that owner ends or is archived, and sweep periodically for runtimes whose owner no longer exists. See [docs/daemon-startup-performance.md](docs/daemon-startup-performance.md).

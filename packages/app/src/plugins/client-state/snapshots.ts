@@ -23,6 +23,7 @@ export function createPluginWorkspaceSnapshot(
   hostId: string,
   context: Omit<Parameters<typeof deriveEffectiveWorkspaceStatus>[0], "workspace" | "serverId"> & {
     parentAgent?: PluginWorkspaceSnapshot["parentAgent"];
+    labelColors?: Readonly<Record<string, string>>;
   } = {},
 ): PluginWorkspaceSnapshot {
   const indicator = deriveEffectiveWorkspaceStatus({
@@ -47,7 +48,9 @@ export function createPluginWorkspaceSnapshot(
     pinnedAt: workspace.pinnedAt ?? null,
     labels: Object.freeze([...(workspace.labels ?? [])]),
     background: workspace.background ?? false,
-    branch: workspace.gitRuntime?.currentBranch ?? null,
+    branch: workspace.gitRuntime?.currentBranch ?? workspace.worktreeSlug ?? null,
+    remoteUrl: workspace.gitRuntime?.remoteUrl ?? null,
+    labelColors: Object.freeze({ ...context.labelColors }),
     createdAt: serializeTimestamp(workspace.createdAt),
     lastPromptAt: serializeTimestamp(workspace.lastUserMessageAt),
     parentAgent,

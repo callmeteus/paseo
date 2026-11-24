@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_DESKTOP_SETTINGS,
   type DesktopSettings,
+  type OverlaySettings,
   createDesktopSettingsStore,
 } from "./desktop-settings";
 
@@ -86,6 +87,7 @@ describe("desktop-settings", () => {
         manageBuiltInDaemon: true,
         keepRunningAfterQuit: false,
       },
+      overlay: DEFAULT_DESKTOP_SETTINGS.overlay,
     });
   });
 
@@ -108,8 +110,59 @@ describe("desktop-settings", () => {
         manageBuiltInDaemon: true,
         keepRunningAfterQuit: false,
       },
+      overlay: DEFAULT_DESKTOP_SETTINGS.overlay,
     });
     expect(files).toEqual(["desktop-settings.json"]);
+  });
+
+  it("round-trips overlay settings across restarts", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+
+    await createDesktopSettingsStore({ userDataPath }).patch({
+      overlay: {
+        enabled: true,
+        position: "bottom-center",
+        margin: 40,
+        cornerOffset: 90,
+        animations: false,
+        messagePreviews: false,
+        stickyAwaitingInput: false,
+        serverId: "srv_test",
+        hiddenAgentIds: ["agent-1"],
+      },
+    });
+
+    const settings = await createDesktopSettingsStore({ userDataPath }).get();
+
+    expect(settings.overlay).toEqual({
+      enabled: true,
+      position: "bottom-center",
+      margin: 40,
+      cornerOffset: 90,
+      animations: false,
+      messagePreviews: false,
+      stickyAwaitingInput: false,
+      serverId: "srv_test",
+      hiddenAgentIds: ["agent-1"],
+    } satisfies OverlaySettings);
+  });
+
+  it("discards invalid overlay values without breaking the document", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+
+    const settings = await createDesktopSettingsStore({ userDataPath }).patch({
+      overlay: {
+        position: "middle-left",
+        margin: -50,
+        hiddenAgentIds: [42],
+      },
+    });
+
+    expect(settings.overlay.position).toBe("top-right");
+    expect(settings.overlay.margin).toBe(24);
+    expect(settings.overlay.hiddenAgentIds).toEqual([]);
   });
 
   it("defaults notification sounds on for existing settings documents", async () => {
@@ -275,6 +328,7 @@ describe("desktop-settings", () => {
         manageBuiltInDaemon: false,
         keepRunningAfterQuit: false,
       },
+      overlay: DEFAULT_DESKTOP_SETTINGS.overlay,
     });
     expect(ignoredSecondMigration).toEqual(migrated);
   });
@@ -317,6 +371,7 @@ describe("desktop-settings", () => {
       releaseChannel: "beta",
       notifications: { playSound: false },
       daemon: { manageBuiltInDaemon: true, keepRunningAfterQuit: false },
+      overlay: DEFAULT_DESKTOP_SETTINGS.overlay,
     });
   });
 
