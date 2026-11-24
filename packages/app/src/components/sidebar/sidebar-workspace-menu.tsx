@@ -201,6 +201,7 @@ export interface SidebarWorkspaceMenuProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  deleteShortcutKeys?: ShortcutKey[][] | null;
   onDelete?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -311,6 +312,7 @@ function SidebarWorkspaceMenuItems({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -320,6 +322,10 @@ function SidebarWorkspaceMenuItems({
   const archiveTrailing = useMemo(
     () => (archiveShortcutKeys ? <Shortcut chord={archiveShortcutKeys} /> : null),
     [archiveShortcutKeys],
+  );
+  const deleteTrailing = useMemo(
+    () => (deleteShortcutKeys ? <Shortcut chord={deleteShortcutKeys} /> : null),
+    [deleteShortcutKeys],
   );
   const labelLeading = useMemo(
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
@@ -484,6 +490,7 @@ function SidebarWorkspaceMenuItems({
             surface={surface}
             testID={`sidebar-workspace-menu-delete-${workspaceKey}`}
             leading={deleteLeadingIcon}
+            trailing={deleteTrailing}
             destructive
             onSelect={onDelete}
           >
@@ -537,6 +544,7 @@ export function SidebarWorkspaceMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -586,6 +594,7 @@ export function SidebarWorkspaceMenu({
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
           archiveShortcutKeys={archiveShortcutKeys}
+          deleteShortcutKeys={deleteShortcutKeys}
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
@@ -619,6 +628,7 @@ export function SidebarWorkspaceContextMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -703,6 +713,7 @@ export function SidebarWorkspaceContextMenu({
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
           archiveShortcutKeys={archiveShortcutKeys}
+          deleteShortcutKeys={deleteShortcutKeys}
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}

@@ -3329,6 +3329,7 @@ export const fr: TranslationResources = {
         newWorkspace: "Nouvel espace de travail",
         newWorktree: "Nouveau worktree",
         archiveWorkspace: "Archiver l’espace de travail",
+        deleteWorkspace: "Supprimer l’espace de travail définitivement",
         newTab: "Nouvel onglet",
         closeCurrentTab: "Fermer l’onglet actuel",
         jumpToWorkspace: "Aller à l’espace de travail",

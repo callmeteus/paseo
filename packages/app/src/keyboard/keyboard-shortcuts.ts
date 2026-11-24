@@ -170,6 +170,7 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
     "pin-workspace",
     "archive-workspace",
     "undo-archive-workspace",
+    "delete-workspace",
   ],
   "tabs-panes": [
     "workspace-tab-new",
@@ -213,6 +214,7 @@ const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
   "new-workspace": "settings.shortcuts.help.newWorkspace",
   "switch-project": "settings.shortcuts.help.switchProject",
   "archive-workspace": "settings.shortcuts.help.archiveWorkspace",
+  "delete-workspace": "settings.shortcuts.help.deleteWorkspace",
   "workspace-tab-new": "settings.shortcuts.help.newTab",
   "workspace-tab-target-agent": "workspace.tabs.actions.newAgent",
   "workspace-tab-target-chat": "workspace.tabs.fallback.chat",
@@ -390,6 +392,22 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
       id: "undo-archive-workspace",
       section: "workspaces",
       label: "Undo archive workspace",
+    },
+  },
+
+  // --- Delete workspace permanently ---
+  // Delete does not type a character, but it edits text in a focused field, so claim it
+  // only outside editable, terminal and command-center surfaces. The handler always opens
+  // the permanent-delete confirmation; the key never deletes a workspace silently.
+  {
+    id: "workspace-delete",
+    action: "workspace.delete",
+    combo: "Delete",
+    when: { commandCenter: false, editable: false, terminal: false },
+    help: {
+      id: "delete-workspace",
+      section: "workspaces",
+      label: "Delete workspace permanently",
     },
   },
 

@@ -418,6 +418,7 @@ interface WorkspaceRowInnerProps {
   onMarkAsRead?: () => void;
   onMarkAsUnread?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  deleteShortcutKeys?: ShortcutKey[][] | null;
   isPinned?: boolean;
   onTogglePin?: () => void;
   reserveIdleStatusIndicatorSpace?: boolean;
@@ -741,6 +742,7 @@ function WorkspaceRowRightGroup({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onArchive,
   onDelete,
   onMarkAsRead,
@@ -762,6 +764,7 @@ function WorkspaceRowRightGroup({
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  deleteShortcutKeys?: ShortcutKey[][] | null;
   onArchive?: () => void;
   onDelete?: () => void;
   onMarkAsRead?: () => void;
@@ -837,6 +840,7 @@ function WorkspaceRowRightGroup({
                   archiveStatus={archiveStatus}
                   archivePendingLabel={archivePendingLabel}
                   archiveShortcutKeys={archiveShortcutKeys}
+                  deleteShortcutKeys={deleteShortcutKeys}
                   isPinned={isPinned}
                   onTogglePin={onTogglePin}
                   openInFileManagerPath={workspacePath}
@@ -1237,6 +1241,7 @@ function WorkspaceRowInner({
   onMarkAsRead,
   onMarkAsUnread,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   isPinned,
   onTogglePin,
   reserveIdleStatusIndicatorSpace = true,
@@ -1320,6 +1325,7 @@ function WorkspaceRowInner({
               archiveStatus={archiveStatus}
               archivePendingLabel={archivePendingLabel}
               archiveShortcutKeys={archiveShortcutKeys}
+              deleteShortcutKeys={deleteShortcutKeys}
               isPinned={isPinned}
               onTogglePin={onTogglePin}
               openInFileManagerPath={workspace.workspaceDirectory}
@@ -1364,6 +1370,7 @@ function WorkspaceRowInner({
                   archiveStatus={archiveStatus}
                   archivePendingLabel={archivePendingLabel}
                   archiveShortcutKeys={archiveShortcutKeys}
+                  deleteShortcutKeys={deleteShortcutKeys}
                   onArchive={onArchive}
                   onDelete={onDelete}
                   onCopyBranchName={onCopyBranchName}
@@ -1479,6 +1486,7 @@ function WorkspaceRowWithMenu({
   const onTogglePin = canPin ? handleTogglePin : undefined;
 
   const archiveShortcutKeys = useShortcutKeys("archive-workspace");
+  const deleteShortcutKeys = useShortcutKeys("delete-workspace");
   const { hasClearableAttention, canMarkUnread, clearAttention, markUnread } =
     useWorkspaceReadState({
       serverId: workspace.serverId,
@@ -1524,6 +1532,7 @@ function WorkspaceRowWithMenu({
         onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
         onMarkAsUnread={canMarkUnread ? handleMarkAsUnread : undefined}
         archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+        deleteShortcutKeys={selected && onDelete ? deleteShortcutKeys : null}
         isPinned={isPinned}
         onTogglePin={onTogglePin}
         reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}

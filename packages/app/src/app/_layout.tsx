@@ -55,6 +55,7 @@ import { DesktopWindowControls } from "@/components/desktop/window-controls";
 import { SidebarModelProvider } from "@/components/sidebar/sidebar-model";
 import { WorkspacePinShortcutHandler } from "@/components/workspace-pin-shortcut-handler";
 import { WorkspaceArchiveShortcutHandler } from "@/components/workspace-archive-shortcut-handler";
+import { WorkspaceDeleteShortcutHandler } from "@/components/workspace-delete-shortcut-handler";
 import { WorkspaceRenameHost } from "@/components/workspace-rename-host";
 import { EditWorkspaceSheetHost } from "@/projects/edit-workspace-sheet";
 import { WorkspaceArchiveUndoShortcutHost } from "@/workspace/archive-undo";
@@ -577,6 +578,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
       {workspaceBelowHostTabs({ hostTabsRailVisible, workspaceChrome })}
       <AddHostFlowHost />
       <WorkspaceArchiveShortcutHandler />
+      <WorkspaceDeleteShortcutHandler />
       <AppearanceStyleBoundary>
         {!isCompactLayout && appChromeLayout.sidebarToggleOwner === "window" ? (
           <WindowChromeRegion corners="top-left">

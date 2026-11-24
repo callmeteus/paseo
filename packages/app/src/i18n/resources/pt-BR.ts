@@ -3324,6 +3324,7 @@ export const ptBR: TranslationResources = {
         newWorkspace: "Novo workspace",
         newWorktree: "Novo worktree",
         archiveWorkspace: "Arquivar workspace",
+        deleteWorkspace: "Excluir workspace permanentemente",
         newTab: "Nova aba",
         closeCurrentTab: "Fechar aba atual",
         jumpToWorkspace: "Ir para workspace",

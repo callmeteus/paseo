@@ -3410,6 +3410,7 @@ export const en = {
         newWorkspace: "New workspace",
         newWorktree: "New worktree",
         archiveWorkspace: "Archive workspace",
+        deleteWorkspace: "Delete workspace permanently",
         newTab: "New tab",
         closeCurrentTab: "Close current tab",
         jumpToWorkspace: "Jump to workspace",
