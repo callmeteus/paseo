@@ -230,6 +230,11 @@ export const fr: TranslationResources = {
       pasteImageFailed: "Impossible de coller l’image",
       fileTooLarge: "{{fileName}} est trop volumineux (maximum {{size}})",
     },
+    chatModeToggle: {
+      label: "Basculer entre Chat et Agent",
+      chat: "Chat",
+      agent: "Agent",
+    },
     clientCommands: {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",

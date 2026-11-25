@@ -229,6 +229,11 @@ export const ru: TranslationResources = {
       pasteImageFailed: "Не удалось вставить изображение",
       fileTooLarge: "Файл {{fileName}} слишком большой (максимальный размер: {{size}})",
     },
+    chatModeToggle: {
+      label: "Переключить чат и агента",
+      chat: "Чат",
+      agent: "Агент",
+    },
     clientCommands: {
       archiveAgent: "Архивировать текущего агента",
       freshDraft: "Архивировать этого агента и создать новый черновик",

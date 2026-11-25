@@ -229,6 +229,11 @@ export const ja: TranslationResources = {
       pasteImageFailed: "画像を貼り付けられませんでした",
       fileTooLarge: "{{fileName}}が大きすぎます（最大{{size}}）",
     },
+    chatModeToggle: {
+      label: "チャットとエージェントを切り替え",
+      chat: "チャット",
+      agent: "エージェント",
+    },
     clientCommands: {
       archiveAgent: "現在のエージェントをアーカイブ",
       freshDraft: "このエージェントをアーカイブして新しい下書きを開始",

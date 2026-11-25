@@ -224,6 +224,11 @@ export const en = {
       pasteImageFailed: "Failed to paste image",
       fileTooLarge: "{{fileName}} is too large (max {{size}})",
     },
+    chatModeToggle: {
+      label: "Switch between Chat and Agent",
+      chat: "Chat",
+      agent: "Agent",
+    },
     clientCommands: {
       archiveAgent: "Archive the current agent",
       freshDraft: "Archive this agent and start a fresh draft",

@@ -238,7 +238,7 @@ export function CombinedModelSelector({
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const activeRouter = useActiveRouter(serverId, activeRouterId);
-  const activeRouterName = activeRouter?.name ?? null;
+  const activeRouterName = activeRouter?.name ?? t("modelSelector.defaultModel");
   const modelBrowserScrolling = resolveModelBrowserScrolling({ isNative, isCompact });
   const anchorRef = useRef<View>(null);
   const [isOpen, setIsOpen] = useState(false);

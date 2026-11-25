@@ -226,6 +226,11 @@ export const ar: TranslationResources = {
       pasteImageFailed: "تعذر لصق الصورة",
       fileTooLarge: "{{fileName}} is too large (max {{size}})",
     },
+    chatModeToggle: {
+      label: "التبديل بين الدردشة والوكيل",
+      chat: "دردشة",
+      agent: "وكيل",
+    },
     clientCommands: {
       archiveAgent: "أرشفة الوكيل الحالي",
       freshDraft: "أرشفة هذا الوكيل وابدأ مسودة جديدة",

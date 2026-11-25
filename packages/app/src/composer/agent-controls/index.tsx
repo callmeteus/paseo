@@ -12,6 +12,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
 import { resolveForcedLiveModeId } from "@/agent-controls/policy";
+import { ChatModeToggle } from "@/composer/agent-controls/chat-mode-toggle";
 import { readSelectOption, type ComposerOptionControls } from "@/agent-controls/option-controls";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
@@ -157,6 +158,9 @@ const EMPTY_AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [];
 const EMPTY_OPTIONS: ProviderOptions = {};
 
 interface ControlledAgentControlsProps {
+  agentId?: string;
+  serverId?: string;
+  isOpenUIChat?: boolean;
   provider: string;
   modelOptions?: AgentControlOption[];
   selectedModelId?: string;
@@ -591,6 +595,9 @@ function densityFolds(density: ComposerControlDensity): boolean {
 
 // oxlint-disable-next-line complexity
 function ControlledAgentControls({
+  agentId,
+  serverId,
+  isOpenUIChat,
   provider,
   modelOptions,
   selectedModelId,
@@ -777,14 +784,14 @@ function ControlledAgentControls({
   );
 
   const handleDesktopModelSelect = useCallback(
-    (nextProviderId: string, modelId: string, serverId?: string | null) => {
+    (nextProviderId: string, modelId: string, targetServerId?: string | null) => {
       pickDesktopModel({
         nextProviderId,
         modelId,
         currentProvider: provider,
         onSelectModel,
         onSelectProviderAndModel: onSelectProviderAndModel
-          ? (p, m) => onSelectProviderAndModel(p, m, serverId)
+          ? (p, m) => onSelectProviderAndModel(p, m, targetServerId)
           : undefined,
       });
     },
@@ -802,13 +809,13 @@ function ControlledAgentControls({
   }, [onDropdownClose, presentation.foldControls]);
 
   const handleSheetModelSelect = useCallback(
-    (nextProviderId: string, modelId: string, serverId?: string | null) => {
+    (nextProviderId: string, modelId: string, targetServerId?: string | null) => {
       pickSheetModel({
         nextProviderId,
         modelId,
         currentProvider: provider,
         onSelectProviderAndModel: onSelectProviderAndModel
-          ? (p, m) => onSelectProviderAndModel(p, m, serverId)
+          ? (p, m) => onSelectProviderAndModel(p, m, targetServerId)
           : undefined,
         onSelectModel,
       });
@@ -825,6 +832,13 @@ function ControlledAgentControls({
   return (
     <ComposerControlLayoutProvider value={layoutContextValue}>
       <View style={styles.container} onLayout={handleLayout} testID="agent-controls-toolbar">
+        {agentId && serverId ? (
+          <ChatModeToggle
+            agentId={agentId}
+            serverId={serverId}
+            isOpenUIChat={Boolean(isOpenUIChat)}
+          />
+        ) : null}
         {!presentation.foldControls ? (
           <DesktopAgentControlsContent
             provider={provider}
@@ -1877,6 +1891,9 @@ export const AgentControls = memo(function AgentControls({
         <>
           {profileEditor.element}
           <ControlledAgentControls
+            agentId={agentId}
+            serverId={serverId}
+            isOpenUIChat={Boolean(isOpenUIChat)}
             provider={resolveDisplayProvider(
               pendingProviderSwitch,
               agent.provider,

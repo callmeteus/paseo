@@ -226,6 +226,11 @@ export const zhCN: TranslationResources = {
       pasteImageFailed: "无法粘贴图片",
       fileTooLarge: "{{fileName}} is too large (max {{size}})",
     },
+    chatModeToggle: {
+      label: "在聊天和智能体之间切换",
+      chat: "聊天",
+      agent: "智能体",
+    },
     clientCommands: {
       archiveAgent: "归档当前 Agent",
       freshDraft: "归档此 Agent 并开始新的草稿",

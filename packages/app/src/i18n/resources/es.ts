@@ -229,6 +229,11 @@ export const es: TranslationResources = {
       pasteImageFailed: "No se pudo pegar la imagen",
       fileTooLarge: "{{fileName}} is too large (max {{size}})",
     },
+    chatModeToggle: {
+      label: "Cambiar entre Chat y Agente",
+      chat: "Chat",
+      agent: "Agente",
+    },
     clientCommands: {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",

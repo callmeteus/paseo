@@ -228,6 +228,11 @@ export const ptBR: TranslationResources = {
       pasteImageFailed: "Falha ao colar a imagem",
       fileTooLarge: "{{fileName}} é grande demais (máximo {{size}})",
     },
+    chatModeToggle: {
+      label: "Alternar entre Chat e Agente",
+      chat: "Chat",
+      agent: "Agente",
+    },
     clientCommands: {
       archiveAgent: "Arquivar o agente atual",
       freshDraft: "Arquivar este agente e iniciar um novo rascunho",
