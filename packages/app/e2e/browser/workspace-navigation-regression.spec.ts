@@ -45,6 +45,7 @@ import { expectAppRoute } from "../support/helpers/route-assertions";
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { addConnectedHostAndReload, addOfflineHostAndReload } from "../support/helpers/hosts";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
+import { openWorkspaceSidebarKebab } from "../support/helpers/sidebar";
 
 const LOADING_WORKSPACE_TEXT_PATTERN = /Loading workspace/i;
 async function expectNoLoadingWorkspacePane(
@@ -528,6 +529,19 @@ test.describe("Workspace navigation regression", () => {
       await expect(firstDeckEntry).toBeHidden();
       await expect(secondDeckEntry).toBeVisible({ timeout: 30_000 });
       await expectWorkspaceDeckEntryCount(page, 2);
+
+      // The move-workspace sheet is a global host. Retained workspace screens must not
+      // each portal a copy, which used to freeze the whole app when the picker opened.
+      const menuServerId = await openWorkspaceSidebarKebab(page, secondWorkspace.workspaceId);
+      await page
+        .getByTestId(
+          `sidebar-workspace-menu-move-to-folder-${menuServerId}:${secondWorkspace.workspaceId}`,
+        )
+        .click();
+      await expect(page.getByTestId("move-workspace-to-folder-sheet")).toHaveCount(1);
+      await expect(page.getByTestId("move-workspace-to-folder-search")).toHaveCount(1);
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("move-workspace-to-folder-sheet")).toHaveCount(0);
 
       await page.evaluate(
         ({ agentId, serverId: targetServerId, workspaceId }) => {

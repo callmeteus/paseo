@@ -58,6 +58,7 @@ import { WorkspaceArchiveShortcutHandler } from "@/components/workspace-archive-
 import { WorkspaceDeleteShortcutHandler } from "@/components/workspace-delete-shortcut-handler";
 import { WorkspaceRenameHost } from "@/components/workspace-rename-host";
 import { EditWorkspaceSheetHost } from "@/projects/edit-workspace-sheet";
+import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { WorkspaceArchiveUndoShortcutHost } from "@/workspace/archive-undo";
 import { WorkspaceExplorerOpenGesture } from "@/mobile-panels/explorer-open-gesture";
 import { useWebAgentListSwipe } from "@/mobile-panels/use-web-agent-list-swipe";
@@ -613,6 +614,8 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <WorkspacePinShortcutHandler />
         <WorkspaceRenameHost />
         <EditWorkspaceSheetHost />
+        {/* One global host: retained workspace screens must not each portal this modal. */}
+        <MoveWorkspaceToFolderSheet />
         <WorkspaceArchiveUndoShortcutHost />
         <CommandCenter />
         <AddProjectFlowHost />

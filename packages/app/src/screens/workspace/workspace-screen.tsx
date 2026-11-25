@@ -160,7 +160,6 @@ import { AgentForkRequestHost } from "@/screens/workspace/agent-fork-request-hos
 import { MoveAgentToWorkspaceSheet } from "@/screens/workspace/move-agent-to-workspace-sheet";
 import { TabDropToWorkspaceSheet } from "@/screens/workspace/tab-drop-to-workspace-sheet";
 import { PromoteAgentToWorkspaceSheet } from "@/screens/workspace/promote-agent-to-workspace-sheet";
-import { MoveWorkspaceToFolderSheet } from "@/screens/workspace/move-workspace-to-folder-sheet";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
 import { setOpenLinkInPaseoHandler } from "@/components/markdown/link-context-menu-store";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
@@ -4108,7 +4107,6 @@ function WorkspaceScreenContent({
         <MoveAgentToWorkspaceSheet />
         <TabDropToWorkspaceSheet />
         <PromoteAgentToWorkspaceSheet />
-        <MoveWorkspaceToFolderSheet />
       </WorkspaceMarkdownLinks>
     </WorkspaceContentProviders>
   );
