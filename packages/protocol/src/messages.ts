@@ -4935,6 +4935,8 @@ export const ServerInfoStatusPayloadSchema = z
         timelineFreshnessCheck: z.boolean().optional(),
         explicitEventSubscriptions: z.boolean().optional(),
         ownedSubscriptions: z.boolean().optional(),
+        // Fork capability: the daemon accepts plan and composer events in session.events.set_subscription.request.
+        extendedEventSubscriptions: z.boolean().optional(),
         providerOptionControls: z.boolean().optional(),
         entityMetadata: z.boolean().optional(),
         diffSubscription: z.boolean().optional(),
