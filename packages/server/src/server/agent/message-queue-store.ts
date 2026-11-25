@@ -25,6 +25,7 @@ type MessageQueueListener = (change: MessageQueueChange) => void;
 export class MessageQueueStore {
   private readonly directory: string;
   private readonly listeners = new Set<MessageQueueListener>();
+  private readonly tails = new Map<string, Promise<void>>();
 
   constructor(
     private readonly options: {
@@ -47,21 +48,7 @@ export class MessageQueueStore {
   }
 
   async get(agentId: string): Promise<AgentQueuedMessage[]> {
-    try {
-      const text = await fs.readFile(this.pathFor(agentId), "utf8");
-      const parsed = STORED_QUEUE_SCHEMA.safeParse(JSON.parse(text));
-      if (!parsed.success) {
-        this.options.logger.warn(
-          { agentId, error: parsed.error.message },
-          "Ignoring invalid message queue file",
-        );
-        return [];
-      }
-      return parsed.data.items;
-    } catch (error) {
-      if (isMissingFile(error)) return [];
-      throw error;
-    }
+    return this.getUnlocked(agentId);
   }
 
   async list(): Promise<Record<string, AgentQueuedMessage[]>> {
@@ -96,8 +83,51 @@ export class MessageQueueStore {
   }
 
   async set(agentId: string, items: readonly AgentQueuedMessage[]): Promise<AgentQueuedMessage[]> {
+    return this.enqueue(agentId, () => this.setUnlocked(agentId, items));
+  }
+
+  /** Remove accepted message ids without letting a concurrent snapshot write them back. */
+  async remove(agentId: string, messageIds: readonly string[]): Promise<AgentQueuedMessage[]> {
+    const removed = new Set(messageIds);
+    if (removed.size === 0) return this.get(agentId);
+    return this.enqueue(agentId, async () => {
+      const current = await this.getUnlocked(agentId);
+      const next = current.filter((item) => !removed.has(item.id));
+      if (next.length === current.length) return current;
+      return this.setUnlocked(agentId, next);
+    });
+  }
+
+  async delete(agentId: string): Promise<void> {
+    await this.enqueue(agentId, async () => {
+      await fs.rm(this.pathFor(agentId), { force: true });
+      this.notify({ agentId, items: [] });
+    });
+  }
+
+  private enqueue<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.tails.get(agentId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(operation);
+    const settled = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.tails.set(agentId, settled);
+    void settled
+      .finally(() => {
+        if (this.tails.get(agentId) === settled) this.tails.delete(agentId);
+      })
+      .catch(() => undefined);
+    return next;
+  }
+
+  private async setUnlocked(
+    agentId: string,
+    items: readonly AgentQueuedMessage[],
+  ): Promise<AgentQueuedMessage[]> {
     if (items.length === 0) {
-      await this.delete(agentId);
+      await fs.rm(this.pathFor(agentId), { force: true });
+      this.notify({ agentId, items: [] });
       return [];
     }
     const parsed = STORED_QUEUE_SCHEMA.parse({ agentId, items });
@@ -106,9 +136,22 @@ export class MessageQueueStore {
     return parsed.items;
   }
 
-  async delete(agentId: string): Promise<void> {
-    await fs.rm(this.pathFor(agentId), { force: true });
-    this.notify({ agentId, items: [] });
+  private async getUnlocked(agentId: string): Promise<AgentQueuedMessage[]> {
+    try {
+      const text = await fs.readFile(this.pathFor(agentId), "utf8");
+      const parsed = STORED_QUEUE_SCHEMA.safeParse(JSON.parse(text));
+      if (!parsed.success) {
+        this.options.logger.warn(
+          { agentId, error: parsed.error.message },
+          "Ignoring invalid message queue file",
+        );
+        return [];
+      }
+      return parsed.data.items;
+    } catch (error) {
+      if (isMissingFile(error)) return [];
+      throw error;
+    }
   }
 
   private notify(change: MessageQueueChange): void {

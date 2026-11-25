@@ -1851,6 +1851,8 @@ function ComposerContentImpl({
   const queuedMessages = isDraftCreating ? draftQueuedMessages : (queuedMessagesRaw ?? EMPTY_ARRAY);
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
+  const markQueuedMessageRemoved = useSessionStore((state) => state.markQueuedMessageRemoved);
+  const restoreQueuedMessage = useSessionStore((state) => state.restoreQueuedMessage);
   const supportsAgentMessageQueue = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentMessageQueue === true,
   );
@@ -2416,8 +2418,18 @@ function ComposerContentImpl({
         setQueuedMessages(serverId, updater);
         persistQueue();
       },
+      markRemoved: (id, messageId) => markQueuedMessageRemoved(serverId, id, messageId),
+      restore: (id, messageId) => restoreQueuedMessage(serverId, id, messageId),
     };
-  }, [agentId, draftQueueKey, persistQueue, serverId, setQueuedMessages]);
+  }, [
+    agentId,
+    draftQueueKey,
+    markQueuedMessageRemoved,
+    persistQueue,
+    restoreQueuedMessage,
+    serverId,
+    setQueuedMessages,
+  ]);
 
   const queueMessage = useCallback(
     (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {

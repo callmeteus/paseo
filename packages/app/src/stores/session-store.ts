@@ -555,6 +555,9 @@ export interface SessionState {
     string,
     Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
   >;
+  // Ids intentionally removed from the queue. Remote snapshots are additive and may be
+  // stale, so they must not resurrect a message that was sent, edited or deleted.
+  removedQueuedMessageIds: Map<string, Set<string>>;
 }
 
 // Global store state
@@ -740,6 +743,8 @@ interface SessionStoreActions {
           prev: Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>,
         ) => Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>),
   ) => void;
+  markQueuedMessageRemoved: (serverId: string, agentId: string, messageId: string) => void;
+  restoreQueuedMessage: (serverId: string, agentId: string, messageId: string) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -753,6 +758,50 @@ interface SessionStoreActions {
 type SessionStore = SessionStoreState & SessionStoreActions;
 
 const agentLastActivityCoalescer = createAgentLastActivityCoalescer();
+const MAX_REMOVED_QUEUED_MESSAGE_IDS = 500;
+
+type QueuedMessageMap = Map<
+  string,
+  Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
+>;
+
+function addRemovedQueuedMessageIds(
+  removed: Map<string, Set<string>>,
+  agentId: string,
+  messageIds: Iterable<string>,
+): Map<string, Set<string>> {
+  const ids = [...new Set(messageIds)].filter((id) => id.length > 0);
+  if (ids.length === 0) return removed;
+  const existing = removed.get(agentId);
+  const newIds = ids.filter((id) => !existing?.has(id));
+  if (newIds.length === 0) return removed;
+  const next = new Map(removed);
+  const agentIds = new Set(existing ?? []);
+  for (const id of newIds) agentIds.add(id);
+  while (agentIds.size > MAX_REMOVED_QUEUED_MESSAGE_IDS) {
+    const oldest = agentIds.values().next().value;
+    if (oldest === undefined) break;
+    agentIds.delete(oldest);
+  }
+  next.set(agentId, agentIds);
+  return next;
+}
+
+function filterRemovedQueuedMessages(
+  queued: QueuedMessageMap,
+  removed: Map<string, Set<string>>,
+): QueuedMessageMap {
+  let next = queued;
+  for (const [agentId, items] of queued) {
+    const removedIds = removed.get(agentId);
+    if (!removedIds || removedIds.size === 0) continue;
+    const filtered = items.filter((item) => !removedIds.has(item.id));
+    if (filtered.length === items.length) continue;
+    if (next === queued) next = new Map(queued);
+    next.set(agentId, filtered);
+  }
+  return next;
+}
 
 // Helper to create initial session state
 function createInitialSessionState(
@@ -794,6 +843,7 @@ function createInitialSessionState(
     pendingPermissions: new Map(),
     fileExplorer: new Map(),
     queuedMessages: new Map(),
+    removedQueuedMessageIds: new Map(),
   };
 }
 
@@ -1155,10 +1205,30 @@ export const useSessionStore = create<SessionStore>()(
             state.acknowledgedClientMessageIds ?? [],
           );
           const changedSubmissions = observedSubmissions !== currentSubmissions;
+          const acknowledgedIds = state.acknowledgedClientMessageIds ?? [];
+          const removedQueuedMessageIds =
+            acknowledgedIds.length > 0
+              ? addRemovedQueuedMessageIds(
+                  session.removedQueuedMessageIds,
+                  agentId,
+                  acknowledgedIds,
+                )
+              : session.removedQueuedMessageIds;
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
+          const changedQueue = queuedMessages !== session.queuedMessages;
           const agentTasks = updateAgentTasks(session.agentTasks, agentId, state.taskSnapshot);
           const changedTasks = agentTasks !== session.agentTasks;
 
-          if (!changedTail && !changedHead && !changedSubmissions && !changedTasks) {
+          if (
+            !changedTail &&
+            !changedHead &&
+            !changedSubmissions &&
+            !changedQueue &&
+            !changedTasks
+          ) {
             return prev;
           }
 
@@ -1182,6 +1252,8 @@ export const useSessionStore = create<SessionStore>()(
                 agentStreamHead: nextHead,
                 agentTasks,
                 messageSubmissions,
+                queuedMessages,
+                removedQueuedMessageIds,
               },
             },
           };
@@ -1555,6 +1627,15 @@ export const useSessionStore = create<SessionStore>()(
               messageSubmissions.delete(agentId);
             }
           }
+          const removedQueuedMessageIds = addRemovedQueuedMessageIds(
+            session.removedQueuedMessageIds,
+            agentId,
+            state.acknowledgedClientMessageIds,
+          );
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
           if (state.synchronized) {
             nextAuthoritative.set(agentId, true);
             nextSyncGeneration.set(agentId, session.historySyncGeneration);
@@ -1585,6 +1666,8 @@ export const useSessionStore = create<SessionStore>()(
                 agentAuthoritativeHistoryApplied: nextAuthoritative,
                 agentHistorySyncGeneration: nextSyncGeneration,
                 messageSubmissions,
+                queuedMessages,
+                removedQueuedMessageIds,
               },
             },
           };
@@ -1950,7 +2033,8 @@ export const useSessionStore = create<SessionStore>()(
           if (!session) {
             return prev;
           }
-          const nextValue = typeof value === "function" ? value(session.queuedMessages) : value;
+          const proposed = typeof value === "function" ? value(session.queuedMessages) : value;
+          const nextValue = filterRemovedQueuedMessages(proposed, session.removedQueuedMessageIds);
           if (session.queuedMessages === nextValue) {
             return prev;
           }
@@ -1959,6 +2043,53 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, queuedMessages: nextValue },
+            },
+          };
+        });
+      },
+
+      markQueuedMessageRemoved: (serverId, agentId, messageId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session || !messageId) return prev;
+          const removedQueuedMessageIds = addRemovedQueuedMessageIds(
+            session.removedQueuedMessageIds,
+            agentId,
+            [messageId],
+          );
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
+          if (
+            removedQueuedMessageIds === session.removedQueuedMessageIds &&
+            queuedMessages === session.queuedMessages
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, queuedMessages, removedQueuedMessageIds },
+            },
+          };
+        });
+      },
+
+      restoreQueuedMessage: (serverId, agentId, messageId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          const agentIds = session?.removedQueuedMessageIds.get(agentId);
+          if (!session || !agentIds?.delete(messageId)) return prev;
+          const removedQueuedMessageIds = new Map(session.removedQueuedMessageIds);
+          if (agentIds.size === 0) removedQueuedMessageIds.delete(agentId);
+          else removedQueuedMessageIds.set(agentId, agentIds);
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, removedQueuedMessageIds },
             },
           };
         });

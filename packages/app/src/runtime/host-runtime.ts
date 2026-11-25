@@ -3027,6 +3027,9 @@ export class HostRuntimeStore {
           return [agentId, await hydrateQueuedMessages(items)] as const;
         }),
       );
+      // The connection may have been replaced while attachments were restored. An old
+      // snapshot must not overwrite the queue belonging to the new client.
+      if (useSessionStore.getState().sessions[serverId]?.client !== client) return;
       useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
         const next = new Map(previous);
         for (const [agentId, items] of hydrated) {
@@ -3323,6 +3326,10 @@ export class HostRuntimeStore {
         read: (queuedAgentId) =>
           useSessionStore.getState().sessions[serverId]?.queuedMessages.get(queuedAgentId) ?? [],
         write: (update) => useSessionStore.getState().setQueuedMessages(serverId, update),
+        markRemoved: (id, messageId) =>
+          useSessionStore.getState().markQueuedMessageRemoved(serverId, id, messageId),
+        restore: (id, messageId) =>
+          useSessionStore.getState().restoreQueuedMessage(serverId, id, messageId),
       },
       submitMessage: async ({ text, attachments }) => {
         const supportsForgeAttachments =

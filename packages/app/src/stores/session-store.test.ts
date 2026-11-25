@@ -849,3 +849,52 @@ describe("removeWorkspace", () => {
     expect(after.workspaces).toBe(before.workspaces);
   });
 });
+
+describe("queued message tombstones", () => {
+  it("does not let a stale daemon snapshot restore a removed message id", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "already sent", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    store.markQueuedMessageRemoved("test-server", "agent", item.id);
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [],
+    );
+  });
+
+  it("allows a rejected send to restore the same message id", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "retry me", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+    store.markQueuedMessageRemoved("test-server", "agent", item.id);
+
+    store.restoreQueuedMessage("test-server", "agent", item.id);
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [item],
+    );
+  });
+
+  it("retires a queued id when the canonical timeline acknowledges it", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "delivered elsewhere", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    store.setAgentStreamState("test-server", "agent", {
+      tail: [],
+      head: [],
+      acknowledgedClientMessageIds: [item.id],
+    });
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [],
+    );
+  });
+});

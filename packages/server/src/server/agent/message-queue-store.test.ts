@@ -60,6 +60,24 @@ describe("MessageQueueStore", () => {
     await expect(store.list()).resolves.toEqual({});
   });
 
+  test("removes an accepted message id and keeps the remaining queue", async () => {
+    const { store } = await createStore();
+    await store.set("agent-1", [queuedMessage("one"), queuedMessage("two")]);
+
+    await expect(store.remove("agent-1", ["one"])).resolves.toEqual([queuedMessage("two")]);
+    await expect(store.get("agent-1")).resolves.toEqual([queuedMessage("two")]);
+  });
+
+  test("serializes an accepted-message removal behind a concurrent queue write", async () => {
+    const { store } = await createStore();
+
+    const write = store.set("agent-1", [queuedMessage("one"), queuedMessage("two")]);
+    const remove = store.remove("agent-1", ["one"]);
+    await Promise.all([write, remove]);
+
+    await expect(store.get("agent-1")).resolves.toEqual([queuedMessage("two")]);
+  });
+
   test("notifies subscribers when a queue is written and cleared", async () => {
     const { store } = await createStore();
     const changes: Array<{ agentId: string; items: unknown[] }> = [];

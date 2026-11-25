@@ -71,6 +71,8 @@ export type {
   AgentFileExplorerState,
 } from "@/stores/session-store";
 
+const messageQueueApplyTails = new Map<string, Promise<void>>();
+
 type AudioOutputPayload = Extract<SessionOutboundMessage, { type: "audio_output" }>["payload"];
 
 interface BufferedAudioChunk {
@@ -189,12 +191,27 @@ async function applyMessageQueueChange(
   serverId: string,
   payload: { agentId: string; items: readonly AgentQueuedMessage[] },
 ): Promise<void> {
-  const items = await hydrateQueuedMessages(payload.items);
-  useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
-    const next = new Map(previous);
-    next.set(payload.agentId, mergeQueuedMessages(next.get(payload.agentId), items));
-    return next;
-  });
+  const key = `${serverId}:${payload.agentId}`;
+  // Hydration may await image persistence. Apply events in arrival order so a slow older
+  // event cannot land after a newer removal and resurrect a message that was already sent.
+  const previous = messageQueueApplyTails.get(key) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const items = await hydrateQueuedMessages(payload.items);
+      useSessionStore.getState().setQueuedMessages(serverId, (queued) => {
+        const merged = new Map(queued);
+        merged.set(payload.agentId, mergeQueuedMessages(merged.get(payload.agentId), items));
+        return merged;
+      });
+      return undefined;
+    });
+  messageQueueApplyTails.set(key, next);
+  try {
+    await next;
+  } finally {
+    if (messageQueueApplyTails.get(key) === next) messageQueueApplyTails.delete(key);
+  }
 }
 
 interface SessionProviderSharedProps {

@@ -10981,6 +10981,17 @@ export class Session {
         }
       });
       await Promise.race([sent, admitted]);
+      if (this.messageQueueStore && msg.messageId !== undefined) {
+        const acceptedMessageId: string = msg.messageId;
+        // The composer removes the item optimistically, but the daemon must retire the
+        // same id too so another client or a post-restart hydration cannot restore it.
+        await this.messageQueueStore.remove(agentId, [acceptedMessageId]).catch((error) => {
+          this.sessionLogger.warn(
+            { err: error, agentId, messageId: acceptedMessageId },
+            "Failed to remove accepted message from composer queue",
+          );
+        });
+      }
 
       this.emit({
         type: "send_agent_message_response",

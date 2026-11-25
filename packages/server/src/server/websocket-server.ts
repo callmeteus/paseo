@@ -831,7 +831,10 @@ export class VoiceAssistantWebSocketServer {
       join(paseoHome, "agent-requests"),
       async (agentId, messageId) => {
         try {
-          const rows = await agentManager.getTimelineRows(agentId);
+          // Receipts must also resolve after a daemon restart, before the agent has been
+          // lazily reopened. The searchable read uses the durable timeline without
+          // requiring a live provider session.
+          const rows = await agentManager.getSearchableTimelineRows(agentId);
           return rows.some(
             (row) => row.item.type === "user_message" && row.item.clientMessageId === messageId,
           );
