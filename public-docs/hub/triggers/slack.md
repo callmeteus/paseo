@@ -89,9 +89,11 @@ The Slack app has to have interactivity turned on. See [Slack for Hub](/docs/hub
 ## Hub-enforced presentation and tool policy
 
 A step with `slack_agent` can let the Hub own the thread's lifecycle reactions. When
-`lifecycle_reactions` is set, the Hub reacts with `on_start` when the execution starts and
-`on_finish` when it completes or fails. Both names are data from the document; the Hub does not
-know any bot's wording. The model does not need to call `react` for those two moments.
+`lifecycle_reactions` is set, the Hub reacts with `on_start` when the execution starts,
+`on_finish` only when it succeeds, and `on_failure` when it fails. A failed execution gets no
+reaction unless `on_failure` is set, so a success marker never stands in for a failure. The names
+are data from the document; the Hub does not know any bot's wording. The model does not need to
+call `react` for these moments.
 
 ```yaml
 run:
@@ -100,6 +102,7 @@ run:
     lifecycle_reactions:
       on_start: eyes
       on_finish: white_check_mark
+      on_failure: warning
   denied_tools: [question]
   outputs:
     slack.reply:
