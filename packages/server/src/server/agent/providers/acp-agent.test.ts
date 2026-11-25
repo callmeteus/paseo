@@ -33,7 +33,7 @@ import {
   type SessionStateResponse,
   buildACPClientCapabilities,
   createLoggedNdJsonStream,
-  deriveFeaturesFromACP,
+  deriveControlsFromACP,
   deriveModelDefinitionsFromACP,
   deriveModesFromACP,
   mapACPUsage,
@@ -290,6 +290,7 @@ function createSessionWithConfig(
     model?: string | null;
     providerOptions?: Record<string, unknown>;
     toolPolicy?: ToolPolicy;
+    thinkingOptionId?: string;
   } = {},
   logger: ReturnType<typeof createTestLogger> = createTestLogger(),
 ): ACPAgentSession {
@@ -302,6 +303,7 @@ function createSessionWithConfig(
       model: config.model ?? undefined,
       providerOptions: config.providerOptions,
       toolPolicy: config.toolPolicy,
+      thinkingOptionId: config.thinkingOptionId,
     },
     {
       provider: config.provider ?? "claude-acp",
@@ -1313,6 +1315,29 @@ describe("ACPAgentSession Zed parity", () => {
 
     await expect(internals.applyConfiguredOverrides()).resolves.toBeUndefined();
     expect(setSessionConfigOption).not.toHaveBeenCalled();
+  });
+
+  test("does not fail session start when the model rejects a stored thinking option", async () => {
+    const logger = createTestLogger();
+    const childLogger = { trace: vi.fn(), warn: vi.fn() };
+    vi.spyOn(logger, "child").mockReturnValue(asInternals<typeof logger>(childLogger));
+    const session = createSessionWithConfig({ thinkingOptionId: "high" }, logger);
+    const { internals } = prepareConfiguredOverrideSession(session, {
+      currentModel: "grok-4.6",
+      availableModels: [{ modelId: "grok-4.6", name: "Grok 4.6", description: null }],
+      configOptions: [selectConfigOption("thought_level", ["low", "high"], "low")],
+      connection: {
+        setSessionConfigOption: vi.fn(async () => {
+          throw new RequestError(-32602, "Unknown model config option: reasoning_effort");
+        }),
+      },
+    });
+
+    await expect(internals.applyConfiguredOverrides()).resolves.toBeUndefined();
+    expect(childLogger.warn).toHaveBeenCalledWith(
+      { value: "high" },
+      expect.stringContaining("Unknown model config option"),
+    );
   });
 
   test("does not fail session start when configured model cannot be applied by ACP", async () => {
@@ -2943,7 +2968,7 @@ describe("ACPAgentClient config features", () => {
 
   test("derives a one-click toggle from a two-choice boolean config option", () => {
     expect(
-      deriveFeaturesFromACP(
+      deriveControlsFromACP(
         [
           {
             id: "fast",
@@ -2961,12 +2986,12 @@ describe("ACPAgentClient config features", () => {
     ).toEqual([
       {
         type: "toggle",
-        id: "fast",
+        key: "fast",
         label: "Fast",
         description: undefined,
         tooltip: undefined,
         icon: undefined,
-        value: true,
+        defaultValue: true,
       },
     ]);
   });

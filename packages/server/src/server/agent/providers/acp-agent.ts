@@ -4088,7 +4088,11 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       try {
         await this.setThinkingOption(this.config.thinkingOptionId);
       } catch (error) {
-        if (!this.isThinkingSelectionUnavailableError(error)) {
+        // A provider can reject a stored thinking option because it belongs to
+        // a different model. The feature-value path already tolerates that after
+        // a model switch; thinking options need the same treatment or the whole
+        // session fails to start (e.g. Cursor with "reasoning_effort").
+        if (!this.isThinkingSelectionUnavailableError(error) && !isACPInvalidParams(error)) {
           throw error;
         }
         this.warnInvalidSelection(
