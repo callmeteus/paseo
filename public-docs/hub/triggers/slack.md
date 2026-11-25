@@ -104,9 +104,14 @@ run:
       on_finish: white_check_mark
       on_failure: warning
   denied_tools: [question]
+  reply_guard:
+    matches_regex: "the case was closed|resolved by another path"
   outputs:
     slack.reply:
       max: 1
+      contract:
+        require: [content, pr_links, state, evidence]
+        state_enum: [open, awaiting_review, merged, deployed]
     slack.read_messages:
       max: 4
       args_limit:
@@ -118,7 +123,19 @@ from the granted tool set and rejected at the capability boundary. The same name
 to the provider as `disallowedTools` when the provider supports them. `outputs.slack.reply.max`
 caps replies for the whole execution; `args_limit` sets numeric maxima Hub checks on each tool
 call, so a model asking for more than the configured `limit` gets an error instead of a larger
-read. All three options are optional and change nothing when omitted.
+read. All options here are optional and change nothing when omitted.
+
+A reply `contract` adds a separate `final_reply` tool. The usual `reply` tool keeps working for
+intermediate plan and finding messages. `final_reply` requires every field in `require`, accepts
+`state` only from `state_enum`, and appends a state line the Hub renders from its own i18n
+catalog in the trigger's locale. A missing or invalid field is sent back to the model as a
+tool error naming what is missing; nothing is posted.
+
+`reply_guard` is a regex the provider evaluates against newer messages in the triggering thread
+before any reply is sent. When it matches, Hub refuses the reply and ends the execution. This is
+how a thread that was resolved elsewhere stops a closing reply without relying on the model
+remembering to re-read. The regex is authored in the trigger document; the Hub applies it
+generically.
 
 ## Tasks, text, and thumbs
 
