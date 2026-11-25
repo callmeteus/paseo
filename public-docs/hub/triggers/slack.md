@@ -86,6 +86,37 @@ To read or post to Slack channels from a schedule, webhook, or another trigger, 
 
 The Slack app has to have interactivity turned on. See [Slack for Hub](/docs/hub/self-hosting/slack-app).
 
+## Hub-enforced presentation and tool policy
+
+A step with `slack_agent` can let the Hub own the thread's lifecycle reactions. When
+`lifecycle_reactions` is set, the Hub reacts with `on_start` when the execution starts and
+`on_finish` when it completes or fails. Both names are data from the document; the Hub does not
+know any bot's wording. The model does not need to call `react` for those two moments.
+
+```yaml
+run:
+  slack_agent:
+    display: timeline
+    lifecycle_reactions:
+      on_start: eyes
+      on_finish: white_check_mark
+  denied_tools: [question]
+  outputs:
+    slack.reply:
+      max: 1
+    slack.read_messages:
+      max: 4
+      args_limit:
+        limit: 10
+```
+
+`denied_tools` names tools the Hub must not grant or accept in this run. Denied names are dropped
+from the granted tool set and rejected at the capability boundary. The same names are forwarded
+to the provider as `disallowedTools` when the provider supports them. `outputs.slack.reply.max`
+caps replies for the whole execution; `args_limit` sets numeric maxima Hub checks on each tool
+call, so a model asking for more than the configured `limit` gets an error instead of a larger
+read. All three options are optional and change nothing when omitted.
+
 ## Tasks, text, and thumbs
 
 A step that opts into `slack_agent` draws the agent's own plan on the card. Each task in a `todo` timeline row becomes a task on that card, with `task_display_mode` taken from `slack_agent.display`. The model can still call `slack.agent.stage`. When both name the same task id, the explicit call wins.

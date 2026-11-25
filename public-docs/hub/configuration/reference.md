@@ -135,7 +135,7 @@ Hub grants the `reply` tool when the event has an issue, pull request, or thread
 
 A `github.push` event has no reply destination. If you set `run.outputs.github.reply.required: true` for a push, Hub fails the run before it starts the agent.
 
-Set `run.outputs` to cap replies with `max` or require a reply before `finish_execution`.
+Set `run.outputs` to cap replies with `max` or require a reply before `finish_execution`. An output may also declare `args_limit`, a map of argument names to numeric maxima the Hub enforces at call time. `run.denied_tools` names tools the Hub withholds and rejects for the execution. See [Slack triggers](/docs/hub/triggers/slack) for `slack_agent.lifecycle_reactions` and a worked example.
 
 ```yaml
 run:
