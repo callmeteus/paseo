@@ -1748,6 +1748,46 @@ describe("create_agent MCP tool", () => {
     }
   });
 
+  it("accepts ephemeral and notifyUser on create_agent", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.createAgent.mockResolvedValue({
+      id: "ephemeral-agent",
+      provider: "codex",
+      cwd: existingCwd,
+      workspaceId: "workspace-created",
+      lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Ephemeral agent" },
+    } as ManagedAgent);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      ensureWorkspaceForCreate,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+    const input = {
+      ...detachedDirectoryWorkspace(existingCwd),
+      provider: "codex/gpt-5.4",
+      title: "Ephemeral agent",
+      initialPrompt: "Do work",
+      ephemeral: true,
+      notifyUser: false,
+    };
+
+    await expect(tool.inputSchema.safeParseAsync(input)).resolves.toMatchObject({ success: true });
+    await tool.handler(input);
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ internal: true }),
+      undefined,
+      expect.objectContaining({ persistSession: false, notifyUser: false }),
+    );
+    expect(spies.agentManager.subscribe).toHaveBeenCalled();
+  });
+
   it("rejects partial explicit workspace shape", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const server = await createAgentMcpServer({

@@ -541,6 +541,10 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   autoArchive?: CreateAgentRequestMessage["autoArchive"];
   /** Creates a background agent. A workspace this request creates inherits it. */
   background?: CreateAgentRequestMessage["background"];
+  /** False suppresses user attention and push notifications for this agent. */
+  notifyUser?: CreateAgentRequestMessage["notifyUser"];
+  /** Runs one task, delivers the result, then removes the agent on finish. */
+  ephemeral?: CreateAgentRequestMessage["ephemeral"];
   /** @deprecated Use createWorkspace({ source, agent, idempotencyKey }); rejected by createAgent. */
   worktreeName?: string;
   requestId?: string;
@@ -3752,6 +3756,18 @@ export class DaemonClient {
       );
     }
     if (options.background !== undefined) this.requireBackgroundCreation(options);
+    if (
+      options.ephemeral !== undefined &&
+      this.lastServerInfoMessage?.features?.ephemeralAgents !== true
+    ) {
+      throw new Error("Update the host to create ephemeral agents.");
+    }
+    if (
+      options.notifyUser === false &&
+      this.lastServerInfoMessage?.features?.agentNotificationControl !== true
+    ) {
+      throw new Error("Update the host to suppress agent notifications.");
+    }
     if (options.metadata !== undefined) this.requireEntityMetadata();
     const config = resolveAgentConfig(options);
     const result = await this.creations.createAgent({
@@ -3816,6 +3832,7 @@ export class DaemonClient {
       ...(options.git ? { git: options.git } : {}),
       ...(options.worktree ? { worktree: options.worktree } : {}),
       ...(options.autoArchive !== undefined ? { autoArchive: options.autoArchive } : {}),
+      ...creationModeFields(options),
       ...(options.background !== undefined ? { background: options.background } : {}),
       ...(options.worktreeName ? { worktreeName: options.worktreeName } : {}),
       ...(options.labels && Object.keys(options.labels).length > 0
@@ -9117,6 +9134,13 @@ export class DaemonClient {
   }
 }
 
+function creationModeFields(options: CreateAgentRequestOptions) {
+  return {
+    ...(options.notifyUser !== undefined ? { notifyUser: options.notifyUser } : {}),
+    ...(options.ephemeral !== undefined ? { ephemeral: options.ephemeral } : {}),
+  };
+}
+
 function resolveAgentConfig(
   options: CreateAgentRequestOptions,
   opts?: { allowMissingCwd?: boolean },
@@ -9135,6 +9159,8 @@ function resolveAgentConfig(
     worktree: _worktree,
     autoArchive: _autoArchive,
     background: _background,
+    notifyUser: _notifyUser,
+    ephemeral: _ephemeral,
     env: _env,
     workspaceId: _workspaceId,
     initialPrompt: _initialPrompt,

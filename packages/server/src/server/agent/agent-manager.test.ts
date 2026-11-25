@@ -6754,6 +6754,39 @@ test("runAgent persists finished attention and idle status without an external s
   expect(persisted?.attentionTimestamp).toEqual(expect.any(String));
 });
 
+test("notifyUser false keeps a finished agent out of user attention", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-silent-finish-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: {
+      codex: new TestAgentClient(),
+    },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000136",
+  });
+
+  const snapshot = await manager.createAgent(
+    {
+      provider: "codex",
+      cwd: workdir,
+      title: "Silent agent",
+    },
+    undefined,
+    { workspaceId: undefined, notifyUser: false },
+  );
+
+  await manager.runAgent(snapshot.id, "say hello");
+  await manager.flush();
+
+  expect(manager.getAgent(snapshot.id)?.attention.requiresAttention).toBe(false);
+  const persisted = await storage.get(snapshot.id);
+  expect(persisted?.notifyUser).toBe(false);
+  expect(persisted?.requiresAttention).toBe(false);
+  expect(persisted?.lastStatus).toBe("idle");
+});
+
 test("archiveSnapshot clears persisted attention and normalizes running status", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-archive-attention-"));
   const storagePath = join(workdir, "agents");

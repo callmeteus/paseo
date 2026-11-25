@@ -105,6 +105,8 @@ const RAW_STORED_AGENT_SCHEMA = z.object({
     .max(24 * 60 * 60_000)
     .optional(),
   background: z.boolean().optional(),
+  /** False means this agent never raises user attention or push notifications. */
+  notifyUser: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
   migratedTo: z

@@ -2217,6 +2217,10 @@ export const CreateAgentRequestMessageSchema = z.object({
   git: GitSetupOptionsSchema.optional(),
   worktree: CreateAgentWorktreeTargetSchema.optional(),
   autoArchive: z.boolean().optional(),
+  // An ephemeral agent runs one task, reports back, and removes itself on finish.
+  ephemeral: z.boolean().optional(),
+  // Set false to keep attention and push notifications away from the user.
+  notifyUser: z.boolean().optional(),
   /**
    * Model router that owns the new chat. Null/absent means the chat runs on the
    * provider/model in `config` with no fallback.
@@ -4721,6 +4725,8 @@ export const ServerInfoStatusPayloadSchema = z
         remoteAccess: z.boolean().optional(),
         // COMPAT(backgroundAgents): added in v0.15.0; remove gate after 2027-05-03.
         backgroundAgents: z.boolean().optional(),
+        ephemeralAgents: z.boolean().optional(),
+        agentNotificationControl: z.boolean().optional(),
         // COMPAT(usageSetting): added in v0.14, remove after 2027-05-01.
         usageSetting: z.boolean().optional(),
         usageSources: z.boolean().optional(),

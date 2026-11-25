@@ -4477,6 +4477,67 @@ test("rejects an internal create before sending when the host predates internal 
   expect(mock.sent).toHaveLength(0);
 });
 
+test("ephemeral and notifyUser need hosts that advertise the creation options", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen({ features: {} });
+  await connectPromise;
+
+  await expect(
+    client.createAgent({ provider: "codex", cwd: "/tmp/project", ephemeral: true }),
+  ).rejects.toThrow("Update the host to create ephemeral agents.");
+  await expect(
+    client.createAgent({ provider: "codex", cwd: "/tmp/project", notifyUser: false }),
+  ).rejects.toThrow("Update the host to suppress agent notifications.");
+  expect(mock.sent).toHaveLength(0);
+});
+
+test("sends ephemeral and notifyUser to a host that advertises them", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen({ features: { ephemeralAgents: true, agentNotificationControl: true } });
+  await connectPromise;
+
+  const createPromise = client.createAgent({
+    provider: "codex",
+    cwd: "/tmp/project",
+    ephemeral: true,
+    notifyUser: false,
+  });
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toEqual(
+    expect.objectContaining({ ephemeral: true, notifyUser: false, type: "create_agent_request" }),
+  );
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "status",
+      payload: {
+        status: "agent_create_failed",
+        requestId: request.requestId,
+        error: "creation sentinel",
+      },
+    }),
+  );
+  await expect(createPromise).rejects.toThrow("creation sentinel");
+});
+
 test("metadata needs a host that advertises entityMetadata and sends nothing to one that does not", async () => {
   const mock = createMockTransport();
   const client = new DaemonClient({

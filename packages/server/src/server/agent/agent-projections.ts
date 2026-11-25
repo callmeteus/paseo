@@ -112,6 +112,7 @@ export function toStoredAgentRecord(
       : null,
     internal: options?.internal,
     ...(agent.background ? { background: true } : {}),
+    ...(agent.notifyUser === false ? { notifyUser: false } : {}),
     owner: agent.owner,
     ...(agent.migratedFrom ? { migratedFrom: agent.migratedFrom } : {}),
     ...(agent.migratedTo ? { migratedTo: agent.migratedTo } : {}),

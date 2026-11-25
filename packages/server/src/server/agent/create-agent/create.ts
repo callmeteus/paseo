@@ -37,6 +37,8 @@ interface McpWorkspaceIntent {
 
 export interface CreateAgentCommandDependencies {
   finishSubscriptions?: FinishSubscriptions;
+  /** Registers lifecycle cleanup while the agent is still live, before its first prompt. */
+  onAgentCreated?: (agentId: string) => void | Promise<void>;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   logger: Logger;
@@ -78,6 +80,8 @@ export interface CreateAgentFromSessionInput {
   firstAgentContext: FirstAgentContext;
   /** Silence budget from the automation `idle_timeout`. Prompts do not carry it. */
   idleTimeoutMs?: number;
+  /** False keeps this agent out of user attention and push notifications. */
+  notifyUser?: boolean;
 }
 
 export interface CreateAgentFromMcpInput {
@@ -97,6 +101,10 @@ export interface CreateAgentFromMcpInput {
   unattended?: boolean;
   promptFailure?: CreateAgentPromptFailureMode;
   notifyOnFinish: boolean;
+  /** Ephemeral agents are internal helpers that clean themselves up on finish. */
+  ephemeral?: boolean;
+  /** False keeps this agent out of user attention and push notifications. */
+  notifyUser?: boolean;
   internal?: boolean;
   /** Omitted with a caller, the caller agent's own background applies. */
   background?: boolean;
@@ -192,6 +200,7 @@ export async function createAgentCommand(
   );
 
   if (input.kind === "session") await input.onAgentReady?.(snapshot);
+  await dependencies.onAgentCreated?.(snapshot.id);
 
   let liveSnapshot = snapshot;
   let initialPromptStarted = false;
@@ -282,6 +291,7 @@ async function resolveSessionCreateAgent(
       modelRouterId: input.modelRouterId ?? null,
       idleTimeoutMs: input.idleTimeoutMs,
       background: input.background,
+      notifyUser: input.notifyUser,
     },
     prompt: hasPromptContent ? prompt : undefined,
     source: input.source,
@@ -347,21 +357,25 @@ async function resolveMcpCreateAgent(
   });
 
   const trimmedPrompt = input.initialPrompt?.trim() ?? "";
+  const config = buildMcpSessionConfig({
+    input,
+    resolvedProviderModel,
+    provider,
+    resolvedCwd: intent.cwd,
+    trimmedPrompt,
+    resolvedMode: resolvedCreateConfig.modeId,
+    resolvedProviderOptions: resolvedCreateConfig.providerOptions,
+  });
   return {
-    config: buildMcpSessionConfig({
-      input,
-      resolvedProviderModel,
-      provider,
-      resolvedCwd: intent.cwd,
-      trimmedPrompt,
-      resolvedMode: resolvedCreateConfig.modeId,
-      resolvedProviderOptions: resolvedCreateConfig.providerOptions,
-    }),
+    config,
     createOptions: {
       ...(Object.keys(intent.labels).length > 0 ? { labels: intent.labels } : {}),
       workspaceId: intent.workspaceId,
       owner: input.owner,
       background: inheritAgentBackground(input.background, parentAgent),
+      notifyUser: input.notifyUser,
+      // Nothing can resume an internal agent's provider session; keep it off disk.
+      ...(config.internal ? { persistSession: false } : {}),
       env: input.env,
       modelRouterId: input.modelRouterId ?? null,
     },
@@ -437,7 +451,9 @@ function buildMcpSessionConfig(params: {
     modeId: params.resolvedMode ?? passthroughConfig?.modeId,
     model: params.resolvedProviderModel.model ?? passthroughConfig?.model,
     thinkingOptionId: params.input.thinking ?? passthroughConfig?.thinkingOptionId,
-    internal: params.input.internal ?? passthroughConfig?.internal,
+    internal: params.input.ephemeral
+      ? true
+      : (params.input.internal ?? passthroughConfig?.internal),
   };
   if (provisionalTitle) {
     config.title = provisionalTitle;

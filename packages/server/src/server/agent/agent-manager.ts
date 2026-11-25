@@ -533,6 +533,8 @@ export interface CreateAgentOptions {
   sideQuestion?: boolean;
   /** Background agents stay out of discovery, tabs, tracks and attention. Fixed at creation. */
   background?: boolean;
+  /** False suppresses user attention and push notifications. Fixed at creation. */
+  notifyUser?: boolean;
 }
 
 export interface GoalTurnPlan {
@@ -618,9 +620,11 @@ export type AttentionState =
       attentionTimestamp: Date;
     };
 
-/** Private helpers and background agents report to their creator, never to the user. */
-function raisesAttention(agent: Pick<ManagedAgent, "internal" | "background">): boolean {
-  return !agent.internal && !agent.background;
+/** Private helpers, background agents and silent agents report to their creator, never to the user. */
+function raisesAttention(
+  agent: Pick<ManagedAgent, "internal" | "background" | "notifyUser">,
+): boolean {
+  return !agent.internal && !agent.background && agent.notifyUser !== false;
 }
 
 /** The attention a read agent gets back when marked unread; null while it is still working. */
@@ -711,6 +715,11 @@ interface ManagedAgentBase {
    * Fixed at creation.
    */
   background?: boolean;
+  /**
+   * False keeps this agent out of user attention and push notifications. Agent-to-agent
+   * finish notifications still work. Fixed at creation.
+   */
+  notifyUser?: boolean;
   /**
    * User-defined labels for categorizing agents (e.g., { surface: "workspace" }).
    */
@@ -2265,6 +2274,7 @@ export class AgentManager {
           portedTimeline: record.portedTimeline as AgentTimelineRow[] | undefined,
           goal: record.goal,
           idleTimeoutMs: record.idleTimeoutMs,
+          notifyUser: record.notifyUser,
         });
       }),
     );
@@ -2363,6 +2373,7 @@ export class AgentManager {
       goal: options.goal,
       idleTimeoutMs: options.idleTimeoutMs,
       background: options.background,
+      notifyUser: options.notifyUser,
       launchEnv: options.env ? { ...options.env } : undefined,
       historyPrimed: true,
     });
@@ -4235,7 +4246,7 @@ export class AgentManager {
     };
     this.touchUpdatedAt(agent);
     this.emitState(agent);
-    this.broadcastAgentAttention(agent, reason);
+    if (agent.notifyUser !== false) this.broadcastAgentAttention(agent, reason);
   }
 
   /**
@@ -5620,7 +5631,7 @@ export class AgentManager {
    * `finished` reason so clients keep one unread concept.
    */
   private markExternalActivityAttention(agent: ActiveManagedAgent, preserveReason = false): void {
-    if (agent.internal) return;
+    if (agent.internal || agent.notifyUser === false) return;
     if (preserveReason && agent.attention?.requiresAttention) {
       this.touchUpdatedAt(agent);
       this.emitState(agent);
@@ -5723,10 +5734,13 @@ export class AgentManager {
   }
 
   async getLastAssistantMessage(agentId: string): Promise<string | null> {
+    // An archived ephemeral agent drops its timeline; its retired snapshot keeps
+    // the final answer long enough for a waiter or finish subscription to read it.
+    const retiredMessage = this.getRetiredInternalAgent(agentId)?.lastMessage ?? null;
     if (!this.timelineStore.has(agentId)) {
-      return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? null;
+      return (await this.durableTimelineStore?.getLastAssistantMessage(agentId)) ?? retiredMessage;
     }
-    return await this.getLastAssistantMessageFromStores(agentId);
+    return (await this.getLastAssistantMessageFromStores(agentId)) ?? retiredMessage;
   }
 
   private getLastAssistantMessageFromTimeline(
@@ -6010,6 +6024,7 @@ export class AgentManager {
       goal?: AgentGoal;
       idleTimeoutMs?: number;
       background?: boolean;
+      notifyUser?: boolean;
       launchEnv?: Record<string, string>;
     },
   ): Promise<ManagedAgent> {
@@ -6045,6 +6060,7 @@ export class AgentManager {
         now,
         durableTimelineHasRows,
         background: options?.background === true,
+        notifyUser: options?.notifyUser,
         options,
       });
 
@@ -6204,6 +6220,7 @@ export class AgentManager {
     now: Date;
     durableTimelineHasRows: boolean;
     background: boolean;
+    notifyUser?: boolean;
     options:
       | {
           createdAt?: Date;
@@ -6277,6 +6294,7 @@ export class AgentManager {
       attention: resolveInitialAttention(options?.attention),
       internal: config.internal ?? false,
       background: params.background,
+      notifyUser: params.notifyUser,
       ...agentEntityData(options),
       ...automationIdleTimeoutField(options),
       ...buildPortedAgentState(options),

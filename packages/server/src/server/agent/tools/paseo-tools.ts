@@ -102,6 +102,7 @@ import {
   waitForAgentRunStartWithTimeout,
 } from "../agent-prompt.js";
 import { respondToAgentPermission } from "../permission-response.js";
+import { registerAgentAutoArchive } from "../create-agent-lifecycle-dispatch.js";
 import {
   archiveAgentCommand,
   cancelAgentRunCommand,
@@ -1465,6 +1466,18 @@ function createToolCatalog(
       .describe(
         "True creates a background agent: hidden from tabs, default lists, your subagent track and notifications. You still get its finish notification and can address it by id. Omit to inherit your own value (false without a caller); use it for helpers the user does not need to watch.",
       ),
+    notifyUser: z
+      .boolean()
+      .optional()
+      .describe(
+        "Set false to keep this agent out of user notifications and unread attention. Finish notifications back to a calling agent still work.",
+      ),
+    ephemeral: z
+      .boolean()
+      .optional()
+      .describe(
+        "Create an ephemeral agent: it runs one task, reports its result, then removes itself when finished. Ephemeral agents are hidden from lists and never notify the user.",
+      ),
   };
   const legacyCreateAgentPlacementFields = {
     relationship: AgentRelationshipInputSchema.describe(
@@ -2028,6 +2041,14 @@ function createToolCatalog(
           terminalManager,
           providerSnapshotManager,
           createPaseoWorktree: options.createPaseoWorktree,
+          onAgentCreated: (agentId) => {
+            if (parsedArgs.ephemeral !== true) return;
+            registerAgentAutoArchive({
+              agentManager,
+              agentId,
+              archive: () => agentManager.archiveAgent(agentId),
+            });
+          },
           ...(options.ensureWorkspaceForCreate
             ? { ensureWorkspaceForCreate: options.ensureWorkspaceForCreate }
             : {}),
@@ -2051,6 +2072,8 @@ function createToolCatalog(
           mode: launch.modeId ?? requestedMode,
           promptFailure: multitaskParent ? "return-error" : "throw",
           notifyOnFinish,
+          notifyUser: parsedArgs.notifyUser,
+          ephemeral: parsedArgs.ephemeral,
           background: parsedArgs.background,
           detached: resolvedArgs.detached,
           callerAgentId,

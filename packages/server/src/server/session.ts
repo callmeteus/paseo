@@ -6203,6 +6203,13 @@ export class Session {
           paseoHome: this.paseoHome,
           worktreesRoot: this.worktreesRoot,
           providerSnapshotManager: this.providerSnapshotManager,
+          onAgentCreated: (registeredAgentId) => {
+            this.createAgentLifecycleDispatch.registerAutoArchiveIfRequested({
+              autoArchive: autoArchive === true || msg.ephemeral === true,
+              agentId: registeredAgentId,
+              createdWorktree,
+            });
+          },
         },
         {
           kind: "session",
@@ -6229,6 +6236,7 @@ export class Session {
           provisionalTitle,
           firstAgentContext,
           idleTimeoutMs: msg.idleTimeoutMs,
+          notifyUser: msg.notifyUser,
         },
       );
       createdAgentId = snapshot.id;
@@ -6259,11 +6267,6 @@ export class Session {
           { currentSelection: this.getFocusedAgentSelectionForCwd(resolvedIntent.config.cwd) },
         );
       }
-      this.createAgentLifecycleDispatch.registerAutoArchiveIfRequested({
-        autoArchive,
-        agentId: snapshot.id,
-        createdWorktree,
-      });
       this.sessionLogger.info(
         { agentId: snapshot.id, provider: snapshot.provider },
         "Created agent",
@@ -6299,7 +6302,7 @@ export class Session {
     const { request, createdWorktree } = input;
     const callerAgent = await this.resolveCreationCaller(request.callerAgentId);
 
-    let config = request.config;
+    let config = request.ephemeral ? { ...request.config, internal: true } : request.config;
 
     const intent = await resolveCreateAgentIntent({
       explicitWorkspaceId: createdWorktree?.workspace.workspaceId ?? request.workspaceId,
@@ -11118,6 +11121,9 @@ export class Session {
         error instanceof Error &&
         (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"));
       if (!isAbort) {
+        // An ephemeral agent can archive itself between the initial liveness
+        // check and the terminal event. Its settled snapshot still has the result.
+        if (await this.emitSettledWaitForFinish(requestId, agentId)) return;
         const message = errorToFriendlyMessage(error);
         this.sessionLogger.error({ err: error, agentId }, "wait_for_finish_request failed");
         const final = await this.getAgentPayloadById(agentId);
@@ -11147,6 +11153,30 @@ export class Session {
         clearTimeout(timeoutHandle);
       }
     }
+  }
+
+  private async emitSettledWaitForFinish(requestId: string, agentId: string): Promise<boolean> {
+    const settled = await this.readSettledAgent(agentId).catch(() => null);
+    if (!settled) return false;
+    const { record, lastMessage } = settled;
+    let status: "permission" | "error" | "idle" = "idle";
+    if (record.attentionReason === "permission") {
+      status = "permission";
+    } else if (record.lastStatus === "error") {
+      status = "error";
+    }
+    const final = this.buildStoredAgentPayload(record);
+    this.emit({
+      type: "wait_for_finish_response",
+      payload: {
+        requestId,
+        status,
+        final,
+        error: resolveWaitForFinishError({ status, final }),
+        lastMessage,
+      },
+    });
+    return true;
   }
 
   /**

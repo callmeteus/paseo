@@ -161,7 +161,7 @@ Setup belongs to the workspace, including combined workspace-plus-agent creation
 
 Users can also detach an existing subagent from the subagents track. Detach is deliberately a manual lifecycle gesture, not an agent-facing MCP tool. It removes the parent and open-tab lifecycle labels: it does not stop, archive, move, or restart the agent. The agent keeps its current `cwd` and `workspaceId`, leaves the former parent's track, and behaves like a root agent for tab close, workspace activity, and future parent archive.
 
-`notifyOnFinish` defaults to `true` for agent-scoped creation and prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` for explicit reporting or no completion callback.
+`notifyOnFinish` defaults to `true` for agent-scoped creation and prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` for explicit reporting or no completion callback. User-facing notifications are a separate channel; `notifyUser: false` suppresses those without losing the finish callback.
 
 Agent-originated messages and automatic notifications share a recipient-daemon delivery module. A queued receipt acknowledges admission before provider dispatch. Idle recipients retain the two-second quiet window. While a recipient has a running or starting turn (including compaction), messages stay queued across quiet windows and are delivered together after that turn settles, including failure or cancellation. A ready batch is released when the daemon observes the recipient settle; the two-second timer also retries it. Agent callers using `steer`, including the default, wait for the turn to end; only explicit `interrupt` replaces a running turn. An explicit interrupt or a command the provider accepts out of band runs before earlier queued messages. Those messages stay queued and are delivered after the running or replacement turn ends. Human prompts dispatch directly with their existing behavior. Conflicting session-mode choices retain separate ordered dispatches.
 
@@ -240,13 +240,24 @@ Clients gate background workspaces and inclusive discovery on `features.backgrou
 They gate a background agent placed in an existing workspace or under a caller on
 `features.backgroundAgents`.
 
+### Silent agents
+
+`notifyUser: false` on creation (`create_agent`, `create_agent_request`, or `paseo run --no-notify`) suppresses user attention and push notifications for that agent. It stays durable and visible in discovery and tabs, and a calling agent still receives its finish notification. The choice is stored on the agent and fixed at creation.
+
 ### Private daemon helpers
 
 Branch-name and commit-message generators still use private disposable internal runtimes.
 `AgentManager` does not persist them or their provider sessions, excludes them from public
 discovery and plugin hooks, and drops their timelines on archive. An archived helper retains
 its exact-ID result briefly to cover completion before a waiter attaches. This internal
-lifecycle is separate from public workspace visibility and is not a public creation option.
+lifecycle is separate from public workspace visibility; the private helper itself is not a
+creation option, but public [ephemeral agents](#ephemeral-agents) use the same non-persistent path.
+
+## Ephemeral agents
+
+`ephemeral: true` on creation (`create_agent` or `paseo run --ephemeral`) makes an agent a public internal helper. It runs one task, reports the result through the existing caller paths, and archives itself on the first terminal turn event. Nothing about it is written to disk, so it has no record to resume or list. Its final answer stays addressable by id briefly after cleanup so a waiter or finish subscription can still read it.
+
+An ephemeral agent never raises user attention. Agent-scoped creation still registers `notifyOnFinish` by default, so the creating agent receives the result. `paseo run --ephemeral` waits by default and returns the result like a normal foreground run.
 
 ## Archive
 

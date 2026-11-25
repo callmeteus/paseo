@@ -186,6 +186,8 @@ const remoteCreate = z
     workspaceId: z.string().min(1),
     labels: z.record(z.string(), z.string()).optional(),
     notifyOnFinish: z.boolean().optional(),
+    notifyUser: z.boolean().optional(),
+    ephemeral: z.boolean().optional(),
     background: z.boolean().optional(),
     idempotencyKey: z.string().optional(),
     settings: z
@@ -239,6 +241,13 @@ export function createHostResolver(input: {
                 ? parentAddressLabels({ agentId: input.callerAgentId, serverId: input.serverId })
                 : {}),
             };
+            const remoteFeatures = client.getLastServerInfoMessage()?.features;
+            if (parsed.ephemeral && remoteFeatures?.ephemeralAgents !== true) {
+              throw new Error("Update the host to create ephemeral agents.");
+            }
+            if (parsed.notifyUser === false && remoteFeatures?.agentNotificationControl !== true) {
+              throw new Error("Update the host to suppress agent notifications.");
+            }
             const snapshot = await client.createAgent({
               config: {
                 provider,
@@ -249,6 +258,8 @@ export function createHostResolver(input: {
                 thinkingOptionId: parsed.settings?.thinkingOptionId,
                 featureValues: parsed.settings?.features,
               },
+              ephemeral: parsed.ephemeral,
+              notifyUser: parsed.notifyUser,
               workspaceId: parsed.workspaceId,
               // Older hosts reject any background with a workspaceId, so a visible create omits it.
               ...(inheritAgentBackground(parsed.background, caller) ? { background: true } : {}),

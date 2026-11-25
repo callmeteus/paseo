@@ -3,6 +3,7 @@ import { DaemonConnectionError } from "@getpaseo/client/internal/daemon-client";
 import { resolveCallerAgentId as resolveRunCallerAgentId } from "../../utils/caller-agent.js";
 import {
   resolveExistingRunWorkspace,
+  resolveRunCreationOptions,
   runRunCommand,
   waitsForFinish,
   type AgentRunOptions,
@@ -28,6 +29,17 @@ describe("run wait policy", () => {
     expect(waitsForFinish({ wait: false })).toBe(false);
     expect(waitsForFinish({ background: true })).toBe(false);
     expect(waitsForFinish({ detach: true })).toBe(false);
+  });
+});
+
+describe("run creation options", () => {
+  it("maps --no-notify and --ephemeral only when requested", () => {
+    expect(resolveRunCreationOptions({})).toEqual({});
+    expect(resolveRunCreationOptions({ notify: true })).toEqual({});
+    expect(resolveRunCreationOptions({ notify: false, ephemeral: true })).toEqual({
+      notifyUser: false,
+      ephemeral: true,
+    });
   });
 });
 

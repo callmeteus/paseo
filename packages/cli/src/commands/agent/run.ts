@@ -28,6 +28,11 @@ export function addRunOptions(cmd: Command): Command {
       .description("Create and start an agent with a task")
       .argument("<prompt>", "The task/prompt for the agent")
       .option("--no-wait", "Return immediately without waiting for completion")
+      .option("--no-notify", "Do not send user notifications or unread attention for this agent")
+      .option(
+        "--ephemeral",
+        "Run one task, deliver the result, then remove the agent when it finishes",
+      )
       // COMPAT(backgroundRunFlag): --background was the documented spelling of
       // --no-wait. Added in v0.2.0; remove after 2027-04-01.
       .addOption(new Option("-d, --background", "Legacy alias for --no-wait").hideHelp())
@@ -118,6 +123,8 @@ export const agentRunSchema: OutputSchema<AgentRunResult> = {
 
 export interface AgentRunOptions extends CommandOptions {
   wait?: boolean;
+  notify?: boolean;
+  ephemeral?: boolean;
   background?: boolean;
   detach?: boolean;
   title?: string;
@@ -424,6 +431,13 @@ export function waitsForFinish(
   return options.wait !== false && !options.background && !options.detach;
 }
 
+export function resolveRunCreationOptions(options: AgentRunOptions) {
+  return {
+    ...(options.notify === false ? { notifyUser: false } : {}),
+    ...(options.ephemeral === true ? { ephemeral: true } : {}),
+  };
+}
+
 function parseWaitTimeoutOption(waitTimeout: string | undefined): number {
   if (!waitTimeout) return 0;
   try {
@@ -658,6 +672,7 @@ export async function runRunCommand(
             images,
             env: requestEnv,
             labels: Object.keys(labels).length > 0 ? labels : undefined,
+            ...resolveRunCreationOptions(options),
           });
         } else {
           await client.sendMessage(structuredAgent.id, structuredPrompt);
@@ -728,6 +743,7 @@ export async function runRunCommand(
       images,
       env: requestEnv,
       labels: Object.keys(labels).length > 0 ? labels : undefined,
+      ...resolveRunCreationOptions(options),
     });
 
     // Default run behavior is foreground: wait for completion unless --no-wait is set.

@@ -264,6 +264,43 @@ test("session create stamps the requested workspaceId when no worktree setup run
   }
 });
 
+test("ephemeral mcp create keeps the agent off disk and registers cleanup", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "create-agent-ephemeral-test-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const agentManager = createRealAgentManager(storage);
+  const onAgentCreated = vi.fn();
+
+  try {
+    const { snapshot } = await createAgentCommand(
+      {
+        agentManager,
+        agentStorage: storage,
+        logger,
+        providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+        onAgentCreated,
+      },
+      {
+        kind: "mcp",
+        provider: "codex/gpt-5.4",
+        title: "ephemeral",
+        initialPrompt: "do the work",
+        notifyOnFinish: false,
+        cwd: workdir,
+        workspaceId: "ws-ephemeral",
+        ephemeral: true,
+        notifyUser: false,
+      },
+    );
+
+    expect(snapshot.internal).toBe(true);
+    expect(snapshot.notifyUser).toBe(false);
+    expect(await storage.get(snapshot.id)).toBeNull();
+    expect(onAgentCreated).toHaveBeenCalledWith(snapshot.id);
+  } finally {
+    await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
+  }
+});
+
 test("mcp create stamps the new worktree's workspaceId, not the parent's", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "create-agent-test-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
