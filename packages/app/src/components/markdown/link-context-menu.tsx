@@ -1,11 +1,15 @@
 import { useCallback, useEffect, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Globe, Link2 } from "lucide-react-native";
+import { ExternalLink, FolderOpen, Globe, Link2 } from "lucide-react-native";
 import { withUnistyles } from "react-native-unistyles";
 import * as Clipboard from "expo-clipboard";
 import type { Theme } from "@/styles/theme";
 import { MenuItem, MenuRoot, MenuSurface, useMenuContext } from "@/components/ui/menu";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { useToast } from "@/contexts/toast-context";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
+import { resolveMarkdownFileDirectory } from "./image-source";
 import { isLocalFileHref, localFileHrefToPath } from "./file-link-href";
 import {
   canOpenLinkInPaseo,
@@ -18,10 +22,12 @@ import {
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedLink2 = withUnistyles(Link2);
+const ThemedFolderOpen = withUnistyles(FolderOpen);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const globeIcon = <ThemedGlobe size={15} uniProps={mutedMapping} />;
 const externalIcon = <ThemedExternalLink size={15} uniProps={mutedMapping} />;
 const linkIcon = <ThemedLink2 size={15} uniProps={mutedMapping} />;
+const folderIcon = <ThemedFolderOpen size={15} uniProps={mutedMapping} />;
 
 /**
  * Right-click menu for links in assistant prose. Electron's own menu only knows
@@ -39,7 +45,7 @@ export function LinkContextMenu(): ReactElement {
       <LinkMenuAnchor request={request} />
       {request ? (
         <MenuSurface testID="link-context-menu">
-          <LinkMenuItems url={request.url} />
+          <LinkMenuItems request={request} />
         </MenuSurface>
       ) : null}
     </MenuRoot>
@@ -56,19 +62,48 @@ function LinkMenuAnchor({ request }: { request: LinkContextMenuRequest | null })
   return null;
 }
 
-function LinkMenuItems({ url }: { url: string }): ReactElement {
+function LinkMenuItems({ request }: { request: LinkContextMenuRequest }): ReactElement {
   const { t } = useTranslation();
-  const isFile = isLocalFileHref(url);
-  const copyValue = isFile ? localFileHrefToPath(url) : url;
-  const openInPaseo = useCallback(() => openLinkInPaseo(url), [url]);
-  const openExternal = useCallback(() => void openExternalUrl(url), [url]);
+  const toast = useToast();
+  const isFile = isLocalFileHref(request.url);
+  const localPath = request.localPath ?? (isFile ? localFileHrefToPath(request.url) : null);
+  const directory = localPath ? resolveMarkdownFileDirectory({ markdownPath: localPath }) : null;
+  const isLocalDaemon = useIsLocalDaemon(request.serverId ?? "");
+  const { targets } = useDesktopOpenTargets({
+    isLocalExecution: isLocalDaemon && Boolean(directory),
+  });
+  const fileManagerTarget = targets.find((target) => target.kind === "file-manager");
+  const copyValue = isFile ? (localPath ?? request.url) : request.url;
+  const openInPaseo = useCallback(() => openLinkInPaseo(request.url), [request.url]);
+  const openExternal = useCallback(() => void openExternalUrl(request.url), [request.url]);
   const copy = useCallback(() => void Clipboard.setStringAsync(copyValue), [copyValue]);
+  const openDirectory = useCallback(() => {
+    if (!fileManagerTarget || !directory) return;
+    void openDesktopTarget({
+      editorId: fileManagerTarget.id,
+      workspacePath: directory,
+    }).catch((error) => {
+      console.warn("[link-context-menu] open directory failed", error);
+      toast.error(t("sidebar.project.actions.openFolderFailed"));
+    });
+  }, [directory, fileManagerTarget, t, toast]);
 
   if (isFile) {
     return (
-      <MenuItem leading={linkIcon} onSelect={copy} testID="link-context-menu-copy">
-        {t("linkMenu.copyPath")}
-      </MenuItem>
+      <>
+        {directory && fileManagerTarget ? (
+          <MenuItem
+            leading={folderIcon}
+            onSelect={openDirectory}
+            testID="link-context-menu-open-directory"
+          >
+            {t("workspace.tabs.menu.openContainingDirectory")}
+          </MenuItem>
+        ) : null}
+        <MenuItem leading={linkIcon} onSelect={copy} testID="link-context-menu-copy">
+          {t("linkMenu.copyPath")}
+        </MenuItem>
+      </>
     );
   }
 

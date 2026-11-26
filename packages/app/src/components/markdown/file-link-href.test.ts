@@ -27,7 +27,12 @@ describe("local file href helpers", () => {
   it("detects local paths and file URLs but not web links", () => {
     expect(isLocalFileHref("/tmp/opencode/hub-bootstrap-password")).toBe(true);
     expect(isLocalFileHref("file:///tmp/notes.md")).toBe(true);
+    expect(isLocalFileHref("C:\\Users\\Gio\\file.txt")).toBe(true);
+    expect(isLocalFileHref("C:/Users/Gio/file.txt")).toBe(true);
+    expect(isLocalFileHref("\\\\server\\share\\file.txt")).toBe(true);
+    expect(isLocalFileHref("file://server/share/file.txt")).toBe(true);
     expect(isLocalFileHref("https://github.com/paseo")).toBe(false);
+    expect(isLocalFileHref("mailto:gio@example.com")).toBe(false);
     expect(isLocalFileHref("packages/app/src")).toBe(false);
   });
 
@@ -36,6 +41,11 @@ describe("local file href helpers", () => {
       "/tmp/opencode/hub-bootstrap-password",
     );
     expect(localFileHrefToPath("file:///tmp/with%20space")).toBe("/tmp/with space");
+    expect(localFileHrefToPath("file:///C:/Users/Gio/file.txt")).toBe("C:/Users/Gio/file.txt");
+    expect(localFileHrefToPath("file://server/share/file%20name.txt")).toBe(
+      "\\\\server\\share\\file name.txt",
+    );
+    expect(localFileHrefToPath("C:\\Users\\Gio\\file.txt")).toBe("C:\\Users\\Gio\\file.txt");
   });
 });
 
