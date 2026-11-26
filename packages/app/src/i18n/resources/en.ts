@@ -228,6 +228,7 @@ export const en = {
       label: "Switch between Chat and Agent",
       chat: "Chat",
       agent: "Agent",
+      failed: "Could not switch modes. Try again.",
     },
     clientCommands: {
       archiveAgent: "Archive the current agent",

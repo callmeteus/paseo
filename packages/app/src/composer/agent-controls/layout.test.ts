@@ -101,6 +101,30 @@ describe("composer control layout", () => {
     ).toBe("condensed");
   });
 
+  it("budgets the trailing Chat/Agente control before restoring full density", () => {
+    const controls = {
+      hasModel: true,
+      hasThinking: true,
+      hasMode: true,
+      features: [{ type: "toggle" as const }],
+      pluginItemsWidth: 0,
+      fontScale: 1,
+    };
+    const input = {
+      availableWidth: 420,
+      currentDensity: "full" as const,
+      geometry: POINTER,
+    };
+
+    expect(resolveComposerControlDensity({ ...input, controls })).toBe("full");
+    expect(
+      resolveComposerControlDensity({
+        ...input,
+        controls: { ...controls, chatModeLabel: "Agent" },
+      }),
+    ).toBe("condensed");
+  });
+
   it("budgets extra features and larger text before restoring full labels", () => {
     const base = {
       availableWidth: 430,

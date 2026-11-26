@@ -1,10 +1,21 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Text, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { ActivityIndicator, Text, View, type PressableStateCallbackType } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { MessageSquare, Bot } from "lucide-react-native";
 import { PressHighlight } from "@/components/ui/press-highlight";
+import { toolbarContentSlot } from "@/components/ui/control-geometry";
+import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
+import { ComposerToolbarGlyph } from "@/composer/agent-controls/glyph";
+import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
+
+const ThemedMessageSquare = withUnistyles(MessageSquare);
+const ThemedBot = withUnistyles(Bot);
+const mutedMapping = (theme: { colors: { foregroundMuted: string } }) => ({
+  color: theme.colors.foregroundMuted,
+});
+const CHAT_MODE_SWITCH_TIMEOUT_MS = 30_000;
 
 /**
  * Composer control that switches the current chat between OpenUI Chat mode and
@@ -15,35 +26,77 @@ export function ChatModeToggle({
   agentId,
   serverId,
   isOpenUIChat,
+  surface = "toolbar",
 }: {
   agentId: string;
   serverId: string;
   isOpenUIChat: boolean;
+  surface?: "toolbar" | "sheet";
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
+  const { glyphs } = useComposerControlLayout();
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const [pending, setPending] = useState(false);
   const toggle = useCallback(() => {
-    if (!client) return;
+    if (!client || pending) return;
     const next = isOpenUIChat ? "agent" : "chat";
-    void client.setAgentChatMode(agentId, next).catch(() => undefined);
-  }, [agentId, client, isOpenUIChat]);
+    setPending(true);
+    void client
+      .setAgentChatMode(agentId, next, { timeout: CHAT_MODE_SWITCH_TIMEOUT_MS })
+      .catch((error: unknown) => {
+        console.warn("[ChatModeToggle] Failed to switch mode", error);
+        toast.error(t("composer.chatModeToggle.failed"));
+      })
+      .finally(() => setPending(false));
+  }, [agentId, client, isOpenUIChat, pending, t, toast]);
 
   const label = isOpenUIChat
     ? t("composer.chatModeToggle.chat")
     : t("composer.chatModeToggle.agent");
-  const Icon = isOpenUIChat ? MessageSquare : Bot;
+  const Icon = isOpenUIChat ? ThemedMessageSquare : ThemedBot;
+  const disabled = !client || pending;
+  const isSheet = surface === "sheet";
+  const accessibilityState = useMemo(() => ({ disabled, busy: pending }), [disabled, pending]);
+  let glyph;
+  if (pending) {
+    glyph = <ActivityIndicator size="small" color={styles.label.color} />;
+  } else if (isSheet) {
+    glyph = <Icon size={16} strokeWidth={1.5} uniProps={mutedMapping} />;
+  } else {
+    glyph = (
+      <ComposerToolbarGlyph role="label">
+        <Icon
+          size={glyphs.label.size}
+          strokeWidth={glyphs.label.strokeWidth}
+          uniProps={mutedMapping}
+        />
+      </ComposerToolbarGlyph>
+    );
+  }
+  const buttonStyle = useCallback(
+    ({ hovered = false, pressed = false }: PressableStateCallbackType & { hovered?: boolean }) => [
+      isSheet ? styles.sheetButton : styles.button,
+      !isSheet && (hovered || pending) ? styles.hovered : null,
+      (pressed || pending) && styles.pressed,
+      disabled && styles.disabled,
+    ],
+    [disabled, isSheet, pending],
+  );
 
   return (
     <PressHighlight
       onPress={toggle}
-      disabled={!client}
+      disabled={disabled}
       accessibilityLabel={t("composer.chatModeToggle.label")}
+      accessibilityState={accessibilityState}
       testID="composer-chat-mode-toggle"
-      style={styles.button}
+      style={buttonStyle}
+      highlightStyle={styles.pressed}
     >
-      <View style={styles.row}>
-        <Icon size={13} />
-        <Text style={styles.label} numberOfLines={1}>
+      <View style={isSheet ? styles.sheetRow : styles.row}>
+        {glyph}
+        <Text style={isSheet ? styles.sheetLabel : styles.label} numberOfLines={1}>
           {label}
         </Text>
       </View>
@@ -53,20 +106,48 @@ export function ChatModeToggle({
 
 const styles = StyleSheet.create((theme) => ({
   button: {
+    ...toolbarContentSlot(),
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
     borderRadius: theme.borderRadius.full,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: "transparent",
     flexShrink: 0,
+  },
+  hovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  pressed: {
+    backgroundColor: theme.colors.surface2,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: theme.spacing[1],
   },
   label: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.normal,
+  },
+  sheetButton: {
+    minHeight: 44,
+    marginHorizontal: -theme.spacing[1],
+    paddingHorizontal: theme.spacing[4],
+    borderRadius: theme.borderRadius["2xl"],
+    backgroundColor: theme.colors.surface1,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  sheetLabel: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.normal,
   },
 }));

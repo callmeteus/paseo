@@ -3307,31 +3307,53 @@ export class AgentManager {
     agentId: string,
     mode: "chat" | "agent",
   ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
+    // Keep the label write and provider reload in one lifecycle lane. Two quick clicks or a
+    // concurrent Auto Accept update used to interleave between those steps and leave the label
+    // and the loaded system prompt describing different modes.
+    return this.runLifecycleMutation(agentId, () => this.setAgentChatModeUnlocked(agentId, mode));
+  }
+
+  private async setAgentChatModeUnlocked(
+    agentId: string,
+    mode: "chat" | "agent",
+  ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
     const live = this.agents.get(agentId);
     if (!live) {
       throw new Error(`Agent ${agentId} is not loaded`);
     }
     const chat = mode === "chat";
-    if ((live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat) {
+    const labelMatches = (live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat;
+    if (labelMatches && !this.pendingChatModeReload.has(agentId)) {
       return { mode, applied: "now" };
     }
-    // Labels are applied as a patch: `null` deletes the key. Passing the full
-    // label map instead would leave the key behind, so the switch never landed.
+
+    // The marker means "the persisted mode still needs a provider reload". Set it before
+    // mutating metadata so a failed label write cannot leave a fast-path success behind.
+    this.pendingChatModeReload.set(agentId, mode);
     live.config.systemPrompt = chat ? OPENUI_SYSTEM_PROMPT : undefined;
-    await this.updateAgentMetadata(agentId, {
-      labels: { [OPENUI_CHAT_LABEL]: chat ? "1" : null },
-    });
-    const updated = this.agents.get(agentId);
-    if (updated) {
-      this.refreshSessionPersistence(updated);
-      this.touchUpdatedAt(updated);
-      this.emitState(updated);
+    if (!labelMatches) {
+      // Labels are applied as a patch: `null` deletes the key. Passing the full
+      // label map instead would leave the key behind, so the switch never landed.
+      await this.updateAgentMetadataUnlocked(agentId, {
+        labels: { [OPENUI_CHAT_LABEL]: chat ? "1" : null },
+      });
+      const updated = this.agents.get(agentId);
+      if (updated) {
+        this.refreshSessionPersistence(updated);
+        this.touchUpdatedAt(updated);
+        this.emitState(updated);
+      }
     }
+
+    // Keep the marker on failure so retrying the same mode does not take the label fast path
+    // while the session is closed.
     if (this.hasInFlightRun(agentId)) {
-      this.pendingChatModeReload.set(agentId, mode);
       return { mode, applied: "next-message" };
     }
-    await this.reloadAgentSession(agentId, { systemPrompt: live.config.systemPrompt });
+    await this.trackAgentRegistrationOperation(
+      this.reloadAgentSessionInternal(agentId, { systemPrompt: live.config.systemPrompt }),
+    );
+    this.pendingChatModeReload.delete(agentId);
     return { mode, applied: "now" };
   }
 

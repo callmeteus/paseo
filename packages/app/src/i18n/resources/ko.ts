@@ -231,6 +231,7 @@ export const ko: TranslationResources = {
       label: "채팅과 에이전트 전환",
       chat: "채팅",
       agent: "에이전트",
+      failed: "모드를 전환할 수 없습니다. 다시 시도하세요.",
     },
     clientCommands: {
       archiveAgent: "현재 에이전트 보관",

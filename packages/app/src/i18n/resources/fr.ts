@@ -234,6 +234,7 @@ export const fr: TranslationResources = {
       label: "Basculer entre Chat et Agent",
       chat: "Chat",
       agent: "Agent",
+      failed: "Impossible de changer de mode. Réessayez.",
     },
     clientCommands: {
       archiveAgent: "Archiver l’agent actuel",

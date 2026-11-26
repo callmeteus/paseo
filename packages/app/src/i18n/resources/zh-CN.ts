@@ -230,6 +230,7 @@ export const zhCN: TranslationResources = {
       label: "在聊天和智能体之间切换",
       chat: "聊天",
       agent: "智能体",
+      failed: "无法切换模式，请重试。",
     },
     clientCommands: {
       archiveAgent: "归档当前 Agent",

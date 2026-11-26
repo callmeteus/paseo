@@ -371,6 +371,7 @@ function resolveHasAnyControl({
   hasMode,
   hasWorkflowMode,
   pluginItemCount,
+  hasChatMode,
 }: {
   canSelectModel: boolean;
   thinkingOptions: AgentControlOption[] | undefined;
@@ -378,6 +379,7 @@ function resolveHasAnyControl({
   hasMode: boolean;
   hasWorkflowMode: boolean;
   pluginItemCount: number;
+  hasChatMode: boolean;
 }) {
   return (
     canSelectModel ||
@@ -385,7 +387,8 @@ function resolveHasAnyControl({
     Boolean(controls?.length) ||
     hasMode ||
     hasWorkflowMode ||
-    pluginItemCount > 0
+    pluginItemCount > 0 ||
+    hasChatMode
   );
 }
 
@@ -670,6 +673,7 @@ function ControlledAgentControls({
     hasMode: modeControl !== null && modeControl !== undefined,
     hasWorkflowMode: workflowModeControl !== null && workflowModeControl !== undefined,
     pluginItemCount,
+    hasChatMode: Boolean(agentId && serverId),
   });
   const featureControls = useMemo(
     () =>
@@ -685,6 +689,12 @@ function ControlledAgentControls({
       }),
     [optionControls],
   );
+  let chatModeLabel: string | null = null;
+  if (agentId && serverId) {
+    chatModeLabel = isOpenUIChat
+      ? t("composer.chatModeToggle.chat")
+      : t("composer.chatModeToggle.agent");
+  }
   const controlPresence = useMemo(
     () => ({
       hasModel: canSelectModel,
@@ -693,8 +703,17 @@ function ControlledAgentControls({
       features: featureControls,
       pluginItemsWidth,
       fontScale,
+      chatModeLabel,
     }),
-    [canSelectModel, canSelectThinking, featureControls, fontScale, modeControl, pluginItemsWidth],
+    [
+      canSelectModel,
+      canSelectThinking,
+      chatModeLabel,
+      featureControls,
+      fontScale,
+      modeControl,
+      pluginItemsWidth,
+    ],
   );
   const presentation = useMemo(() => resolveComposerControlPresentation(density), [density]);
   const layoutContextValue = useMemo(
@@ -828,17 +847,14 @@ function ControlledAgentControls({
   }
 
   const modelPickerNonce = modelPickerOpenNonce ?? 0;
+  const chatModeToggle =
+    agentId && serverId ? (
+      <ChatModeToggle agentId={agentId} serverId={serverId} isOpenUIChat={Boolean(isOpenUIChat)} />
+    ) : null;
 
   return (
     <ComposerControlLayoutProvider value={layoutContextValue}>
       <View style={styles.container} onLayout={handleLayout} testID="agent-controls-toolbar">
-        {agentId && serverId ? (
-          <ChatModeToggle
-            agentId={agentId}
-            serverId={serverId}
-            isOpenUIChat={Boolean(isOpenUIChat)}
-          />
-        ) : null}
         {!presentation.foldControls ? (
           <DesktopAgentControlsContent
             provider={provider}
@@ -915,6 +931,9 @@ function ControlledAgentControls({
             onRouterPicked={onRouterPicked}
             activeRouterId={activeRouterId}
             modelPickerOpenNonce={modelPickerNonce}
+            chatModeAgentId={agentId}
+            chatModeServerId={serverId}
+            chatModeIsOpenUIChat={Boolean(isOpenUIChat)}
           />
         )}
         {!isCompact ? (
@@ -925,6 +944,7 @@ function ControlledAgentControls({
             onLayout={handlePluginItemsLayout}
           />
         ) : null}
+        {!isCompact ? chatModeToggle : null}
       </View>
     </ComposerControlLayoutProvider>
   );
@@ -1141,6 +1161,9 @@ interface SheetAgentControlsContentProps extends AgentControlsContentProps {
   activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
   modelPickerOpenNonce?: number;
+  chatModeAgentId?: string;
+  chatModeServerId?: string;
+  chatModeIsOpenUIChat?: boolean;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
@@ -1178,6 +1201,9 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     onRouterPicked,
     activeRouterId,
     modelPickerOpenNonce = 0,
+    chatModeAgentId,
+    chatModeServerId,
+    chatModeIsOpenUIChat,
   } = props;
 
   const sheetControls = (
@@ -1206,6 +1232,14 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         onOpenIdChange={handleSheetOpenChange}
       />
       <PluginComposerItems serverId={modelSelectorServerId} surface="sheet" />
+      {chatModeAgentId && chatModeServerId ? (
+        <ChatModeToggle
+          agentId={chatModeAgentId}
+          serverId={chatModeServerId}
+          isOpenUIChat={Boolean(chatModeIsOpenUIChat)}
+          surface="sheet"
+        />
+      ) : null}
     </View>
   );
 

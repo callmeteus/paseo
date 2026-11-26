@@ -233,6 +233,7 @@ export const ru: TranslationResources = {
       label: "Переключить чат и агента",
       chat: "Чат",
       agent: "Агент",
+      failed: "Не удалось переключить режим. Попробуйте ещё раз.",
     },
     clientCommands: {
       archiveAgent: "Архивировать текущего агента",

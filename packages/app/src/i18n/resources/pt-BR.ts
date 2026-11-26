@@ -232,6 +232,7 @@ export const ptBR: TranslationResources = {
       label: "Alternar entre Chat e Agente",
       chat: "Chat",
       agent: "Agente",
+      failed: "Não foi possível alternar o modo. Tente novamente.",
     },
     clientCommands: {
       archiveAgent: "Arquivar o agente atual",

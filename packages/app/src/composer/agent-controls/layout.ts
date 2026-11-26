@@ -29,6 +29,8 @@ export interface ComposerControlPresence {
   features: readonly ComposerFeatureControlPresence[];
   /** The plugin items' measured width in the toolbar row; 0 when none of them renders anything. */
   pluginItemsWidth: number;
+  /** The trailing Chat/Agente label; null when no live agent owns the control. */
+  chatModeLabel?: string | null;
   fontScale: number;
 }
 
@@ -122,6 +124,9 @@ function resolveCondensedFloor(
   if (controls.features.length > 0 || controls.pluginItemsWidth > 0) {
     widths.push(geometry.controlSize);
   }
+  if (controls.chatModeLabel) {
+    widths.push(chrome + estimateLabelWidth(controls.chatModeLabel, fontScale));
+  }
   return sumControlWidths(widths, geometry);
 }
 
@@ -140,6 +145,9 @@ function resolveFullFloor(
     widths.push(resolveFeatureControlWidth(feature, fontScale, geometry));
   }
   if (controls.pluginItemsWidth > 0) widths.push(controls.pluginItemsWidth);
+  if (controls.chatModeLabel) {
+    widths.push(chrome + estimateLabelWidth(controls.chatModeLabel, fontScale));
+  }
   return sumControlWidths(widths, geometry);
 }
 
@@ -157,6 +165,9 @@ function resolveTightFloor(
   if (controls.hasMode) widths.push(geometry.controlSize);
   if (controls.features.length > 0 || controls.pluginItemsWidth > 0) {
     widths.push(geometry.controlSize);
+  }
+  if (controls.chatModeLabel) {
+    widths.push(labelledChrome(geometry) + estimateLabelWidth(controls.chatModeLabel, fontScale));
   }
   return sumControlWidths(widths, geometry);
 }

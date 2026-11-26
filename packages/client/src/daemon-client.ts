@@ -4928,6 +4928,7 @@ export class DaemonClient {
   async setAgentChatMode(
     agentId: string,
     mode: "chat" | "agent",
+    options?: { timeout?: number },
   ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
@@ -4939,6 +4940,7 @@ export class DaemonClient {
     const payload = await this.sendRequest({
       requestId,
       message,
+      timeout: options?.timeout,
       options: { skipQueue: true },
       select: (msg) => {
         if (msg.type !== "agent.chat_mode.set.response") {

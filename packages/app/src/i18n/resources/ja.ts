@@ -233,6 +233,7 @@ export const ja: TranslationResources = {
       label: "チャットとエージェントを切り替え",
       chat: "チャット",
       agent: "エージェント",
+      failed: "モードを切り替えられませんでした。もう一度お試しください。",
     },
     clientCommands: {
       archiveAgent: "現在のエージェントをアーカイブ",

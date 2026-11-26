@@ -230,6 +230,7 @@ export const ar: TranslationResources = {
       label: "التبديل بين الدردشة والوكيل",
       chat: "دردشة",
       agent: "وكيل",
+      failed: "تعذر تبديل الوضع. حاول مرة أخرى.",
     },
     clientCommands: {
       archiveAgent: "أرشفة الوكيل الحالي",
