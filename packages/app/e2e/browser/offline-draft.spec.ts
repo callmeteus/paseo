@@ -22,6 +22,7 @@ test("an offline workspace draft reports the disconnected host instead of loadin
   await gate.waitForBlockedConnection();
   await createAgentTabFromMenu(page);
   await submitMessage(page, "hello");
+  await expect(page.getByRole("alert").filter({ hasText: "Host is not connected" })).toHaveCount(1);
   await expect(page.getByRole("alert").filter({ hasText: "Host is not connected" })).toHaveText(
     "Host is not connected",
   );

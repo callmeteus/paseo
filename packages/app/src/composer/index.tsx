@@ -1474,6 +1474,8 @@ interface ComposerProps {
   onForgeChangeRequestAutoAttach?: (item: ForgeSearchItem) => void;
   cwd: string;
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
+  /** Externally controlled submission error for draft/create flows. */
+  submissionError?: string | null;
   /** When true, auto-focuses the text input on web. */
   autoFocus?: boolean;
   /** Changing this value requests focus again while autoFocus remains true. */
@@ -1802,6 +1804,7 @@ function ComposerContentImpl({
   onForgeChangeRequestAutoAttach,
   cwd,
   clearDraft,
+  submissionError,
   autoFocus = false,
   autoFocusKey,
   onFocusInput,
@@ -2491,7 +2494,7 @@ function ComposerContentImpl({
         setAttachments: (nextAttachments) => {
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
-        setSendError,
+        setSendError: submissionError === undefined ? setSendError : () => undefined,
         setIsProcessing,
         onSubmitError: (error) => {
           console.error("[AgentInput] Failed to send message:", error);
@@ -2530,6 +2533,7 @@ function ComposerContentImpl({
       queueMessage,
       setSelectedAttachments,
       replaceUserInput,
+      submissionError,
       submitBehavior,
       submitMessage,
       t,
@@ -3331,14 +3335,15 @@ function ComposerContentImpl({
   // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint && hasFinePointer;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
+  const visibleSendError = submissionError ?? sendError;
   const sendErrorNode = useMemo(
     () =>
-      sendError ? (
+      visibleSendError ? (
         <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
+          {visibleSendError}
         </Text>
       ) : null,
-    [sendError],
+    [visibleSendError],
   );
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")
