@@ -59,7 +59,6 @@ import {
   Image as ImageIcon,
   ClipboardPaste,
   Paperclip,
-  Target,
   Info,
   Minus,
   Pause,
@@ -95,6 +94,7 @@ import { ICON_SIZE, FONT_SIZE, type Theme } from "@/styles/theme";
 import type { AgentGoalState } from "@/utils/agent-snapshots";
 import { shouldListCommandsForComposer } from "@/hooks/agent-commands-query";
 import { QueuedMessageContent } from "./queued-message-content";
+import { GoalStatusIcon } from "./goal-status-icon";
 import { useAgentCommandsQuery } from "@/agent-commands/use-query";
 import type { DraftCommandTarget } from "@/agent-commands";
 import { encodeImages } from "@/utils/encode-images";
@@ -1095,7 +1095,7 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
   return (
     <View style={styles.goalRow} testID="composer-goal-banner">
       <View style={styles.goalHeaderRow}>
-        <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+        <GoalStatusIcon active={!isPaused} />
         <Text style={isPaused ? styles.goalBadgePaused : styles.goalBadge} accessibilityRole="text">
           {isPaused ? t("composer.goal.paused") : t("composer.goal.active")}
         </Text>
@@ -3771,7 +3771,6 @@ const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
-const ThemedTarget = withUnistyles(Target);
 const ThemedInfo = withUnistyles(Info);
 const ThemedMinus = withUnistyles(Minus);
 const ThemedPause = withUnistyles(Pause);

@@ -134,6 +134,10 @@ describe.each(themes)("$name", ({ theme }) => {
     );
   });
 
+  it("keeps the goal status icon visible on its card", () => {
+    expect(contrastRatio(colors.accentBright, colors.surface1)).toBeGreaterThanOrEqual(3);
+  });
+
   it("keeps terminal text readable on the terminal background", () => {
     const terminal = colors.terminal;
     const { background, ...palette } = terminal;
