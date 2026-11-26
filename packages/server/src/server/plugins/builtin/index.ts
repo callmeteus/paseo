@@ -14,6 +14,7 @@ export const builtinPlugins = [
   "goose-provider",
   "grok-usage-source",
   "hoplite-provider",
+  "io-guard",
   "kimi-usage-source",
   "local-cli-usage-source",
   "minimax-usage-source",

@@ -1,0 +1,7 @@
+{
+  "id": "io-guard",
+  "name": "IO Guard",
+  "requirements": {
+    "paseo": ">=0.17.0-beta.1"
+  }
+}
