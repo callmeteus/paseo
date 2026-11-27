@@ -12,8 +12,16 @@ export const BLANK_TERMINAL_PROFILE_ID = "blank";
 export const CHAT_LAUNCH_TARGET: LaunchTarget = { kind: "chat" };
 export const OPENUI_CHAT_LAUNCH_TARGET: LaunchTarget = { kind: "chat", openui: true };
 
+export function maestroLaunchTarget(scope: "workspace" | "all"): LaunchTarget {
+  return { kind: "chat", maestro: true, maestroScope: scope };
+}
+
 export function isOpenUIChatTarget(target: LaunchTarget): boolean {
   return target.kind === "chat" && target.openui === true;
+}
+
+export function isMaestroChatTarget(target: LaunchTarget): boolean {
+  return target.kind === "chat" && target.maestro === true;
 }
 
 export function isBlankTerminalTarget(target: LaunchTarget): boolean {

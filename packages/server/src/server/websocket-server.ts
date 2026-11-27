@@ -2248,6 +2248,8 @@ export class VoiceAssistantWebSocketServer {
         pluginSubscriptions: true,
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: true,
+        // COMPAT(maestroChatMode): added in v0.17.0, remove gate after 2027-11-26.
+        maestro: true,
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: true,
         // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, remove gate after 2027-11-09.

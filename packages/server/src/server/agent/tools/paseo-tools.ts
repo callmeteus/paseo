@@ -4041,11 +4041,17 @@ function createToolCatalog(
     {
       title: "Switch chat mode",
       description:
-        'Switch this conversation between "chat" (OpenUI: the assistant answers in openui-lang and the UI hides code-agent controls) and "agent" (a code agent). The transcript stays; the new mode applies from the next message.',
+        'Switch this conversation between "chat" (OpenUI), "agent" (a code agent) and "maestro" (orchestration with the auto-updated Maestro skill). The transcript stays; the new mode applies from the next message.',
       inputSchema: {
         mode: z
-          .enum(["chat", "agent"])
-          .describe('"chat" for an OpenUI chat, "agent" for a code agent.'),
+          .enum(["chat", "agent", "maestro"])
+          .describe(
+            '"chat" for an OpenUI chat, "agent" for a code agent, "maestro" for orchestration.',
+          ),
+        scope: z
+          .enum(["workspace", "all"])
+          .optional()
+          .describe("Maestro scope: the current workspace or all workspaces."),
         agentId: z.string().optional().describe("Agent to switch. Defaults to the calling agent."),
       },
       outputSchema: {
@@ -4053,12 +4059,12 @@ function createToolCatalog(
         applied: z.string(),
       },
     },
-    async ({ mode, agentId }) => {
+    async ({ mode, scope: maestroScope, agentId }) => {
       const targetAgentId = agentId ?? callerAgentId;
       if (!targetAgentId) {
         throw new PaseoToolInputError("agentId is required outside an agent-scoped tool session");
       }
-      const result = await agentManager.setAgentChatMode(targetAgentId, mode);
+      const result = await agentManager.setAgentChatMode(targetAgentId, mode, maestroScope);
       return {
         content: [],
         structuredContent: ensureValidJson(result),

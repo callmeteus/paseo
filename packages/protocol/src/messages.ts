@@ -2856,7 +2856,10 @@ export const AgentWorkflowModeSetResponseMessageSchema = z.object({
 export const AgentChatModeSetRequestMessageSchema = z.object({
   type: z.literal("agent.chat_mode.set.request"),
   agentId: z.string(),
-  mode: z.enum(["chat", "agent"]),
+  // COMPAT(maestroChatMode): "maestro" added in v0.17; gate the UI on
+  // server_info.features.maestro. Old daemons reject the new value.
+  mode: z.enum(["chat", "agent", "maestro"]),
+  scope: z.enum(["workspace", "all"]).optional(),
   requestId: z.string(),
 });
 
@@ -2865,7 +2868,7 @@ export const AgentChatModeSetResponseMessageSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     agentId: z.string(),
-    mode: z.enum(["chat", "agent"]),
+    mode: z.enum(["chat", "agent", "maestro"]),
     applied: z.enum(["now", "next-message"]),
     accepted: z.boolean(),
     error: z.string().nullable(),
@@ -4808,6 +4811,8 @@ export const ServerInfoStatusPayloadSchema = z
         pluginSubscriptions: z.boolean().optional(),
         // COMPAT(skillManagement): added in v0.4.0, remove gate after 2027-08-16.
         skillManagement: z.boolean().optional(),
+        // COMPAT(maestroChatMode): added in v0.17.0, remove gate after 2027-11-26.
+        maestro: z.boolean().optional(),
         // COMPAT(idleRuntimeCleanupSetting): added in v0.13.0, remove gate after 2027-04-26.
         idleRuntimeCleanupSetting: z.boolean().optional(),
         // COMPAT(idleRuntimeCleanupAfterSetting): added in v0.13.2, remove gate after 2027-11-09.

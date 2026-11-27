@@ -470,6 +470,8 @@ Each agent is a single JSON file. Fields relevant to this doc:
 | `id`                                         | `string`      | Stable identifier                                                                   |
 | `archivedAt`                                 | `string?`     | Soft-delete timestamp (ISO 8601)                                                    |
 | `labels["paseo.parent-agent-id"]`            | `string?`     | Parent agent ID, set automatically for agent-scoped creation and removed by detach  |
+| `labels["paseo.maestro"]`                    | `string?`     | `"1"` marks a Maestro chat; see [Maestro mode](./maestro-mode.md)                   |
+| `labels["paseo.maestro.scope"]`              | `string?`     | `"workspace"` (default) or `"all"`                                                  |
 | `labels["paseo.open-agent-tab"]`             | `string?`     | Shared tab marker: `"true"` open, `"false"` closed by any client                    |
 | `labels["paseo.open-agent-tab.<client-id>"]` | `string?`     | Legacy per-client marker kept for older clients; detach clears every matching label |
 | `lastStatus`                                 | `AgentStatus` | `initializing` / `idle` / `running` / `error` / `closed`                            |

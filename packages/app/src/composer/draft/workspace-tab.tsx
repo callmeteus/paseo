@@ -26,6 +26,7 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import type { AgentSessionConfig } from "@getpaseo/protocol/agent-types";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { OPENUI_CHAT_LABEL, OPENUI_SYSTEM_PROMPT } from "@/new-workspace-launch/openui";
+import { MAESTRO_CHAT_LABEL, MAESTRO_SCOPE_LABEL } from "@getpaseo/protocol/maestro";
 import { resolveForcedAgentModeId, resolveKnownAgentModeId } from "@/agent-controls/policy";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
@@ -184,6 +185,14 @@ function openuiChatConfigPatch(openui: boolean): Partial<AgentSessionConfig> {
   return openui ? { systemPrompt: OPENUI_SYSTEM_PROMPT } : {};
 }
 
+function mergeMaestroLabels(
+  labels: Record<string, string>,
+  maestro: boolean,
+  scope: "workspace" | "all",
+): Record<string, string> {
+  return maestro ? { ...labels, [MAESTRO_CHAT_LABEL]: "1", [MAESTRO_SCOPE_LABEL]: scope } : labels;
+}
+
 function buildDraftCreateOptions(input: {
   draftId: string;
   config: ReturnType<typeof buildWorkspaceDraftAgentConfig>;
@@ -266,6 +275,8 @@ async function submitDraftCreateRequest(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   workflowModeSource: WorkflowModeSource;
   openui?: boolean;
+  maestro?: boolean;
+  maestroScope?: "workspace" | "all";
   composerState: {
     selectedProvider: string | null;
     selectedWorkflowMode: string;
@@ -292,6 +303,8 @@ async function submitDraftCreateRequest(input: {
     autoSubmitConfig,
     workflowModeSource,
     openui = false,
+    maestro = false,
+    maestroScope = "workspace",
     composerState,
   } = input;
 
@@ -348,12 +361,16 @@ async function submitDraftCreateRequest(input: {
     clientMessageId: attempt.clientMessageId,
     images: imagesData,
     attachments: attachmentsArray,
-    labels: mergeOpenUIChatLabels(
-      draftMultitaskTaskTargetLabels(
-        input.draftId,
-        workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
+    labels: mergeMaestroLabels(
+      mergeOpenUIChatLabels(
+        draftMultitaskTaskTargetLabels(
+          input.draftId,
+          workflowModeSource === "paseo" ? selectedWorkflowMode : "agent",
+        ),
+        openui,
       ),
-      openui,
+      maestro,
+      maestroScope,
     ),
     metadata: composerState.metadata,
   });
@@ -379,6 +396,8 @@ function buildDraftAgentSnapshot(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   workflowModeSource: WorkflowModeSource;
   openui?: boolean;
+  maestro?: boolean;
+  maestroScope?: "workspace" | "all";
   composerState: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
@@ -466,6 +485,8 @@ interface WorkspaceDraftComposerProps {
   draftId: string;
   initialSetup?: WorkspaceDraftTabSetup;
   openui?: boolean;
+  maestro?: boolean;
+  maestroScope?: "workspace" | "all";
   isPaneFocused: boolean;
   editingSession: ComposerEditingSession;
   onCreated: (snapshot: AgentSnapshotPayload) => void;
@@ -548,6 +569,8 @@ export function WorkspaceDraftAgentTab({
   draftId,
   initialSetup = undefined,
   openui = false,
+  maestro = false,
+  maestroScope = "workspace",
   isPaneFocused,
   editingSession,
   onCreated,
@@ -713,6 +736,8 @@ export function WorkspaceDraftAgentTab({
         autoSubmitConfig,
         workflowModeSource,
         openui,
+        maestro,
+        maestroScope,
         composerState,
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
@@ -734,6 +759,8 @@ export function WorkspaceDraftAgentTab({
         autoSubmitConfig,
         workflowModeSource,
         openui,
+        maestro,
+        maestroScope,
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),

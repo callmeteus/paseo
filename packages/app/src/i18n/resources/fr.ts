@@ -236,6 +236,24 @@ export const fr: TranslationResources = {
       agent: "Agent",
       failed: "Impossible de changer de mode. Réessayez.",
     },
+    maestroControl: {
+      title: "Maestro",
+      label: "Choisir la port?e de Maestro",
+      workspace: "Cet espace de travail",
+      all: "Tous les espaces de travail",
+      exit: "Quitter le mode Maestro",
+      failed: "Impossible de changer de mode. R?essayez.",
+      landingTitle: "Maestro",
+      landingSubtitle: "Un planificateur. Plusieurs ex?cutants.",
+      landingBody:
+        "Maestro d?coupe le travail en t?ches, les d?l?gue ? des agents, v?rifie les preuves et fait un rapport. Choisissez une port?e pour commencer.",
+      recommendation:
+        "Pr?f?rez un mod?le avec un contexte plus grand pour conserver plus d'informations. Vous pouvez choisir un autre mod?le.",
+      workers: "Ex?cutants",
+      noWorkers: "Aucun chat d'ex?cutant pour l'instant",
+      thinking: "R?flexion",
+      status: "?tat",
+    },
     clientCommands: {
       archiveAgent: "Archiver l’agent actuel",
       freshDraft: "Archiver cet agent et démarrer un nouveau brouillon",

@@ -235,6 +235,24 @@ export const es: TranslationResources = {
       agent: "Agente",
       failed: "No se pudo cambiar el modo. Inténtalo de nuevo.",
     },
+    maestroControl: {
+      title: "Maestro",
+      label: "Elegir el alcance de Maestro",
+      workspace: "Este espacio de trabajo",
+      all: "Todos los espacios de trabajo",
+      exit: "Salir del modo Maestro",
+      failed: "No se pudo cambiar el modo. Int?ntalo de nuevo.",
+      landingTitle: "Maestro",
+      landingSubtitle: "Un planificador. Muchos ejecutores.",
+      landingBody:
+        "Maestro divide el trabajo en tareas, las delega a agentes, revisa las evidencias e informa. Elige un alcance para empezar.",
+      recommendation:
+        "Prefiere un modelo con un contexto m?s grande para conservar m?s informaci?n. Puedes elegir otro modelo.",
+      workers: "Ejecutores",
+      noWorkers: "A?n no hay chats de ejecutores",
+      thinking: "Pensando",
+      status: "Estado",
+    },
     clientCommands: {
       archiveAgent: "Archivar el agente actual",
       freshDraft: "Archive este agente y comience un nuevo borrador",

@@ -26,11 +26,13 @@ export function ChatModeToggle({
   agentId,
   serverId,
   isOpenUIChat,
+  isMaestro = false,
   surface = "toolbar",
 }: {
   agentId: string;
   serverId: string;
   isOpenUIChat: boolean;
+  isMaestro?: boolean;
   surface?: "toolbar" | "sheet";
 }) {
   const { t } = useTranslation();
@@ -40,7 +42,7 @@ export function ChatModeToggle({
   const [pending, setPending] = useState(false);
   const toggle = useCallback(() => {
     if (!client || pending) return;
-    const next = isOpenUIChat ? "agent" : "chat";
+    const next = isMaestro || isOpenUIChat ? "agent" : "chat";
     setPending(true);
     void client
       .setAgentChatMode(agentId, next, { timeout: CHAT_MODE_SWITCH_TIMEOUT_MS })
@@ -49,11 +51,11 @@ export function ChatModeToggle({
         toast.error(t("composer.chatModeToggle.failed"));
       })
       .finally(() => setPending(false));
-  }, [agentId, client, isOpenUIChat, pending, t, toast]);
+  }, [agentId, client, isMaestro, isOpenUIChat, pending, t, toast]);
 
-  const label = isOpenUIChat
-    ? t("composer.chatModeToggle.chat")
-    : t("composer.chatModeToggle.agent");
+  let label = t("composer.chatModeToggle.agent");
+  if (isOpenUIChat) label = t("composer.chatModeToggle.chat");
+  if (isMaestro) label = t("composer.maestroControl.title");
   const Icon = isOpenUIChat ? ThemedMessageSquare : ThemedBot;
   const disabled = !client || pending;
   const isSheet = surface === "sheet";

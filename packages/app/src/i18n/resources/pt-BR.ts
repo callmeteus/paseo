@@ -234,6 +234,24 @@ export const ptBR: TranslationResources = {
       agent: "Agente",
       failed: "Não foi possível alternar o modo. Tente novamente.",
     },
+    maestroControl: {
+      title: "Maestro",
+      label: "Escolher o escopo do Maestro",
+      workspace: "Este workspace",
+      all: "Todos os workspaces",
+      exit: "Sair do modo Maestro",
+      failed: "N?o foi poss?vel alternar o modo. Tente novamente.",
+      landingTitle: "Maestro",
+      landingSubtitle: "Um planejador. V?rios executores.",
+      landingBody:
+        "O Maestro divide o trabalho em tarefas, delega para agentes, revisa as evid?ncias e reporta o resultado. Escolha um escopo para come?ar.",
+      recommendation:
+        "Prefira um modelo com contexto maior para o Maestro manter mais informa??o. Voc? pode escolher outro modelo.",
+      workers: "Executores",
+      noWorkers: "Nenhum chat de executor ainda",
+      thinking: "Pensando",
+      status: "Estado",
+    },
     clientCommands: {
       archiveAgent: "Arquivar o agente atual",
       freshDraft: "Arquivar este agente e iniciar um novo rascunho",
