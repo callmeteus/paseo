@@ -444,6 +444,46 @@ test.describe("Usage item", () => {
       await leaveSettings(page);
     });
   });
+
+  test("keeps the Usage item when only unified summaries are pinned", async ({ page }) => {
+    test.setTimeout(180_000);
+    const serverId = getServerId();
+    await installUsageReportsFixture(page, { lists: [() => claudeAndCodexReports()] });
+    await page.setViewportSize(WIDE);
+    await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
+    await gotoAppShell(page);
+    await expectPinnedUsage(page, ["31% 5h", "54% wk", "7% 5h", "12% wk"]);
+    await openUsageFromItem(page);
+    const screen = page.getByTestId(`usage-host-${serverId}`);
+
+    for (const [source, window] of [
+      ["Claude", "Session"],
+      ["Claude", "Weekly"],
+      ["Codex", "Session"],
+      ["Codex", "Weekly"],
+    ] as const) {
+      await togglePin(screen, source, window);
+    }
+    await expect(screen.getByRole("checkbox", { name: "Pin Claude Unified usage" })).toBeChecked();
+    await expect(screen.getByRole("checkbox", { name: "Pin Codex Unified usage" })).toBeChecked();
+    await closeUsage(page);
+
+    // Captured before the assertion so a failing run still shows what the footer rendered.
+    await qaScreenshot(page, "unified-only-desktop", { kind: "footer" });
+    await expect(usageItem(page)).toBeVisible();
+    await expect(usageItem(page).getByTestId("sidebar-usage-unified")).toHaveText([
+      "54% Overall",
+      "12% Overall",
+    ]);
+
+    await page.setViewportSize(COMPACT);
+    await openCompactSidebar(page);
+    await qaScreenshot(page, "unified-only-compact", { kind: "footer" });
+    await expect(usageItem(page).getByTestId("sidebar-usage-unified")).toHaveText([
+      "54% Overall",
+      "12% Overall",
+    ]);
+  });
 });
 
 test("without summary data the footer drops the Usage item and keeps the Usage icon", async ({

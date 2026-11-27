@@ -8,6 +8,7 @@ import {
   type PinnedUsageWindow,
 } from "./pinned";
 import type { UsageReportEntry, UsageWindow } from "./types";
+import { resolveUnifiedUsageBySource } from "./unified";
 
 function report(input: {
   sourceId: string;
@@ -196,6 +197,34 @@ describe("resolvePinnedUsage", () => {
         },
       ],
     });
+  });
+
+  it("keeps the sidebar summary when only unified usage is pinned", () => {
+    const pins = [unifiedUsagePin("claude"), unifiedUsagePin("codex")];
+    const preferencesOnlyUnified = preferences(pins);
+    const sources = resolvePinnedUsage([claude, codex], preferencesOnlyUnified);
+
+    const percentsBySource = (source: PinnedUsageSource) => [
+      source.key,
+      source.windows.map((window) => window.percentText),
+    ];
+    expect(sources.map(percentsBySource)).toEqual([
+      ["claude:default", ["31%", "80%"]],
+      ["codex:default", ["12%"]],
+    ]);
+    expect(
+      resolveUnifiedUsageBySource(sources).map(({ source, unified }) => [
+        source.key,
+        unified.percent,
+        unified.driver.key,
+      ]),
+    ).toEqual([
+      ["claude:default", 80, "claude:default/weekly"],
+      ["codex:default", 12, "codex:default/weekly"],
+    ]);
+    expect(
+      resolvePinnedUsageItems([claude, codex], preferencesOnlyUnified).map((item) => item.kind),
+    ).toEqual(["unified", "unified"]);
   });
 
   it("renders a pinned unified item over all windows and a pinned window separately", () => {
