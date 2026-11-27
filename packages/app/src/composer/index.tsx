@@ -59,7 +59,6 @@ import {
   Image as ImageIcon,
   ClipboardPaste,
   Paperclip,
-  Target,
   Info,
   Minus,
   Pause,
@@ -95,6 +94,7 @@ import { ICON_SIZE, FONT_SIZE, type Theme } from "@/styles/theme";
 import type { AgentGoalState } from "@/utils/agent-snapshots";
 import { shouldListCommandsForComposer } from "@/hooks/agent-commands-query";
 import { QueuedMessageContent } from "./queued-message-content";
+import { GoalStatusIcon } from "./goal-status-icon";
 import { useAgentCommandsQuery } from "@/agent-commands/use-query";
 import type { DraftCommandTarget } from "@/agent-commands";
 import { encodeImages } from "@/utils/encode-images";
@@ -1095,7 +1095,7 @@ function GoalBannerRow({ goal, onEdit, onPause, onResume, onStop }: GoalBannerRo
   return (
     <View style={styles.goalRow} testID="composer-goal-banner">
       <View style={styles.goalHeaderRow}>
-        <ThemedTarget size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
+        <GoalStatusIcon active={!isPaused} />
         <Text style={isPaused ? styles.goalBadgePaused : styles.goalBadge} accessibilityRole="text">
           {isPaused ? t("composer.goal.paused") : t("composer.goal.active")}
         </Text>
@@ -1474,6 +1474,8 @@ interface ComposerProps {
   onForgeChangeRequestAutoAttach?: (item: ForgeSearchItem) => void;
   cwd: string;
   clearDraft: (lifecycle: "sent" | "abandoned") => void;
+  /** Externally controlled submission error for draft/create flows. */
+  submissionError?: string | null;
   /** When true, auto-focuses the text input on web. */
   autoFocus?: boolean;
   /** Changing this value requests focus again while autoFocus remains true. */
@@ -1802,6 +1804,7 @@ function ComposerContentImpl({
   onForgeChangeRequestAutoAttach,
   cwd,
   clearDraft,
+  submissionError,
   autoFocus = false,
   autoFocusKey,
   onFocusInput,
@@ -2491,7 +2494,7 @@ function ComposerContentImpl({
         setAttachments: (nextAttachments) => {
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
-        setSendError,
+        setSendError: submissionError === undefined ? setSendError : () => undefined,
         setIsProcessing,
         onSubmitError: (error) => {
           console.error("[AgentInput] Failed to send message:", error);
@@ -2530,6 +2533,7 @@ function ComposerContentImpl({
       queueMessage,
       setSelectedAttachments,
       replaceUserInput,
+      submissionError,
       submitBehavior,
       submitMessage,
       t,
@@ -3331,14 +3335,15 @@ function ComposerContentImpl({
   // Focusing the composer on a touch screen raises the on-screen keyboard over the conversation.
   const messageInputAutoFocus = autoFocus && isDesktopWebBreakpoint && hasFinePointer;
   const submitLoadingPressHandler = isAgentRunning ? handleCancelAgent : undefined;
+  const visibleSendError = submissionError ?? sendError;
   const sendErrorNode = useMemo(
     () =>
-      sendError ? (
+      visibleSendError ? (
         <Text accessibilityRole="alert" style={styles.sendErrorText}>
-          {sendError}
+          {visibleSendError}
         </Text>
       ) : null,
-    [sendError],
+    [visibleSendError],
   );
   const githubEmptyText = githubSearchResultsQuery.isFetching
     ? t("composer.github.searching")
@@ -3771,7 +3776,6 @@ const ThemedFileText = withUnistyles(FileText);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
-const ThemedTarget = withUnistyles(Target);
 const ThemedInfo = withUnistyles(Info);
 const ThemedMinus = withUnistyles(Minus);
 const ThemedPause = withUnistyles(Pause);

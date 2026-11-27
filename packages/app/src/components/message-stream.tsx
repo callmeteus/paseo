@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { getAgentAttachmentPillContent } from "@/attachments/attachment-pill-content";
 import { AssistantForkMenu, type AssistantForkTarget } from "@/components/assistant-fork-menu";
@@ -582,6 +583,8 @@ interface AssistantMessageProps {
   client?: DaemonClient | null;
   spacing?: "default" | "compactTop" | "compactBottom" | "compactBoth";
   phase: MarkdownPhase;
+  /** Maestro worker cards rendered inside the assistant bubble. */
+  footer?: ReactNode;
 }
 
 export const assistantMessageStylesheet = StyleSheet.create((theme) => ({
@@ -738,6 +741,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   client,
   spacing = "default",
   phase,
+  footer = null,
 }: AssistantMessageProps) {
   const { t } = useTranslation();
   const renderedMessage = useMemo(
@@ -801,6 +805,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         serverId={serverId}
         onOpenUIAction={handleOpenUIAction}
       />
+      {footer}
       {fullMessageByteLength !== null ? (
         <Text
           testID="assistant-message-capped-notice"

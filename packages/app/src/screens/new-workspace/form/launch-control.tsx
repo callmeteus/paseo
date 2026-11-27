@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
-import { Bot, MessageCircle, SquareTerminal } from "lucide-react-native";
+import { Bot, MessageCircle, Sparkles, SquareTerminal } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TerminalProfileIcon } from "@/components/terminal-profile-icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSessionStore } from "@/stores/session-store";
 import { ICON_SIZE } from "@/styles/theme";
 import {
   formatResolvedCommand,
@@ -27,7 +28,9 @@ import {
   BLANK_TERMINAL_PROFILE_ID,
   CHAT_LAUNCH_TARGET,
   isBlankTerminalTarget,
+  isMaestroChatTarget,
   isOpenUIChatTarget,
+  maestroLaunchTarget,
   OPENUI_CHAT_LAUNCH_TARGET,
   resolveLaunchProfile,
   terminalLaunchTarget,
@@ -42,12 +45,14 @@ import {
 const ThemedMessageCircle = withUnistyles(MessageCircle);
 const ThemedBot = withUnistyles(Bot);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
+const ThemedSparkles = withUnistyles(Sparkles);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 const chatIcon = <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const agentIcon = <ThemedBot size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const blankTerminalIcon = <ThemedSquareTerminal size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
+const maestroIcon = <ThemedSparkles size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 
 /** Owns its own leading icon and select callback so neither is rebuilt per render of the menu. */
 function LaunchProfileMenuItem({
@@ -130,6 +135,9 @@ export function LaunchControl({
   const { t } = useTranslation();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const supportsMaestro = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.maestro === true,
+  );
 
   const selectedProfile = useMemo(() => resolveLaunchProfile(target, profiles), [target, profiles]);
   const triggerStyle = useFieldTriggerStyle(variant, disabled);
@@ -151,6 +159,7 @@ export function LaunchControl({
 
   const selectChat = useCallback(() => onChange(OPENUI_CHAT_LAUNCH_TARGET), [onChange]);
   const selectAgent = useCallback(() => onChange(CHAT_LAUNCH_TARGET), [onChange]);
+  const selectMaestro = useCallback(() => onChange(maestroLaunchTarget("workspace")), [onChange]);
   const selectBlankTerminal = useCallback(
     () => onChange(terminalLaunchTarget(BLANK_TERMINAL_PROFILE_ID)),
     [onChange],
@@ -213,11 +222,23 @@ export function LaunchControl({
         <DropdownMenuItem
           testID="new-workspace-launch-option-agent"
           onSelect={selectAgent}
-          selected={target.kind === "chat" && !isOpenUIChatTarget(target)}
+          selected={
+            target.kind === "chat" && !isOpenUIChatTarget(target) && !isMaestroChatTarget(target)
+          }
           leading={agentIcon}
         >
           {t("newWorkspace.launch.agent")}
         </DropdownMenuItem>
+        {supportsMaestro ? (
+          <DropdownMenuItem
+            testID="new-workspace-launch-option-maestro"
+            onSelect={selectMaestro}
+            selected={isMaestroChatTarget(target)}
+            leading={maestroIcon}
+          >
+            {t("composer.maestroControl.title")}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuLabel>{t("newWorkspace.launch.terminal")}</DropdownMenuLabel>
         <DropdownMenuItem
           testID="new-workspace-launch-option-blank"

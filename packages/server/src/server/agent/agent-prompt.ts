@@ -26,6 +26,7 @@ export type AgentRunController = Pick<
   | "steerOrReplaceActiveTurn"
   | "streamAgent"
 > & {
+  planMaestroTurn?: AgentManager["planMaestroTurn"];
   reloadAgentSession(agentId: string): Promise<unknown>;
 };
 
@@ -181,6 +182,32 @@ async function planSkillDispatch(
   };
 }
 
+/**
+ * Re-reads Maestro's ledger on disk before each turn. It is the run's memory when
+ * provider context was compacted; the timeline keeps the text the user typed.
+ */
+async function planMaestroDispatch(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+): Promise<{ prompt: AgentPromptInput; options: StartAgentRunOptions | undefined }> {
+  if (!agentManager.planMaestroTurn) return { prompt, options };
+  const plan = await agentManager.planMaestroTurn(agentId, prompt);
+  if (!plan) return { prompt, options };
+  return {
+    prompt: plan.prompt,
+    options: {
+      ...options,
+      runOptions: {
+        ...options?.runOptions,
+        clientMessageId: options?.runOptions?.clientMessageId ?? randomUUID(),
+        submittedPromptText: plan.submittedPromptText,
+      },
+    },
+  };
+}
+
 function applyWorkflowDispatch(
   agentManager: AgentRunController,
   agentId: string,
@@ -270,6 +297,7 @@ export async function startAgentRun(
       return { disposition: "out_of_band" };
     }
   }
+  ({ prompt, options } = await planMaestroDispatch(agentManager, agentId, prompt, options));
   // Re-assert the active workflow on every dispatch. The provider mode switch
   // is the enforcement; this instruction keeps the role explicit mid-session
   // and applies immediately when the user changes the workflow.

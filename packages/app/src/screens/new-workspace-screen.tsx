@@ -42,6 +42,7 @@ import {
   type LaunchTarget,
 } from "@/new-workspace-launch/target";
 import { OPENUI_SYSTEM_PROMPT } from "@/new-workspace-launch/openui";
+import { MAESTRO_CHAT_LABEL, MAESTRO_SCOPE_LABEL } from "@getpaseo/protocol/maestro";
 import { useTerminalComposerState } from "@/new-workspace-launch/composer-state";
 import { runCreateTerminalWorkspace } from "./new-workspace-terminal";
 import {
@@ -602,8 +603,16 @@ function workspaceChatAgentTaskLabels(input: {
 function mergeWorkspaceAgentLabels(
   taskLabelFields: ReturnType<typeof workspaceChatAgentTaskLabels>,
   openuiChat: boolean,
+  maestro?: { scope: "workspace" | "all" },
 ): Record<string, string> {
   const base = (taskLabelFields as { labels?: Record<string, string> }).labels ?? {};
+  if (maestro) {
+    return {
+      ...base,
+      [MAESTRO_CHAT_LABEL]: "1",
+      [MAESTRO_SCOPE_LABEL]: maestro.scope,
+    };
+  }
   return openuiChat ? { ...base, "paseo.openui": "1" } : base;
 }
 
@@ -672,7 +681,13 @@ async function createWorkspaceChatAgent(input: CreateChatAgentInput): Promise<Su
     clientMessageId: `${input.draftId}:initial-message`,
     images: images?.length ? images : undefined,
     attachments: wirePayload.attachments?.length ? wirePayload.attachments : undefined,
-    labels: mergeWorkspaceAgentLabels(taskLabelFields, openuiChat),
+    labels: mergeWorkspaceAgentLabels(
+      taskLabelFields,
+      openuiChat,
+      input.launchTarget.kind === "chat" && input.launchTarget.maestro
+        ? { scope: input.launchTarget.maestroScope ?? "workspace" }
+        : undefined,
+    ),
   };
   const execute = async (): Promise<AgentSnapshotPayload> => {
     const { agent } = await ensureWorkspace({

@@ -26,6 +26,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/product.md](docs/product.md)                                       | What Paseo is, who it's for, where it's going                                                                                  |
 | [docs/architecture.md](docs/architecture.md)                             | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
 | [docs/agent-lifecycle.md](docs/agent-lifecycle.md)                       | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
+| [docs/maestro-mode.md](docs/maestro-mode.md)                             | Maestro chat mode: auto-updated skill, per-chat ledger, workspace scope, worker blocks                                         |
 | [docs/daemon-restart-continuity.md](docs/daemon-restart-continuity.md)   | What survives a daemon restart, recovery behavior, and runtime-only gaps                                                       |
 | [docs/data-model.md](docs/data-model.md)                                 | File-based JSON persistence, Zod schemas, atomic writes, no migrations                                                         |
 | [docs/model-routers.md](docs/model-routers.md)                           | Model routers — fallback and distribution, automatic open-weight routers, free-first ordering                                  |

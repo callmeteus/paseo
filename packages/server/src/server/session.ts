@@ -3864,7 +3864,7 @@ export class Session {
           msg.requestId,
         );
       case "agent.chat_mode.set.request":
-        return this.handleAgentChatModeSetRequest(msg.agentId, msg.mode, msg.requestId);
+        return this.handleAgentChatModeSetRequest(msg.agentId, msg.mode, msg.requestId, msg.scope);
       case "agent.workspace.set.request":
         return this.handleAgentWorkspaceSetRequest(msg.agentId, msg.workspaceId, msg.requestId);
       default:
@@ -4923,11 +4923,12 @@ export class Session {
 
   private async handleAgentChatModeSetRequest(
     agentId: string,
-    mode: "chat" | "agent",
+    mode: "chat" | "agent" | "maestro",
     requestId: string,
+    scope?: "workspace" | "all",
   ): Promise<void> {
     try {
-      const result = await this.agentManager.setAgentChatMode(agentId, mode);
+      const result = await this.agentManager.setAgentChatMode(agentId, mode, scope);
       this.emit({
         type: "agent.chat_mode.set.response",
         payload: {

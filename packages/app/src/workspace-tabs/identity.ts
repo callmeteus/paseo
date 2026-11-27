@@ -18,6 +18,8 @@ export function normalizeWorkspaceTabTarget(
       draftId,
       ...(setup ? { setup } : {}),
       ...(value.openui === true ? { openui: true } : {}),
+      ...(value.maestro === true ? { maestro: true } : {}),
+      ...(value.maestroScope ? { maestroScope: value.maestroScope } : {}),
     };
   }
   if (value.kind === "new_tab") {
@@ -101,6 +103,19 @@ export function normalizeWorkspaceDraftTabSetup(
   };
 }
 
+function draftTargetsEqual(
+  left: Extract<WorkspaceTabTarget, { kind: "draft" }>,
+  right: Extract<WorkspaceTabTarget, { kind: "draft" }>,
+): boolean {
+  return (
+    left.draftId === right.draftId &&
+    Boolean(left.openui) === Boolean(right.openui) &&
+    Boolean(left.maestro) === Boolean(right.maestro) &&
+    (left.maestroScope ?? "workspace") === (right.maestroScope ?? "workspace") &&
+    workspaceDraftTabSetupsEqual(left.setup, right.setup)
+  );
+}
+
 export function workspaceTabTargetsEqual(
   left: WorkspaceTabTarget,
   right: WorkspaceTabTarget,
@@ -109,11 +124,7 @@ export function workspaceTabTargetsEqual(
     return false;
   }
   if (left.kind === "draft" && right.kind === "draft") {
-    return (
-      left.draftId === right.draftId &&
-      Boolean(left.openui) === Boolean(right.openui) &&
-      workspaceDraftTabSetupsEqual(left.setup, right.setup)
-    );
+    return draftTargetsEqual(left, right);
   }
   if (left.kind === "agent" && right.kind === "agent") {
     return left.agentId === right.agentId;

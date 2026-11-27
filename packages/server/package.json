@@ -49,6 +49,11 @@
       "source": "./src/utils/spawn.ts",
       "default": "./dist/server/utils/spawn.js"
     },
+    "./close-inherited-fds": {
+      "types": "./dist/server/utils/close-inherited-fds.d.ts",
+      "source": "./src/utils/close-inherited-fds.ts",
+      "default": "./dist/server/utils/close-inherited-fds.js"
+    },
     "./auth": {
       "types": "./dist/server/server/auth.d.ts",
       "source": "./src/server/auth.ts",

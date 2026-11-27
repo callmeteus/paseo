@@ -13,6 +13,7 @@ import { useShallow } from "zustand/shallow";
 import { Settings2 } from "lucide-react-native";
 import { resolveForcedLiveModeId } from "@/agent-controls/policy";
 import { ChatModeToggle } from "@/composer/agent-controls/chat-mode-toggle";
+import { MaestroModeControl } from "@/composer/agent-controls/maestro-control";
 import { readSelectOption, type ComposerOptionControls } from "@/agent-controls/option-controls";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
@@ -161,6 +162,9 @@ interface ControlledAgentControlsProps {
   agentId?: string;
   serverId?: string;
   isOpenUIChat?: boolean;
+  isMaestroChat?: boolean;
+  maestroScope?: "workspace" | "all";
+  supportsMaestro?: boolean;
   provider: string;
   modelOptions?: AgentControlOption[];
   selectedModelId?: string;
@@ -303,9 +307,21 @@ function useModeControls(serverId: string, agentId: string, supportsWorkflowMode
   const isOpenUIChat = useSessionStore(
     (state) => state.sessions[serverId]?.agents?.get(agentId)?.labels?.["paseo.openui"] === "1",
   );
+  const maestroLabels = useSessionStore(
+    (state) => state.sessions[serverId]?.agents?.get(agentId)?.labels ?? null,
+  );
+  const isMaestroChat = maestroLabels?.["paseo.maestro"] === "1";
+  const maestroScope: "workspace" | "all" =
+    maestroLabels?.["paseo.maestro.scope"] === "all" ? "all" : "workspace";
+  const supportsMaestro = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.maestro === true,
+  );
   return {
     usesPaseoWorkflowModes,
     isOpenUIChat,
+    isMaestroChat,
+    maestroScope,
+    supportsMaestro,
     modeControl: !usesPaseoWorkflowModes && !isOpenUIChat ? liveModeControl : null,
     workflowModeControl: usesPaseoWorkflowModes && !isOpenUIChat ? liveWorkflowModeControl : null,
   };
@@ -371,6 +387,7 @@ function resolveHasAnyControl({
   hasMode,
   hasWorkflowMode,
   pluginItemCount,
+  hasChatMode,
 }: {
   canSelectModel: boolean;
   thinkingOptions: AgentControlOption[] | undefined;
@@ -378,6 +395,7 @@ function resolveHasAnyControl({
   hasMode: boolean;
   hasWorkflowMode: boolean;
   pluginItemCount: number;
+  hasChatMode: boolean;
 }) {
   return (
     canSelectModel ||
@@ -385,7 +403,8 @@ function resolveHasAnyControl({
     Boolean(controls?.length) ||
     hasMode ||
     hasWorkflowMode ||
-    pluginItemCount > 0
+    pluginItemCount > 0 ||
+    hasChatMode
   );
 }
 
@@ -598,6 +617,9 @@ function ControlledAgentControls({
   agentId,
   serverId,
   isOpenUIChat,
+  isMaestroChat = false,
+  maestroScope = "workspace",
+  supportsMaestro = false,
   provider,
   modelOptions,
   selectedModelId,
@@ -670,6 +692,7 @@ function ControlledAgentControls({
     hasMode: modeControl !== null && modeControl !== undefined,
     hasWorkflowMode: workflowModeControl !== null && workflowModeControl !== undefined,
     pluginItemCount,
+    hasChatMode: Boolean(agentId && serverId),
   });
   const featureControls = useMemo(
     () =>
@@ -685,6 +708,12 @@ function ControlledAgentControls({
       }),
     [optionControls],
   );
+  let chatModeLabel: string | null = null;
+  if (agentId && serverId) {
+    chatModeLabel = isOpenUIChat
+      ? t("composer.chatModeToggle.chat")
+      : t("composer.chatModeToggle.agent");
+  }
   const controlPresence = useMemo(
     () => ({
       hasModel: canSelectModel,
@@ -693,8 +722,17 @@ function ControlledAgentControls({
       features: featureControls,
       pluginItemsWidth,
       fontScale,
+      chatModeLabel,
     }),
-    [canSelectModel, canSelectThinking, featureControls, fontScale, modeControl, pluginItemsWidth],
+    [
+      canSelectModel,
+      canSelectThinking,
+      chatModeLabel,
+      featureControls,
+      fontScale,
+      modeControl,
+      pluginItemsWidth,
+    ],
   );
   const presentation = useMemo(() => resolveComposerControlPresentation(density), [density]);
   const layoutContextValue = useMemo(
@@ -828,17 +866,29 @@ function ControlledAgentControls({
   }
 
   const modelPickerNonce = modelPickerOpenNonce ?? 0;
+  const chatModeToggle =
+    agentId && serverId ? (
+      <View style={styles.modeControlsRow}>
+        <ChatModeToggle
+          agentId={agentId}
+          serverId={serverId}
+          isOpenUIChat={Boolean(isOpenUIChat)}
+          isMaestro={isMaestroChat}
+        />
+        {supportsMaestro ? (
+          <MaestroModeControl
+            agentId={agentId}
+            serverId={serverId}
+            isMaestro={isMaestroChat}
+            scope={maestroScope}
+          />
+        ) : null}
+      </View>
+    ) : null;
 
   return (
     <ComposerControlLayoutProvider value={layoutContextValue}>
       <View style={styles.container} onLayout={handleLayout} testID="agent-controls-toolbar">
-        {agentId && serverId ? (
-          <ChatModeToggle
-            agentId={agentId}
-            serverId={serverId}
-            isOpenUIChat={Boolean(isOpenUIChat)}
-          />
-        ) : null}
         {!presentation.foldControls ? (
           <DesktopAgentControlsContent
             provider={provider}
@@ -915,6 +965,12 @@ function ControlledAgentControls({
             onRouterPicked={onRouterPicked}
             activeRouterId={activeRouterId}
             modelPickerOpenNonce={modelPickerNonce}
+            chatModeAgentId={agentId}
+            chatModeServerId={serverId}
+            chatModeIsOpenUIChat={Boolean(isOpenUIChat)}
+            chatModeIsMaestro={Boolean(isMaestroChat)}
+            chatModeMaestroScope={maestroScope}
+            supportsMaestro={supportsMaestro}
           />
         )}
         {!isCompact ? (
@@ -925,6 +981,7 @@ function ControlledAgentControls({
             onLayout={handlePluginItemsLayout}
           />
         ) : null}
+        {!isCompact ? chatModeToggle : null}
       </View>
     </ComposerControlLayoutProvider>
   );
@@ -1141,6 +1198,12 @@ interface SheetAgentControlsContentProps extends AgentControlsContentProps {
   activeRouterId?: string | null;
   onRouterPicked?: (routerId: string | null) => void;
   modelPickerOpenNonce?: number;
+  chatModeAgentId?: string;
+  chatModeServerId?: string;
+  chatModeIsOpenUIChat?: boolean;
+  chatModeIsMaestro?: boolean;
+  chatModeMaestroScope?: "workspace" | "all";
+  supportsMaestro?: boolean;
 }
 
 function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
@@ -1178,6 +1241,12 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     onRouterPicked,
     activeRouterId,
     modelPickerOpenNonce = 0,
+    chatModeAgentId,
+    chatModeServerId,
+    chatModeIsOpenUIChat,
+    chatModeIsMaestro = false,
+    chatModeMaestroScope = "workspace",
+    supportsMaestro = false,
   } = props;
 
   const sheetControls = (
@@ -1206,6 +1275,25 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         onOpenIdChange={handleSheetOpenChange}
       />
       <PluginComposerItems serverId={modelSelectorServerId} surface="sheet" />
+      {chatModeAgentId && chatModeServerId ? (
+        <>
+          <ChatModeToggle
+            agentId={chatModeAgentId}
+            serverId={chatModeServerId}
+            isOpenUIChat={Boolean(chatModeIsOpenUIChat)}
+            isMaestro={chatModeIsMaestro}
+            surface="sheet"
+          />
+          {supportsMaestro ? (
+            <MaestroModeControl
+              agentId={chatModeAgentId}
+              serverId={chatModeServerId}
+              isMaestro={chatModeIsMaestro}
+              scope={chatModeMaestroScope}
+            />
+          ) : null}
+        </>
+      ) : null}
     </View>
   );
 
@@ -1358,8 +1446,15 @@ export const AgentControls = memo(function AgentControls({
   const hosts = useHosts();
   const [crossHostProviders, setCrossHostProviders] = useState<ProviderSelectorProvider[]>([]);
   const supportsWorkflowModes = useHostFeature(serverId, "workflowModes");
-  const { usesPaseoWorkflowModes, isOpenUIChat, modeControl, workflowModeControl } =
-    useModeControls(serverId, agentId, supportsWorkflowModes);
+  const {
+    usesPaseoWorkflowModes,
+    isOpenUIChat,
+    isMaestroChat,
+    maestroScope,
+    supportsMaestro,
+    modeControl,
+    workflowModeControl,
+  } = useModeControls(serverId, agentId, supportsWorkflowModes);
   useForceAgentMode(serverId, agentId, usesPaseoWorkflowModes);
   useForceWorkflowAgentMode(serverId, agentId, isOpenUIChat);
   const commandCenterModes = toCommandCenterModes(modeControl);
@@ -1894,6 +1989,9 @@ export const AgentControls = memo(function AgentControls({
             agentId={agentId}
             serverId={serverId}
             isOpenUIChat={Boolean(isOpenUIChat)}
+            isMaestroChat={Boolean(isMaestroChat)}
+            maestroScope={maestroScope}
+            supportsMaestro={supportsMaestro}
             provider={resolveDisplayProvider(
               pendingProviderSwitch,
               agent.provider,
@@ -2235,6 +2333,11 @@ const styles = StyleSheet.create((theme) => ({
   modelControl: {
     minWidth: 0,
     flexShrink: 1,
+  },
+  modeControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
   },
   modeIconBadge: {
     ...toolbarSlot(),

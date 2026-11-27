@@ -23,8 +23,8 @@ import { describeHookAgent, publishAgentStream } from "../plugins/lifecycle/inde
 import { applyRecordPatch } from "../record-patch.js";
 import type { PluginSessionOpenRequest } from "@getpaseo/plugin/server";
 import { randomUUID } from "node:crypto";
-import { basename, resolve } from "node:path";
-import { stat } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import {
   AGENT_LIFECYCLE_STATUSES,
   type AgentLifecycleStatus,
@@ -41,6 +41,17 @@ import {
 } from "@getpaseo/protocol/agent-labels";
 import { MULTITASK_TASK_TARGET_LABEL } from "@getpaseo/protocol/multitask-task-target";
 import { OPENUI_CHAT_LABEL, OPENUI_SYSTEM_PROMPT } from "@getpaseo/protocol/openui";
+import {
+  MAESTRO_CHAT_LABEL,
+  MAESTRO_SCOPE_LABEL,
+  getMaestroScope,
+  isMaestroChat,
+  maestroChatLabels,
+  maestroLedgerRelativePath,
+  type MaestroChatMode,
+  type MaestroScope,
+} from "@getpaseo/protocol/maestro";
+import type { MaestroSkillService } from "../maestro/maestro-skill.js";
 import type { Logger } from "pino";
 import type { ToolPolicy } from "@getpaseo/protocol/agent-types";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
@@ -564,6 +575,8 @@ export interface AgentManagerOptions {
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   appendSystemPrompt?: string;
+  /** Supplies the auto-updating Maestro skill prompt and ledger paths. */
+  maestroSkill?: MaestroSkillService;
   /** Resolves project-level instructions applied to new chats created in a cwd. */
   resolveProjectInstructions?: (cwd: string) => Promise<string>;
   agentStreamCoalesceWindowMs?: number;
@@ -1372,6 +1385,7 @@ export class AgentManager {
     provider: AgentProvider,
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
+  private readonly maestroSkill?: MaestroSkillService;
   private readonly resolveProjectInstructions?: (cwd: string) => Promise<string>;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -1396,7 +1410,7 @@ export class AgentManager {
    * Chat/agent mode flipped while a turn was running. The provider session still holds the
    * previous system prompt, so the reload waits until the next prompt is dispatched.
    */
-  private readonly pendingChatModeReload = new Map<string, "chat" | "agent">();
+  private readonly pendingChatModeReload = new Map<string, MaestroChatMode>();
   /**
    * Installed skill names per live provider session. Keyed by session object so a
    * reload naturally misses instead of serving names from a retired runtime.
@@ -1420,6 +1434,7 @@ export class AgentManager {
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
     this.paseoHome = options.paseoHome;
+    this.maestroSkill = options.maestroSkill;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
@@ -2323,12 +2338,20 @@ export class AgentManager {
     const projectInstructions = disablePaseoTools
       ? ""
       : await this.readProjectInstructions(storedConfig.cwd);
-    const launchConfig = disablePaseoTools
+    let launchConfig = disablePaseoTools
       ? preparedLaunchConfig
       : this.appendSystemPromptText(
           this.appendSystemPromptText(preparedLaunchConfig, projectInstructions),
           HUB_AUTOMATION_CHAT_INSTRUCTION,
         );
+    if (options.labels?.[MAESTRO_CHAT_LABEL] === "1" && this.maestroSkill) {
+      const scope = options.labels?.[MAESTRO_SCOPE_LABEL] === "all" ? "all" : "workspace";
+      launchConfig = this.appendSystemPromptText(
+        launchConfig,
+        await this.maestroSkill.systemPrompt({ scope, cwd: storedConfig.cwd }),
+      );
+      await this.ensureMaestroLedger(resolvedAgentId);
+    }
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -3305,33 +3328,75 @@ export class AgentManager {
 
   async setAgentChatMode(
     agentId: string,
-    mode: "chat" | "agent",
-  ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
+    mode: MaestroChatMode,
+    scope?: MaestroScope,
+  ): Promise<{ mode: MaestroChatMode; applied: "now" | "next-message" }> {
+    // Keep the label write and provider reload in one lifecycle lane. Two quick clicks or a
+    // concurrent Auto Accept update used to interleave between those steps and leave the label
+    // and the loaded system prompt describing different modes.
+    return this.runLifecycleMutation(agentId, () =>
+      this.setAgentChatModeUnlocked(agentId, mode, scope),
+    );
+  }
+
+  private async setAgentChatModeUnlocked(
+    agentId: string,
+    mode: MaestroChatMode,
+    scope?: MaestroScope,
+  ): Promise<{ mode: MaestroChatMode; applied: "now" | "next-message" }> {
     const live = this.agents.get(agentId);
     if (!live) {
       throw new Error(`Agent ${agentId} is not loaded`);
     }
     const chat = mode === "chat";
-    if ((live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat) {
+    const maestro = mode === "maestro";
+    const nextScope = scope ?? getMaestroScope(live.labels);
+    const labelMatches =
+      (live.labels?.[OPENUI_CHAT_LABEL] === "1") === chat &&
+      isMaestroChat(live.labels) === maestro &&
+      (!maestro || getMaestroScope(live.labels) === nextScope);
+    if (labelMatches && !this.pendingChatModeReload.has(agentId)) {
       return { mode, applied: "now" };
     }
-    // Labels are applied as a patch: `null` deletes the key. Passing the full
-    // label map instead would leave the key behind, so the switch never landed.
-    live.config.systemPrompt = chat ? OPENUI_SYSTEM_PROMPT : undefined;
-    await this.updateAgentMetadata(agentId, {
-      labels: { [OPENUI_CHAT_LABEL]: chat ? "1" : null },
-    });
-    const updated = this.agents.get(agentId);
-    if (updated) {
-      this.refreshSessionPersistence(updated);
-      this.touchUpdatedAt(updated);
-      this.emitState(updated);
+    if (maestro && !this.maestroSkill) {
+      throw new Error("Maestro skill is unavailable on this daemon");
     }
+
+    // The marker means "the persisted mode still needs a provider reload". Set it before
+    // mutating metadata so a failed label write cannot leave a fast-path success behind.
+    this.pendingChatModeReload.set(agentId, mode);
+    if (maestro) {
+      live.config.systemPrompt = await this.loadMaestroPrompt(live, agentId, nextScope);
+    } else {
+      live.config.systemPrompt = chat ? OPENUI_SYSTEM_PROMPT : undefined;
+    }
+    if (!labelMatches) {
+      // Labels are applied as a patch: `null` deletes the key. Passing the full
+      // label map instead would leave the key behind, so the switch never landed.
+      const labels: Record<string, string | null> = {
+        [OPENUI_CHAT_LABEL]: chat ? "1" : null,
+        [MAESTRO_CHAT_LABEL]: maestro ? "1" : null,
+        [MAESTRO_SCOPE_LABEL]: null,
+      };
+      if (maestro) Object.assign(labels, maestroChatLabels(scope ?? "workspace"));
+      await this.updateAgentMetadataUnlocked(agentId, { labels });
+      const updated = this.agents.get(agentId);
+      if (updated) {
+        this.refreshSessionPersistence(updated);
+        this.touchUpdatedAt(updated);
+        this.emitState(updated);
+      }
+    }
+
+    // Keep the marker on failure so retrying the same mode does not take the label fast path
+    // while the session is closed.
     if (this.hasInFlightRun(agentId)) {
-      this.pendingChatModeReload.set(agentId, mode);
       return { mode, applied: "next-message" };
     }
-    await this.reloadAgentSession(agentId, { systemPrompt: live.config.systemPrompt });
+    await this.trackAgentRegistrationOperation(
+      this.reloadAgentSessionInternal(agentId, { systemPrompt: live.config.systemPrompt }),
+    );
+    this.pendingChatModeReload.delete(agentId);
     return { mode, applied: "now" };
   }
 
@@ -3349,6 +3414,82 @@ export class AgentManager {
     }
     this.pendingChatModeReload.delete(agentId);
     await this.reloadAgentSession(agentId, { systemPrompt: live.config.systemPrompt });
+  }
+
+  private async loadMaestroPrompt(
+    live: LiveManagedAgent,
+    agentId: string,
+    scope: MaestroScope,
+  ): Promise<string> {
+    if (!this.maestroSkill) throw new Error("Maestro skill is unavailable on this daemon");
+    const prompt = await this.maestroSkill.systemPrompt({ scope, cwd: live.cwd });
+    await this.ensureMaestroLedger(agentId);
+    return prompt;
+  }
+
+  private maestroLedgerDirectory(agentId: string): string | null {
+    if (!this.paseoHome) return null;
+    return join(this.paseoHome, maestroLedgerRelativePath(agentId));
+  }
+
+  /** Creates the per-chat ledger once. Maestro itself writes the rest of the files. */
+  private async ensureMaestroLedger(agentId: string): Promise<void> {
+    const directory = this.maestroLedgerDirectory(agentId);
+    if (!directory) return;
+    await mkdir(directory, { recursive: true });
+    const runPath = join(directory, "run.json");
+    try {
+      await stat(runPath);
+    } catch {
+      await writeFile(
+        runPath,
+        JSON.stringify(
+          {
+            chatId: agentId,
+            createdAt: new Date().toISOString(),
+            phase: "intake",
+            workers: [],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+    }
+  }
+
+  /**
+   * Injects the current Maestro ledger into every turn. After a context reset the
+   * model has no memory of the run, so the daemon re-reads the ledger on disk and
+   * puts a short digest in the prompt. The timeline still shows only what the user typed.
+   */
+  async planMaestroTurn(agentId: string, prompt: AgentPromptInput): Promise<SkillTurnPlan | null> {
+    if (typeof prompt !== "string" || prompt.trimStart().startsWith("/")) return null;
+    if (parseAgentMessage(prompt)) return null;
+    const agent = this.agents.get(agentId);
+    if (!agent || !isMaestroChat(agent.labels)) return null;
+    const directory = this.maestroLedgerDirectory(agentId);
+    if (!directory) return null;
+    const read = async (name: string): Promise<string> => {
+      try {
+        return await readFile(join(directory, name), "utf8");
+      } catch {
+        return "";
+      }
+    };
+    const [run, workers] = await Promise.all([read("run.json"), read("workers.jsonl")]);
+    const workerLines = workers
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .slice(-20);
+    const digest = [`run.json: ${run.trim() || "(empty)"}`];
+    if (workerLines.length > 0) digest.push(`workers.jsonl (latest):\n${workerLines.join("\n")}`);
+    const text = digest.join("\n").slice(0, 4000);
+    return {
+      prompt: `${prompt}\n\n[MAESTRO_LEDGER]\n${text}\n[/MAESTRO_LEDGER]`,
+      submittedPromptText: prompt,
+    };
   }
 
   private async applyLiveWorkflowMode(

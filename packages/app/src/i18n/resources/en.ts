@@ -228,6 +228,25 @@ export const en = {
       label: "Switch between Chat and Agent",
       chat: "Chat",
       agent: "Agent",
+      failed: "Could not switch modes. Try again.",
+    },
+    maestroControl: {
+      title: "Maestro",
+      label: "Choose Maestro scope",
+      workspace: "This workspace",
+      all: "All workspaces",
+      exit: "Leave Maestro mode",
+      failed: "Could not switch mode. Try again.",
+      landingTitle: "Maestro",
+      landingSubtitle: "One planner. Many workers.",
+      landingBody:
+        "Maestro breaks the work into tasks, delegates them to agents, reviews the evidence, and reports back. Pick a scope to begin.",
+      recommendation:
+        "Prefer a model with a larger context so Maestro keeps more information. You can choose another model.",
+      workers: "Workers",
+      noWorkers: "No worker chats yet",
+      thinking: "Thinking",
+      status: "Status",
     },
     clientCommands: {
       archiveAgent: "Archive the current agent",

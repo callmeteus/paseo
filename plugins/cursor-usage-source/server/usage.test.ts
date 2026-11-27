@@ -53,6 +53,36 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function jwt(sub: string, exp?: number): string {
+  const payload: Record<string, unknown> = { sub };
+  if (exp !== undefined) payload.exp = exp;
+  return `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;
+}
+
+function availableUsage(): Response {
+  return jsonResponse({
+    planUsage: { totalSpend: "100", remaining: "900", limit: "1000" },
+    billingCycleStart: null,
+    billingCycleEnd: null,
+  });
+}
+
+// Records the Bearer token each store attempt presents, so the test asserts store order
+// without ever materializing a real credential.
+function recordingFetch(reply: (authorization: string) => Response): {
+  api: typeof fetch;
+  authorizations: string[];
+} {
+  const authorizations: string[] = [];
+  const api = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const headers = init?.headers as Record<string, string> | undefined;
+    const authorization = headers?.Authorization ?? "";
+    authorizations.push(authorization);
+    return reply(authorization);
+  }) as unknown as typeof fetch;
+  return { api, authorizations };
+}
+
 describe("cursor usage source", () => {
   let homeDir: string;
   let fetchApi: typeof fetch;
@@ -231,23 +261,106 @@ describe("cursor usage source", () => {
     });
   });
 
-  it("prefers the desktop state.vscdb token over cursor-agent auth.json", async () => {
+  it("prefers the cursor-agent CLI login over the desktop state.vscdb token", async () => {
     writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
     writeCursorAuthJson(homeDir, "cursor_cli_jwt");
-    let authorization: string | null = null;
-    fetchApi = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-      authorization = (init?.headers as Record<string, string> | undefined)?.Authorization ?? null;
-      return jsonResponse({
-        planUsage: { totalSpend: "0", remaining: "100", limit: "100" },
-        billingCycleStart: null,
-        billingCycleEnd: null,
-      });
-    }) as unknown as typeof fetch;
+    const { api, authorizations } = recordingFetch(() => availableUsage());
+    fetchApi = api;
 
     const cursor = findProvider(await service({ cursorHomeDir: homeDir }).listUsage(), "cursor");
 
-    expect(authorization).toBe("Bearer cursor_desktop_jwt");
+    expect(authorizations).toEqual(["Bearer cursor_cli_jwt"]);
     expect(cursor.status).toBe("available");
+  });
+
+  it("tries the CLI login first and falls back to the desktop store when the CLI token is rejected", async () => {
+    writeCursorAuthJson(homeDir, "cursor_cli_jwt");
+    writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
+    const { api, authorizations } = recordingFetch((authorization) =>
+      authorization === "Bearer cursor_cli_jwt"
+        ? new Response(null, { status: 401 })
+        : availableUsage(),
+    );
+    fetchApi = api;
+
+    const cursor = findProvider(await service({ cursorHomeDir: homeDir }).listUsage(), "cursor");
+
+    expect(authorizations).toEqual(["Bearer cursor_cli_jwt", "Bearer cursor_desktop_jwt"]);
+    expect(cursor).toMatchObject({
+      status: "available",
+      balances: [expect.objectContaining({ id: "plan_usage", used: 1, limit: 10 })],
+    });
+  });
+
+  it("falls back to the desktop store when the CLI token is expired", async () => {
+    writeCursorAuthJson(homeDir, jwt("user-a", Math.floor(Date.now() / 1000) - 60));
+    writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
+    const { api, authorizations } = recordingFetch(() => availableUsage());
+    fetchApi = api;
+
+    const cursor = findProvider(await service({ cursorHomeDir: homeDir }).listUsage(), "cursor");
+
+    expect(authorizations).toEqual(["Bearer cursor_desktop_jwt"]);
+    expect(cursor.status).toBe("available");
+  });
+
+  it("uses the desktop store when the CLI login is absent", async () => {
+    writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
+    const { api, authorizations } = recordingFetch(() => availableUsage());
+    fetchApi = api;
+
+    const cursor = findProvider(await service({ cursorHomeDir: homeDir }).listUsage(), "cursor");
+
+    expect(authorizations).toEqual(["Bearer cursor_desktop_jwt"]);
+    expect(cursor.status).toBe("available");
+  });
+
+  it("reports the last rejection when every store rejects the login", async () => {
+    writeCursorAuthJson(homeDir, "cursor_cli_jwt");
+    writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
+    const { api, authorizations } = recordingFetch(() => new Response(null, { status: 403 }));
+    fetchApi = api;
+
+    const cursor = findProvider(await service({ cursorHomeDir: homeDir }).listUsage(), "cursor");
+
+    expect(authorizations).toEqual(["Bearer cursor_cli_jwt", "Bearer cursor_desktop_jwt"]);
+    expect(cursor).toMatchObject({
+      status: "unavailable",
+      problem: { kind: "rejected", status: 403 },
+    });
+  });
+
+  it("discovers the CLI login first and keeps the desktop store as a fallback", async () => {
+    writeCursorAuthJson(homeDir, "cursor_cli_jwt");
+    writeCursorStateDb(homeDir, { "cursorAuth/accessToken": "cursor_desktop_jwt" });
+
+    const accounts = await discover();
+
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]!.input).toEqual({
+      store: "file",
+      locator: join(homeDir, ".config", "cursor", "auth.json"),
+      fallback: [
+        { store: "env", locator: "CURSOR_ACCESS_TOKEN" },
+        { store: "env", locator: "CURSOR_TOKEN" },
+        {
+          store: "sqlite",
+          locator: join(
+            homeDir,
+            "Library",
+            "Application Support",
+            "Cursor",
+            "User",
+            "globalStorage",
+            "state.vscdb",
+          ),
+        },
+        {
+          store: "sqlite",
+          locator: join(homeDir, ".config", "Cursor", "User", "globalStorage", "state.vscdb"),
+        },
+      ],
+    });
   });
 
   it("omits unreadable state.vscdb", async () => {
@@ -376,8 +489,12 @@ describe("cursor usage source", () => {
 });
 
 it("discovery returns a locator when fetch finds cursor credentials", async () => {
-  const previous = process.env["CURSOR_ACCESS_TOKEN"];
+  const original = { ...process.env };
+  const isolatedHome = mkdtempSync(join(tmpdir(), "cursor-discovery-home-"));
   try {
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    process.env["HOME"] = isolatedHome;
+    process.env["USERPROFILE"] = isolatedHome;
     process.env["CURSOR_ACCESS_TOKEN"] = "fixture-token";
     let requested = false;
     await fetchFirst(async () => {
@@ -388,12 +505,42 @@ it("discovery returns a locator when fetch finds cursor credentials", async () =
     expect(await discover()).toEqual([
       {
         key: expect.stringMatching(/^store-[a-f0-9]{64}$/),
-        input: { store: "env", locator: "CURSOR_ACCESS_TOKEN" },
+        input: {
+          store: "env",
+          locator: "CURSOR_ACCESS_TOKEN",
+          fallback: [
+            { store: "env", locator: "CURSOR_TOKEN" },
+            {
+              store: "sqlite",
+              locator: join(
+                isolatedHome,
+                "Library",
+                "Application Support",
+                "Cursor",
+                "User",
+                "globalStorage",
+                "state.vscdb",
+              ),
+            },
+            {
+              store: "sqlite",
+              locator: join(
+                isolatedHome,
+                ".config",
+                "Cursor",
+                "User",
+                "globalStorage",
+                "state.vscdb",
+              ),
+            },
+          ],
+        },
       },
     ]);
   } finally {
-    if (previous === undefined) delete process.env["CURSOR_ACCESS_TOKEN"];
-    else process.env["CURSOR_ACCESS_TOKEN"] = previous;
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, original);
+    rmSync(isolatedHome, { recursive: true, force: true });
   }
 });
 

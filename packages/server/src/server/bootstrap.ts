@@ -1,5 +1,6 @@
 /* eslint-disable paseo/no-sync-io -- merge: pre-existing synchronous IO */
 import { unarchiveWorkspaceAgents } from "./workspace-archive-service.js";
+import { MaestroSkillService } from "./maestro/maestro-skill.js";
 import { createRestartRecovery } from "./agent/restart-recovery/index.js";
 import { sendPromptToAgent, unarchiveAgentState } from "./agent/agent-prompt.js";
 import { createChangeRequestWatches } from "./agent/change-request-watches/index.js";
@@ -1199,6 +1200,11 @@ export async function createPaseoDaemon(
     if (git) configureGitProcessPolicy(git);
   });
   const initialAgentManagerState = providerSnapshotManager.getAgentManagerProviderState();
+  const maestroSkill = new MaestroSkillService({
+    paseoHome: config.paseoHome,
+    logger,
+  });
+  maestroSkill.start();
   const agentManager = new AgentManager({
     pluginLifecycle: pluginRuntime,
     pluginAgentTools: pluginRuntime,
@@ -1206,6 +1212,7 @@ export async function createPaseoDaemon(
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
     appendSystemPrompt: config.appendSystemPrompt,
+    maestroSkill,
     resolveProjectInstructions: async (cwd) => {
       const repoRoot = await workspaceGitService.resolveRepoRoot(cwd).catch(() => cwd);
       return readProjectChatInstructions(repoRoot);

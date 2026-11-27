@@ -115,6 +115,9 @@ import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useHostFeature } from "@/runtime/host-features";
 import { resolveUserMessageForkBoundary } from "./turn-boundary";
 import type { AssistantForkTarget } from "@/components/assistant-fork-menu";
+import { MaestroWorkerBlocks } from "@/maestro/worker-blocks";
+import { MaestroLanding } from "@/maestro/landing";
+import { useMaestroChat } from "@/maestro/hooks";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import {
   CompletedTurnFooterRow,
@@ -295,6 +298,10 @@ function renderListEmptyComponent(input: {
   renderModel: AgentStreamRenderModel;
   emptyStateStyle: StyleProp<ViewStyle>;
   emptyText: string;
+  isMaestro?: boolean;
+  serverId?: string;
+  agentId?: string;
+  scope?: "workspace" | "all";
 }): ReactNode {
   if (
     input.renderModel.boundary.hasVirtualizedHistory ||
@@ -306,6 +313,15 @@ function renderListEmptyComponent(input: {
     return null;
   }
 
+  if (input.isMaestro && input.serverId && input.agentId) {
+    return (
+      <MaestroLanding
+        serverId={input.serverId}
+        agentId={input.agentId}
+        scope={input.scope ?? "workspace"}
+      />
+    );
+  }
   return (
     <View style={input.emptyStateStyle}>
       <Text style={stylesheet.emptyStateText}>{input.emptyText}</Text>
@@ -453,6 +469,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     ref,
   ) {
     const { t } = useTranslation();
+    const { isMaestro, scope } = useMaestroChat(serverId, agentId);
     const autoExpandReasoning = useSettings((settings) => settings.autoExpandReasoning);
     const chatDisplay = useSettings((settings) => settings.chatDisplay);
     const contentMaxWidth = useSettings(resolveContentMaxWidth);
@@ -936,6 +953,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       ],
     );
 
+    const maestroFooter = useMemo(
+      () =>
+        isMaestro ? (
+          <MaestroWorkerBlocks serverId={resolvedServerId} parentAgentId={agentId} />
+        ) : null,
+      [agentId, isMaestro, resolvedServerId],
+    );
+
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
         // Cursor prints a spent session as assistant text. It is a warning, not the reply.
@@ -999,6 +1024,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                   client={client}
                   spacing={layoutItem.assistantSpacing}
                   phase={layoutItem.phase}
+                  footer={maestroFooter}
                 />
               )}
             </ChatFindExpansion>
@@ -1014,6 +1040,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         handleInlinePathPress,
         lastUserPrompt,
         limitResumeItemId,
+        maestroFooter,
         readOnly,
         resolvedServerId,
         toast,
@@ -1349,8 +1376,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           renderModel,
           emptyStateStyle,
           emptyText: t("agentStream.empty"),
+          isMaestro,
+          serverId: resolvedServerId,
+          agentId,
+          scope,
         }),
-      [renderModel, emptyStateStyle, t],
+      [agentId, isMaestro, renderModel, emptyStateStyle, resolvedServerId, scope, t],
     );
 
     const { boundary, auxiliary } = renderModel;

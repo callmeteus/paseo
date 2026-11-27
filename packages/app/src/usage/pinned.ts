@@ -154,11 +154,19 @@ export function resolvePinnedUsage(
   return usageReportsOn(reports, preferences).flatMap((entry) => {
     const snapshot = resolveUsageSnapshot(entry);
     if (!snapshot) return [];
+    const sourcePins = pins.filter((pin) => pin.sourceId === entry.sourceId);
+    const pinnedWindowIds = new Set(
+      sourcePins.filter((pin) => pin.windowId !== UNIFIED_USAGE_PIN_ID).map((pin) => pin.windowId),
+    );
+    // A source pinned only through its unified summary has no window id to match. The unified row
+    // covers every window, so the summary keeps them until a specific window is pinned.
+    const keepAllWindows =
+      pinnedWindowIds.size === 0 && sourcePins.some((pin) => pin.windowId === UNIFIED_USAGE_PIN_ID);
     const windows = snapshot.report.windows
       .filter(
         (window) =>
           displayPercent(window, preferences.displayAs) !== null &&
-          pins.some((pin) => pin.sourceId === entry.sourceId && pin.windowId === window.id),
+          (keepAllWindows || pinnedWindowIds.has(window.id)),
       )
       .map((window) => pinnedWindow(entry, window, preferences, t));
     if (windows.length === 0) return [];

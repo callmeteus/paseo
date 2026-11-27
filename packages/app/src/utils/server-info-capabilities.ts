@@ -3,6 +3,13 @@ import type { DaemonServerInfo } from "@/stores/session-store";
 
 export type VoiceReadinessMode = "dictation" | "voice";
 
+/** Whether the host accepts the fork's extended event subscription set. */
+export function supportsExtendedEventSubscriptions(params: {
+  serverInfo: DaemonServerInfo | null | undefined;
+}): boolean {
+  return params.serverInfo?.features?.extendedEventSubscriptions === true;
+}
+
 export function getServerCapabilities(params: {
   serverInfo: DaemonServerInfo | null | undefined;
 }): DaemonServerInfo["capabilities"] | null {

@@ -4924,21 +4924,24 @@ export class DaemonClient {
     return payload.workflowModeId;
   }
 
-  /** Switches an agent between OpenUI chat mode and code-agent mode. */
+  /** Switches an agent between Chat (OpenUI), Agent and Maestro modes. */
   async setAgentChatMode(
     agentId: string,
-    mode: "chat" | "agent",
-  ): Promise<{ mode: "chat" | "agent"; applied: "now" | "next-message" }> {
+    mode: "chat" | "agent" | "maestro",
+    options?: { timeout?: number; scope?: "workspace" | "all" },
+  ): Promise<{ mode: "chat" | "agent" | "maestro"; applied: "now" | "next-message" }> {
     const requestId = this.createRequestId();
     const message = SessionInboundMessageSchema.parse({
       type: "agent.chat_mode.set.request",
       agentId,
       mode,
+      scope: options?.scope,
       requestId,
     });
     const payload = await this.sendRequest({
       requestId,
       message,
+      timeout: options?.timeout,
       options: { skipQueue: true },
       select: (msg) => {
         if (msg.type !== "agent.chat_mode.set.response") {

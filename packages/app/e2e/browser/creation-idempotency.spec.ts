@@ -174,6 +174,7 @@ test("an edited agent draft starts after its first start failed", async ({
   await startup.fail();
   await creation.submitPrompt("Start the original task.");
   await creation.expectStartupFailure();
+  await expect(page.getByText(/Creation startup failed for test/)).toHaveCount(1);
   await creation.submitPrompt("Start the edited task.");
   await creation.expectPromptVisible("Start the edited task.");
   await creation.expectAgentCount(1);

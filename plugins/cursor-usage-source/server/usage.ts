@@ -155,32 +155,67 @@ async function readCursorTokenFromAuthJson(path: string): Promise<string | null>
   }
 }
 
+// Only a decoded, already-expired exp skips a token. Opaque logins (non-JWT builds) stay
+// usable, and an undecodable token falls through to the API, which is the authority on it.
+function jwtExpiryMs(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload: unknown = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"));
+    const parsed = z.object({ exp: z.number() }).safeParse(payload);
+    return parsed.success ? parsed.data.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function primaryStore(input: UsageInput): UsageInput {
+  return { store: input.store, locator: input.locator };
+}
+
 export async function fetchUsage(
   input: UsageInput,
   fetchApi: typeof fetch = fetch,
 ): Promise<UsageReport> {
-  const token = await readToken(input);
-  if (!token) throw new Error("Cursor login store no longer exists");
+  const candidates = [primaryStore(input), ...(input.fallback ?? [])];
+  let rejectedStatus: number | null = null;
 
-  const res = await fetchApi(
-    "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
-    {
-      signal: AbortSignal.timeout(15_000),
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Connect-Protocol-Version": "1",
+  for (const candidate of candidates) {
+    const token = await readToken(candidate);
+    if (!token) continue;
+    const expiry = jwtExpiryMs(token);
+    if (expiry !== null && expiry <= Date.now()) continue;
+
+    const res = await fetchApi(
+      "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+      {
+        signal: AbortSignal.timeout(15_000),
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Connect-Protocol-Version": "1",
+        },
+        body: JSON.stringify({}),
       },
-      body: JSON.stringify({}),
-    },
-  );
+    );
 
-  if (res.status === 401 || res.status === 403)
-    return unavailable({ kind: "rejected", status: res.status });
-  if (!res.ok) throw new Error(`Cursor usage API returned ${res.status}`);
+    if (res.status === 401 || res.status === 403) {
+      rejectedStatus = res.status;
+      continue;
+    }
+    if (!res.ok) throw new Error(`Cursor usage API returned ${res.status}`);
 
-  const resp = CursorUsageResponseSchema.parse(await res.json());
+    const report = parseUsageResponse(await res.json());
+    return report;
+  }
+
+  if (rejectedStatus !== null) return unavailable({ kind: "rejected", status: rejectedStatus });
+  throw new Error("Cursor login store no longer exists");
+}
+
+function parseUsageResponse(body: unknown): UsageReport {
+  const resp = CursorUsageResponseSchema.parse(body);
   const billingCycleEnd = parseCursorBillingCycleTimestamp(resp.billingCycleEnd);
   const windows: UsageWindow[] = [];
   const balances: UsageBalance[] = [];
@@ -258,20 +293,28 @@ function cursorAccount(token: string, input: UsageInput): UsageAccount {
   return { key: `store-${key}`, input };
 }
 
-export async function discover(): Promise<UsageAccount[]> {
-  const home = homedir();
-  const candidates: UsageInput[] = ["CURSOR_ACCESS_TOKEN", "CURSOR_TOKEN"].map((locator) => ({
-    store: "env",
-    locator,
-  }));
-  if (process.env.APPDATA)
-    candidates.push({
+// Cursor logins in priority order. The cursor-agent CLI login comes before the desktop
+// store: cursor-agent refreshes auth.json and it is the login the user keeps current,
+// while state.vscdb can hold a stale or wrapped token long after a CLI re-login.
+function cursorLoginStores(
+  home = homedir(),
+  env: Record<string, string | undefined> = process.env,
+  platform: NodeJS.Platform = process.platform,
+): UsageInput[] {
+  const stores: UsageInput[] = [];
+  const cliAuthPath = cursorAgentAuthPath(env as Record<string, string>, platform);
+  if (cliAuthPath) stores.push({ store: "file", locator: cliAuthPath });
+  for (const locator of ["CURSOR_ACCESS_TOKEN", "CURSOR_TOKEN"])
+    stores.push({ store: "env", locator });
+  if (env.APPDATA)
+    stores.push({
       store: "sqlite",
-      locator: join(process.env.APPDATA, "Cursor", "User", "globalStorage", "state.vscdb"),
+      locator: join(env.APPDATA, "Cursor", "User", "globalStorage", "state.vscdb"),
     });
-  candidates.push(
-    ...[
-      join(
+  stores.push(
+    {
+      store: "sqlite",
+      locator: join(
         home,
         "Library",
         "Application Support",
@@ -280,13 +323,25 @@ export async function discover(): Promise<UsageAccount[]> {
         "globalStorage",
         "state.vscdb",
       ),
-      join(home, ".config", "Cursor", "User", "globalStorage", "state.vscdb"),
-    ].map((locator) => ({ store: "sqlite" as const, locator })),
-    { store: "file", locator: join(home, ".config", "cursor", "auth.json") },
+    },
+    {
+      store: "sqlite",
+      locator: join(home, ".config", "Cursor", "User", "globalStorage", "state.vscdb"),
+    },
   );
-  for (const input of candidates) {
+  return stores;
+}
+
+export async function discover(): Promise<UsageAccount[]> {
+  const stores = cursorLoginStores();
+  for (const [index, input] of stores.entries()) {
     const token = await readToken(input);
-    if (token) return [cursorAccount(token, input)];
+    if (!token) continue;
+    // One card per account; the remaining stores are logins of it, tried only when the
+    // primary one is missing, expired, or rejected.
+    return [
+      { ...cursorAccount(token, input), input: { ...input, fallback: stores.slice(index + 1) } },
+    ];
   }
   return [];
 }

@@ -31,7 +31,7 @@ import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js"
 import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import { OPENUI_CHAT_LABEL } from "@getpaseo/protocol/openui";
+import { OPENUI_CHAT_LABEL, OPENUI_SYSTEM_PROMPT } from "@getpaseo/protocol/openui";
 import { createAgentMessageDelivery } from "./agent-messages/index.js";
 import { AgentTurnBusyError, sendPreparedPromptToAgent, startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
@@ -6069,9 +6069,10 @@ test("setAgentChatMode deletes the OpenUI chat label when switching to agent", a
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-chat-mode-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
+  const client = new TestAgentClient();
   const manager = new AgentManager({
     clients: {
-      codex: new TestAgentClient(),
+      codex: client,
     },
     registry: storage,
     logger,
@@ -6094,12 +6095,14 @@ test("setAgentChatMode deletes the OpenUI chat label when switching to agent", a
   await manager.setAgentChatMode(snapshot.id, "agent");
 
   expect(manager.getAgent(snapshot.id)?.labels?.[OPENUI_CHAT_LABEL]).toBeUndefined();
+  expect(client.resumeOverrides.at(-1)?.systemPrompt).toBeUndefined();
   const storedAfterAgent = await storage.get(snapshot.id);
   expect(storedAfterAgent?.labels?.[OPENUI_CHAT_LABEL]).toBeUndefined();
 
   await manager.setAgentChatMode(snapshot.id, "chat");
 
   expect(manager.getAgent(snapshot.id)?.labels?.[OPENUI_CHAT_LABEL]).toBe("1");
+  expect(client.resumeOverrides.at(-1)?.systemPrompt).toBe(OPENUI_SYSTEM_PROMPT);
   const storedAfterChat = await storage.get(snapshot.id);
   expect(storedAfterChat?.labels?.[OPENUI_CHAT_LABEL]).toBe("1");
 });

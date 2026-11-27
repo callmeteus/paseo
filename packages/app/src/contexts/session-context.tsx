@@ -15,7 +15,11 @@ import type { StreamItem } from "@/types/stream";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import { requestTimelineReplacement } from "@/timeline/timeline-replacement";
 import { type ViewedTimelineOwner } from "@/timeline/viewed-timeline-sync";
-import type { AgentQueuedMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type {
+  AgentQueuedMessage,
+  SessionEventSubscription,
+  SessionOutboundMessage,
+} from "@getpaseo/protocol/messages";
 import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 import {
   buildAgentAttentionNotificationPayload,
@@ -58,6 +62,7 @@ import { getLastWorkspaceSelection } from "@/stores/navigation-active-workspace-
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
+import { supportsExtendedEventSubscriptions } from "@/utils/server-info-capabilities";
 import { usePlanStore } from "@/plans/store";
 import { openPlanInExplorerSidebar } from "@/workspace-tabs/open-plan";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -266,6 +271,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   );
   const focusedTerminalId = useSessionStore(
     (state) => state.sessions[serverId]?.focusedTerminalId ?? null,
+  );
+  const extendedEventsSupported = useSessionStore((state) =>
+    supportsExtendedEventSubscriptions({
+      serverInfo: state.sessions[serverId]?.serverInfo,
+    }),
   );
   const _sessionStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attentionNotifiedRef = useRef<Map<string, number>>(new Map());
@@ -511,21 +521,22 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
   // Daemon message handlers - directly update Zustand store
   useEffect(() => {
-    const feeds = client.observeEvents(
-      [
-        "agent_attention_required",
-        "terminal_attention_required",
-        "agent_permission_request",
-        "agent_permission_resolved",
-        "agent.provider_subagents.update",
-        "checkout_status_update",
-        "status.server_info",
+    const events: SessionEventSubscription[] = [
+      "agent_attention_required",
+      "terminal_attention_required",
+      "agent_permission_request",
+      "agent_permission_resolved",
+      "agent.provider_subagents.update",
+      "checkout_status_update",
+      "status.server_info",
+    ];
+    if (extendedEventsSupported)
+      events.push(
         "status.agent_commands_changed",
         "agent_prompt_dropped",
         "agent.message_queue.changed",
-      ],
-      { notifications: true },
-    );
+      );
+    const feeds = client.observeEvents(events, { notifications: true });
     const onFeed = (
       type: SessionOutboundMessage["type"],
       handler: (message: SessionOutboundMessage) => void,
@@ -579,8 +590,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
     // plan_update travels as an owned event stream. Modern clients reject broadcast
     // messages that no subscription proves ownership of, so it must be observed here.
-    const planUpdates = client.observeEvents(["plan_update"]);
-    planUpdates.subscribe({
+    const planUpdates = extendedEventsSupported ? client.observeEvents(["plan_update"]) : null;
+    planUpdates?.subscribe({
       snapshot: () => {},
       update: (message) => {
         if (message.type !== "plan_update") return;
@@ -805,9 +816,10 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       unsubAgentAttention();
       unsubCheckoutStatusUpdate();
       unsubStatus();
-      void planUpdates
-        .release()
-        .catch((error) => console.warn("[Session] Failed to release plan updates", error));
+      if (planUpdates)
+        void planUpdates
+          .release()
+          .catch((error) => console.warn("[Session] Failed to release plan updates", error));
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubPromptDropped();
@@ -821,6 +833,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     client,
     queryClient,
     serverId,
+    extendedEventsSupported,
     isCompactFormFactor,
     setIsPlayingAudio,
     setAgentStreamTail,

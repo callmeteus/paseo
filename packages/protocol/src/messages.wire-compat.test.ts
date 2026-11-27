@@ -201,6 +201,17 @@ describe("wire schema compatibility", () => {
     });
   });
 
+  test("server info preserves the extended event subscription capability", () => {
+    const base = { status: "server_info" as const, serverId: "srv-1" };
+    expect(ServerInfoStatusPayloadSchema.parse(base).features).toBeUndefined();
+    expect(
+      ServerInfoStatusPayloadSchema.parse({
+        ...base,
+        features: { ownedSubscriptions: true, extendedEventSubscriptions: true },
+      }).features,
+    ).toEqual({ ownedSubscriptions: true, extendedEventSubscriptions: true });
+  });
+
   test("user timeline images and attachments are optional on the wire", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

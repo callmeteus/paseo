@@ -4,6 +4,10 @@ export interface LinkContextMenuRequest {
   url: string;
   x: number;
   y: number;
+  /** Resolved filesystem target for local file links. */
+  localPath?: string;
+  /** Host that owns the file. Remote paths must not reach the local Electron bridge. */
+  serverId?: string;
 }
 
 let request: LinkContextMenuRequest | null = null;

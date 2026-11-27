@@ -13,14 +13,18 @@ import type {
   MarkdownRenderers,
 } from "react-native-enriched-markdown";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { useFileLink } from "@/assistant-file-links";
+import { useAssistantFileLinkEnvironment, useFileLink } from "@/assistant-file-links";
 import { MARKDOWN_COPY_RECOGNIZED_LINK_ATTRIBUTE } from "@/assistant-selection-copy/markup";
 import { useForgeShorthand } from "@/git/forge-shorthand";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import type { Theme } from "@/styles/theme";
 import { MermaidFence } from "./fence/mermaid";
-import { localFileLinkHref, normalizeMarkdownLinkHref } from "./file-link-href";
+import {
+  localFileHrefToPath,
+  localFileLinkHref,
+  normalizeMarkdownLinkHref,
+} from "./file-link-href";
 import { openLinkContextMenu } from "./link-context-menu-store";
 import { isRecognizedLink, markdownLinkSource } from "./source";
 
@@ -45,9 +49,10 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
   const forgeShorthand = useForgeShorthand();
   // A forge reference like `#12` carries its web URL so hover, copy and new-tab opens work.
   const forgeUrl = link.sourceType === "text" ? forgeShorthand?.resolve(link.url) : null;
-  const { tooltipPath, onHoverIn } = useFileLink(
+  const { target, tooltipPath, onHoverIn } = useFileLink(
     forgeUrl ? markdownLinkSource(forgeUrl) : markdownLinkSource(link.url, link.sourceType),
   );
+  const { serverId } = useAssistantFileLinkEnvironment();
   const tooltip = forgeUrl ?? tooltipPath;
   const [hovered, setHovered] = useState(false);
   const handleMouseEnter = useCallback(() => setHovered(true), []);
@@ -58,13 +63,21 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
   const href = normalizeMarkdownLinkHref(
     typeof anchorProps.href === "string" ? anchorProps.href : "",
   );
+  const fileHref = localFileLinkHref(href);
+  const localPath = target?.path ?? (fileHref ? localFileHrefToPath(href) : undefined);
   const showLinkMenu = useCallback(
     (event: ReactMouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      openLinkContextMenu({ url: href, x: event.clientX, y: event.clientY });
+      openLinkContextMenu({
+        url: href,
+        x: event.clientX,
+        y: event.clientY,
+        localPath,
+        serverId,
+      });
     },
-    [href],
+    [href, localPath, serverId],
   );
   const anchorStyle = useMemo(
     () => ({
@@ -74,7 +87,6 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
     }),
     [anchorProps.style, hovered],
   );
-  const fileHref = localFileLinkHref(href);
   // Selection copy pastes a link Paseo recognized as the text the reply showed.
   const recognized = isRecognizedLink(link);
   const copyAnchorProps = useMemo(

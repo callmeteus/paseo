@@ -1,4 +1,4 @@
-import { pathToFileUri } from "@/attachments/utils";
+import { fileUriToPath, pathToFileUri } from "@/attachments/utils";
 
 /**
  * Absolute paths must be file URLs. A path-absolute href resolves against
@@ -22,22 +22,14 @@ const DOMAIN_LIKE_URL = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?:[/:?#]|$)/;
  * Absolute POSIX/Windows/UNC paths and `file://` URLs are paths.
  */
 export function isLocalFileHref(href: string): boolean {
-  const trimmed = href.trim();
-  if (trimmed.startsWith("file://")) return true;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return false;
-  return localFileLinkHref(trimmed) !== null;
+  // Test the filesystem conversion before rejecting schemes. A Windows drive letter
+  // looks like a URL scheme (`C:`), and UNC paths must stay local file targets too.
+  return localFileLinkHref(href.trim()) !== null;
 }
 
 /** Turn a `file://` href back into the filesystem path it represents. */
 export function localFileHrefToPath(href: string): string {
-  if (!href.startsWith("file://")) return href;
-  const withoutScheme = href.slice("file://".length);
-  const pathname = withoutScheme.replace(/^\/([a-zA-Z]:)/, "$1");
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return pathname;
-  }
+  return fileUriToPath(href);
 }
 
 export function normalizeMarkdownLinkHref(href: string): string {

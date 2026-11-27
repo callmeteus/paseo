@@ -5,6 +5,7 @@ import {
   getServerCapabilities,
   getVoiceReadinessState,
   resolveVoiceUnavailableMessage,
+  supportsExtendedEventSubscriptions,
 } from "./server-info-capabilities";
 
 function buildServerInfo(capabilities?: ServerCapabilities): DaemonServerInfo {
@@ -20,6 +21,14 @@ describe("server-info-capabilities", () => {
   it("returns null capabilities when server_info does not include capability metadata", () => {
     const serverInfo = buildServerInfo();
     expect(getServerCapabilities({ serverInfo })).toBeNull();
+  });
+
+  it("detects extended event subscriptions only when the host advertises them", () => {
+    expect(supportsExtendedEventSubscriptions({ serverInfo: buildServerInfo() })).toBe(false);
+    expect(supportsExtendedEventSubscriptions({ serverInfo: null })).toBe(false);
+    const serverInfo = buildServerInfo();
+    serverInfo.features = { extendedEventSubscriptions: true };
+    expect(supportsExtendedEventSubscriptions({ serverInfo })).toBe(true);
   });
 
   it("returns the matching voice capability state by mode", () => {

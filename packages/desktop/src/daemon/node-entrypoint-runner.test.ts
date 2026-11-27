@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { main } from "./node-entrypoint-runner";
 
@@ -16,6 +17,16 @@ declare global {
 }
 
 describe("node-entrypoint-runner", () => {
+  it("imports only Node built-ins so the unpacked runner has no siblings", () => {
+    const sourcePath = fileURLToPath(new URL("./node-entrypoint-runner.ts", import.meta.url));
+    const source = readFileSync(sourcePath, "utf8");
+    const specifiers = [...source.matchAll(/(?:from\s+|require\()\s*["']([^"']+)["']/g)].map(
+      (match) => match[1],
+    );
+
+    expect(specifiers).toEqual(["node:fs", "node:url"]);
+  });
+
   it("preserves Electron node-mode env before loading the target entrypoint", async () => {
     const originalArgv = process.argv;
     const originalRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
