@@ -31,7 +31,8 @@ export interface V2Api {
   command: OpenCodeClient["command"];
   skill: OpenCodeClient["skill"];
   message: OpenCodeClient["message"];
-  mcp: Pick<OpenCodeClient["mcp"], "add" | "list">;
+  mcp: Pick<OpenCodeClient["mcp"], "add" | "list" | "remove">;
+  config: Pick<OpenCodeClient["config"], "get">;
   permission: Pick<OpenCodeClient["permission"], "list" | "reply">;
   event: OpenCodeClient["event"];
 }

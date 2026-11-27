@@ -7,6 +7,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  CancelledNotificationSchema,
   ElicitRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
@@ -49,23 +50,56 @@ const upstream = new Client(
   { name: "paseo-mcp-proxy", version: "1.0.0" },
   { capabilities: { elicitation: { form: {}, url: {} } } },
 );
-upstream.setRequestHandler(ElicitRequestSchema, async (request) => {
+const cancelEndpoint = callback.replace(/\/elicit$/, "/elicit-cancel");
+const outstandingElicitations = new Set();
+const notifyCancelled = (id, reason) => {
+  if (id === undefined || id === null) return;
+  outstandingElicitations.delete(String(id));
+  return fetch(cancelEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token, request: { id: String(id), reason } }),
+  }).catch((error) => log("[paseo-proxy] cancel callback failed", String(error)));
+};
+upstream.setNotificationHandler(CancelledNotificationSchema, (notification) => {
+  notifyCancelled(notification.params?.requestId, "cancelled");
+});
+// The MCP SDK Client is an EventEmitter-like Protocol with an `onclose`
+// callback; it has no addEventListener. Use the supported hook or the shim
+// crashes at startup and every wrapped MCP server fails to connect.
+// oxlint-disable-next-line unicorn/prefer-add-event-listener -- MCP Client has no addEventListener
+upstream.onclose = () => {
+  for (const id of outstandingElicitations) notifyCancelled(id, "closed");
+};
+upstream.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
+  const id = extra.requestId;
+  const key = String(id);
   log(
     "[paseo-proxy] elicitation received",
     JSON.stringify(request.params?.message ?? "").slice(0, 120),
   );
-  const response = await fetch(callback, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token, request }),
-  });
-  if (!response.ok) {
-    log("[paseo-proxy] callback failed", response.status);
-    return { action: "decline" };
+  outstandingElicitations.add(key);
+  extra.signal.addEventListener("abort", () => notifyCancelled(id, "aborted"), { once: true });
+  try {
+    const response = await fetch(callback, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, request: { id: key, params: request.params } }),
+    });
+    if (!response.ok) {
+      log("[paseo-proxy] callback failed", response.status);
+      return { action: "cancel" };
+    }
+    const answer = await response.json();
+    log("[paseo-proxy] elicitation answered", answer?.action);
+    return answer;
+  } catch (error) {
+    // Daemon unreachable: never hang the tool; relay everything else.
+    log("[paseo-proxy] callback unreachable", String(error));
+    return { action: "cancel" };
+  } finally {
+    outstandingElicitations.delete(key);
   }
-  const answer = await response.json();
-  log("[paseo-proxy] elicitation answered", answer?.action);
-  return answer;
 });
 await upstream.connect(transport());
 

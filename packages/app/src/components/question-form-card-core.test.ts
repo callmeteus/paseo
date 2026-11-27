@@ -213,6 +213,45 @@ describe("question form card core", () => {
     });
   });
 
+  test("answers an MCP grant form with a checkbox and an enum selection", () => {
+    const questions = parseQuestionFormQuestions({
+      elicitation: true,
+      questions: [
+        {
+          header: "Grant SSH",
+          question: "Confirm the grant",
+          type: "boolean",
+          options: [],
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: true,
+        },
+        {
+          header: "Duration",
+          question: "Pick a duration",
+          type: "text",
+          options: [{ label: "4 hours" }, { label: "8 hours" }],
+          multiSelect: false,
+          allowOther: false,
+          allowEmpty: false,
+        },
+      ],
+    });
+
+    if (!questions) throw new Error("questions did not parse");
+    expect(areQuestionsAnswered(questions, {}, {})).toBe(false);
+    expect(buildQuestionFormAnswers(questions, { 0: new Set([0]), 1: new Set([1]) }, {})).toEqual({
+      "Grant SSH": "true",
+      Duration: "8 hours",
+    });
+    // An unchecked box is a valid answer: the provider maps a missing boolean
+    // to false rather than blocking the whole form.
+    expect(areQuestionsAnswered(questions, { 1: new Set([0]) }, {})).toBe(true);
+    expect(buildQuestionFormAnswers(questions, { 1: new Set([0]) }, {})).toEqual({
+      Duration: "4 hours",
+    });
+  });
+
   test("keeps a checkbox default so the card starts in the server's state", () => {
     const questions = parseQuestionFormQuestions({
       questions: [

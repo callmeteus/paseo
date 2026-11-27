@@ -1,5 +1,10 @@
 import type { FormInfo, ModelInfo, SessionMessageInfo } from "@opencode/client";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { describe, expect, test } from "vitest";
+import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { createTestLogger } from "../../../../../test-utils/test-logger.js";
 import type { AgentStreamEvent } from "../../../agent-sdk-types.js";
@@ -12,6 +17,26 @@ function toolBridge(): OpenCodeBridge {
     bindSession: () => () => undefined,
     decorateV2ServerEnv: async (env: Record<string, string>) => env,
   } as unknown as OpenCodeBridge;
+}
+
+const SERVER_ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
+const MCP_SHIM = path.join(SERVER_ROOT, "scripts/mcp-proxy-shim.mjs");
+const UPSTREAM_SERVER_SCRIPT = `
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+const server = new Server({ name: "upstream", version: "1.0.0" }, { capabilities: { tools: {} } });
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [{ name: "ask_grant", inputSchema: { type: "object" } }],
+}));
+await server.connect(new StdioServerTransport());
+`;
+function definedEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
 }
 
 function isRetryTimelineEvent(event: AgentStreamEvent): boolean {
@@ -896,6 +921,604 @@ describe("OpenCode v2 session lifecycle", () => {
     }
     await expect(session.startTurn("after close")).rejects.toThrow("OpenCode session is closed");
   });
+  test("proxies an MCP elicitation into a question card and sends the answer back", async () => {
+    const harness = new V2Harness();
+    const adds: Array<{ server: string; config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ server: input.server, config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({
+      provider: "opencode",
+      cwd: "/tmp/project",
+      mcpServers: { grants: { type: "stdio", command: "node", args: ["server.mjs"] } },
+    });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    try {
+      expect(adds.map((add) => add.server)).toEqual(["grants"]);
+      const registered = adds[0]!.config;
+      expect(registered.type).toBe("local");
+      expect(registered.command).toEqual([
+        process.execPath,
+        expect.stringMatching(/mcp-proxy-shim\.mjs$/),
+      ]);
+      const env = registered.environment as Record<string, string>;
+      expect(env.PASEO_MCP_PROXY_CONFIG).toBeTruthy();
+
+      // The shim calls this loopback URL when the upstream MCP server asks for input.
+      const elicitation = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message: "Confirm the grant and pick a duration.",
+              requestedSchema: {
+                type: "object",
+                properties: {
+                  grant: { type: "boolean", title: "Grant SSH" },
+                  duration: {
+                    type: "string",
+                    title: "Duration",
+                    oneOf: [
+                      { const: "4h", title: "4 hours" },
+                      { const: "8h", title: "8 hours" },
+                    ],
+                  },
+                },
+                required: ["grant", "duration"],
+              },
+            },
+          },
+        }),
+      });
+      await expect.poll(() => session.getPendingPermissions()).toHaveLength(1);
+      const asked = events.find(
+        (event): event is Extract<AgentStreamEvent, { type: "permission_requested" }> =>
+          event.type === "permission_requested",
+      )!;
+      expect(asked.request.input).toMatchObject({
+        elicitation: true,
+        questions: [
+          { header: "Grant SSH", type: "boolean" },
+          { header: "Duration", options: [{ label: "4 hours" }, { label: "8 hours" }] },
+        ],
+      });
+      expect(session.getPendingPermissions().map((request) => request.id)).toEqual([
+        asked.request.id,
+      ]);
+
+      await session.respondToPermission(asked.request.id, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true", Duration: "8 hours" } },
+      });
+      await expect(elicitation).resolves.toBeDefined();
+      const answer = await (await elicitation).json();
+      expect(answer).toEqual({ action: "accept", content: { grant: true, duration: "8h" } });
+      expect(session.getPendingPermissions()).toEqual([]);
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
+  });
+
+  test("wraps MCP servers from OpenCode's own config in the elicitation shim", async () => {
+    const harness = new V2Harness();
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    const adds: Array<{ server: string; config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ server: input.server, config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    try {
+      expect(adds).toHaveLength(1);
+      const config = adds[0]!.config;
+      expect(config.type).toBe("local");
+      expect(config.command).toEqual([
+        process.execPath,
+        expect.stringMatching(/mcp-proxy-shim\.mjs$/),
+      ]);
+      const env = config.environment as Record<string, string>;
+      expect(
+        JSON.parse(Buffer.from(env.PASEO_MCP_PROXY_CONFIG!, "base64").toString("utf8")),
+      ).toMatchObject({ type: "stdio", command: "node", args: ["server.mjs"] });
+
+      const elicitation = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message: "Confirm the grant.",
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+      await expect.poll(() => session.getPendingPermissions()).toHaveLength(1);
+      const asked = events.find(
+        (event): event is Extract<AgentStreamEvent, { type: "permission_requested" }> =>
+          event.type === "permission_requested",
+      )!;
+      expect(asked.request.input).toMatchObject({
+        elicitation: true,
+        questions: [{ header: "Grant SSH", type: "boolean" }],
+      });
+      await session.respondToPermission(asked.request.id, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true" } },
+      });
+      expect(await (await elicitation).json()).toEqual({
+        action: "accept",
+        content: { grant: true },
+      });
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
+  });
+
+  test("preserves OpenCode tool visibility when wrapping harness MCP servers", async () => {
+    const harness = new V2Harness();
+    harness.harnessMcpConfig.set("/tmp/project", {
+      direct: { type: "local", command: ["node", "direct.mjs"] },
+      coded: { type: "local", command: ["node", "coded.mjs"], codemode: true },
+    });
+    const adds: Array<{ server: string; config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ server: input.server, config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      // OpenCode defaults dynamically added servers to Code Mode, so the
+      // wrapper must state the original visibility explicitly.
+      expect(adds.map((add) => add.server).sort()).toEqual(["coded", "direct"]);
+      expect(adds.find((add) => add.server === "direct")?.config.codemode).toBe(false);
+      expect(adds.find((add) => add.server === "coded")?.config.codemode).toBe(true);
+      const directEnv = adds.find((add) => add.server === "direct")!.config.environment as Record<
+        string,
+        string
+      >;
+      expect(
+        JSON.parse(Buffer.from(directEnv.PASEO_MCP_PROXY_CONFIG!, "base64").toString("utf8")),
+      ).toMatchObject({ type: "stdio", command: "node", args: ["direct.mjs"] });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("starts the MCP proxy shim and relays the upstream tool catalog", async () => {
+    // A shim that throws during startup connects no tools at all. Exercise the
+    // real script against a real upstream server so a broken SDK call fails here.
+    const env = definedEnv();
+    env.PASEO_MCP_PROXY_CONFIG = Buffer.from(
+      JSON.stringify({
+        type: "stdio",
+        command: process.execPath,
+        args: ["--input-type=module", "-e", UPSTREAM_SERVER_SCRIPT],
+        name: "grants",
+      }),
+    ).toString("base64");
+    env.PASEO_MCP_PROXY_CALLBACK = "http://127.0.0.1:1/elicit";
+    env.PASEO_MCP_PROXY_TOKEN = "shim-regression";
+    env.PASEO_MCP_PROXY_LOG = path.join(tmpdir(), `paseo-shim-regression-${process.pid}.log`);
+
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [MCP_SHIM],
+      cwd: SERVER_ROOT,
+      env,
+      stderr: "pipe",
+    });
+    const client = new Client({ name: "shim-regression", version: "1.0.0" });
+    try {
+      await client.connect(transport);
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toContain("ask_grant");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("routes an elicitation raised inside a Code Mode execute call", async () => {
+    const harness = new V2Harness();
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    let env: Record<string, string> = {};
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      env = input.config.environment as Record<string, string>;
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      // Code Mode calls the wrapped server through `execute`, so the tool name
+      // carries no server prefix; the call still must mark the session as the
+      // elicitation target.
+      harness.push({
+        id: "started-execute",
+        created: 50,
+        type: "session.tool.input.started",
+        durable: { aggregateID: session.id, seq: 50, version: 1 as const },
+        data: {
+          sessionID: session.id,
+          assistantMessageID: "message",
+          id: "call-execute",
+          name: "execute",
+        },
+      });
+      const elicitation = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message: "Grant request from Code Mode",
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+      await expect.poll(() => session.getPendingPermissions()).toHaveLength(1);
+      const requestId = session.getPendingPermissions()[0]!.id;
+      await session.respondToPermission(requestId, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true" } },
+      });
+      expect(await (await elicitation).json()).toEqual({
+        action: "accept",
+        content: { grant: true },
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("routes an elicitation to the session with the running call even after a sibling closes", async () => {
+    const harness = new V2Harness();
+    harness.distinctSessionIds = true;
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    const adds: Array<{ server: string; config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ server: input.server, config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const a = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const b = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const eventsA: AgentStreamEvent[] = [];
+    const eventsB: AgentStreamEvent[] = [];
+    const unsubA = a.subscribe((event) => eventsA.push(event));
+    const unsubB = b.subscribe((event) => eventsB.push(event));
+    const ask = async (toolCallId: string) => {
+      const started = {
+        id: `started-${toolCallId}`,
+        created: 50,
+        type: "session.tool.input.started" as const,
+        durable: { aggregateID: a.id, seq: 50, version: 1 as const },
+        data: {
+          sessionID: a.id,
+          assistantMessageID: "message",
+          id: toolCallId,
+          name: "grants_ask_grant",
+        },
+      };
+      // The harness queue is consumed by one subscriber at a time; publish
+      // twice so both session streams see the event and filter by sessionID.
+      harness.push(started);
+      harness.push({ ...started, id: `started-2-${toolCallId}` });
+      const env = adds[0]!.config.environment as Record<string, string>;
+      const responsePromise = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message: "Confirm the grant.",
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+      await expect.poll(() => a.getPendingPermissions()).toHaveLength(1);
+      expect(b.getPendingPermissions()).toEqual([]);
+      expect(eventsA.some((event) => event.type === "permission_requested")).toBe(true);
+      expect(eventsB.some((event) => event.type === "permission_requested")).toBe(false);
+      await a.respondToPermission(a.getPendingPermissions()[0]!.id, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true" } },
+      });
+      expect(await (await responsePromise).json()).toEqual({
+        action: "accept",
+        content: { grant: true },
+      });
+    };
+    try {
+      expect(adds).toHaveLength(1); // wrapped once for the shared location
+      await ask("call-1");
+      await b.close();
+      await ask("call-2");
+    } finally {
+      unsubA();
+      unsubB();
+      await a.close();
+    }
+  });
+
+  test("wraps harness MCP on a discovered service but declines uncaptured elicitation", async () => {
+    const harness = new V2Harness();
+    (harness.connection as { serviceKind: string }).serviceKind = "discovered";
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    const adds: Array<{ server: string; config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ server: input.server, config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    try {
+      expect(adds.map((add) => add.server)).toEqual(["grants"]);
+      expect(adds[0]!.config.command).toEqual([
+        process.execPath,
+        expect.stringMatching(/mcp-proxy-shim\.mjs$/),
+      ]);
+      const env = adds[0]!.config.environment as Record<string, string>;
+      // No Paseo tool call is in flight: a non-Paseo client's request is
+      // declined and no question card is emitted on any Paseo chat.
+
+      const response = await fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message: "External client grant request",
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+
+      expect(await response.json()).toEqual({ action: "decline" });
+      expect(session.getPendingPermissions()).toEqual([]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("keeps A's unanswered card when B's elicitation arrives on the same server", async () => {
+    const harness = new V2Harness();
+    harness.distinctSessionIds = true;
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    const adds: Array<{ config: Record<string, unknown> }> = [];
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      adds.push({ config: input.config as Record<string, unknown> });
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const a = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const b = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const started = (sessionId: string, toolCallId: string) => ({
+      id: `started-${toolCallId}`,
+      created: 50,
+      type: "session.tool.input.started" as const,
+      durable: { aggregateID: sessionId, seq: 50, version: 1 as const },
+      data: {
+        sessionID: sessionId,
+        assistantMessageID: "message",
+        id: toolCallId,
+        name: "grants_ask_grant",
+      },
+    });
+    const ask = (message: string) => {
+      const env = adds[0]!.config.environment as Record<string, string>;
+      return fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            params: {
+              mode: "form",
+              message,
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+    };
+    try {
+      harness.push(started(a.id, "call-a"));
+      harness.push(started(a.id, "call-a"));
+      const responseA = ask("A grant");
+      await expect.poll(() => a.getPendingPermissions()).toHaveLength(1);
+      const requestA = a.getPendingPermissions()[0]!.id;
+      harness.push(started(b.id, "call-b"));
+      harness.push(started(b.id, "call-b"));
+      const responseB = ask("B grant");
+      await expect.poll(() => b.getPendingPermissions()).toHaveLength(1);
+      const requestB = b.getPendingPermissions()[0]!.id;
+      // B's elicitation must not withdraw A's still-open card.
+      expect(a.getPendingPermissions().map((request) => request.id)).toEqual([requestA]);
+      expect(requestB).not.toBe(requestA);
+
+      await b.respondToPermission(requestB, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true" } },
+      });
+      expect(await (await responseB).json()).toEqual({
+        action: "accept",
+        content: { grant: true },
+      });
+      // A's original card is still answerable after B finished.
+      await a.respondToPermission(requestA, {
+        behavior: "allow",
+        updatedInput: { answers: { "Grant SSH": "true" } },
+      });
+      expect(await (await responseA).json()).toEqual({
+        action: "accept",
+        content: { grant: true },
+      });
+      expect(a.getPendingPermissions()).toEqual([]);
+      expect(b.getPendingPermissions()).toEqual([]);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("withdraws the card when the upstream MCP request is cancelled", async () => {
+    const harness = new V2Harness();
+    harness.harnessMcpConfig.set("/tmp/project", {
+      grants: { type: "local", command: ["node", "server.mjs"] },
+    });
+    let env: Record<string, string> = {};
+    harness.api.mcp.add = async (input) => {
+      harness.mcpAdds.push(input.server);
+      env = input.config.environment as Record<string, string>;
+    };
+    const client = new OpenCodeV2AgentClient({
+      logger: createTestLogger(),
+      runtime: harness.runtime,
+    });
+    const session = await client.createSession({ provider: "opencode", cwd: "/tmp/project" });
+    const events: AgentStreamEvent[] = [];
+    const unsubscribe = session.subscribe((event) => events.push(event));
+    try {
+      harness.push({
+        id: "started-cancel",
+        created: 50,
+        type: "session.tool.input.started",
+        durable: { aggregateID: session.id, seq: 50, version: 1 as const },
+        data: {
+          sessionID: session.id,
+          assistantMessageID: "message",
+          id: "call-cancel",
+          name: "grants_ask_grant",
+        },
+      });
+      const elicitation = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: env.PASEO_MCP_PROXY_TOKEN,
+          request: {
+            id: "req-1",
+            params: {
+              mode: "form",
+              message: "Grant request",
+              requestedSchema: {
+                type: "object",
+                properties: { grant: { type: "boolean", title: "Grant SSH" } },
+                required: ["grant"],
+              },
+            },
+          },
+        }),
+      });
+      await expect.poll(() => session.getPendingPermissions()).toHaveLength(1);
+      const requestId = session.getPendingPermissions()[0]!.id;
+      const cancelled = await fetch(
+        env.PASEO_MCP_PROXY_CALLBACK!.replace(/\/elicit$/, "/elicit-cancel"),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            token: env.PASEO_MCP_PROXY_TOKEN,
+            request: { id: "req-1", reason: "cancelled" },
+          }),
+        },
+      );
+      expect(cancelled.status).toBe(200);
+      await expect.poll(() => session.getPendingPermissions()).toHaveLength(0);
+      expect(await (await elicitation).json()).toEqual({ action: "decline" });
+      expect(
+        events.some(
+          (event) =>
+            event.type === "timeline" &&
+            event.item.type === "notification" &&
+            event.item.message.includes("withdrawn"),
+        ),
+      ).toBe(true);
+      await expect(
+        session.respondToPermission(requestId, {
+          behavior: "allow",
+          updatedInput: { answers: { "Grant SSH": "true" } },
+        }),
+      ).rejects.toThrow(/expired/);
+    } finally {
+      unsubscribe();
+      await session.close();
+    }
+  });
+
   test("keeps the chat usable when an MCP server fails", async () => {
     const harness = new V2Harness();
     harness.mcpAddFailures.add("broken");

@@ -13,6 +13,11 @@ function unexpected(): never {
 }
 
 export class V2Harness {
+  static sequenceCounter = 0;
+  /** Give each created session its own id so shared-connection tests can route events. */
+  serviceKind: V2Connection["serviceKind"] = "owned";
+  distinctSessionIds = false;
+  readonly sessionInfos: SessionInfo[] = [];
   readonly info: SessionInfo = {
     id: "session",
     projectID: "project",
@@ -34,6 +39,8 @@ export class V2Harness {
   readonly mcpAddFailures = new Set<string>();
   /** Servers that register but never reach the connected state. */
   readonly mcpConnectFailures = new Map<string, string>();
+  /** MCP servers from OpenCode's own config, keyed by location directory. */
+  readonly harnessMcpConfig = new Map<string, Record<string, Record<string, unknown>>>();
   readonly instructions = new Map<string, string>();
   releases = 0;
   active = false;
@@ -78,8 +85,10 @@ export class V2Harness {
     this.finishExecution("interrupted");
     return { interrupted: true };
   };
-  private pendingEvents: OpenCodeEvent[] = [];
-  private notify: (() => void) | null = null;
+  private readonly subscribers: Array<{
+    queue: OpenCodeEvent[];
+    wake: (() => void) | null;
+  }> = [];
   push(event: OpenCodeEvent, publish = true) {
     if (
       event.type === "session.execution.started" ||
@@ -91,8 +100,11 @@ export class V2Harness {
       this.executions.push(event);
     }
     if (!publish) return;
-    this.pendingEvents.push(event);
-    this.notify?.();
+    for (const subscriber of this.subscribers) {
+      subscriber.queue.push(event);
+      subscriber.wake?.();
+      subscriber.wake = null;
+    }
   }
 
   readonly api: V2Api = {
@@ -120,6 +132,19 @@ export class V2Harness {
     },
     model: { list: unexpected, default: unexpected },
     provider: { list: unexpected },
+    config: {
+      get: async (input) => {
+        const directory = input?.location?.directory ?? this.info.location.directory;
+        const servers = this.harnessMcpConfig.get(directory) ?? {};
+        return [
+          {
+            type: "document" as const,
+            path: directory,
+            info: { mcp: { servers } },
+          },
+        ];
+      },
+    },
     command: { list: unexpected },
     skill: { list: unexpected },
     mcp: {
@@ -128,6 +153,9 @@ export class V2Harness {
         if (this.mcpAddFailures.has(input.server)) {
           throw new Error(`OpenCode could not register MCP server ${input.server}`);
         }
+      },
+      remove: async (input) => {
+        this.mcpExisting.delete(input.server);
       },
       list: async (input) => ({
         location: { directory: input?.location?.directory ?? this.info.location.directory },
@@ -151,9 +179,14 @@ export class V2Harness {
       form: { list: async () => [], reply: unexpected, cancel: unexpected },
       create: async (input = {}) => {
         this.creates.push(input);
-        return this.info;
+        const info = this.distinctSessionIds
+          ? { ...this.info, id: `session-${this.sessionInfos.length + 1}` }
+          : this.info;
+        this.sessionInfos.push(info);
+        return info;
       },
-      get: async () => this.info,
+      get: async (input) =>
+        this.sessionInfos.find((info) => info.id === input.sessionID) ?? this.info,
       list: async () => ({ data: [], cursor: {} }),
       active: async () => {
         this.activeReads += 1;
@@ -204,6 +237,8 @@ export class V2Harness {
     },
     retain: () => this.connection,
     exited: new Promise<Error>(() => undefined),
+    serviceKind: this.serviceKind,
+    id: "harness-" + ++V2Harness.sequenceCounter,
   };
   readonly runtime = { acquire: async () => this.connection, shutdown: async () => undefined };
 
@@ -214,21 +249,31 @@ export class V2Harness {
   }
 
   private async *events(signal?: AbortSignal): AsyncGenerator<OpenCodeEvent> {
+    const subscriber: { queue: OpenCodeEvent[]; wake: (() => void) | null } = {
+      queue: [],
+      wake: null,
+    };
+    this.subscribers.push(subscriber);
     yield { id: "connected", created: 1, type: "server.connected", data: {} };
-    const wake = () => this.notify?.();
+    const wake = () => {
+      subscriber.wake?.();
+      subscriber.wake = null;
+    };
     signal?.addEventListener("abort", wake);
     try {
       while (true) {
         if (signal?.aborted) return;
-        const event = this.pendingEvents.shift();
+        const event = subscriber.queue.shift();
         if (event) yield event;
         else
           await new Promise<void>((resolve) => {
-            this.notify = resolve;
+            subscriber.wake = resolve;
           });
       }
     } finally {
       signal?.removeEventListener("abort", wake);
+      const index = this.subscribers.indexOf(subscriber);
+      if (index >= 0) this.subscribers.splice(index, 1);
     }
   }
 }

@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { PluginSessionHistory } from "./plugin-session-history.js";
+import {
+  ElicitationProxy,
+  ElicitationQuestions,
+  readHarnessMcpServers,
+} from "../mcp/elicitation-proxy.js";
 import { resolve as resolvePath } from "node:path";
 import type { Logger } from "pino";
 import type { JsonValue, ProviderOptions } from "@getpaseo/protocol/agent-types";
@@ -1174,9 +1179,33 @@ class PluginAgentClient implements AgentClient {
     persist: boolean;
   }): Promise<PluginAgentSession> {
     const sessionId = randomUUID();
+    // Plugin ACP providers pass MCP servers straight to the agent and initialize
+    // with empty client capabilities, so the agent auto-declines elicitation.
+    // Route their servers through Paseo's shim and render the form as a question
+    // card on this session.
+    const bufferedElicitationEvents: AgentStreamEvent[] = [];
+    let emitElicitation: (event: AgentStreamEvent) => void = (event) => {
+      bufferedElicitationEvents.push(event);
+    };
+    const elicits = new ElicitationQuestions(this.provider, (event) => emitElicitation(event));
+    const elicitationProxy = new ElicitationProxy();
+    const harnessServers = await readHarnessMcpServers({
+      provider: this.provider,
+      cwd: input.config.cwd,
+    });
+    const proxiedServers = await elicitationProxy.wrapServers(
+      { ...harnessServers, ...input.config.mcpServers },
+      sessionId,
+      { ask: (_server, message, form) => elicits.ask(message, form) },
+    );
+    const config = mapSessionConfig(
+      { ...input.config, mcpServers: proxiedServers },
+      input.launchContext,
+      input.persist,
+    );
     const bridge = await this.runtime.openSession({
       sessionId,
-      config: mapSessionConfig(input.config, input.launchContext, input.persist),
+      config,
       persistence: input.persistence,
       history: input.history,
     });
@@ -1189,7 +1218,6 @@ class PluginAgentClient implements AgentClient {
       this.rootsBySession.set(next.id, session);
       this.attachPendingChildren();
     };
-    const config = mapSessionConfig(input.config, input.launchContext, input.persist);
     const session = new PluginAgentSession(
       this.provider,
       bridge,
@@ -1218,7 +1246,11 @@ class PluginAgentClient implements AgentClient {
             env: { ...this.runtime.connectedLaunch.env, ...config.env },
           }
         : undefined,
+      elicits,
+      elicitationProxy,
     );
+    emitElicitation = (event) => session.externalElicitationEvent(event);
+    for (const event of bufferedElicitationEvents) session.externalElicitationEvent(event);
     bind(bridge);
     return session;
   }
@@ -1277,6 +1309,8 @@ class PluginAgentSession implements AgentSession {
   private readonly history = new PluginSessionHistory();
   private readonly pendingPermissions = new Map<string, AgentPermissionRequest>();
   private readonly permissionResponses = new Map<string, AgentPermissionResponse>();
+  private readonly elicits: ElicitationQuestions;
+  private readonly elicitationProxy: ElicitationProxy;
   private readonly revertTokens = new Map<string, ProviderTimelineItem["revertToken"]>();
   private readonly timelineSnapshots = new Map<string, TimelineTextSnapshot>();
   private readonly subagentIdsBySession = new Map<string, string | null>();
@@ -1319,7 +1353,11 @@ class PluginAgentSession implements AgentSession {
     private readonly onBind: (bridge: ProviderRuntimeSession) => void,
     givenOptions: Readonly<Record<string, JsonValue>>,
     private readonly usageLaunch: ProviderLaunch | undefined,
+    elicits: ElicitationQuestions,
+    elicitationProxy: ElicitationProxy,
   ) {
+    this.elicits = elicits;
+    this.elicitationProxy = elicitationProxy;
     this.subagentIdsBySession.set(bridge.id, null);
     // Every setting the session opened with that was not given, including ones nobody set.
     this.committedOptions = { ...givenOptions };
@@ -1457,10 +1495,18 @@ class PluginAgentSession implements AgentSession {
   }
 
   getPendingPermissions(): AgentPermissionRequest[] {
-    return [...this.pendingPermissions.values()];
+    return [...this.pendingPermissions.values(), ...this.elicits.getPendingPermissions()];
+  }
+
+  /** Emits a Paseo-owned question card without a provider event of the same shape. */
+  externalElicitationEvent(event: AgentStreamEvent): void {
+    this.publish(event);
   }
 
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+    if (this.elicits.hasWithdrawn(requestId))
+      throw new Error(`MCP elicitation request '${requestId}' has expired`);
+    if (this.elicits.respondToPermission(requestId, response)) return;
     this.permissionResponses.set(requestId, response);
     try {
       await this.bridge.respondToPermission(
@@ -1489,6 +1535,8 @@ class PluginAgentSession implements AgentSession {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.elicits.declineAll();
+    await this.elicitationProxy.close();
     this.listeners.clear();
     await this.replaying?.catch(() => undefined);
     await this.clearBinding();

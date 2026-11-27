@@ -1,4 +1,6 @@
 import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
+import type { McpServerConfig } from "@getpaseo/protocol/messages";
+import { PASEO_MCP_SERVER_NAME } from "../../../runtime-mcp-config.js";
 import { applyProviderOptionsPatch } from "../../../option-controls.js";
 import { assertChangesAreLive, validateProviderOptions } from "../../../provider-options.js";
 import { OpenCodeProviderOptionsSchema } from "../options.js";
@@ -33,6 +35,7 @@ import { composeSystemPromptParts } from "../../../system-prompt.js";
 import { raceProviderRefreshAbort } from "../../../provider-refresh-deadline.js";
 
 import { type V2Connection } from "./runtime.js";
+import type { V2Api } from "./api.js";
 import { modelRef, modesFromV2 } from "./mapping.js";
 
 import { V2_CAPABILITIES } from "./capabilities.js";
@@ -41,6 +44,15 @@ import { commands } from "./commands.js";
 import { messages } from "./history.js";
 import { SessionPermissions } from "./permissions.js";
 import { SessionUsage } from "./usage.js";
+import {
+  ElicitationQuestions,
+  type HarnessMcpServerConfig,
+} from "../../../../mcp/elicitation-proxy.js";
+import {
+  openCodeElicitationRouter,
+  openCodeElicitationToken,
+} from "../../../../mcp/opencode-elicitation-router.js";
+import { wrapMcpServersWithCallback } from "../../../../mcp/elicitation-proxy.js";
 
 export class OpenCodeV2Session implements AgentSession {
   readonly provider = "opencode";
@@ -49,6 +61,9 @@ export class OpenCodeV2Session implements AgentSession {
   private readonly timeline = new V2Timeline();
   private readonly abort = new AbortController();
   private readonly permissions: SessionPermissions;
+  private readonly elicits: ElicitationQuestions;
+  private readonly routedTokens = new Map<string, string>();
+  private readonly activeToolTokens = new Map<string, string>();
   private readonly turns: SessionTurns;
   private readonly children: SessionChildren;
   private readonly usage: SessionUsage;
@@ -99,6 +114,7 @@ export class OpenCodeV2Session implements AgentSession {
       config,
       (event) => this.emit(event),
     );
+    this.elicits = new ElicitationQuestions(this.provider, (event) => this.emit(event));
     this.children = new SessionChildren({
       client: () => this.client,
       id: info.id,
@@ -205,19 +221,101 @@ export class OpenCodeV2Session implements AgentSession {
    * startup wait by the number of configured servers.
    */
   private async configureMcpServers(location: { directory: string }) {
-    const configured = Object.entries(this.config.mcpServers ?? {});
-    if (configured.length === 0) return;
-    // The location may already provide these servers from its own config
-    // (opencode.json, plugins, a previous session). Adding the same name again
-    // registers a second copy of every tool, and that duplicate tool surface is
-    // what overflows the model's context. An existing server wins.
+    // An explicitly configured external service is authoritative: its MCP
+    // registry belongs to the user and Paseo must not replace those servers.
+    // A discovered local service is shared, but it is the user's normal
+    // OpenCode setup; wrap its harness servers with refcounting and restore
+    // the original as soon as the last Paseo session releases it. The router
+    // will decline elicitation that has no Paseo tool call in flight, so a
+    // non-Paseo OpenCode client never gets a Paseo card.
+    const sharedService = this.connection.serviceKind === "discovered";
+    if (sharedService) {
+      this.logger.warn(
+        { serviceKind: this.connection.serviceKind },
+        "Discovered OpenCode service: wrapping harness MCP with the shared elicitation shim",
+      );
+    }
+    if (this.connection.serviceKind === "external") {
+      this.logger.warn(
+        { serviceKind: this.connection.serviceKind },
+        "External OpenCode service: skipping MCP elicitation shim to preserve the user's server config",
+      );
+      return;
+    }
+    const harness = await this.readHarnessMcpServers(location);
+    const originals = { ...harness, ...this.config.mcpServers };
     const existing = await this.listMcpServerNames(location);
+    const wrappedByName = new Map<
+      string,
+      { token: string; config: McpServerConfig; fromHarness: boolean }
+    >();
+    const seen = new Set<string>();
+    for (const [name, original] of Object.entries(originals)) {
+      if (name === PASEO_MCP_SERVER_NAME) continue;
+      // A Paseo-configured server the location already provides stays owned by
+      // the location; only harness config from `config.get` is replaced.
+      if (!harness[name] && existing.has(name)) continue;
+      const token = openCodeElicitationToken(
+        this.connection.id,
+        location.directory,
+        name,
+        original,
+      );
+      if (seen.has(token)) continue;
+      seen.add(token);
+      const { callback, first } = await openCodeElicitationRouter.acquire({
+        token,
+        // On a shared service only an in-flight Paseo tool call may get a card.
+        allowFallback: !sharedService,
+        restore: async () => {
+          if (harness[name] && !this.config.mcpServers?.[name]) {
+            await this.client.mcp.add({
+              server: name,
+              location,
+              config: toOpenCodeMcpConfig(original),
+            });
+          } else {
+            await this.client.mcp.remove({ server: name, location }).catch(() => undefined);
+          }
+        },
+      });
+      const wrapped = await wrapMcpServersWithCallback({
+        servers: { [name]: original },
+        tokenFor: () => token,
+        callback,
+      });
+      wrappedByName.set(name, {
+        token,
+        config: wrapped[name]!,
+        fromHarness: Boolean(harness[name]),
+      });
+      openCodeElicitationRouter.registerCandidate(token, {
+        sessionId: this.id,
+        ask: (message, form) => this.elicits.askCard(message, form),
+      });
+      this.routedTokens.set(token, name);
+      if (first) {
+        // Replace the harness's raw server once per (location, server), never
+        // once per session: all sessions in this directory share the shim.
+        try {
+          await this.client.mcp.remove({ server: name, location }).catch(() => undefined);
+          await this.client.mcp.add({
+            server: name,
+            location,
+            config: toOpenCodeMcpConfig(wrapped[name]!),
+          });
+        } catch (error) {
+          this.abort.signal.throwIfAborted();
+          this.reportMcpUnavailable(name, error);
+        }
+      }
+    }
+
+    // Servers that are not wrapped keep the previous registration behaviour.
     const registered: string[] = [];
-    for (const [server, config] of configured) {
-      // The Paseo tool bridge plugin already exposes the whole catalog for this
-      // session, bound to the agent and filtered by its policy. Registering the
-      // `paseo` MCP server too sends every one of those tools a second time.
-      if (this.requiresPaseoPlugin && server === "paseo") {
+    for (const [server, config] of Object.entries(this.config.mcpServers ?? {})) {
+      if (wrappedByName.has(server)) continue;
+      if (this.requiresPaseoPlugin && server === PASEO_MCP_SERVER_NAME) {
         this.logger.debug(
           { server },
           "Paseo tool plugin already provides this catalog; skipping MCP registration",
@@ -270,6 +368,63 @@ export class OpenCodeV2Session implements AgentSession {
       ),
     );
   }
+
+  /** MCP servers OpenCode loads from its own config at this location. */
+  private async readHarnessMcpServers(location: {
+    directory: string;
+  }): Promise<Record<string, HarnessMcpServerConfig>> {
+    let entries: Awaited<ReturnType<V2Api["config"]["get"]>> = [];
+    try {
+      entries = await this.client.config.get({ location });
+    } catch {
+      return {};
+    }
+    const servers: Record<string, McpServerConfig> = {};
+    for (const entry of entries) {
+      if (entry.type !== "document") continue;
+      const configured = entry.info?.mcp?.servers;
+      if (!configured) continue;
+      for (const [name, raw] of Object.entries(configured)) {
+        if (name === PASEO_MCP_SERVER_NAME) continue;
+        const server = raw as OpenCodeMcpConfig & { disabled?: boolean };
+        if (server.disabled === true) continue;
+        servers[name] = fromOpenCodeMcpConfig(server);
+      }
+    }
+    return servers;
+  }
+
+  /** OpenCode tool names carry the MCP server as `<server>_<tool>`. */
+  private trackToolCall(event: import("@opencode/client").OpenCodeEvent): void {
+    if (event.type === "session.tool.input.started") {
+      const name = event.data.name;
+      const match = [...this.routedTokens.entries()]
+        .filter(([, server]) => name === server || name.startsWith(`${server}_`))
+        .sort((a, b) => b[1].length - a[1].length)[0];
+      if (match) {
+        this.activeToolTokens.set(event.data.id, match[0]);
+        openCodeElicitationRouter.toolStarted({
+          token: match[0],
+          sessionId: this.id,
+          toolCallId: event.data.id,
+        });
+        return;
+      }
+      // Code Mode invokes MCP tools through the generic `execute` tool, so
+      // the tool name does not identify the server. Register this call for
+      // every server wrapped on this session; only one of them can elicit.
+      this.activeToolTokens.set(event.data.id, "*");
+      openCodeElicitationRouter.toolStartedForSession(this.id, event.data.id);
+      return;
+    }
+    if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
+      const token = this.activeToolTokens.get(event.data.id);
+      if (!token) return;
+      this.activeToolTokens.delete(event.data.id);
+      openCodeElicitationRouter.toolFinishedForSession(this.id, event.data.id, token);
+    }
+  }
+
   private async listMcpServerNames(location: { directory: string }): Promise<Set<string>> {
     try {
       const catalog = await this.client.mcp.list(
@@ -594,9 +749,12 @@ export class OpenCodeV2Session implements AgentSession {
     await this.client.session.revert.commit({ sessionID: this.id });
   }
   getPendingPermissions() {
-    return [...this.permissions.list()];
+    return [...this.permissions.list(), ...this.elicits.getPendingPermissions()];
   }
   async respondToPermission(requestId: string, response: AgentPermissionResponse) {
+    if (this.elicits.hasWithdrawn(requestId))
+      throw new Error(`MCP elicitation request '${requestId}' has expired`);
+    if (this.elicits.respondToPermission(requestId, response)) return;
     await this.reconnectIfExited();
     const deniesOwnRequest =
       response.behavior === "deny" && this.permissions.isOwnedBy(requestId, this.id);
@@ -691,6 +849,7 @@ export class OpenCodeV2Session implements AgentSession {
       if (streamed) this.emitTimeline(streamed);
       return;
     }
+    this.trackToolCall(event);
     this.permissions.observe(event);
     this.usage.observe(event);
     this.turns.observe(event);
@@ -768,6 +927,15 @@ export class OpenCodeV2Session implements AgentSession {
     if (this.closed) return;
     this.closed = true;
     this.abort.abort();
+    this.elicits.declineAll();
+    for (const token of this.routedTokens.keys()) {
+      await openCodeElicitationRouter
+        .release({ token, sessionId: this.id })
+        .catch((error: unknown) =>
+          this.logger.warn({ error }, "Could not release OpenCode elicitation registration"),
+        );
+    }
+    this.routedTokens.clear();
     this.turns.close();
     this.streamAbort.abort();
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
@@ -788,4 +956,65 @@ export class OpenCodeV2Session implements AgentSession {
     }
     this.listeners.clear();
   }
+}
+
+/** OpenCode's own config shape for one MCP server (local or remote). */
+type OpenCodeMcpConfig =
+  | {
+      type: "local";
+      command: string[];
+      cwd?: string;
+      environment?: Record<string, string>;
+      codemode?: boolean;
+    }
+  | {
+      type: "remote";
+      url: string;
+      headers?: Record<string, string>;
+      oauth?: false;
+      codemode?: boolean;
+    };
+
+function fromOpenCodeMcpConfig(config: OpenCodeMcpConfig): HarnessMcpServerConfig {
+  const codemode = typeof config.codemode === "boolean" ? { codemode: config.codemode } : {};
+  if (config.type === "local") {
+    const [command, ...args] = config.command;
+    return {
+      type: "stdio",
+      command: command ?? "",
+      ...(args.length ? { args } : {}),
+      ...(config.cwd ? { cwd: config.cwd } : {}),
+      ...(config.environment ? { env: config.environment } : {}),
+      ...codemode,
+    };
+  }
+  return {
+    type: "http",
+    url: config.url,
+    ...(config.headers ? { headers: config.headers } : {}),
+    ...codemode,
+  };
+}
+
+function toOpenCodeMcpConfig(config: HarnessMcpServerConfig): OpenCodeMcpConfig {
+  // OpenCode defaults dynamically added MCP servers to Code Mode. Preserve the
+  // original visibility: config-file servers are direct tools unless they
+  // explicitly asked for Code Mode.
+  const codemode = config.codemode ?? false;
+  if (config.type === "stdio") {
+    return {
+      type: "local",
+      command: [config.command, ...(config.args ?? [])],
+      ...(config.cwd ? { cwd: config.cwd } : {}),
+      ...(config.env ? { environment: config.env } : {}),
+      codemode,
+    };
+  }
+  return {
+    type: "remote",
+    url: config.url,
+    ...(config.headers ? { headers: config.headers } : {}),
+    oauth: false,
+    codemode,
+  };
 }

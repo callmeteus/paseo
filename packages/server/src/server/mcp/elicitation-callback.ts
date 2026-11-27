@@ -3,12 +3,14 @@ import http from "node:http";
 export interface ElicitationBridge {
   origin: string;
   register: (token: string, handler: (request: unknown) => Promise<unknown>) => void;
+  unregister: (token: string) => void;
   close: () => Promise<void>;
 }
 
 /** Loopback endpoint the MCP shim calls when the server asks for operator input. */
 export function startElicitationBridge(): Promise<ElicitationBridge> {
   const handlers = new Map<string, (request: unknown) => Promise<unknown>>();
+  const sockets = new Set<import("node:net").Socket>();
   const server = http.createServer((request, response) => {
     if (request.method === "POST" && request.url === "/tool-result") {
       const chunks: Buffer[] = [];
@@ -24,6 +26,29 @@ export function startElicitationBridge(): Promise<ElicitationBridge> {
           handler?.(body.result);
         } catch {
           /* ignore malformed result */
+        }
+        response.writeHead(200).end();
+      });
+      return;
+    }
+    if (request.method === "GET" && request.url === "/health") {
+      response.writeHead(200).end("ok");
+      return;
+    }
+    if (request.method === "POST" && request.url === "/elicit-cancel") {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            token?: string;
+            request?: unknown;
+          };
+          const handler =
+            typeof body.token === "string" ? handlers.get(`cancel:${body.token}`) : undefined;
+          void handler?.(body.request);
+        } catch {
+          /* ignore malformed cancellation */
         }
         response.writeHead(200).end();
       });
@@ -55,6 +80,10 @@ export function startElicitationBridge(): Promise<ElicitationBridge> {
   });
   return new Promise((resolve, reject) => {
     server.once("error", reject);
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       if (!address || typeof address === "string") {
@@ -64,7 +93,17 @@ export function startElicitationBridge(): Promise<ElicitationBridge> {
       resolve({
         origin: `http://127.0.0.1:${address.port}`,
         register: (token, handler) => handlers.set(token, handler),
-        close: () => new Promise((done) => server.close(() => done())),
+        unregister: (token) => {
+          handlers.delete(token);
+          handlers.delete(`result:${token}`);
+        },
+        close: () =>
+          new Promise((done) => {
+            server.close(() => done());
+            // Fetch clients keep connections alive; close() otherwise waits for
+            // their idle timeout while the agent session is tearing down.
+            for (const socket of sockets) socket.destroy();
+          }),
       });
     });
   });
