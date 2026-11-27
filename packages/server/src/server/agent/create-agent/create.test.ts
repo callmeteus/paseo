@@ -10,6 +10,7 @@ import { AgentManager } from "../agent-manager.js";
 import { AgentStorage } from "../agent-storage.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { createAgentCommand } from "./create.js";
+import { ForegroundPromptStart } from "../agent-run-state.js";
 import type { ManagedAgent } from "../agent-manager.js";
 
 const logger = createTestLogger();
@@ -69,6 +70,13 @@ test("session create forwards clientMessageId to the initial prompt run options"
       getAgent: vi.fn(() => snapshot),
       tryRunOutOfBand: vi.fn(() => false),
       hasInFlightRun: vi.fn(() => false),
+      reloadStalePluginSession: async () => {},
+      steerOrReplaceActiveTurn: vi.fn(async () => ({ status: "inactive" as const })),
+      planGoalTurn: vi.fn(async () => null),
+      planSkillTurn: vi.fn(async () => null),
+      planWorkflowTurn: vi.fn(() => null),
+      planCursorRulesTurn: vi.fn(() => null),
+      reloadAgentSession: vi.fn(async () => undefined),
       streamAgent,
       waitForAgentRunStart: vi.fn(async () => undefined),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
@@ -88,9 +96,12 @@ test("session create forwards clientMessageId to the initial prompt run options"
     firstAgentContext: { attachments: [] },
   });
 
-  expect(streamAgent).toHaveBeenCalledWith("agent-1", "hello from create", {
-    clientMessageId: "msg-create-1",
-  });
+  expect(streamAgent).toHaveBeenCalledWith(
+    "agent-1",
+    "hello from create",
+    { clientMessageId: "msg-create-1" },
+    expect.any(ForegroundPromptStart),
+  );
 });
 
 test("session create validates the requested mode against the provider's modes", async () => {
@@ -146,7 +157,7 @@ test("session create applies the resolved mode from the provider create config",
   const stub = createProviderSnapshotManagerStub();
   stub.resolveCreateConfig.mockResolvedValue({
     modeId: "build",
-    featureValues: { auto_accept: true },
+    providerOptions: { auto_accept: true },
   });
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
@@ -170,7 +181,7 @@ test("session create applies the resolved mode from the provider create config",
   expect(createAgent).toHaveBeenCalledWith(
     expect.objectContaining({
       modeId: "build",
-      featureValues: { auto_accept: true },
+      providerOptions: { auto_accept: true },
     }),
     undefined,
     expect.anything(),
@@ -248,6 +259,43 @@ test("session create stamps the requested workspaceId when no worktree setup run
 
     const stored = await storage.get(snapshot.id);
     expect(stored?.workspaceId).toBe("ws-source");
+  } finally {
+    await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
+  }
+});
+
+test("ephemeral mcp create keeps the agent off disk and registers cleanup", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "create-agent-ephemeral-test-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const agentManager = createRealAgentManager(storage);
+  const onAgentCreated = vi.fn();
+
+  try {
+    const { snapshot } = await createAgentCommand(
+      {
+        agentManager,
+        agentStorage: storage,
+        logger,
+        providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+        onAgentCreated,
+      },
+      {
+        kind: "mcp",
+        provider: "codex/gpt-5.4",
+        title: "ephemeral",
+        initialPrompt: "do the work",
+        notifyOnFinish: false,
+        cwd: workdir,
+        workspaceId: "ws-ephemeral",
+        ephemeral: true,
+        notifyUser: false,
+      },
+    );
+
+    expect(snapshot.internal).toBe(true);
+    expect(snapshot.notifyUser).toBe(false);
+    expect(await storage.get(snapshot.id)).toBeNull();
+    expect(onAgentCreated).toHaveBeenCalledWith(snapshot.id);
   } finally {
     await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
   }

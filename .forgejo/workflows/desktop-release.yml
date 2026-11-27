@@ -1,0 +1,156 @@
+name: Desktop Release
+
+# Adapted from the GitHub Actions workflow for Forgejo Actions.
+# GitHub Releases are still the distribution channel: GH_TOKEN comes from a
+# Forgejo repo secret. The Forgejo runner is Linux-only, so macOS and Windows
+# packages are not produced here; their signing toolchains need native runners.
+# The nightly workflow covers the daily Linux + APK build on develop.
+on:
+  push:
+    tags:
+      - "v*"
+      - "desktop-v*"
+      - "desktop-linux-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.1.0)"
+        required: true
+        type: string
+      checkout_ref:
+        description: "Optional branch/ref to checkout while using tag for release metadata"
+        required: false
+        default: ""
+        type: string
+      publish:
+        description: "Publish built artifacts to GitHub Releases"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  SOURCE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.checkout_ref || github.ref_name) || github.ref_name }}
+  SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false' }}
+  DESKTOP_PACKAGE_PATH: "packages/desktop"
+
+jobs:
+  create-release:
+    runs-on: docker
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+          ref: ${{ env.CHECKOUT_REF }}
+
+      - name: Resolve release metadata
+        shell: bash
+        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        if: env.IS_SMOKE_TAG != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists, skipping creation"
+            exit 0
+          fi
+          prerelease_flag=""
+          if [[ "$IS_PRERELEASE" == "true" ]]; then prerelease_flag="--prerelease"; fi
+          gh release create "$RELEASE_TAG" \
+            --repo "callmeteus/paseo" \
+            --title "Paseo $RELEASE_TAG" \
+            --notes "" \
+            --draft \
+            $prerelease_flag || {
+              echo "Release creation raced with another workflow; continuing."
+              node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null
+            }
+
+  publish-linux:
+    needs: [create-release]
+    if: ${{ always() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
+    runs-on: docker
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.CHECKOUT_REF }}
+
+      - name: Resolve release metadata
+        shell: bash
+        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+
+      - name: Install JS dependencies
+        run: node scripts/npm-retry.mjs ci
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Set desktop package version from tag
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const version = process.env.DESKTOP_VERSION;
+          if (!version) throw new Error('DESKTOP_VERSION env var is missing');
+          const p = process.env.DESKTOP_PACKAGE_PATH + '/package.json';
+          const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+          pkg.version = version;
+          fs.writeFileSync(p, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+
+      - name: Install Linux packaging dependencies
+        run: apt-get update && apt-get install -y xvfb xauth rpm squashfs-tools
+
+      - name: Build Linux desktop release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EP_GH_IGNORE_TIME: "true"
+        run: |
+          set -euo pipefail
+          build_args=(-- --publish never --linux --x64)
+          build_args+=("-c.publish.releaseType=$RELEASE_TYPE")
+          build_args+=("-c.publish.channel=$RELEASE_CHANNEL")
+          npm run build:desktop "${build_args[@]}"
+
+      - name: Upload artifacts to workflow
+        if: env.SHOULD_PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*
+          retention-days: 14
+
+      - name: Upload artifacts to GitHub release
+        if: env.SHOULD_PUBLISH == 'true' && env.IS_SMOKE_TAG != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="${DESKTOP_PACKAGE_PATH}/release"
+          release_lookup="$(node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG")"
+          node scripts/upload-release-assets.mjs "$release_lookup" "$release_dir" "callmeteus/paseo"

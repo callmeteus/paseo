@@ -28,6 +28,12 @@ for (const directory of ["", "v2/"]) {
     external: ["node:fs", "node:path"],
     outfile: outputPath,
   });
+  if (directory === "v2/") {
+    await copyFile(
+      new URL("../src/server/agent/providers/opencode/v2/state.mjs", import.meta.url),
+      path.join(path.dirname(outputPath), "state.mjs"),
+    );
+  }
 }
 
 // tsc emits only .js. The compiled agent-manager imports cursor-rules.mjs at

@@ -19,7 +19,7 @@ function getLogger(logger: LoggerLike): LoggerLike {
   return logger.child({ module: "persistence" });
 }
 
-type AgentStoragePersistence = Pick<AgentStorage, "applySnapshot" | "list">;
+type AgentStoragePersistence = Pick<AgentStorage, "applySnapshot">;
 type AgentManagerStateSource = Pick<AgentManager, "subscribe">;
 
 interface BuildSessionConfigOptions {
@@ -75,8 +75,7 @@ export function buildConfigOverrides(record: StoredAgentRecord): Partial<AgentSe
     workflowModeId: record.config?.workflowModeId ?? undefined,
     model: record.config?.model ?? undefined,
     thinkingOptionId: record.config?.thinkingOptionId ?? undefined,
-    featureValues: resolveFeatureValues(record),
-    providerOptions: record.config?.providerOptions ?? undefined,
+    providerOptions: resolveProviderOptions(record),
     toolPolicy: record.config?.toolPolicy ?? undefined,
     systemPrompt: record.config?.systemPrompt ?? undefined,
     mcpServers: record.config?.mcpServers ?? undefined,
@@ -88,19 +87,20 @@ const ACP_AUTO_ACCEPT_FEATURE = "auto_accept";
 
 /**
  * Imported Cursor chats keep Cursor's own default of auto-accepting permission
- * prompts. Records imported before this default existed have no stored
- * featureValues, so apply it when the session is created. An explicit `false`
- * from the user is preserved.
+ * prompts. Records imported before this default existed have no stored option
+ * for it, so apply it when the session is created. An explicit `false` from the
+ * user is preserved. Legacy `featureValues` were folded into `providerOptions`
+ * when the record was parsed, so the option is the only place to read.
  */
-function resolveFeatureValues(record: StoredAgentRecord): Record<string, unknown> | undefined {
-  const featureValues = record.config?.featureValues ?? undefined;
+function resolveProviderOptions(record: StoredAgentRecord): Record<string, unknown> | undefined {
+  const providerOptions = record.config?.providerOptions ?? undefined;
   const isImportedCursor =
     record.provider === "cursor" &&
     getImportSourceFromLabels(record.labels) === CURSOR_IMPORT_SOURCE;
-  if (!isImportedCursor || featureValues?.[ACP_AUTO_ACCEPT_FEATURE] !== undefined) {
-    return featureValues;
+  if (!isImportedCursor || providerOptions?.[ACP_AUTO_ACCEPT_FEATURE] !== undefined) {
+    return providerOptions;
   }
-  return { ...featureValues, [ACP_AUTO_ACCEPT_FEATURE]: true };
+  return { ...providerOptions, [ACP_AUTO_ACCEPT_FEATURE]: true };
 }
 
 export function buildSessionConfig(
@@ -118,7 +118,6 @@ export function buildSessionConfig(
     workflowModeId: overrides.workflowModeId,
     model: overrides.model,
     thinkingOptionId: overrides.thinkingOptionId,
-    featureValues: overrides.featureValues,
     providerOptions: overrides.providerOptions,
     toolPolicy: overrides.toolPolicy,
     systemPrompt: overrides.systemPrompt,
@@ -162,16 +161,20 @@ export function extractTimestamps(record: StoredAgentRecord): {
   updatedAt: Date;
   lastUserMessageAt: Date | null;
   labels?: Record<string, string>;
+  metadata?: StoredAgentRecord["metadata"];
   workspaceId?: string;
   owner?: StoredAgentRecord["owner"];
+  background?: boolean;
 } {
   return {
     createdAt: new Date(record.createdAt),
     updatedAt: new Date(resolveStoredAgentUpdatedAt(record)),
     lastUserMessageAt: record.lastUserMessageAt ? new Date(record.lastUserMessageAt) : null,
     labels: record.labels,
+    metadata: record.metadata,
     workspaceId: record.workspaceId,
     owner: record.owner,
+    background: record.background,
   };
 }
 

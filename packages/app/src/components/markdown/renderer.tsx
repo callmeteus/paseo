@@ -6,6 +6,10 @@ import {
   useAssistantFileLinkEnvironment,
 } from "@/assistant-file-links";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { matchCommandLink, useAgentCommandHints, type CommandHints } from "@/agent-commands";
+import { useForgeShorthand } from "@/git/forge-shorthand";
+import { pluginOverviewUrl } from "@getpaseo/protocol/plugin-overview";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import type { Theme } from "@/styles/theme";
 import { isWeb } from "@/constants/platform";
@@ -14,6 +18,7 @@ import { MarkdownBlockStack } from "./block-stack";
 import { WEB_RENDERERS } from "./renderers";
 import { createMarkdownStyles } from "./styles";
 import { PENDING_MARKDOWN_IMAGE } from "./source";
+import { normalizeMarkdownLinkHref } from "./file-link-href";
 import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
 
@@ -23,6 +28,8 @@ import { OpenUIRenderer } from "./openui-renderer";
 
 const ThemedMarkdown = withUnistyles(EnrichedMarkdownText);
 const MD4C_FLAGS = { latexMath: false, hardSoftBreaks: true, admonitions: true };
+// A README is written for its forge, where the lines of a paragraph join into one.
+const EXTERNAL_MD4C_FLAGS = { ...MD4C_FLAGS, hardSoftBreaks: false };
 
 // Reading the breakpoint here makes Unistyles restyle the text when the layout crosses it.
 const markdownStyle =
@@ -52,6 +59,13 @@ export interface MarkdownRendererProps extends MarkdownImageContext {
   onLinkPress?: (url: string) => unknown;
   /** Send a conversational OpenUI button action back to the agent. */
   onOpenUIAction?: (message: string) => void;
+  agentCommands?: boolean;
+  /**
+   * Author-controlled Markdown from outside this host, such as a plugin README: only its https
+   * links and images work, nothing is read as a file, forge reference or command, and the lines of
+   * a paragraph join as they do on its forge.
+   */
+  external?: boolean;
 }
 
 /** All Markdown surfaces share the same engine and source adaptation. */
@@ -72,13 +86,19 @@ export const MarkdownRenderer = memo(function MarkdownRenderer(props: MarkdownRe
       />
     );
   }
-  if (!streaming || boundary === 0) return <MarkdownPart {...props} />;
+  const Part = props.agentCommands ? CommandMarkdownPart : MarkdownPart;
+  if (!streaming || boundary === 0) return <Part {...props} />;
   return (
     <MarkdownBlockStack>
-      <MarkdownPart {...props} text={props.text.slice(0, boundary)} />
-      <MarkdownPart {...props} text={props.text.slice(boundary)} />
+      <Part {...props} text={props.text.slice(0, boundary)} />
+      <Part {...props} text={props.text.slice(boundary)} />
     </MarkdownBlockStack>
   );
+});
+
+const CommandMarkdownPart = memo(function CommandMarkdownPart(props: MarkdownRendererProps) {
+  const commandHints = useAgentCommandHints();
+  return <MarkdownPart {...props} commandHints={commandHints} />;
 });
 
 const MarkdownPart = memo(function MarkdownPart({
@@ -88,25 +108,55 @@ const MarkdownPart = memo(function MarkdownPart({
   selectable = true,
   streaming = false,
   onLinkPress,
+  agentCommands: _agentCommands,
+  external = false,
+  commandHints = null,
   ...imageContext
-}: MarkdownRendererProps) {
+}: MarkdownRendererProps & { commandHints?: CommandHints | null }) {
   const environment = useAssistantFileLinkEnvironment();
   const actions = useAssistantFileLinkActions();
+  const workspaceForgeShorthand = useForgeShorthand();
+  const forgeShorthand = external ? null : workspaceForgeShorthand;
   const client =
     imageContext.client ??
     (environment.client?.readFile
       ? { readFile: environment.client.readFile.bind(environment.client) }
       : undefined);
-  const { markdown, imageSources, linkRecognition, linkSource } = useMarkdownSource(text, {
-    workspaceRoot: environment.workspaceRoot,
-    serverId: environment.serverId,
-    ...imageContext,
-    client,
-  });
+  const { markdown, imageSources, linkRecognition, linkSource } = useMarkdownSource(
+    text,
+    {
+      workspaceRoot: environment.workspaceRoot,
+      serverId: environment.serverId,
+      ...imageContext,
+      client,
+    },
+    {
+      commandNames: commandHints?.names,
+      forgeReferencePattern: forgeShorthand?.pattern,
+      external,
+    },
+  );
   const [image, setImage] = useState<ImageLightboxSource | null>(null);
   const pressLink = useStableEvent(({ url, sourceType }: LinkPressEvent) => {
-    const source = linkSource(url, sourceType);
-    if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(url);
+    const href = normalizeMarkdownLinkHref(url);
+    if (external) {
+      // The parser still autolinks bare http, www and email text; only https links open.
+      const safe = pluginOverviewUrl(href);
+      if (safe) void openExternalUrl(safe);
+      return;
+    }
+    const command = commandHints && matchCommandLink(href, sourceType, commandHints.names);
+    if (command) {
+      commandHints.insert(command);
+      return;
+    }
+    const forgeUrl = sourceType === "text" ? forgeShorthand?.resolve(href) : null;
+    if (forgeUrl) {
+      void openExternalUrl(forgeUrl);
+      return;
+    }
+    const source = linkSource(href, sourceType);
+    if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(href);
     else actions.open(source, "preferred");
   });
   const pressImage = useStableEvent(({ url }: { url: string }) => {
@@ -131,7 +181,7 @@ const MarkdownPart = memo(function MarkdownPart({
               uniProps={pickMarkdownStyle(compact, muted)}
               flavor="github"
               selectable={selectable}
-              md4cFlags={MD4C_FLAGS}
+              md4cFlags={external ? EXTERNAL_MD4C_FLAGS : MD4C_FLAGS}
               linkRecognition={linkRecognition}
               enableTaskListItemToggle={false}
               enableLinkPreview={false}

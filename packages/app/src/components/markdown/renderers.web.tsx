@@ -1,5 +1,12 @@
 import { Text } from "react-native";
-import { forwardRef, useCallback, useMemo, useState, type ComponentProps } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useMemo,
+  useState,
+  type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type {
   CodeBlockRendererProps,
   LinkRendererProps,
@@ -7,12 +14,15 @@ import type {
 } from "react-native-enriched-markdown";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useFileLink } from "@/assistant-file-links";
+import { MARKDOWN_COPY_RECOGNIZED_LINK_ATTRIBUTE } from "@/assistant-selection-copy/markup";
+import { useForgeShorthand } from "@/git/forge-shorthand";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import type { Theme } from "@/styles/theme";
 import { MermaidFence } from "./fence/mermaid";
-import { localFileLinkHref } from "./file-link-href";
-import { markdownLinkSource } from "./source";
+import { localFileLinkHref, normalizeMarkdownLinkHref } from "./file-link-href";
+import { openLinkContextMenu } from "./link-context-menu-store";
+import { isRecognizedLink, markdownLinkSource } from "./source";
 
 const ThemedCodeBlock = withUnistyles(HighlightedCodeBlock);
 const codeStyle = (theme: Theme) => ({
@@ -32,13 +42,30 @@ function WebCodeBlock({ code, language }: CodeBlockRendererProps) {
 const LINK_HOVER_STYLE = { textDecoration: "underline" } as const;
 
 function WebLink({ link, anchorProps, children }: LinkRendererProps) {
-  const { tooltipPath, onHoverIn } = useFileLink(markdownLinkSource(link.url, link.sourceType));
+  const forgeShorthand = useForgeShorthand();
+  // A forge reference like `#12` carries its web URL so hover, copy and new-tab opens work.
+  const forgeUrl = link.sourceType === "text" ? forgeShorthand?.resolve(link.url) : null;
+  const { tooltipPath, onHoverIn } = useFileLink(
+    forgeUrl ? markdownLinkSource(forgeUrl) : markdownLinkSource(link.url, link.sourceType),
+  );
+  const tooltip = forgeUrl ?? tooltipPath;
   const [hovered, setHovered] = useState(false);
   const handleMouseEnter = useCallback(() => setHovered(true), []);
   const handleMouseLeave = useCallback(() => setHovered(false), []);
   const preventFileLinkNavigation = useCallback((event: { preventDefault: () => void }) => {
     event.preventDefault();
   }, []);
+  const href = normalizeMarkdownLinkHref(
+    typeof anchorProps.href === "string" ? anchorProps.href : "",
+  );
+  const showLinkMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openLinkContextMenu({ url: href, x: event.clientX, y: event.clientY });
+    },
+    [href],
+  );
   const anchorStyle = useMemo(
     () => ({
       ...anchorProps.style,
@@ -47,18 +74,27 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
     }),
     [anchorProps.style, hovered],
   );
-  const href = typeof anchorProps.href === "string" ? anchorProps.href : "";
   const fileHref = localFileLinkHref(href);
+  // Selection copy pastes a link Paseo recognized as the text the reply showed.
+  const recognized = isRecognizedLink(link);
+  const copyAnchorProps = useMemo(
+    () =>
+      recognized
+        ? { ...anchorProps, [MARKDOWN_COPY_RECOGNIZED_LINK_ATTRIBUTE]: "true" }
+        : anchorProps,
+    [anchorProps, recognized],
+  );
   const anchor = (
     <a
-      {...anchorProps}
-      href={fileHref ?? anchorProps.href}
+      {...copyAnchorProps}
+      href={fileHref ?? forgeUrl ?? href}
       // A file address must not open a blank window. Click still goes through onLinkPress.
-      target={fileHref ? undefined : anchorProps.target}
+      target={fileHref ? undefined : copyAnchorProps.target}
       style={anchorStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onAuxClick={fileHref ? preventFileLinkNavigation : undefined}
+      onContextMenu={showLinkMenu}
     >
       {children}
     </a>
@@ -68,10 +104,10 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
       <TooltipTrigger asChild onHoverIn={onHoverIn}>
         <InlineLinkTrigger>{anchor}</InlineLinkTrigger>
       </TooltipTrigger>
-      {tooltipPath ? (
-        <TooltipContent side="top" align="start" maxWidth={420}>
+      {tooltip ? (
+        <TooltipContent side="top" align="start" maxWidth={520}>
           <Text selectable={false} style={styles.tooltipPath}>
-            {tooltipPath}
+            {tooltip}
           </Text>
         </TooltipContent>
       ) : null}
@@ -100,7 +136,6 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
-    maxWidth: 420,
     overflowWrap: "anywhere",
   },
 }));

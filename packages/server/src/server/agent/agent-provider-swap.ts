@@ -270,7 +270,6 @@ export async function swapAgentProvider(input: SwapProviderInput): Promise<SwapP
   const {
     modeId: _sourceModeId,
     thinkingOptionId: _sourceThinkingOptionId,
-    featureValues: _sourceFeatureValues,
     providerOptions: _sourceProviderOptions,
     model: _sourceModel,
     ...portedConfig

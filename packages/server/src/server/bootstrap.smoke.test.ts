@@ -30,6 +30,7 @@ import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
 import { DaemonClient } from "./test-utils/daemon-client.js";
 import { isPlatform } from "../test-utils/platform.js";
 import { findFreePort } from "./service-proxy.js";
+import { isClaudeAvailable } from "../test-utils/claude-availability.js";
 import {
   configureGitProcessPolicy,
   snapshotGitCommandRuntimeMetrics,
@@ -298,6 +299,7 @@ describe("paseo daemon bootstrap", () => {
         requestId: "runtime-policies",
         appliedPaths: [
           "agents.catalogRefreshTimeoutMs",
+          "agents.modelRouters",
           "agents.providers",
           "app.baseUrl",
           "daemon.cors.allowedOrigins",
@@ -698,11 +700,11 @@ describe("paseo daemon bootstrap", () => {
 
   test("rolls back standalone listener without starting plugins when main listen fails", async () => {
     const mainPort = await findFreePort();
-    const standalonePort = await findFreePort();
     const occupiedMain = http.createServer((_req, res) => {
       res.end("occupied-main");
     });
     await new Promise<void>((resolve) => occupiedMain.listen(mainPort, "127.0.0.1", resolve));
+    const standalonePort = await findFreePort();
 
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-main-rollback-"));
     const paseoHome = path.join(paseoHomeRoot, ".paseo");
@@ -1097,7 +1099,7 @@ function probeWebSocketConnection(
   });
 }
 
-test("startup closes stale active records before serving status without resuming sessions", async () => {
+test("disabled recovery closes stale active records without resuming sessions", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-stale-status-"));
   const logger = pino({ level: "silent" });
   const storagePath = path.join(root, ".paseo", "agents");
@@ -1137,6 +1139,7 @@ test("startup closes stale active records before serving status without resuming
       lastStatus: status as StoredAgentRecord["lastStatus"],
       title: `Keep ${status}`,
       labels: { "paseo.parent-agent-id": "parent", custom: "keep" },
+      metadata: {},
       persistence: { provider: "codex", sessionId: `session-${index}` },
       config: { modeId: "full-access" },
       requiresAttention: true,
@@ -1149,6 +1152,7 @@ test("startup closes stale active records before serving status without resuming
   let sessionsCreated = 0;
   const handle = await createTestPaseoDaemon({
     paseoHomeRoot: root,
+    resumeOnStartup: false,
     agentClients: createTestAgentClients({
       beforeCreateSession: async () => {
         sessionsCreated++;
@@ -1157,19 +1161,22 @@ test("startup closes stale active records before serving status without resuming
   });
   const client = new DaemonClient({ url: `ws://127.0.0.1:${handle.port}/ws` });
   try {
-    const expected = records.map((record) => ({
-      ...record,
-      lastStatus:
-        record.lastStatus === "running" || record.lastStatus === "initializing"
-          ? "closed"
-          : record.lastStatus,
-    }));
+    const expected = records.map((record) => {
+      const busy = record.lastStatus === "running" || record.lastStatus === "initializing";
+      return {
+        ...record,
+        ...(busy ? { resumeOnStartup: false } : {}),
+        lastStatus: busy ? "closed" : record.lastStatus,
+      };
+    });
     expect(
-      (await handle.daemon.agentStorage.list()).sort((a, b) => a.id.localeCompare(b.id)),
+      (await handle.daemon.agentStorage.listAll()).sort((a, b) => a.id.localeCompare(b.id)),
     ).toEqual(expected.sort((a, b) => a.id.localeCompare(b.id)));
     // A fresh reader proves the repaired states were written, rather than projected only in memory.
     expect(
-      (await new AgentStorage(storagePath, logger).list()).sort((a, b) => a.id.localeCompare(b.id)),
+      (await new AgentStorage(storagePath, logger).listAll()).sort((a, b) =>
+        a.id.localeCompare(b.id),
+      ),
     ).toEqual(expected);
     expect(handle.daemon.agentManager.listAgents()).toEqual([]);
     expect(sessionsCreated).toBe(0);
@@ -1194,7 +1201,7 @@ test("startup closes stale active records before serving status without resuming
   }
 }, 30_000);
 
-test.each(["reject", "stall"] as const)(
+test.skipIf(!isClaudeAvailable()).each(["reject", "stall"] as const)(
   "shutdown closes Claude and its process despite a %s peer and stalled SDK handshake",
   async (failure) => {
     let child: ChildProcess | undefined;

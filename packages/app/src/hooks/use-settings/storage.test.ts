@@ -228,6 +228,39 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.chatOutlineEnabled).toBe(false);
   });
 
+  it("uses Enter to send by default", async () => {
+    const deps = makeDeps();
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sendShortcut).toBe("enter");
+    expect(DEFAULT_CLIENT_SETTINGS.sendShortcut).toBe("enter");
+  });
+
+  it("loads the modifier Enter send preference", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sendShortcut: "mod-enter" }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sendShortcut).toBe("mod-enter");
+  });
+
+  it("falls back to Enter when the stored send shortcut is invalid", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ sendShortcut: "yes" }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.sendShortcut).toBe("enter");
+  });
+
   it("defaults sidebar navigation items to an empty preference list", async () => {
     const deps = makeDeps();
 
@@ -268,7 +301,7 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarNavItems).toEqual([]);
   });
 
-  it("loads stored sidebar footer items in order and defaults them to empty", async () => {
+  it("loads stored sidebar footer items in order, dropping the migrated usage entry", async () => {
     expect((await loadAppSettingsFromStorage(makeDeps())).sidebarFooterItems).toEqual([]);
 
     const deps = makeDeps({
@@ -289,7 +322,6 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarFooterItems).toEqual([
       { key: "help", visible: false },
       { key: "plugin:sync:status", visible: true },
-      { key: "usage", visible: false },
     ]);
   });
 
@@ -298,6 +330,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "used",
       pins: null,
       serverId: null,
+      cardOrder: [],
+      cardsOff: [],
     });
 
     const deps = makeDeps({
@@ -322,6 +356,8 @@ describe("loadAppSettingsFromStorage", () => {
         { sourceId: "claude", windowId: "five-hour" },
       ],
       serverId: "server",
+      cardOrder: [],
+      cardsOff: [],
     });
   });
 
@@ -337,6 +373,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "remaining",
       pins: [],
       serverId: "server",
+      cardOrder: [],
+      cardsOff: [],
     });
   });
 
@@ -357,6 +395,8 @@ describe("loadAppSettingsFromStorage", () => {
       displayAs: "used",
       pins: [{ sourceId: "claude", windowId: "weekly" }],
       serverId: null,
+      cardOrder: [],
+      cardsOff: [],
     });
   });
 
@@ -1100,49 +1140,64 @@ describe("parseClampedFontSize", () => {
   });
 });
 
-describe("content max width", () => {
-  it("follows the current default until the user picks a width", async () => {
+describe("content width", () => {
+  it("uses the default width when no preference is saved", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();
 
     await saveAppSettings({ queryClient, updates: { codeFontSize: 14 }, deps });
 
-    const stored = JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null");
-    expect(stored.contentMaxWidth).toBeNull();
-    expect(resolveContentMaxWidth(await loadAppSettingsFromStorage(deps))).toBe(
-      DEFAULT_CONTENT_MAX_WIDTH,
-    );
+    const settings = await loadAppSettingsFromStorage(deps);
+    expect(settings.contentWidth).toBe("default");
+    expect(resolveContentMaxWidth(settings)).toBe(DEFAULT_CONTENT_MAX_WIDTH);
   });
 
-  it("keeps a picked width and returns to the default when reset", async () => {
+  it.each([
+    ["wide", 1200],
+    ["full", undefined],
+    ["default", DEFAULT_CONTENT_MAX_WIDTH],
+  ] as const)("persists the %s preset and resolves its width", async (contentWidth, expected) => {
     const deps = makeDeps();
     const queryClient = new QueryClient();
+    await saveAppSettings({ queryClient, updates: { contentWidth }, deps });
 
-    await saveAppSettings({ queryClient, updates: { contentMaxWidth: 1600 }, deps });
-    expect(resolveContentMaxWidth(await loadAppSettingsFromStorage(deps))).toBe(1600);
-
-    await saveAppSettings({ queryClient, updates: { contentMaxWidth: null }, deps });
-    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null").contentMaxWidth).toBe(
-      null,
-    );
-    expect(resolveContentMaxWidth(await loadAppSettingsFromStorage(deps))).toBe(
-      DEFAULT_CONTENT_MAX_WIDTH,
-    );
+    const settings = await loadAppSettingsFromStorage(deps);
+    expect(settings.contentWidth).toBe(contentWidth);
+    expect(resolveContentMaxWidth(settings)).toBe(expected);
   });
 
-  it("clamps stored widths and drops malformed ones to the default", async () => {
-    const load = (contentMaxWidth: unknown) =>
-      loadAppSettingsFromStorage(
-        makeDeps({
-          storage: createInMemoryKeyValueStorage({
-            [APP_SETTINGS_KEY]: JSON.stringify({ contentMaxWidth }),
-          }),
-        }),
-      );
+  it("preserves a legacy custom width until a preset is picked", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ contentMaxWidth: 1600 }),
+      }),
+    });
+    const queryClient = new QueryClient();
+    const settings = await loadAppSettingsFromStorage(deps);
+    expect(settings.contentWidth).toBe(1600);
+    expect(resolveContentMaxWidth(settings)).toBe(1600);
 
-    expect((await load(100_000)).contentMaxWidth).toBe(4000);
-    expect((await load(10)).contentMaxWidth).toBe(600);
-    expect((await load("wide")).contentMaxWidth).toBeNull();
+    await saveAppSettings({ queryClient, updates: { codeFontSize: 14 }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).contentWidth).toBe(1600);
+
+    await saveAppSettings({ queryClient, updates: { contentWidth: "default" }, deps });
+    expect((await loadAppSettingsFromStorage(deps)).contentWidth).toBe("default");
+  });
+
+  it.each([
+    [100_000, 4000],
+    [10, 600],
+    [null, "default"],
+    ["wide", "default"],
+  ])("normalizes legacy width %s on load", async (contentMaxWidth, expected) => {
+    const settings = await loadAppSettingsFromStorage(
+      makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ contentMaxWidth }),
+        }),
+      }),
+    );
+    expect(settings.contentWidth).toBe(expected);
   });
 });
 

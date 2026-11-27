@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyStreamEvent,
   createUserMessage,
+  dropLocalPromptEchoesFromHead,
   handoffCreatedAgentUserMessageToStream,
   hydrateStreamState,
   mergeToolCallDetail,
@@ -678,6 +679,82 @@ describe("stream reducer canonical tool calls", () => {
     const tools = state.filter(isAgentToolCallItem);
     expect(tools.map((tool) => tool.turnId)).toEqual(["autonomous-turn-1", "autonomous-turn-2"]);
     expect(new Set(tools.map((tool) => tool.id)).size).toBe(2);
+  });
+
+  it.each(["live", "canonical"] as const)(
+    "keeps current tool identity during %s updates when an older turn reports late",
+    (source) => {
+      let state: StreamItem[] = [];
+      const events = [
+        { callId: "background", turnId: "codex-turn-17", status: "running" as const },
+        { callId: "exec-current", turnId: "codex-turn-18", status: "running" as const },
+        { callId: "background", turnId: "codex-turn-17", status: "completed" as const },
+        { callId: "exec-current", turnId: "codex-turn-18", status: "completed" as const },
+      ];
+      for (const [index, item] of events.entries()) {
+        state = reduceStreamUpdate(
+          state,
+          canonicalToolTimeline({
+            provider: "codex",
+            name: "exec_command",
+            ...item,
+          }),
+          new Date(index * 1000),
+          { source },
+        );
+      }
+      expect(
+        state.filter(isAgentToolCallItem).map((item) => ({
+          id: item.id,
+          turnId: item.turnId,
+          status: item.payload.data.status,
+        })),
+      ).toEqual([
+        {
+          id: "agent_tool_turn:codex-turn-17/background",
+          turnId: "codex-turn-17",
+          status: "completed",
+        },
+        {
+          id: "agent_tool_turn:codex-turn-18/exec-current",
+          turnId: "codex-turn-18",
+          status: "completed",
+        },
+      ]);
+    },
+  );
+
+  it("does not move reasoning into an older turn when a late tool update finalizes it", () => {
+    const background = canonicalToolTimeline({
+      provider: "codex",
+      name: "exec_command",
+      callId: "background",
+      turnId: "old",
+      status: "running",
+    });
+    let state = reduceStreamUpdate([], background, new Date(0));
+    state = reduceStreamUpdate(
+      state,
+      {
+        type: "timeline",
+        provider: "codex",
+        turnId: "current",
+        item: { type: "reasoning", text: "Working on the current request" },
+      },
+      new Date(1),
+    );
+    state = reduceStreamUpdate(
+      state,
+      canonicalToolTimeline({
+        provider: "codex",
+        name: "exec_command",
+        callId: "background",
+        turnId: "old",
+        status: "completed",
+      }),
+      new Date(2),
+    );
+    expect(state.at(-1)).toMatchObject({ kind: "thought", turnId: "current", status: "ready" });
   });
 
   it("merges lifecycle updates for the same call occurrence", () => {
@@ -2681,5 +2758,50 @@ describe("settleInterruptedStreamItems", () => {
   it("returns the same array when there is nothing to settle", () => {
     const rows = [toolCall("current", "running", "turn-1")];
     expect(settleInterruptedStreamItems(rows, { activeTurnId: "turn-1" })).toBe(rows);
+  });
+});
+
+describe("dropLocalPromptEchoesFromHead", () => {
+  const timestamp = new Date("2026-11-19T17:19:00.000Z");
+
+  function positionedPrompt(clientMessageId: string): StreamItem {
+    return createUserMessage({
+      id: "canonical",
+      text: "Faça com que todos os ingressos não fiquem disponíveis",
+      timestamp,
+      clientMessageId,
+      timelineCursor: { epoch: "epoch-1", seq: 1 },
+    });
+  }
+
+  function localEcho(clientMessageId: string): StreamItem {
+    return createUserMessage({
+      id: "local",
+      text: "Faça com que todos os ingressos não fiquem disponíveis",
+      timestamp,
+      clientMessageId,
+    });
+  }
+
+  it("drops a local echo whose canonical copy is already positioned in the tail", () => {
+    const head = [localEcho("client-1")];
+    const result = dropLocalPromptEchoesFromHead([positionedPrompt("client-1")], head);
+    expect(result).toEqual([]);
+  });
+
+  it("drops the echo even when only the text and timestamp identify the pair", () => {
+    const head = [localEcho("client-1")];
+    const canonical = { ...positionedPrompt("provider-id"), clientMessageId: undefined };
+    expect(dropLocalPromptEchoesFromHead([canonical], head)).toEqual([]);
+  });
+
+  it("keeps a head row when no positioned canonical copy exists", () => {
+    const head = [localEcho("client-1")];
+    expect(dropLocalPromptEchoesFromHead([], head)).toBe(head);
+  });
+
+  it("keeps prompts from different clients that happen to share text", () => {
+    const head = [localEcho("client-2")];
+    expect(dropLocalPromptEchoesFromHead([positionedPrompt("client-1")], head)).toBe(head);
   });
 });

@@ -1,3 +1,6 @@
+import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
+import { useAddHost } from "@/hosts/add-host";
+import { Modal } from "@/components/ui/modal";
 import { usePanelStore } from "@/stores/panel-store";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { router } from "expo-router";
@@ -22,14 +25,7 @@ import {
   type ComponentType,
   type RefObject,
 } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type PressableStateCallbackType,
-} from "react-native";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import {
   EditingTextInput as TextInput,
   type EditingTextInputHandle,
@@ -74,19 +70,15 @@ import {
 } from "@/components/project-picker-options";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useRevealActiveItem } from "@/components/ui/scroll-reveal";
-import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
+import { useHardwareKeyboardPresent } from "@/keyboard";
 import { getIsElectronRuntime } from "@/constants/layout";
-import { isNative, isWeb } from "@/constants/platform";
+import { isWeb } from "@/constants/platform";
 import { pickDirectory } from "@/desktop/pick-directory";
 import { useFetchQuery } from "@/data/query";
 import { getOpenProjectFailureReason, registerProjectDescriptor } from "@/hooks/open-project";
 import { useIsLocalDaemon, useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useCloneGithubProject, useOpenProject } from "@/hooks/use-open-project";
-import {
-  OverlayLayerProvider,
-  useGlobalWebOverlayLayer,
-  useWebOverlayRegistration,
-} from "@/lib/overlay-root";
+import { OverlayLayerProvider, useGlobalOverlayLayer } from "@/lib/overlay-root";
 import {
   useHosts,
   useHostRuntimeClient,
@@ -98,7 +90,7 @@ import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
 import type { AddProjectFlowRequest } from "@/stores/add-project-flow-store";
 import type { Theme } from "@/styles/theme";
 import { shortenPath } from "@/utils/shorten-path";
-import { buildNewWorkspaceRoute, buildSettingsAddHostRoute } from "@/utils/host-routes";
+import { buildNewWorkspaceRoute } from "@/utils/host-routes";
 
 interface AddProjectFlowProps {
   request: AddProjectFlowRequest;
@@ -307,7 +299,7 @@ function FlowRow({
 }
 
 function FlowHint({ keys, action }: { keys: string[]; action: string }) {
-  const shortcutsAvailable = useKeyboardShortcutsAvailable();
+  const shortcutsAvailable = useHardwareKeyboardPresent();
   if (!shortcutsAvailable) return null;
 
   return (
@@ -328,9 +320,19 @@ function setPageStatus(
   );
 }
 
+function setNewDirectoryStatus(
+  state: AddProjectFlowState,
+  input: { isSubmitting?: boolean; error?: string | null; errorCode?: string | null },
+): AddProjectFlowState {
+  return updateCurrentAddProjectPage(state, (page) =>
+    page.kind === "new-directory-name" ? { ...page, ...input } : page,
+  );
+}
+
 // The product flow is intentionally one cohesive page-stack state machine.
 // eslint-disable-next-line complexity
 export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
+  const addHost = useAddHost();
   const hosts = useHosts();
   const hostIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
   const connectionStatuses = useHostRuntimeConnectionStatuses(hostIds);
@@ -343,6 +345,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const githubSearchByHost = useHostFeatureMap(hostIds, "workspaceGithubRepositorySearch");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
+  // COMPAT(projectCreateDirectoryRecursive): remove the gate when the version floor supports it.
+  const createParentDirectoriesByHost = useHostFeatureMap(
+    hostIds,
+    "projectCreateDirectoryRecursive",
+  );
   const localServerId = useLocalDaemonServerId();
   const availableHosts = useMemo<AddProjectHost[]>(
     () =>
@@ -360,12 +367,14 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             canCloneGithubRepositories: githubCloneByHost.get(host.serverId) === true,
             canSearchGithubRepositories: githubSearchByHost.get(host.serverId) === true,
             canCreateDirectory: createDirectoryByHost.get(host.serverId) === true,
+            canCreateParentDirectories: createParentDirectoriesByHost.get(host.serverId) === true,
           },
         ];
       }),
     [
       connectionStatuses,
       createDirectoryByHost,
+      createParentDirectoriesByHost,
       githubCloneByHost,
       githubSearchByHost,
       hosts,
@@ -464,13 +473,10 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   });
 
   const handleBack = useCallback(() => {
-    setState((current) => {
-      const previous = backAddProjectPage(current);
-      if (previous) return previous;
-      onClose();
-      return current;
-    });
-  }, [onClose]);
+    const previous = backAddProjectPage(state);
+    if (previous) setState(previous);
+    else onClose();
+  }, [onClose, state]);
 
   const openNewWorkspaceForProject = useCallback(
     (serverId: string, project: WorkspaceProjectDescriptorPayload) => {
@@ -602,6 +608,63 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     },
     [cloneGithubProject, openNewWorkspaceForProject],
   );
+  const createDirectory = useCallback(
+    async (options?: { recursive?: boolean }) => {
+      if (page.kind !== "new-directory-name" || !client) return;
+      const name = page.name.trim();
+      if (!name || name === "." || name === ".." || /[\\/]/.test(name)) {
+        setState((current) =>
+          setNewDirectoryStatus(current, { error: "Enter a directory name", errorCode: null }),
+        );
+        return;
+      }
+      if (submissionInFlightRef.current) return;
+      submissionInFlightRef.current = true;
+      setState((current) =>
+        setNewDirectoryStatus(current, { isSubmitting: true, error: null, errorCode: null }),
+      );
+      try {
+        const payload = await client.createProjectDirectory({
+          parentPath: page.parentPath,
+          name,
+          ...(options?.recursive ? { recursive: true } : {}),
+        });
+        if (payload.error || !payload.project) {
+          setState((current) =>
+            setNewDirectoryStatus(current, {
+              isSubmitting: false,
+              error: payload.error ?? "Unable to create directory",
+              errorCode: payload.errorCode ?? null,
+            }),
+          );
+          return;
+        }
+        registerProjectDescriptor({
+          serverId: page.hostId,
+          project: payload.project,
+          upsertProject,
+          setHasHydratedWorkspaces,
+        });
+        openNewWorkspaceForProject(page.hostId, payload.project);
+      } catch {
+        setState((current) =>
+          setNewDirectoryStatus(current, {
+            isSubmitting: false,
+            error: "Unable to create directory",
+            errorCode: null,
+          }),
+        );
+      } finally {
+        submissionInFlightRef.current = false;
+      }
+    },
+    [client, openNewWorkspaceForProject, page, setHasHydratedWorkspaces, upsertProject],
+  );
+  const canSuggestParentDirectories =
+    page.kind === "new-directory-name" &&
+    page.errorCode === "parent_directory_not_found" &&
+    host?.canCreateParentDirectories === true &&
+    !page.isSubmitting;
   const rows = useMemo<FlowRowOption[]>(() => {
     if (page.kind === "host") {
       const choices = filterAddProjectHosts(state.hosts, page.query).map<FlowRowOption>(
@@ -622,9 +685,9 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           icon: Plus,
           testID: "add-project-flow-add-host",
           select: () => {
+            // The native project Modal must release its window before the root sheet opens.
             onClose();
-            usePanelStore.getState().showMobileAgent();
-            router.push(buildSettingsAddHostRoute(Date.now()));
+            addHost();
           },
         });
       }
@@ -717,12 +780,27 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           setState((current) => openNewDirectoryNamePage(current, page.hostId, option.path)),
       }));
     }
+    if (page.kind === "new-directory-name" && canSuggestParentDirectories) {
+      return [
+        {
+          id: "create-parent-directories",
+          title: "Create parent directories",
+          subtitle: `Also create ${shortenPath(page.parentPath)}`,
+          icon: FolderPlus,
+          testID: "add-project-flow-create-parents",
+          select: () => void createDirectory({ recursive: true }),
+        },
+      ];
+    }
     return [];
   }, [
+    canSuggestParentDirectories,
     cloneRepository,
+    createDirectory,
     directoryPaths,
     githubQuery.data,
     host,
+    addHost,
     onClose,
     openAddedProject,
     page,
@@ -740,60 +818,15 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       listKey: rowListKey,
       scrollRef: resultsRef,
     });
-  const createDirectory = useCallback(async () => {
-    if (page.kind !== "new-directory-name" || !client) return;
-    const name = page.name.trim();
-    if (!name || name === "." || name === ".." || /[\\/]/.test(name)) {
-      setState((current) =>
-        setPageStatus(current, "new-directory-name", { error: "Enter a directory name" }),
-      );
+  const submitActive = useCallback(() => {
+    const option = rows[activeIndex];
+    if (option && !option.disabled) {
+      option.select();
       return;
     }
-    if (submissionInFlightRef.current) return;
-    submissionInFlightRef.current = true;
-    setState((current) =>
-      setPageStatus(current, "new-directory-name", { isSubmitting: true, error: null }),
-    );
-    try {
-      const payload = await client.createProjectDirectory({
-        parentPath: page.parentPath,
-        name,
-      });
-      if (payload.error || !payload.project) {
-        setState((current) =>
-          setPageStatus(current, "new-directory-name", {
-            isSubmitting: false,
-            error: payload.error ?? "Unable to create directory",
-          }),
-        );
-        return;
-      }
-      registerProjectDescriptor({
-        serverId: page.hostId,
-        project: payload.project,
-        upsertProject,
-        setHasHydratedWorkspaces,
-      });
-      openNewWorkspaceForProject(page.hostId, payload.project);
-    } catch {
-      setState((current) =>
-        setPageStatus(current, "new-directory-name", {
-          isSubmitting: false,
-          error: "Unable to create directory",
-        }),
-      );
-    } finally {
-      submissionInFlightRef.current = false;
-    }
-  }, [client, openNewWorkspaceForProject, page, setHasHydratedWorkspaces, upsertProject]);
-
-  const submitActive = useCallback(() => {
     if (page.kind === "new-directory-name") {
       void createDirectory();
-      return;
     }
-    const option = rows[activeIndex];
-    if (option && !option.disabled) option.select();
   }, [activeIndex, createDirectory, page.kind, rows]);
 
   const handleKey = useCallback(
@@ -818,29 +851,21 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     [activeIndex, handleBack, rows, submitActive],
   );
 
-  const modalLayer = useGlobalWebOverlayLayer("modal", isWeb);
-  const handleWebOverlayKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+  const modalLayer = useGlobalOverlayLayer("modal", true);
+  const handleOverlayKeyDown = useCallback(
+    (event: KeyboardInputEvent) => {
       if (!handleKey(event.key)) return false;
       event.preventDefault();
       return true;
     },
     [handleKey],
   );
-  const setWebOverlayScope = useWebOverlayRegistration({
-    active: isWeb,
+  const setOverlayScope = useOverlayRegistration({
+    keys: ["Escape", "Enter", "ArrowUp", "ArrowDown"],
+    active: true,
     layer: modalLayer,
-    onKeyDown: handleWebOverlayKeyDown,
+    onKeyDown: handleOverlayKeyDown,
   });
-
-  const handleNativeKeyPress = useCallback(
-    ({ nativeEvent: { key } }: { nativeEvent: { key: string } }) => {
-      if (key === "ArrowDown" || key === "ArrowUp" || key === "Escape") {
-        handleKey(key);
-      }
-    },
-    [handleKey],
-  );
 
   const handleInputChange = useCallback((value: string) => {
     setState((current) =>
@@ -876,7 +901,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       <View style={styles.overlay} testID="add-project-flow">
         <Pressable style={styles.backdrop} onPress={onClose} testID="add-project-flow-backdrop" />
         <View
-          ref={setWebOverlayScope}
+          ref={setOverlayScope}
           style={styles.panel}
           testID={`add-project-flow-page-${page.kind}`}
           accessibilityLabel={`Add project: ${page.kind}`}
@@ -895,29 +920,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 ) : null}
               </View>
             </View>
-            {page.kind === "method" && isNative ? (
-              // Native hardware-keyboard events need a focused responder even without a visible field.
-              <TextInput
-                ref={inputRef}
-                onKeyPress={handleNativeKeyPress}
-                onSubmitEditing={submitActive}
-                showSoftInputOnFocus={false}
-                caretHidden
-                contextMenuHidden
-                accessible={false}
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-                pointerEvents="none"
-                style={styles.keyboardCapture}
-                testID="add-project-flow-keyboard-capture"
-              />
-            ) : null}
             {page.kind !== "method" ? (
               <ThemedTextInput
                 ref={inputRef}
                 initialValue={pageInput(page)}
                 onChangeText={handleInputChange}
-                onKeyPress={isWeb ? undefined : handleNativeKeyPress}
                 onSubmitEditing={isWeb ? undefined : submitActive}
                 placeholder={pagePlaceholder(page)}
                 style={styles.input}
@@ -991,7 +998,10 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           </ScrollView>
           <View style={styles.footer} testID="add-project-flow-footer">
             <FlowHint keys={NAVIGATION_HINT_KEYS} action="Navigate" />
-            <FlowHint keys={SELECT_HINT_KEYS} action="Select" />
+            <FlowHint
+              keys={SELECT_HINT_KEYS}
+              action={canSuggestParentDirectories ? "Create parents" : "Select"}
+            />
             <FlowHint keys={ESCAPE_HINT_KEYS} action={state.pages.length > 1 ? "Back" : "Close"} />
           </View>
         </View>
@@ -999,7 +1009,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     </Modal>
   );
 
-  return createElement(OverlayLayerProvider, { layer: isWeb ? modalLayer : 0 }, modal);
+  return createElement(OverlayLayerProvider, { layer: modalLayer }, modal);
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -1073,12 +1083,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1],
     outlineStyle: "none",
   } as object,
-  keyboardCapture: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
   results: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   resultsContent: { paddingVertical: theme.spacing[2] },
   row: {

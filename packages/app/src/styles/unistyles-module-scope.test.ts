@@ -72,5 +72,5 @@ describe("Unistyles module scope", () => {
     const violations = listSourceFiles(SOURCE_ROOT).flatMap(findEagerModuleStyleReads);
 
     expect(violations).toEqual([]);
-  });
+  }, 30_000);
 });

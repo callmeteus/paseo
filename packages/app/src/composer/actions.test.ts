@@ -18,6 +18,7 @@ import {
   type MessageSubmissionRecord,
 } from "@/composer/submission/model";
 import {
+  AcceptedComposerMessageError,
   uploadFileAttachments,
   cancelComposerAgent,
   dispatchComposerAgentMessage,
@@ -544,7 +545,11 @@ describe("dispatchComposerAgentMessage", () => {
         submission,
         activeTurnBehavior: "steer",
       }),
-    ).rejects.toBe(transportError);
+    ).rejects.toMatchObject({
+      name: "AcceptedComposerMessageError",
+      message: transportError.message,
+      originalError: transportError,
+    });
   });
 
   it("sends text + image data + structured attachments and appends user_message to the tail when head is empty", async () => {
@@ -816,8 +821,11 @@ describe("removeQueuedComposerMessage", () => {
         ],
       ]),
     );
+    const markRemoved = vi.fn();
+    queue.markRemoved = markRemoved;
 
     expect(removeQueuedComposerMessage({ agentId: "agent", messageId: "drop", queue })).toBe(true);
+    expect(markRemoved).toHaveBeenCalledWith("agent", "drop");
     expect(queue.state.get("agent")).toEqual([{ id: "keep", text: "stay", attachments: [] }]);
   });
 
@@ -908,6 +916,30 @@ describe("sendQueuedComposerMessageNow", () => {
     expect(result).toEqual({ status: "submitted" });
     expect(queue.state.get("agent")).toEqual([]);
     expect(submitted).toEqual([{ text: "send me", attachments: [review], messageId: "msg-1" }]);
+  });
+
+  it("keeps the entry removed when delivery was accepted but the RPC response was lost", async () => {
+    const queue = createFakeQueue(
+      new Map([["agent", [{ id: "msg-1", text: "already delivered", attachments: [] }]]]),
+    );
+    const markRemoved = vi.fn();
+    const restore = vi.fn();
+    queue.markRemoved = markRemoved;
+    queue.restore = restore;
+
+    const result = await sendQueuedComposerMessageNow({
+      agentId: "agent",
+      messageId: "msg-1",
+      queue,
+      submitMessage: async () => {
+        throw new AcceptedComposerMessageError(new Error("connection lost after delivery"));
+      },
+    });
+
+    expect(result).toEqual({ status: "submitted" });
+    expect(queue.state.get("agent")).toEqual([]);
+    expect(markRemoved).toHaveBeenCalledWith("agent", "msg-1");
+    expect(restore).not.toHaveBeenCalled();
   });
 
   it("restores the queued entry to the front and surfaces the error message on failure", async () => {

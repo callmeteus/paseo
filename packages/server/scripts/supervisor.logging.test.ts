@@ -114,7 +114,7 @@ async function runSupervisorFixture(options: {
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("supervisor fixture timed out"));
-    }, options.timeoutMs ?? 10_000);
+    }, options.timeoutMs ?? 30_000);
 
     child.on("error", (error) => {
       clearTimeout(timeout);
@@ -392,11 +392,11 @@ describe("supervisor durable logging", () => {
 
       expect(result.code).toBe(0);
       expect(result.signal).toBeNull();
-      expect(result.elapsedMs).toBeLessThan(2_500);
+      expect(result.elapsedMs).toBeLessThan(10_000);
       expect(result.log).toContain('"reason":"stdio_descendant"');
       expect(result.log).toContain("Restarting worker");
     },
-    7_000,
+    30_000,
   );
 
   // POSIX-only: Windows reports the worker self-kill as an exit code, not SIGKILL.

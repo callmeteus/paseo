@@ -1,6 +1,10 @@
 import { useWorkspace, useFileUrl, type PluginFilePanelProps } from "@getpaseo/plugin/client";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { MarkdownPreviewFind } from "./markdown-preview/preview-find";
+import { isWeb } from "@/constants/platform";
+import { usePaneFocus } from "@/panels/pane-context";
+import { useRetainedPanelActive } from "@/components/retained-panel";
 import { StyleSheet } from "react-native-unistyles";
 import { ZoomableImage } from "@/components/zoomable-viewport/image";
 import { AssistantSelectionCopySurface } from "@/assistant-selection-copy/surface";
@@ -63,10 +67,51 @@ function MarkdownPreview({ text, params, workspaceId, host }: TextFilePreviewPro
     serverId: host.id,
     workspaceId,
   });
+  const contentRef = useRef<View | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const { isInteractive } = usePaneFocus();
+  const panelActive = useRetainedPanelActive();
+  const handleContentKeyDown = useCallback(
+    (event: ReactKeyboardEvent) => {
+      if (!isWeb || !isInteractive || !panelActive) return;
+      const target = event.target as Element | null;
+      if (target?.closest?.('input, textarea, [contenteditable="true"]')) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        const node = contentRef.current as unknown as HTMLElement | null;
+        if (node && typeof window !== "undefined" && window.getSelection) {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      }
+    },
+    [isInteractive, panelActive],
+  );
+  const previewRootRef = useRef<HTMLElement | null>(null);
+  const previewScrollRef = useRef<HTMLElement | null>(null);
+  const setScrollRef = useCallback((event: { currentTarget: unknown }) => {
+    if (isWeb) previewScrollRef.current = event.currentTarget as HTMLElement;
+  }, []);
+  const setContentRef = useCallback((node: View | null) => {
+    contentRef.current = node;
+    if (isWeb) previewRootRef.current = node as unknown as HTMLElement;
+  }, []);
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator>
-        <View onLayout={handleLayout}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.container}
+        showsVerticalScrollIndicator
+        onLayout={setScrollRef}
+      >
+        <View
+          ref={setContentRef}
+          onLayout={handleLayout}
+          {...(isWeb ? { onKeyDown: handleContentKeyDown } : {})}
+        >
           <AssistantSelectionCopySurface
             onAddSelectionToChat={canAddSelection ? addSelection : undefined}
             onAddSelectionToSideChat={
@@ -83,6 +128,7 @@ function MarkdownPreview({ text, params, workspaceId, host }: TextFilePreviewPro
           </AssistantSelectionCopySurface>
         </View>
       </ScrollView>
+      <MarkdownPreviewFind root={previewRootRef} scrollContainer={previewScrollRef} />
       {rendered ? null : <FilePanelLoading />}
     </View>
   );

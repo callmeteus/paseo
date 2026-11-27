@@ -7,6 +7,7 @@ import {
   rmSync,
   symlinkSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -476,6 +477,10 @@ describe("searchDirectoryEntries", () => {
     ).resolves.toEqual([]);
 
     mkdirSync(path.join(dynamicRoot, "fresh-project"));
+    // Coarse filesystem timestamps can leave the listing cache valid even after
+    // a child was added, so force a distinct mtime before the second lookup.
+    const changedAt = new Date(Date.now() + 2_000);
+    utimesSync(dynamicRoot, changedAt, changedAt);
 
     await expect(
       searchDirectoryEntries({

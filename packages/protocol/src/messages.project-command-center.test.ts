@@ -91,6 +91,16 @@ describe("project command-center protocol", () => {
     ).toBe(true);
 
     expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "project.create_directory.request",
+        parentPath: "/Users/example/dev",
+        name: "new-project",
+        requestId: "req-create-recursive",
+        recursive: true,
+      }).success,
+    ).toBe(true);
+
+    expect(
       SessionOutboundMessageSchema.parse({
         type: "project.create_directory.response",
         payload: {

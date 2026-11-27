@@ -367,7 +367,9 @@ test.each(["agent", "workspace"] as const)(
         error: null,
         agent: { id: created.id },
       });
-      const expectedTimeline = [
+      // The stream includes the submitted prompt, but a turn that fails before
+      // it gets a turn id is not persisted as a user message.
+      const streamedTimeline = [
         {
           type: "user_message",
           text: agent.initialPrompt,
@@ -376,14 +378,15 @@ test.each(["agent", "workspace"] as const)(
         },
         { type: "assistant_message", text: `[System Error] ${rejection}` },
       ];
+      const persistedTimeline = streamedTimeline.slice(1);
       expect(
         (await client.fetchAgentTimeline(created.id)).entries.map((entry) => entry.item),
-      ).toEqual(expectedTimeline);
-      expect(streamed).toEqual(expectedTimeline);
+      ).toEqual(persistedTimeline);
+      expect(streamed).toEqual(streamedTimeline);
       expect((await submit()).id).toBe(created.id);
       expect(
         (await client.fetchAgentTimeline(created.id)).entries.map((entry) => entry.item),
-      ).toEqual(expectedTimeline);
+      ).toEqual(persistedTimeline);
       expect((await client.fetchAgents()).entries).toHaveLength(1);
       expect({ sessions, prompts }).toEqual({ sessions: 1, prompts: 1 });
     } finally {

@@ -53,9 +53,13 @@ interface TestPaseoDaemonOptions {
   agentProfiles?: AgentProfile[];
   mcpServers?: PaseoDaemonConfig["mcpServers"];
   autoArchiveAfterMerge?: boolean;
+  resumeOnStartup?: boolean;
+  resumePrompt?: string;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
+  pluginRegistryUrl?: PaseoDaemonConfig["pluginRegistryUrl"];
   builtinPlugins?: BuiltinPluginLoader;
   plugins?: PaseoDaemonConfig["plugins"];
+  remoteAccess?: PaseoDaemonConfig["remoteAccess"];
 }
 
 export interface TestPaseoDaemon {
@@ -228,8 +232,12 @@ async function prepareTestDaemonConfig(
     agentProfiles: options.agentProfiles,
     mcpServers: options.mcpServers,
     autoArchiveAfterMerge: options.autoArchiveAfterMerge,
+    resumeOnStartup: options.resumeOnStartup,
+    resumePrompt: options.resumePrompt,
     pluginsEnabled: options.pluginsEnabled,
     plugins: options.plugins,
+    pluginRegistryUrl: options.pluginRegistryUrl,
+    remoteAccess: options.remoteAccess,
   };
   return { config, paseoHomeRoot, paseoHome, staticDir, createdDirs };
 }

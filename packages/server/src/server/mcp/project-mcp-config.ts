@@ -1,3 +1,4 @@
+// eslint-disable-next-line paseo/no-sync-io -- merge: pre-existing synchronous IO
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { McpServerConfig } from "@getpaseo/protocol/messages";

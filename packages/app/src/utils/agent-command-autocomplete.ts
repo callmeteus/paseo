@@ -6,7 +6,10 @@ import {
 } from "@getpaseo/protocol/search/text-match";
 import { collapsedSelection, type TextReplacement } from "./text-replacement";
 
+type CommandAutocompleteSource = "provider" | "plugin" | "client";
+
 interface CommandAutocompleteEntry {
+  source: CommandAutocompleteSource;
   command: {
     name: string;
     aliases?: readonly string[];
@@ -17,6 +20,15 @@ interface CommandAutocompleteEntry {
 interface InlineSkillCommandEntry extends CommandAutocompleteEntry {
   source: "provider" | "client";
 }
+
+// The list renders reversed above the input with the first entry selected. Paseo's own actions
+// run at once (`/exit` archives), so an empty query never selects one: they sort farthest from
+// the input, and with nothing else to list the menu waits for a search.
+const EMPTY_QUERY_SOURCE_ORDER: Record<CommandAutocompleteSource, number> = {
+  provider: 0,
+  plugin: 1,
+  client: 2,
+};
 
 export type SlashCommandPosition = "start" | "inline";
 
@@ -56,7 +68,11 @@ export function filterAndRankCommandAutocompleteEntries<TEntry extends CommandAu
 ): TEntry[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) {
-    return [...entries];
+    if (entries.every((entry) => entry.source === "client")) return [];
+    // Hermes has no `toSorted`.
+    return [...entries].sort(
+      (a, b) => EMPTY_QUERY_SOURCE_ORDER[a.source] - EMPTY_QUERY_SOURCE_ORDER[b.source],
+    );
   }
 
   const scoredEntries: ScoredCommandAutocompleteEntry<TEntry>[] = [];
@@ -117,6 +133,27 @@ export function highlightedCommandNames(
     names.push(name);
   }
   return names;
+}
+
+/**
+ * Combines every source of names the composer paints: provider commands,
+ * daemon commands, plugin slash commands and the host's installed skills.
+ * De-duplicates case-insensitively so a skill reported by more than one source
+ * is still painted once.
+ */
+export function mergeHighlightedCommandNames(groups: readonly (readonly string[])[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const group of groups) {
+    for (const rawName of group) {
+      const name = rawName.trim().replace(/^\//, "");
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+    }
+  }
+  return names.sort();
 }
 
 export function skillCommandNames(commands: readonly { name: string; kind?: string }[]): string[] {

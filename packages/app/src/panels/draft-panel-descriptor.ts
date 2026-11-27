@@ -6,9 +6,12 @@ export function buildDraftPanelDescriptor(input: {
   isCreating: boolean;
   pendingPrompt?: string | null;
   icon: ComponentType<PanelIconProps>;
+  draftId?: string;
 }): PanelDescriptor {
-  const { icon, isCreating, pendingPrompt } = input;
-  const newAgentLabel = i18n.t("panels.draft.newAgent");
+  const { icon, isCreating, pendingPrompt, draftId } = input;
+  const newAgentLabel = draftId?.startsWith("side:")
+    ? i18n.t("sideChat.title")
+    : i18n.t("panels.draft.newAgent");
   const creatingLabel = pendingPrompt?.trim() || newAgentLabel;
   if (isCreating) {
     return {

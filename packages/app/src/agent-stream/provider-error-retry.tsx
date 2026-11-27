@@ -7,22 +7,34 @@ import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { generateMessageId } from "@/types/stream";
 
 /**
- * Re-sends the prompt the provider rejected. The daemon drops that turn and the
- * composer restores its text, so the draft is the retry payload. The button is
- * hidden when there is nothing restored to send.
+ * Re-sends the prompt the provider rejected. The daemon normally drops that turn and the
+ * composer restores its text, so the draft is the preferred retry payload. The prompt is
+ * also present in the transcript, so keep the button available with that text as a fallback:
+ * a failed turn whose dropped-prompt event never reached the app used to leave the error
+ * card with no visible retry, and the user had to type something to make it appear.
  */
-export function ProviderErrorRetry({ serverId, agentId }: { serverId: string; agentId: string }) {
+export function ProviderErrorRetry({
+  serverId,
+  agentId,
+  fallbackText,
+}: {
+  serverId: string;
+  agentId: string;
+  fallbackText?: string;
+}) {
   const { t } = useTranslation();
   const [isRetrying, setIsRetrying] = useState(false);
   const draftKey = buildDraftStoreKey({ serverId, agentId });
-  const hasPrompt = useDraftStore((state) => {
+  const draftText = useDraftStore((state) => {
     const text = state.getDraftInput(draftKey)?.text;
-    return typeof text === "string" && text.trim().length > 0;
+    return typeof text === "string" && text.trim().length > 0 ? text : undefined;
   });
+  const retryText = draftText ?? (fallbackText?.trim() ? fallbackText : undefined);
 
   const handleRetry = useCallback(() => {
-    const text = useDraftStore.getState().getDraftInput(draftKey)?.text;
-    if (!text || !text.trim()) return;
+    const text =
+      useDraftStore.getState().getDraftInput(draftKey)?.text?.trim() || fallbackText?.trim();
+    if (!text) return;
     const client = getHostRuntimeStore().getClient(serverId);
     if (!client) return;
     setIsRetrying(true);
@@ -36,16 +48,14 @@ export function ProviderErrorRetry({ serverId, agentId }: { serverId: string; ag
         setIsRetrying(false);
       }
     })();
-  }, [agentId, draftKey, serverId]);
-
-  if (!hasPrompt) return null;
+  }, [agentId, draftKey, fallbackText, serverId]);
 
   return (
     <Button
       variant="outline"
       size="sm"
       testID="provider-error-retry"
-      disabled={isRetrying}
+      disabled={isRetrying || !retryText}
       onPress={handleRetry}
     >
       {t("common.actions.retry")}

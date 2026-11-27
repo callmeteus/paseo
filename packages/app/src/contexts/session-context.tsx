@@ -12,11 +12,10 @@ import {
   refreshAgentInitializationTimeout,
 } from "@/hooks/use-agent-initialization";
 import type { StreamItem } from "@/types/stream";
-import { deriveAgentStreamTurnLiveness } from "@/timeline/session-stream-reducers";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import { requestTimelineReplacement } from "@/timeline/timeline-replacement";
 import { type ViewedTimelineOwner } from "@/timeline/viewed-timeline-sync";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { AgentQueuedMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 import {
   buildAgentAttentionNotificationPayload,
@@ -30,6 +29,8 @@ import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import { useLimitResumeRunner } from "@/agent-stream/limit-resume-run";
 import { getHostRuntimeStore, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { restoreDroppedPrompt } from "@/composer/recover-dropped-prompt";
+import { hydrateQueuedMessages } from "@/composer/queue-persistence";
+import { mergeQueuedMessages } from "@/composer/queue-merge";
 import { useVoiceAudioEngineOptional, useVoiceRuntimeOptional } from "@/contexts/voice-context";
 import type { AudioPlaybackSource } from "@/audio";
 import {
@@ -69,6 +70,8 @@ export type {
   ExplorerEntryKind,
   AgentFileExplorerState,
 } from "@/stores/session-store";
+
+const messageQueueApplyTails = new Map<string, Promise<void>>();
 
 type AudioOutputPayload = Extract<SessionOutboundMessage, { type: "audio_output" }>["payload"];
 
@@ -181,6 +184,33 @@ function notifyVoiceAbortFailure(
 ): void {
   if (data.type === "error" && data.metadata?.voiceAbortFailed === true) {
     notifyError(data.content);
+  }
+}
+
+async function applyMessageQueueChange(
+  serverId: string,
+  payload: { agentId: string; items: readonly AgentQueuedMessage[] },
+): Promise<void> {
+  const key = `${serverId}:${payload.agentId}`;
+  // Hydration may await image persistence. Apply events in arrival order so a slow older
+  // event cannot land after a newer removal and resurrect a message that was already sent.
+  const previous = messageQueueApplyTails.get(key) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const items = await hydrateQueuedMessages(payload.items);
+      useSessionStore.getState().setQueuedMessages(serverId, (queued) => {
+        const merged = new Map(queued);
+        merged.set(payload.agentId, mergeQueuedMessages(merged.get(payload.agentId), items));
+        return merged;
+      });
+      return undefined;
+    });
+  messageQueueApplyTails.set(key, next);
+  try {
+    await next;
+  } finally {
+    if (messageQueueApplyTails.get(key) === next) messageQueueApplyTails.delete(key);
   }
 }
 
@@ -373,8 +403,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     const onStream = (message: SessionOutboundMessage) => {
       if (message.type !== "agent_stream") return;
       const { agentId, event, timestamp, seq, epoch } = message.payload;
-      const parsedTimestamp = new Date(timestamp);
-      const streamEvent = event;
       if (
         event.type === "turn_started" ||
         event.type === "turn_completed" ||
@@ -383,18 +411,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       ) {
         voiceRuntime?.onTurnEvent(serverId, agentId, event.type);
       }
-      const turnLiveness = deriveAgentStreamTurnLiveness([
-        { event: streamEvent, seq, epoch, timestamp: parsedTimestamp },
-      ]);
-      if (turnLiveness.length > 0) {
-        getHostRuntimeStore().applyAgentTurnLiveness(serverId, agentId, turnLiveness);
-      }
-      sync.enqueueStreamEvent(agentId, {
-        event: streamEvent,
-        seq,
-        epoch,
-        timestamp: parsedTimestamp,
-      });
+      sync.applyStreamEvent(agentId, { event, seq, epoch, timestamp: new Date(timestamp) });
 
       // NOTE: We don't update lastActivityAt on every stream event to prevent
       // cascading rerenders. The agent_update handler updates agent.lastActivityAt
@@ -413,8 +430,10 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       });
     };
     const sync = getHostRuntimeStore().createViewedTimelineOwner(serverId, {
-      observe: (agentIds) => {
-        const observation = client.observeTimeline(agentIds);
+      canCheckFreshness: () =>
+        client.getLastServerInfoMessage()?.features?.timelineFreshnessCheck === true,
+      observe: (agentIds, cursors) => {
+        const observation = client.observeTimeline(agentIds, { cursors });
         observation.subscribe({
           snapshot: () => {},
           update: (message) => {
@@ -468,10 +487,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       reportError: (error) => {
         console.warn("[Session] viewed timeline synchronization failed", { serverId, error });
       },
-      schedule: (task, delayMs) => {
-        const timeout = setTimeout(task, delayMs);
-        return () => clearTimeout(timeout);
-      },
     });
     viewedTimelineSyncRef.current = sync;
     setViewedTimelineSync(serverId, sync);
@@ -507,6 +522,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         "status.server_info",
         "status.agent_commands_changed",
         "agent_prompt_dropped",
+        "agent.message_queue.changed",
       ],
       { notifications: true },
     );
@@ -537,6 +553,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         if (message.type !== "agent.provider_subagents.update") return;
         useProviderSubagentStore.getState().applyUpdate(serverId, message.payload);
       },
+    });
+
+    onFeed("agent.message_queue.changed", (message) => {
+      if (message.type !== "agent.message_queue.changed") return;
+      void applyMessageQueueChange(serverId, { agentId: message.agentId, items: message.items });
     });
 
     const unsubCheckoutStatusUpdate = onFeed("checkout_status_update", (message) => {

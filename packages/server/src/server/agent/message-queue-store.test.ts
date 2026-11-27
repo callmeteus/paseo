@@ -60,6 +60,53 @@ describe("MessageQueueStore", () => {
     await expect(store.list()).resolves.toEqual({});
   });
 
+  test("removes an accepted message id and keeps the remaining queue", async () => {
+    const { store } = await createStore();
+    await store.set("agent-1", [queuedMessage("one"), queuedMessage("two")]);
+
+    await expect(store.remove("agent-1", ["one"])).resolves.toEqual([queuedMessage("two")]);
+    await expect(store.get("agent-1")).resolves.toEqual([queuedMessage("two")]);
+  });
+
+  test("serializes an accepted-message removal behind a concurrent queue write", async () => {
+    const { store } = await createStore();
+
+    const write = store.set("agent-1", [queuedMessage("one"), queuedMessage("two")]);
+    const remove = store.remove("agent-1", ["one"]);
+    await Promise.all([write, remove]);
+
+    await expect(store.get("agent-1")).resolves.toEqual([queuedMessage("two")]);
+  });
+
+  test("notifies subscribers when a queue is written and cleared", async () => {
+    const { store } = await createStore();
+    const changes: Array<{ agentId: string; items: unknown[] }> = [];
+    const unsubscribe = store.subscribe((change) => changes.push(change));
+
+    await store.set("agent-1", [queuedMessage("one")]);
+    await store.set("agent-1", []);
+    unsubscribe();
+    await store.set("agent-1", [queuedMessage("two")]);
+
+    expect(changes).toEqual([
+      { agentId: "agent-1", items: [queuedMessage("one")] },
+      { agentId: "agent-1", items: [] },
+    ]);
+  });
+
+  test("keeps notifying other subscribers when one listener throws", async () => {
+    const { store } = await createStore();
+    const received: string[] = [];
+    store.subscribe(() => {
+      throw new Error("bad listener");
+    });
+    store.subscribe((change) => received.push(change.agentId));
+
+    await store.set("agent-1", [queuedMessage("one")]);
+
+    expect(received).toEqual(["agent-1"]);
+  });
+
   test("ignores invalid files instead of dropping every queue", async () => {
     const { home, store } = await createStore();
     await store.set("agent-1", [queuedMessage("one")]);

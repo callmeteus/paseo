@@ -59,7 +59,10 @@ Older daemons and clients omit the new fields; `announcedHosts` and the `cluster
 
 ## Delegating agents
 
-Agent MCP discovers destination IDs with `list_hosts`. `create_workspace`, `list_workspaces`,
+Agent MCP discovers destination IDs with `list_hosts`, reads the calling daemon's own identity with
+`get_self`, and renames it with `set_self_label`. The self label reported by `list_hosts.self`,
+`get_self`, and `server_info.hostname` comes from `daemon.selfLabel` when set, otherwise from the
+machine hostname. `create_workspace`, `list_workspaces`,
 `create_agent`, `send_agent_prompt`, `get_agent_status`, `get_agent_activity`, and `list_agents`
 accept `serverId`; omission selects the calling daemon. Remote creation requires a
 destination workspace and explicit provider/model. Caller filesystem defaults apply only on the
@@ -100,12 +103,18 @@ and duplicate-delivery semantics. Concurrent prompts gain no turn attribution.
 The shared Node connector owns the target grammar and each connection attempt, including a fresh
 SSH process. SSH reaches an already running daemon. The shared client connection lifecycle owns
 physical reconnect and keepalive; the registry retains configuration, identity acceptance, and recovery
-status. Unreachable registrations remain saved. Identity is pinned when discovered. Self and duplicate
-registrations remain inspectable; a changed destination requires explicit identity replacement.
+status. Unreachable registrations remain saved. Identity is pinned when discovered. Self and changed-identity
+registrations remain inspectable; a changed destination requires explicit identity replacement. When
+two registrations reach the same daemon, routing uses the online accepted link (the most recent
+`lastOnlineAt` breaks ties), and the daemon removes a stale `duplicate_host` row automatically once
+the owning registration is online.
 
 Both daemons advertise `connectedHosts`; the shared link additionally requires `hostMultiplexing`.
 A completes capability and pinned-identity checks on each physical recovery before admitting channels. There is no local fallback. An older daemon continues to serve existing local
-operations; requesting this feature gives update guidance.
+operations; requesting this feature gives update guidance. The registry retries an older destination
+with capped backoff, so it comes online once updated. Self, changed-identity, and authentication
+failures stay in `error` until an update changes the connection, `enabled`, or `replaceIdentity`, or
+A restarts. A `duplicate_host` row is temporary: it is removed as soon as the owner is online.
 
 Disposing a routed API releases its observations and session. It does not remove the saved host or
 affect sibling API scopes. Disposing the origin cascades to its derived scopes. Observations restore

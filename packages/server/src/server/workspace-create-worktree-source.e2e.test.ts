@@ -3,7 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot keep the terminal worker alive (SIGSEGV).
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 
 import { DaemonClient } from "./test-utils/index.js";
 import { WebSocket } from "ws";
@@ -66,6 +69,43 @@ test("workspace.create worktree source forwards action=checkout + refName into t
     // slug instead of checking out the named branch. The created worktree being
     // on feature/existing-branch is the observable proof both fields forwarded.
     expect(result.workspace?.gitRuntime?.currentBranch).toBe("feature/existing-branch");
+  } finally {
+    await client.close().catch(() => undefined);
+    await daemon.close();
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}, 180000);
+
+test("checkout.worktrees.list returns git worktrees Paseo did not create", async () => {
+  const daemon = await createTestPaseoDaemon();
+  const { repoDir, tempRoot } = createGitRepoWithBranch();
+  const manualPath = path.join(tempRoot, "manual");
+  execFileSync("git", ["worktree", "add", "-b", "feature/manual", manualPath], {
+    cwd: repoDir,
+    stdio: "pipe",
+  });
+  const client = new DaemonClient({
+    url: `ws://127.0.0.1:${daemon.port}/ws`,
+    appVersion: "0.1.82",
+  });
+
+  try {
+    await client.connect();
+    const created = await client.createWorkspace({
+      source: { kind: "worktree", cwd: repoDir, action: "branch-off", branchName: "feature/paseo" },
+    });
+    expect(created.error).toBeNull();
+
+    const worktrees = await client.listCheckoutWorktrees(repoDir);
+
+    expect(worktrees.map(({ branchName, containsCwd }) => ({ branchName, containsCwd }))).toEqual(
+      expect.arrayContaining([
+        { branchName: "main", containsCwd: true },
+        { branchName: "feature/manual", containsCwd: false },
+        { branchName: "feature/paseo", containsCwd: false },
+      ]),
+    );
+    expect(worktrees).toHaveLength(3);
   } finally {
     await client.close().catch(() => undefined);
     await daemon.close();
@@ -493,6 +533,7 @@ async function createRestorableWorkspace(baseRef: string) {
   commitFile(cwd, "feature.txt", "feature change\n");
   const head = runGit(cwd, "rev-parse", "HEAD");
   await client.checkoutRefresh(cwd);
+  expect(await client.getCheckoutStatus(cwd)).toMatchObject({ isPaseoOwnedWorktree: true });
   const before = await client.getCheckoutDiff(cwd, { mode: "base", baseRef: "main" });
   expect(before.error).toBeNull();
   expect(before.files.map((file) => file.path)).toEqual(["feature.txt"]);

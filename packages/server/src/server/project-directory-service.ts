@@ -1,5 +1,5 @@
 import { mkdir, rmdir, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep, win32 } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep, win32 } from "node:path";
 import type { ProjectCreateDirectoryErrorCode } from "@getpaseo/protocol/messages";
 import { expandTilde } from "../utils/path.js";
 import type { PersistedProjectRecord } from "./workspace-registry.js";
@@ -18,6 +18,7 @@ export class ProjectDirectoryRequestError extends Error {
 export interface CreateProjectDirectoryInput {
   parentPath: string;
   name: string;
+  recursive?: boolean;
 }
 
 export interface CreateProjectDirectoryResult {
@@ -67,11 +68,17 @@ export async function createProjectDirectory(
   }
 
   const filesystem = dependencies.filesystem ?? nodeProjectDirectoryFileSystem;
-  await requireExistingParent(filesystem, parentDirectory);
+  let createdParents: string[] = [];
+  if (input.recursive === true) {
+    createdParents = await createMissingParents(filesystem, parentDirectory);
+  } else {
+    await requireExistingParent(filesystem, parentDirectory);
+  }
 
   try {
     await filesystem.mkdir(directoryPath);
   } catch (error) {
+    await rollbackDirectories(filesystem, createdParents);
     throw mapCreateDirectoryError(error, directoryPath);
   }
 
@@ -88,6 +95,7 @@ export async function createProjectDirectory(
         directoryPath,
       );
     }
+    await rollbackDirectories(filesystem, createdParents);
     throw new ProjectDirectoryRequestError(
       "registration_failed",
       `Failed to register project: ${errorMessage(registrationError)}`,
@@ -157,6 +165,86 @@ async function requireExistingParent(
       "filesystem_error",
       `Failed to inspect parent directory: ${errorMessage(error)}`,
     );
+  }
+}
+
+type DirectoryInspection = "directory" | "missing" | "not-a-directory";
+
+async function inspectDirectory(
+  filesystem: ProjectDirectoryFileSystem,
+  path: string,
+): Promise<DirectoryInspection> {
+  try {
+    const entry = await filesystem.stat(path);
+    return entry.isDirectory() ? "directory" : "not-a-directory";
+  } catch (error) {
+    const code = nodeErrorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return "missing";
+    }
+    if (code === "EACCES" || code === "EPERM") {
+      throw new ProjectDirectoryRequestError(
+        "permission_denied",
+        `Permission denied reading parent directory: ${path}`,
+      );
+    }
+    throw new ProjectDirectoryRequestError(
+      "filesystem_error",
+      `Failed to inspect parent directory: ${errorMessage(error)}`,
+    );
+  }
+}
+
+/**
+ * Creates every missing ancestor of `parentDirectory`, top down, and returns
+ * the paths that were created so the caller can roll them back. An ancestor
+ * that exists but is a file is reported as a missing parent, matching the
+ * non-recursive behavior.
+ */
+async function createMissingParents(
+  filesystem: ProjectDirectoryFileSystem,
+  parentDirectory: string,
+): Promise<string[]> {
+  const missing: string[] = [];
+  let current = parentDirectory;
+  for (;;) {
+    const inspection = await inspectDirectory(filesystem, current);
+    if (inspection === "directory") {
+      break;
+    }
+    if (inspection === "not-a-directory") {
+      throw new ProjectDirectoryRequestError(
+        "parent_directory_not_found",
+        `Parent directory not found: ${current}`,
+      );
+    }
+    missing.push(current);
+    const ancestor = dirname(current);
+    if (ancestor === current) {
+      break;
+    }
+    current = ancestor;
+  }
+
+  const created: string[] = [];
+  for (const path of missing.toReversed()) {
+    try {
+      await filesystem.mkdir(path);
+      created.push(path);
+    } catch (error) {
+      await rollbackDirectories(filesystem, created);
+      throw mapCreateDirectoryError(error, path);
+    }
+  }
+  return created;
+}
+
+async function rollbackDirectories(
+  filesystem: ProjectDirectoryFileSystem,
+  paths: readonly string[],
+): Promise<void> {
+  for (const path of paths.toReversed()) {
+    await filesystem.rmdir(path).catch(() => undefined);
   }
 }
 

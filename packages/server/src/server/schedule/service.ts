@@ -15,6 +15,7 @@ import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
+import { foldFeatureValues } from "../agent/option-controls.js";
 import type {
   CreateScheduleInput,
   ScheduleExecutionResult,
@@ -238,6 +239,7 @@ type ScheduleAgentManager = Pick<
   | "planWorkflowTurn"
   | "planCursorRulesTurn"
   | "reloadAgentSession"
+  | "reloadStalePluginSession"
   | "tryRunOutOfBand"
   | "hasInFlightRun"
   | "replaceAgentRun"
@@ -246,7 +248,7 @@ type ScheduleAgentManager = Pick<
 > &
   Pick<
     AgentManager,
-    | "createAgent"
+    | "createAgentFromRecord"
     | "getRegisteredProviderIds"
     | "hydrateTimelineFromProvider"
     | "reconcileTimelineFromProvider"
@@ -254,6 +256,8 @@ type ScheduleAgentManager = Pick<
     | "runAgent"
     | "waitForAgentEvent"
     | "waitForAgentClose"
+    | "setDaemonBackgroundWork"
+    | "removeDaemonBackgroundWork"
   >;
 
 interface ScheduleWorkspaceCreateInput {
@@ -297,12 +301,19 @@ export class ScheduleService {
     runId: string,
   ) => Promise<ScheduleExecutionResult>;
   private readonly runningScheduleIds = new Set<string>();
+  private readonly heartbeatStops = new Map<string, () => Promise<void>>();
+  private recovering = false;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
 
   constructor(options: ScheduleServiceOptions) {
     this.logger = options.logger.child({ module: "schedule-service" });
-    this.store = new ScheduleStore(join(options.paseoHome, "schedules"), this.logger);
     this.agentManager = options.agentManager;
+    this.store = new ScheduleStore(
+      join(options.paseoHome, "schedules"),
+      this.logger,
+      (schedule, change) => this.syncHeartbeat(schedule, change),
+    );
     this.agentStorage = options.agentStorage;
     this.createAgent = options.createAgent;
     this.createDirectoryWorkspace = options.createDirectoryWorkspace;
@@ -313,10 +324,19 @@ export class ScheduleService {
   }
 
   async start(): Promise<void> {
-    await this.recoverInterruptedRuns();
-    await this.sweepOrphanedSchedules();
+    this.closed = false;
     if (this.tickTimer) {
       return;
+    }
+    this.recovering = true;
+    try {
+      await this.recoverInterruptedRuns();
+      await this.sweepOrphanedSchedules();
+    } finally {
+      this.recovering = false;
+    }
+    for (const schedule of await this.store.list()) {
+      this.syncHeartbeat(schedule, "write");
     }
     const timer = setInterval(() => {
       void this.tick().catch((error) => {
@@ -328,6 +348,9 @@ export class ScheduleService {
   }
 
   async stop(): Promise<void> {
+    // Set before clearing the timer: a tick already in flight must not claim another
+    // run while shutdown is closing agents and provider runtimes.
+    this.closed = true;
     if (this.tickTimer) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
@@ -516,6 +539,49 @@ export class ScheduleService {
     await this.store.delete(id);
   }
 
+  private syncHeartbeat(schedule: StoredSchedule, change: "write" | "delete"): void {
+    if (schedule.target.type !== "agent") {
+      return;
+    }
+    const { agentId } = schedule.target;
+    const { id, name, createdAt } = schedule;
+    if (change === "delete" || schedule.status !== "active") {
+      this.heartbeatStops.delete(id);
+      this.agentManager.removeDaemonBackgroundWork({ agentId, namespace: "heartbeat", id });
+      return;
+    }
+    if (this.recovering) {
+      return;
+    }
+    let stop = this.heartbeatStops.get(id);
+    if (!stop) {
+      const stopHeartbeat = () =>
+        this.store.delete(id, (current) => {
+          // A queued Stop can reach the store after a pause and resume replaced its row.
+          if (
+            current?.status !== "active" ||
+            current.target.type !== "agent" ||
+            current.target.agentId !== agentId ||
+            this.heartbeatStops.get(id) !== stopHeartbeat
+          ) {
+            throw new ScheduleStateConflictError("Background work is no longer available to stop");
+          }
+        });
+      this.heartbeatStops.set(id, stopHeartbeat);
+      stop = stopHeartbeat;
+    }
+    this.agentManager.setDaemonBackgroundWork({
+      agentId,
+      namespace: "heartbeat",
+      id,
+      kind: "heartbeat",
+      countsAsRunning: false,
+      description: name,
+      startedAt: createdAt,
+      stop,
+    });
+  }
+
   async completeForAgent(agentId: string): Promise<number> {
     const now = this.now();
     const schedules = await this.store.list();
@@ -580,9 +646,11 @@ export class ScheduleService {
   }
 
   async tick(): Promise<void> {
+    if (this.closed) return;
     const now = this.now();
     const schedules = await this.store.list();
     for (const schedule of schedules) {
+      if (this.closed) return;
       if (schedule.status !== "active" || !schedule.nextRunAt) {
         continue;
       }
@@ -601,7 +669,7 @@ export class ScheduleService {
   }
 
   private async completeScheduleIfDue(scheduleId: string, now: Date): Promise<void> {
-    const updated = await this.store.update(scheduleId, (schedule) => {
+    await this.store.update(scheduleId, (schedule) => {
       if (
         schedule.status !== "active" ||
         !schedule.nextRunAt ||
@@ -611,7 +679,6 @@ export class ScheduleService {
       }
       return completeSchedule(schedule, now);
     });
-    requireSchedule(updated, scheduleId);
   }
 
   private async recoverInterruptedRuns(): Promise<void> {
@@ -657,10 +724,14 @@ export class ScheduleService {
           error: "Daemon restarted before the scheduled run completed",
         };
         updated = { ...updated, runs };
-        if (shouldCompleteSchedule(updated, now)) {
-          updated = completeSchedule(updated, now);
-        }
         dirty = true;
+      }
+
+      if (
+        (updated.status === "active" || runningIndex !== -1) &&
+        shouldCompleteSchedule(updated, now)
+      ) {
+        return completeSchedule(updated, now);
       }
 
       if (
@@ -789,7 +860,7 @@ export class ScheduleService {
     now: Date,
   ): Promise<{ schedule: StoredSchedule; runId: string } | null> {
     let claimed: { schedule: StoredSchedule; runId: string } | null = null;
-    const updatedSchedule = await this.store.update(scheduleId, (schedule) => {
+    await this.store.update(scheduleId, (schedule) => {
       if (
         schedule.status !== "active" ||
         !schedule.nextRunAt ||
@@ -832,7 +903,6 @@ export class ScheduleService {
       claimed = { schedule: updated, runId };
       return updated;
     });
-    requireSchedule(updatedSchedule, scheduleId);
     return claimed;
   }
 
@@ -858,7 +928,8 @@ export class ScheduleService {
     targetGone: boolean;
     manual: boolean;
   }): Promise<void> {
-    const updatedSchedule = await this.store.update(params.scheduleId, (schedule) => {
+    // A Stop can delete the schedule while its already launched turn is still running.
+    await this.store.update(params.scheduleId, (schedule) => {
       const now = this.now();
       const completedRuns = schedule.runs.map((run) =>
         run.id === params.runId
@@ -911,7 +982,6 @@ export class ScheduleService {
 
       return updated;
     });
-    requireSchedule(updatedSchedule, params.scheduleId);
   }
 
   private async recordRunWorkspace(params: {
@@ -1082,7 +1152,6 @@ export class ScheduleService {
       },
       mode: config.modeId,
       thinking: config.thinkingOptionId,
-      features: config.featureValues,
       unattended: true,
       promptFailure: "return-error",
       notifyOnFinish: false,
@@ -1128,8 +1197,8 @@ function buildScheduleAgentConfig(
     model: config.model,
     thinkingOptionId: config.thinkingOptionId,
     title: config.title,
-    providerOptions: config.providerOptions,
-    featureValues: config.featureValues,
+    // COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01.
+    providerOptions: foldFeatureValues(config).providerOptions,
     systemPrompt: config.systemPrompt,
     mcpServers: config.mcpServers as AgentSessionConfig["mcpServers"],
   };

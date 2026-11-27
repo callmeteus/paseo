@@ -1,5 +1,6 @@
 import { applyCursorRules } from "./cursor-rules.mjs";
 import { registerStructuredOutput, STRUCTURED_OUTPUT_TOOL } from "./structured-output-plugin.mjs";
+import { registerSharedBridge } from "./shared-bridge-plugin.mjs";
 
 function ownsMessage(sessionID, message) {
   if (!message || typeof message !== "object") return false;
@@ -137,6 +138,8 @@ export default {
   id: "paseo",
   async setup(context) {
     const disposeStructuredOutput = await registerStructuredOutput(context);
+    // Session scoping and prompt rules do not depend on the tool bridge, so they
+    // are installed even when no bridge is configured.
     const compaction = await context.session.hook("compaction", async (input) => {
       if (!input?.sessionID || !Array.isArray(input.messages)) return;
       let canonical;
@@ -168,114 +171,118 @@ export default {
       }
     });
     const disposeCursorRules = () => cursorRules.dispose();
-    const { baseUrl, token } = context.options;
-    if (!baseUrl || !token) {
+
+    // A structured-only plugin has no tool surface to bridge.
+    if (context.options.mode === "structured-only") {
       return async () => {
         await disposeStructuredOutput();
         await disposeCompaction();
         await disposeCursorRules();
       };
     }
-    async function request(pathname, body, allowMissing = false) {
-      const response = await fetch(new URL(`/_internal/opencode${pathname}`, baseUrl), {
-        method: body === undefined ? "GET" : "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-      if (allowMissing && response.status === 404) return null;
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        const detail = formatErrorDetail(payload?.issues ?? payload?.details);
-        const message =
-          typeof payload?.error === "string" && payload.error
-            ? payload.error
-            : `Paseo tool bridge returned HTTP ${response.status}`;
-        const error = new Error(detail ? `${message}: ${detail}` : message);
-        error.status = response.status;
-        if (detail) error.details = detail;
-        throw error;
-      }
-      return response.json();
-    }
-    async function scope(sessionID) {
-      const visited = new Set();
-      while (sessionID && !visited.has(sessionID)) {
-        visited.add(sessionID);
-        const binding = await request(
-          `/sessions/${encodeURIComponent(sessionID)}/context?tools`,
-          undefined,
-          true,
-        );
-        if (binding) return { ...binding, sessionID };
-        const session = await context.session.get({ sessionID });
-        sessionID = session.parentID;
-      }
-      throw new Error("OpenCode session is not bound to a Paseo agent");
-    }
-    const manifest = await request("/tools");
-    const registration = await context.tool.transform((editor) => {
-      for (const definition of manifest.tools) {
-        editor.add({
-          name: `paseo_${definition.name}`,
-          description: definition.description,
-          input: definition.inputSchema,
-          options: { codemode: false },
-          async execute(input, call) {
-            const binding = await scope(call.sessionID);
-            const result = await request(
-              `/sessions/${encodeURIComponent(binding.sessionID)}/tools/${encodeURIComponent(definition.name)}`,
-              input,
-            );
-            return {
-              content: result.content.map(toOpenCodeContent),
-              metadata: { paseoTool: definition.name },
-            };
-          },
+
+    // The daemon can supply bridge credentials directly as plugin options. In
+    // that mode tools are installed against this bridge, keeping session
+    // scoping and the model's tool ceiling on the request.
+    let disposeInlineBridge = async () => undefined;
+    const { baseUrl, token } = context.options;
+    if (baseUrl && token) {
+      async function request(pathname, body, allowMissing = false) {
+        const response = await fetch(new URL(`/_internal/opencode${pathname}`, baseUrl), {
+          method: body === undefined ? "GET" : "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
+        if (allowMissing && response.status === 404) return null;
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          const detail = formatErrorDetail(payload?.issues ?? payload?.details);
+          const message =
+            typeof payload?.error === "string" && payload.error
+              ? payload.error
+              : `Paseo tool bridge returned HTTP ${response.status}`;
+          const error = new Error(detail ? `${message}: ${detail}` : message);
+          error.status = response.status;
+          if (detail) error.details = detail;
+          throw error;
+        }
+        return response.json();
       }
-    });
-    const filtering = await context.session.hook("context", async (input) => {
-      if (Array.isArray(input.messages)) {
-        input.messages = input.messages.filter((message) => ownsMessage(input.sessionID, message));
+      async function scope(sessionID) {
+        const visited = new Set();
+        while (sessionID && !visited.has(sessionID)) {
+          visited.add(sessionID);
+          const binding = await request(
+            `/sessions/${encodeURIComponent(sessionID)}/context?tools`,
+            undefined,
+            true,
+          );
+          if (binding) return { ...binding, sessionID };
+          const session = await context.session.get({ sessionID });
+          sessionID = session.parentID;
+        }
+        throw new Error("OpenCode session is not bound to a Paseo agent");
       }
-      const binding = await scope(input.sessionID);
-      const allowed = new Set(binding.tools.map((name) => `paseo_${name}`));
-      for (const name of Object.keys(input.tools)) {
-        if (name !== STRUCTURED_OUTPUT_TOOL && name.startsWith("paseo_") && !allowed.has(name))
-          delete input.tools[name];
-      }
-      const budget = budgetToolSurface({ tools: input.tools, maxTools: binding.maxTools });
-      if (budget.hiddenServers.length > 0) {
-        console.warn(
-          `[paseo] model accepts ${binding.maxTools} tools; hid ${budget.removed.length} from ${budget.hiddenServers.join(", ")}`,
-        );
-      }
-    });
+      const manifest = await request("/tools");
+      const registration = await context.tool.transform((editor) => {
+        for (const definition of manifest.tools) {
+          editor.add({
+            name: `paseo_${definition.name}`,
+            description: definition.description,
+            input: definition.inputSchema,
+            options: { codemode: false },
+            async execute(input, call) {
+              const binding = await scope(call.sessionID);
+              const result = await request(
+                `/sessions/${encodeURIComponent(binding.sessionID)}/tools/${encodeURIComponent(definition.name)}`,
+                input,
+              );
+              return {
+                content: result.content.map(toOpenCodeContent),
+                metadata: { paseoTool: definition.name },
+              };
+            },
+          });
+        }
+      });
+      const filtering = await context.session.hook("context", async (input) => {
+        if (Array.isArray(input.messages)) {
+          input.messages = input.messages.filter((message) =>
+            ownsMessage(input.sessionID, message),
+          );
+        }
+        const binding = await scope(input.sessionID);
+        const allowed = new Set(binding.tools.map((name) => `paseo_${name}`));
+        for (const name of Object.keys(input.tools)) {
+          if (name !== STRUCTURED_OUTPUT_TOOL && name.startsWith("paseo_") && !allowed.has(name))
+            delete input.tools[name];
+        }
+        const budget = budgetToolSurface({ tools: input.tools, maxTools: binding.maxTools });
+        if (budget.hiddenServers.length > 0) {
+          console.warn(
+            `[paseo] model accepts ${binding.maxTools} tools; hid ${budget.removed.length} from ${budget.hiddenServers.join(", ")}`,
+          );
+        }
+      });
+      disposeInlineBridge = async () => {
+        await filtering.dispose();
+        await registration.dispose();
+      };
+    }
+
+    // A reused OpenCode service installs tools through the paseo.bridge RPC so
+    // several Paseo runtimes can share one server.
+    let disposeBridge = async () => undefined;
+    if (context.rpc && context.location) {
+      disposeBridge = await registerSharedBridge(context);
+    }
+
     return async () => {
+      await disposeBridge();
+      await disposeInlineBridge();
       await disposeStructuredOutput();
       await disposeCompaction();
       await disposeCursorRules();
-      await filtering.dispose();
-      await registration.dispose();
     };
   },
 };
-
-function formatErrorDetail(details) {
-  if (!Array.isArray(details)) return typeof details === "string" ? details : "";
-  return details
-    .map((issue) => {
-      const path =
-        Array.isArray(issue?.path) && issue.path.length > 0 ? issue.path.join(".") : "input";
-      return `${path}: ${issue?.message ?? "Invalid value"}`;
-    })
-    .join("; ");
-}
-
-// OpenCode tool content is text or a file; MCP images arrive as base64 data.
-function toOpenCodeContent(part) {
-  if (part.type === "image") {
-    return { type: "file", uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType };
-  }
-  return part;
-}

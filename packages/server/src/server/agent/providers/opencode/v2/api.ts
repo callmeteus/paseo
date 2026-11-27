@@ -2,7 +2,7 @@ import type { OpenCodeClient } from "@opencode/client";
 
 export interface V2Api {
   server: OpenCodeClient["server"];
-  shell: Pick<OpenCodeClient["shell"], "list">;
+  shell: Pick<OpenCodeClient["shell"], "list" | "remove">;
   session: Pick<
     OpenCodeClient["session"],
     | "create"
@@ -31,7 +31,8 @@ export interface V2Api {
   command: OpenCodeClient["command"];
   skill: OpenCodeClient["skill"];
   message: OpenCodeClient["message"];
-  mcp: Pick<OpenCodeClient["mcp"], "add" | "list">;
+  mcp: Pick<OpenCodeClient["mcp"], "add" | "list" | "remove">;
+  config: Pick<OpenCodeClient["config"], "get">;
   permission: Pick<OpenCodeClient["permission"], "list" | "reply">;
   event: OpenCodeClient["event"];
 }

@@ -247,6 +247,7 @@ export function WorkspaceSetupDialog() {
         navigateToAgent({
           serverId: pendingWorkspaceSetup.serverId,
           agentId: target.agentId,
+          pin: true,
         });
         return;
       }
@@ -255,6 +256,7 @@ export function WorkspaceSetupDialog() {
         serverId: pendingWorkspaceSetup.serverId,
         workspaceId,
         target,
+        pin: true,
       });
     },
     [clearWorkspaceSetup, pendingWorkspaceSetup],
@@ -463,7 +465,7 @@ export function WorkspaceSetupDialog() {
       desktopMaxWidth={640}
     >
       <FileDropZone style={styles.section}>
-        <KeyboardTranslateView>
+        <KeyboardTranslateView style={styles.composerSlot}>
           <Composer
             agentId={`workspace-setup:${serverId}:${sourceDirectory}`}
             serverId={serverId}
@@ -513,6 +515,9 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     color: theme.colors.destructive,
     lineHeight: 20,
+  },
+  composerSlot: {
+    paddingBottom: theme.spacing[4],
   },
   composerInputWrapper: {
     backgroundColor: theme.colors.surface2,

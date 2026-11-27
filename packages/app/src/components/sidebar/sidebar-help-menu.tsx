@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { Activity, CircleHelp, Gift, Keyboard } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -12,20 +12,19 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DensityIcon } from "@/components/ui/density-icon";
-import { SidebarFooterIconHighlight } from "./sidebar-footer-icon-highlight";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SidebarFooterMenuTrigger } from "./sidebar-footer-menu-trigger";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
-import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
+import { useHardwareKeyboardPresent } from "@/keyboard";
 import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useSessionStore } from "@/stores/session-store";
-import { density } from "@/styles/density";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import type { HostProfile } from "@/types/host-connection";
-import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
+import {
+  formatDaemonVersionLabel,
+  formatVersionWithPrefix,
+} from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { openExternalUrl } from "@/utils/open-external-url";
@@ -62,9 +61,24 @@ function HostVersionHint({ host }: { host: HostProfile }) {
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
-  const version = isConnected
-    ? formatVersionWithPrefix(daemonVersion)
-    : t("settings.about.offline");
+  const daemonCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.commit ?? null,
+  );
+  const daemonMainCommit = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.mainCommit ?? null,
+  );
+  let version: string;
+  if (!isConnected) {
+    version = t("settings.about.offline");
+  } else if (daemonCommit) {
+    version = formatDaemonVersionLabel({
+      commit: daemonCommit,
+      mainCommit: daemonMainCommit,
+      version: daemonVersion,
+    });
+  } else {
+    version = formatVersionWithPrefix(daemonVersion);
+  }
 
   return (
     <DropdownMenuHint
@@ -77,12 +91,32 @@ function HostVersionHint({ host }: { host: HostProfile }) {
   );
 }
 
+/** The Help menu's trigger, and the menu it opens. */
 export function SidebarHelpMenu() {
   const { t } = useTranslation();
-  const shortcutsAvailable = useKeyboardShortcutsAvailable();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <SidebarFooterMenuTrigger
+        icon={CircleHelp}
+        label={t("sidebar.help.trigger")}
+        menuOpen={open}
+        testID="sidebar-help"
+      />
+      <DropdownMenuContent side="top" align="end" offset={8} width={280} testID="sidebar-help-menu">
+        <SidebarHelpMenuItems />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The Help menu's rows, shared by the Help menu and the footer's overflow page for it. */
+export function SidebarHelpMenuItems() {
+  const { t } = useTranslation();
+  const shortcutsAvailable = useHardwareKeyboardPresent();
   const openAppDiagnostic = useAppDiagnosticStore((state) => state.open);
   const setShortcutsDialogOpen = useKeyboardShortcutsStore((state) => state.setShortcutsDialogOpen);
-  const [open, setOpen] = useState(false);
   const version = formatVersionWithPrefix(resolveAppVersion());
   const hosts = useHosts();
 
@@ -99,105 +133,65 @@ export function SidebarHelpMenu() {
   }, []);
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <Tooltip delayDuration={300} enabledOnDesktop={!open}>
-        <TooltipTrigger asChild>
-          <View>
-            <DropdownMenuTrigger
-              style={styles.trigger}
-              testID="sidebar-help"
-              accessibilityRole="button"
-              accessibilityLabel={t("sidebar.help.trigger")}
-            >
-              {({ hovered, pressed, open: menuOpen }) => (
-                <>
-                  <SidebarFooterIconHighlight visible={pressed || menuOpen} />
-                  <DensityIcon
-                    icon={CircleHelp}
-                    size="md"
-                    color={hovered ? "foreground" : "foregroundMuted"}
-                  />
-                </>
-              )}
-            </DropdownMenuTrigger>
-          </View>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="center" offset={8}>
-          <Text style={styles.tooltipText}>{t("sidebar.help.trigger")}</Text>
-        </TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent side="top" align="end" offset={8} width={280} testID="sidebar-help-menu">
-        <DropdownMenuLabel>{t("sidebar.help.sectionHelp")}</DropdownMenuLabel>
-        {shortcutsAvailable ? (
-          <DropdownMenuItem
-            testID="sidebar-help-shortcuts"
-            leading={shortcutsLeadingIcon}
-            onSelect={openKeyboardShortcuts}
-          >
-            {t("sidebar.help.shortcuts")}
-          </DropdownMenuItem>
-        ) : null}
+    <>
+      <DropdownMenuLabel>{t("sidebar.help.sectionHelp")}</DropdownMenuLabel>
+      {shortcutsAvailable ? (
         <DropdownMenuItem
-          testID="sidebar-help-changelog"
-          leading={changelogLeadingIcon}
-          onSelect={openChangelog}
+          testID="sidebar-help-shortcuts"
+          leading={shortcutsLeadingIcon}
+          onSelect={openKeyboardShortcuts}
         >
-          {t("sidebar.help.whatsNew")}
+          {t("sidebar.help.shortcuts")}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          testID="sidebar-help-diagnostics"
-          leading={diagnosticLeadingIcon}
-          onSelect={openAppDiagnostic}
+      ) : null}
+      <DropdownMenuItem
+        testID="sidebar-help-changelog"
+        leading={changelogLeadingIcon}
+        onSelect={openChangelog}
+      >
+        {t("sidebar.help.whatsNew")}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        testID="sidebar-help-diagnostics"
+        leading={diagnosticLeadingIcon}
+        onSelect={openAppDiagnostic}
+      >
+        {t("sidebar.help.diagnostics")}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t("sidebar.help.reportIssue")}</DropdownMenuLabel>
+      <DropdownMenuItem
+        testID="sidebar-help-discord"
+        leading={discordLeadingIcon}
+        onSelect={openDiscord}
+      >
+        {t("sidebar.help.discord")}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        testID="sidebar-help-github"
+        leading={githubLeadingIcon}
+        onSelect={openGitHubIssue}
+      >
+        {t("sidebar.help.github")}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <View style={styles.versionList}>
+        <DropdownMenuHint
+          style={styles.versionHint}
+          trailing={version}
+          testID="sidebar-help-version"
         >
-          {t("sidebar.help.diagnostics")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>{t("sidebar.help.reportIssue")}</DropdownMenuLabel>
-        <DropdownMenuItem
-          testID="sidebar-help-discord"
-          leading={discordLeadingIcon}
-          onSelect={openDiscord}
-        >
-          {t("sidebar.help.discord")}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          testID="sidebar-help-github"
-          leading={githubLeadingIcon}
-          onSelect={openGitHubIssue}
-        >
-          {t("sidebar.help.github")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <View style={styles.versionList}>
-          <DropdownMenuHint
-            style={styles.versionHint}
-            trailing={version}
-            testID="sidebar-help-version"
-          >
-            {t("sidebar.help.appName")}
-          </DropdownMenuHint>
-          {hosts.map((host) => (
-            <HostVersionHint key={host.serverId} host={host} />
-          ))}
-        </View>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {t("sidebar.help.appName")}
+        </DropdownMenuHint>
+        {hosts.map((host) => (
+          <HostVersionHint key={host.serverId} host={host} />
+        ))}
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  trigger: {
-    width: density.iconButton,
-    height: density.iconButton,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
-  },
-  tooltipText: {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.popoverForeground,
-  },
   versionList: {
     gap: theme.spacing[1],
     paddingVertical: theme.spacing[2],

@@ -473,6 +473,34 @@ export function buildNewWorkspaceRoute(options: NewWorkspaceRouteOptions = {}) {
   return `/new?${query}` as const;
 }
 
+interface NewAgentRouteOptions {
+  serverId?: string;
+  workspaceId?: string;
+  draftId?: string;
+}
+
+/** Full-screen agent setup, scoped to the workspace the user came from. */
+export function buildNewAgentRoute(options: NewAgentRouteOptions = {}) {
+  const params = new URLSearchParams();
+  const serverId = trimNonEmpty(options.serverId);
+  const workspaceId = trimNonEmpty(options.workspaceId);
+  if (serverId) {
+    params.set("serverId", serverId);
+  }
+  if (workspaceId) {
+    params.set("workspaceId", workspaceId);
+  }
+  const draftId = trimNonEmpty(options.draftId);
+  if (draftId) {
+    params.set("draftId", draftId);
+  }
+  const query = params.toString();
+  if (!query) {
+    return "/new-agent" as const;
+  }
+  return `/new-agent?${query}` as const;
+}
+
 export type KnownHostRouteResolution =
   | { kind: "render" }
   | { kind: "redirect"; href: ReturnType<typeof buildOpenProjectRoute> | "/welcome" };
@@ -497,6 +525,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "general",
   "appearance",
   "sidebar",
+  "labels",
   "chat",
   "terminal",
   "browser",
@@ -523,6 +552,7 @@ export const HOST_SECTION_SLUGS = [
   "pair-device",
   "agents",
   "mcp",
+  "tokens",
   "metadata",
   "voice",
   "workspaces",
@@ -561,10 +591,6 @@ export function buildSettingsSectionRoute(section: SettingsSectionSlug) {
   return `/settings/${section}` as const;
 }
 
-export function buildSettingsAddHostRoute(intentId: string | number = "1") {
-  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
-}
-
 export function buildSettingsHostRoute(serverId: string) {
   const normalized = trimNonEmpty(serverId);
   if (!normalized) {
@@ -596,7 +622,18 @@ export function buildProjectSettingsRoute(serverId: string, projectId: string) {
   return `/settings/hosts/${encodeSegment(serverId)}/projects/${encodeSegment(projectId)}` as const;
 }
 
+export function buildProviderSettingsRoute(serverId: string, providerId: string) {
+  if (!serverId.trim() || !providerId.trim()) {
+    throw new Error("buildProviderSettingsRoute requires a serverId and providerId");
+  }
+  return `/settings/hosts/${encodeSegment(serverId)}/providers/${encodeSegment(providerId)}` as const;
+}
+
 export function normalizeProjectSettingsRouteId(value: string | string[] | undefined): string {
   const id = Array.isArray(value) ? value[0] : value;
   return typeof id === "string" ? id : "";
+}
+
+export function buildSettingsAddHostRoute(intentId: string | number = "1") {
+  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
 }

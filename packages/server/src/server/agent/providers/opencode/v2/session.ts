@@ -1,3 +1,10 @@
+import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
+import type { McpServerConfig } from "@getpaseo/protocol/messages";
+import { PASEO_MCP_SERVER_NAME } from "../../../runtime-mcp-config.js";
+import { applyProviderOptionsPatch } from "../../../option-controls.js";
+import { assertChangesAreLive, validateProviderOptions } from "../../../provider-options.js";
+import { OpenCodeProviderOptionsSchema } from "../options.js";
+import { OpenCodeBackgroundInventory } from "./background-inventory.js";
 import { SessionChildren } from "./children.js";
 import { SessionTurns } from "./turns.js";
 import { V2Timeline } from "./timeline.js";
@@ -28,14 +35,24 @@ import { composeSystemPromptParts } from "../../../system-prompt.js";
 import { raceProviderRefreshAbort } from "../../../provider-refresh-deadline.js";
 
 import { type V2Connection } from "./runtime.js";
+import type { V2Api } from "./api.js";
 import { modelRef, modesFromV2 } from "./mapping.js";
 
 import { V2_CAPABILITIES } from "./capabilities.js";
-import { features } from "./configuration.js";
+import { controls } from "./configuration.js";
 import { commands } from "./commands.js";
 import { messages } from "./history.js";
 import { SessionPermissions } from "./permissions.js";
 import { SessionUsage } from "./usage.js";
+import {
+  ElicitationQuestions,
+  type HarnessMcpServerConfig,
+} from "../../../../mcp/elicitation-proxy.js";
+import {
+  openCodeElicitationRouter,
+  openCodeElicitationToken,
+} from "../../../../mcp/opencode-elicitation-router.js";
+import { wrapMcpServersWithCallback } from "../../../../mcp/elicitation-proxy.js";
 
 export class OpenCodeV2Session implements AgentSession {
   readonly provider = "opencode";
@@ -44,6 +61,9 @@ export class OpenCodeV2Session implements AgentSession {
   private readonly timeline = new V2Timeline();
   private readonly abort = new AbortController();
   private readonly permissions: SessionPermissions;
+  private readonly elicits: ElicitationQuestions;
+  private readonly routedTokens = new Map<string, string>();
+  private readonly activeToolTokens = new Map<string, string>();
   private readonly turns: SessionTurns;
   private readonly children: SessionChildren;
   private readonly usage: SessionUsage;
@@ -57,6 +77,7 @@ export class OpenCodeV2Session implements AgentSession {
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private history: SessionMessageInfo[] = [];
+  private readonly background: OpenCodeBackgroundInventory;
   private modes: AgentMode[] = [];
   /** Title the session was opened with. A later OpenCode title is what we publish. */
   private baselineTitle: string | null = null;
@@ -73,15 +94,27 @@ export class OpenCodeV2Session implements AgentSession {
     bindChild?: (id: string) => void,
     private readonly acquire?: () => Promise<V2Connection>,
     private readonly moved?: (connection: V2Connection) => void,
+    private readonly historyOnly = false,
   ) {
     const openedWith = config.title?.trim() ?? "";
     this.baselineTitle = openedWith.length > 0 ? openedWith : null;
+    this.background = new OpenCodeBackgroundInventory({
+      id: info.id,
+      cwd: config.cwd,
+      emit: (event) => this.emit(event),
+      report: (error) =>
+        this.logger.warn(
+          { error: toDiagnosticErrorMessage(error) },
+          "OpenCode background inventory failed",
+        ),
+    });
     this.permissions = new SessionPermissions(
       () => this.client,
       info.id,
       config,
       (event) => this.emit(event),
     );
+    this.elicits = new ElicitationQuestions(this.provider, (event) => this.emit(event));
     this.children = new SessionChildren({
       client: () => this.client,
       id: info.id,
@@ -106,7 +139,11 @@ export class OpenCodeV2Session implements AgentSession {
         ),
       clearPermissions: async () => {
         for (const request of this.permissions.list())
-          await this.permissions.respondToPermission(request.id, { behavior: "deny" });
+          await this.permissions.respondToPermission(request.id, {
+            behavior: "deny",
+            message:
+              "The user answered with a message instead of approving. Their message follows.",
+          });
       },
     });
     this.usage = new SessionUsage({
@@ -124,8 +161,8 @@ export class OpenCodeV2Session implements AgentSession {
   get id() {
     return this.info.id;
   }
-  get features() {
-    return features(this.config);
+  get controls() {
+    return controls;
   }
   private get client() {
     return this.connection.client;
@@ -137,7 +174,7 @@ export class OpenCodeV2Session implements AgentSession {
     await this.configureConnection();
     const location = { directory: this.config.cwd };
     this.modes = modesFromV2((await this.client.agent.list({ location })).data);
-    this.timeline.messages(await messages(this.client, this.id));
+    await this.timeline.messages(await messages(this.client, this.id), () => {});
     await this.startStream();
     await this.children.reconcile(this.id);
   }
@@ -145,6 +182,7 @@ export class OpenCodeV2Session implements AgentSession {
     void connection.exited.then((error) => {
       if (this.closed || this.connection !== connection) return undefined;
       this.exited = true;
+      this.background.disconnect(true);
       this.streamAbort.abort(error);
       this.turns.fail(error);
       return undefined;
@@ -152,20 +190,29 @@ export class OpenCodeV2Session implements AgentSession {
   }
   private async configureConnection() {
     const location = { directory: this.config.cwd };
+    await this.connection.bindSession(this.id, this.config.cwd);
     await waitForLocationReady({ client: this.client, location, signal: this.abort.signal });
     if (this.requiresPaseoPlugin)
       await awaitPaseoPlugin({ client: this.client, location, signal: this.abort.signal });
     await this.configureMcpServers(location);
+    if (this.historyOnly) return;
     const system = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
+      ...(this.config.pluginAppendSystemPrompt ?? []),
     );
-    if (system)
+    if (system) {
       await this.client.session.instructions.entry.put({
         sessionID: this.id,
         key: "paseo",
         value: system,
       });
+    } else {
+      const entries = await this.client.session.instructions.entry.list({ sessionID: this.id });
+      if (entries.some((entry) => entry.key === "paseo")) {
+        await this.client.session.instructions.entry.remove({ sessionID: this.id, key: "paseo" });
+      }
+    }
   }
   /**
    * A missing MCP server costs its tools, not the conversation. Register every
@@ -174,19 +221,101 @@ export class OpenCodeV2Session implements AgentSession {
    * startup wait by the number of configured servers.
    */
   private async configureMcpServers(location: { directory: string }) {
-    const configured = Object.entries(this.config.mcpServers ?? {});
-    if (configured.length === 0) return;
-    // The location may already provide these servers from its own config
-    // (opencode.json, plugins, a previous session). Adding the same name again
-    // registers a second copy of every tool, and that duplicate tool surface is
-    // what overflows the model's context. An existing server wins.
+    // An explicitly configured external service is authoritative: its MCP
+    // registry belongs to the user and Paseo must not replace those servers.
+    // A discovered local service is shared, but it is the user's normal
+    // OpenCode setup; wrap its harness servers with refcounting and restore
+    // the original as soon as the last Paseo session releases it. The router
+    // will decline elicitation that has no Paseo tool call in flight, so a
+    // non-Paseo OpenCode client never gets a Paseo card.
+    const sharedService = this.connection.serviceKind === "discovered";
+    if (sharedService) {
+      this.logger.warn(
+        { serviceKind: this.connection.serviceKind },
+        "Discovered OpenCode service: wrapping harness MCP with the shared elicitation shim",
+      );
+    }
+    if (this.connection.serviceKind === "external") {
+      this.logger.warn(
+        { serviceKind: this.connection.serviceKind },
+        "External OpenCode service: skipping MCP elicitation shim to preserve the user's server config",
+      );
+      return;
+    }
+    const harness = await this.readHarnessMcpServers(location);
+    const originals = { ...harness, ...this.config.mcpServers };
     const existing = await this.listMcpServerNames(location);
+    const wrappedByName = new Map<
+      string,
+      { token: string; config: McpServerConfig; fromHarness: boolean }
+    >();
+    const seen = new Set<string>();
+    for (const [name, original] of Object.entries(originals)) {
+      if (name === PASEO_MCP_SERVER_NAME) continue;
+      // A Paseo-configured server the location already provides stays owned by
+      // the location; only harness config from `config.get` is replaced.
+      if (!harness[name] && existing.has(name)) continue;
+      const token = openCodeElicitationToken(
+        this.connection.id,
+        location.directory,
+        name,
+        original,
+      );
+      if (seen.has(token)) continue;
+      seen.add(token);
+      const { callback, first } = await openCodeElicitationRouter.acquire({
+        token,
+        // On a shared service only an in-flight Paseo tool call may get a card.
+        allowFallback: !sharedService,
+        restore: async () => {
+          if (harness[name] && !this.config.mcpServers?.[name]) {
+            await this.client.mcp.add({
+              server: name,
+              location,
+              config: toOpenCodeMcpConfig(original),
+            });
+          } else {
+            await this.client.mcp.remove({ server: name, location }).catch(() => undefined);
+          }
+        },
+      });
+      const wrapped = await wrapMcpServersWithCallback({
+        servers: { [name]: original },
+        tokenFor: () => token,
+        callback,
+      });
+      wrappedByName.set(name, {
+        token,
+        config: wrapped[name]!,
+        fromHarness: Boolean(harness[name]),
+      });
+      openCodeElicitationRouter.registerCandidate(token, {
+        sessionId: this.id,
+        ask: (message, form) => this.elicits.askCard(message, form),
+      });
+      this.routedTokens.set(token, name);
+      if (first) {
+        // Replace the harness's raw server once per (location, server), never
+        // once per session: all sessions in this directory share the shim.
+        try {
+          await this.client.mcp.remove({ server: name, location }).catch(() => undefined);
+          await this.client.mcp.add({
+            server: name,
+            location,
+            config: toOpenCodeMcpConfig(wrapped[name]!),
+          });
+        } catch (error) {
+          this.abort.signal.throwIfAborted();
+          this.reportMcpUnavailable(name, error);
+        }
+      }
+    }
+
+    // Servers that are not wrapped keep the previous registration behaviour.
     const registered: string[] = [];
-    for (const [server, config] of configured) {
-      // The Paseo tool bridge plugin already exposes the whole catalog for this
-      // session, bound to the agent and filtered by its policy. Registering the
-      // `paseo` MCP server too sends every one of those tools a second time.
-      if (this.requiresPaseoPlugin && server === "paseo") {
+    for (const [server, config] of Object.entries(this.config.mcpServers ?? {})) {
+      if (wrappedByName.has(server)) continue;
+      if (this.requiresPaseoPlugin && server === PASEO_MCP_SERVER_NAME) {
         this.logger.debug(
           { server },
           "Paseo tool plugin already provides this catalog; skipping MCP registration",
@@ -239,6 +368,63 @@ export class OpenCodeV2Session implements AgentSession {
       ),
     );
   }
+
+  /** MCP servers OpenCode loads from its own config at this location. */
+  private async readHarnessMcpServers(location: {
+    directory: string;
+  }): Promise<Record<string, HarnessMcpServerConfig>> {
+    let entries: Awaited<ReturnType<V2Api["config"]["get"]>> = [];
+    try {
+      entries = await this.client.config.get({ location });
+    } catch {
+      return {};
+    }
+    const servers: Record<string, McpServerConfig> = {};
+    for (const entry of entries) {
+      if (entry.type !== "document") continue;
+      const configured = entry.info?.mcp?.servers;
+      if (!configured) continue;
+      for (const [name, raw] of Object.entries(configured)) {
+        if (name === PASEO_MCP_SERVER_NAME) continue;
+        const server = raw as OpenCodeMcpConfig & { disabled?: boolean };
+        if (server.disabled === true) continue;
+        servers[name] = fromOpenCodeMcpConfig(server);
+      }
+    }
+    return servers;
+  }
+
+  /** OpenCode tool names carry the MCP server as `<server>_<tool>`. */
+  private trackToolCall(event: import("@opencode/client").OpenCodeEvent): void {
+    if (event.type === "session.tool.input.started") {
+      const name = event.data.name;
+      const match = [...this.routedTokens.entries()]
+        .filter(([, server]) => name === server || name.startsWith(`${server}_`))
+        .sort((a, b) => b[1].length - a[1].length)[0];
+      if (match) {
+        this.activeToolTokens.set(event.data.id, match[0]);
+        openCodeElicitationRouter.toolStarted({
+          token: match[0],
+          sessionId: this.id,
+          toolCallId: event.data.id,
+        });
+        return;
+      }
+      // Code Mode invokes MCP tools through the generic `execute` tool, so
+      // the tool name does not identify the server. Register this call for
+      // every server wrapped on this session; only one of them can elicit.
+      this.activeToolTokens.set(event.data.id, "*");
+      openCodeElicitationRouter.toolStartedForSession(this.id, event.data.id);
+      return;
+    }
+    if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
+      const token = this.activeToolTokens.get(event.data.id);
+      if (!token) return;
+      this.activeToolTokens.delete(event.data.id);
+      openCodeElicitationRouter.toolFinishedForSession(this.id, event.data.id, token);
+    }
+  }
+
   private async listMcpServerNames(location: { directory: string }): Promise<Set<string>> {
     try {
       const catalog = await this.client.mcp.list(
@@ -286,6 +472,11 @@ export class OpenCodeV2Session implements AgentSession {
     if (!this.acquire) throw new Error("OpenCode helper server exited");
     await this.stream;
     await this.sync.catch(() => undefined);
+    await this.connection
+      .unbindSession(this.id, this.config.cwd)
+      .catch((error: unknown) =>
+        this.logger.warn({ error }, "Could not unbind the OpenCode Paseo bridge"),
+      );
     const next = await this.acquire();
     if (this.closed) {
       await next.release();
@@ -311,6 +502,12 @@ export class OpenCodeV2Session implements AgentSession {
   }
   subscribe(callback: (event: AgentStreamEvent) => void) {
     this.listeners.add(callback);
+    const background = this.background.snapshot();
+    if (background) callback(background);
+    // Reopening can adopt an execution during initialization, before its caller
+    // can subscribe. Deliver that live turn so it remains visible and interruptible.
+    if (this.turns.id)
+      callback({ type: "turn_started", provider: "opencode", turnId: this.turns.id });
     return () => {
       this.listeners.delete(callback);
     };
@@ -340,7 +537,11 @@ export class OpenCodeV2Session implements AgentSession {
   async *streamHistory() {
     await this.reconnectIfExited();
     const history = new V2Timeline(false);
-    yield* history.messages(await messages(this.client, this.id));
+    const events: AgentStreamEvent[] = [];
+    await history.messages(await messages(this.client, this.id), (event) => {
+      events.push(event);
+    });
+    yield* events;
   }
   async getRuntimeInfo() {
     await this.reconnectIfExited();
@@ -438,6 +639,7 @@ export class OpenCodeV2Session implements AgentSession {
         thinkingOptionId: variant ?? null,
       },
     });
+    return { model: `${selected.providerID}/${selected.id}` };
   }
 
   async setThinkingOption(variant: string | null) {
@@ -452,14 +654,33 @@ export class OpenCodeV2Session implements AgentSession {
     this.info = await this.client.session.get({ sessionID: this.id });
     this.emit({ type: "thinking_option_changed", provider: "opencode", thinkingOptionId: variant });
   }
-  async setFeature(id: string, value: unknown) {
-    if (id !== "auto_accept" || typeof value !== "boolean")
-      throw new Error("Unknown OpenCode feature");
-    this.config.featureValues = { ...this.config.featureValues, [id]: value };
-    if (value && !this.config.toolPolicy)
-      for (const request of this.permissions.list())
-        if (request.kind !== "question")
-          await this.respondToPermission(request.id, { behavior: "allow" });
+  /** The agent manager sends one apply at a time, so a failed one restores exactly what it changed. */
+  async applyOptions(options: ProviderOptions): Promise<void> {
+    assertChangesAreLive({
+      provider: "opencode",
+      patch: options,
+      current: this.config.providerOptions,
+      live: ["auto_accept"],
+    });
+    const next = validateProviderOptions(
+      "opencode",
+      OpenCodeProviderOptionsSchema,
+      applyProviderOptionsPatch({ options: this.config.providerOptions, patch: options }),
+    );
+    if (!("auto_accept" in options)) return;
+    const value = next?.auto_accept === true;
+    const previous = this.config.providerOptions;
+    this.config.providerOptions = { ...previous, auto_accept: value };
+    try {
+      if (value && !this.config.toolPolicy)
+        for (const request of this.permissions.list())
+          if (request.kind !== "question")
+            await this.respondToPermission(request.id, { behavior: "allow" });
+    } catch (error) {
+      // A rejected apply stores nothing, so the running session keeps asking as it did.
+      this.config.providerOptions = previous;
+      throw error;
+    }
   }
   async listCommands() {
     await this.reconnectIfExited();
@@ -505,10 +726,14 @@ export class OpenCodeV2Session implements AgentSession {
   }
   async startTurn(prompt: AgentPromptInput, options?: AgentRunOptions) {
     await this.reconnectIfExited();
+    await this.connection.bindSession(this.id, this.config.cwd);
     return this.turns.startTurn(prompt, options);
   }
   steerActiveTurn(prompt: AgentPromptInput, options: SteerActiveTurnOptions): Promise<SteerResult> {
     return this.turns.steerActiveTurn(prompt, options);
+  }
+  stopBackgroundWork(id: string) {
+    return this.background.stopItem(id);
   }
   interrupt() {
     return this.turns.interrupt();
@@ -524,9 +749,12 @@ export class OpenCodeV2Session implements AgentSession {
     await this.client.session.revert.commit({ sessionID: this.id });
   }
   getPendingPermissions() {
-    return [...this.permissions.list()];
+    return [...this.permissions.list(), ...this.elicits.getPendingPermissions()];
   }
   async respondToPermission(requestId: string, response: AgentPermissionResponse) {
+    if (this.elicits.hasWithdrawn(requestId))
+      throw new Error(`MCP elicitation request '${requestId}' has expired`);
+    if (this.elicits.respondToPermission(requestId, response)) return;
     await this.reconnectIfExited();
     const deniesOwnRequest =
       response.behavior === "deny" && this.permissions.isOwnedBy(requestId, this.id);
@@ -541,7 +769,7 @@ export class OpenCodeV2Session implements AgentSession {
     this.info = info;
     this.publishSessionTitle(info.title);
     this.history = history;
-    for (const event of this.timeline.messages(history)) this.emitTimeline(event);
+    await this.timeline.messages(history, (event) => this.emitTimeline(event));
     await this.permissions.reconcile(this.id);
   }
   private async reconcile() {
@@ -556,6 +784,7 @@ export class OpenCodeV2Session implements AgentSession {
     }
   }
   private async reconcileConnection() {
+    await this.connection.bindSession(this.id, this.config.cwd);
     // Session environments are process-local. Reapply this agent's snapshot before
     // reconciling a new connection, including event-stream reconnections.
     if (this.launchEnv)
@@ -620,6 +849,7 @@ export class OpenCodeV2Session implements AgentSession {
       if (streamed) this.emitTimeline(streamed);
       return;
     }
+    this.trackToolCall(event);
     this.permissions.observe(event);
     this.usage.observe(event);
     this.turns.observe(event);
@@ -635,9 +865,12 @@ export class OpenCodeV2Session implements AgentSession {
           if (event.type === "server.connected") {
             this.timeline.resetStreams();
             await this.reconcileConnection();
+            signal.throwIfAborted();
+            this.background.start(this.client);
             connected = true;
             ready();
           }
+          this.background.observe(event);
           await this.children.observe(event);
           this.observeOwnEvent(event);
         }
@@ -653,6 +886,7 @@ export class OpenCodeV2Session implements AgentSession {
           "OpenCode event stream interrupted; reconciling on reconnect",
         );
       }
+      this.background.disconnect();
       await delay(100, undefined, { signal }).catch(() => undefined);
     }
   }
@@ -693,12 +927,27 @@ export class OpenCodeV2Session implements AgentSession {
     if (this.closed) return;
     this.closed = true;
     this.abort.abort();
+    this.elicits.declineAll();
+    for (const token of this.routedTokens.keys()) {
+      await openCodeElicitationRouter
+        .release({ token, sessionId: this.id })
+        .catch((error: unknown) =>
+          this.logger.warn({ error }, "Could not release OpenCode elicitation registration"),
+        );
+    }
+    this.routedTokens.clear();
     this.turns.close();
     this.streamAbort.abort();
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.background.disconnect();
     await this.stream;
     await this.reconnecting?.catch(() => undefined);
     await this.sync.catch(() => undefined);
+    await this.connection
+      .unbindSession(this.id, this.config.cwd)
+      .catch((error: unknown) =>
+        this.logger.warn({ error }, "Could not unbind the OpenCode Paseo bridge"),
+      );
     this.unbind?.();
     try {
       if (!this.persist) await this.client.session.remove({ sessionID: this.id });
@@ -707,4 +956,65 @@ export class OpenCodeV2Session implements AgentSession {
     }
     this.listeners.clear();
   }
+}
+
+/** OpenCode's own config shape for one MCP server (local or remote). */
+type OpenCodeMcpConfig =
+  | {
+      type: "local";
+      command: string[];
+      cwd?: string;
+      environment?: Record<string, string>;
+      codemode?: boolean;
+    }
+  | {
+      type: "remote";
+      url: string;
+      headers?: Record<string, string>;
+      oauth?: false;
+      codemode?: boolean;
+    };
+
+function fromOpenCodeMcpConfig(config: OpenCodeMcpConfig): HarnessMcpServerConfig {
+  const codemode = typeof config.codemode === "boolean" ? { codemode: config.codemode } : {};
+  if (config.type === "local") {
+    const [command, ...args] = config.command;
+    return {
+      type: "stdio",
+      command: command ?? "",
+      ...(args.length ? { args } : {}),
+      ...(config.cwd ? { cwd: config.cwd } : {}),
+      ...(config.environment ? { env: config.environment } : {}),
+      ...codemode,
+    };
+  }
+  return {
+    type: "http",
+    url: config.url,
+    ...(config.headers ? { headers: config.headers } : {}),
+    ...codemode,
+  };
+}
+
+function toOpenCodeMcpConfig(config: HarnessMcpServerConfig): OpenCodeMcpConfig {
+  // OpenCode defaults dynamically added MCP servers to Code Mode. Preserve the
+  // original visibility: config-file servers are direct tools unless they
+  // explicitly asked for Code Mode.
+  const codemode = config.codemode ?? false;
+  if (config.type === "stdio") {
+    return {
+      type: "local",
+      command: [config.command, ...(config.args ?? [])],
+      ...(config.cwd ? { cwd: config.cwd } : {}),
+      ...(config.env ? { environment: config.env } : {}),
+      codemode,
+    };
+  }
+  return {
+    type: "remote",
+    url: config.url,
+    ...(config.headers ? { headers: config.headers } : {}),
+    oauth: false,
+    codemode,
+  };
 }

@@ -34,6 +34,7 @@ import { openEditWorkspace } from "@/projects/edit-workspace-store";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
+import { densityIconProps } from "@/styles/density";
 import type { Theme } from "@/styles/theme";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
@@ -53,8 +54,11 @@ import {
 } from "@/components/ui/context-menu";
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { Shortcut } from "@/components/ui/shortcut";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
+import type { KeyboardActionId } from "@/keyboard/keyboard-action-dispatcher";
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { resolveSidebarWorkspaceAccessibilityLabel } from "@/components/sidebar/sidebar-workspace-title";
+import { bySizing } from "@/components/ui/control-geometry";
 import {
   workspaceServiceLabelKey,
   type WorkspaceServiceSummary,
@@ -109,36 +113,22 @@ export function SidebarWorkspaceHoverActions({
   workspaceKey,
   isPinned,
   onTogglePin,
-  onArchive,
-  archiveLabel,
-  archiveStatus,
   children,
 }: {
   workspaceKey: string;
   isPinned?: boolean;
   onTogglePin?: () => void;
-  onArchive?: () => void;
-  archiveLabel?: string;
-  archiveStatus?: "idle" | "pending" | "success";
   children: ReactNode;
 }) {
   const { t } = useTranslation();
   const pinAction = workspacePinAction(isPinned === true);
   const pinLabel = t(`sidebar.workspace.actions.${pinAction}`);
-  const archiveAccessibilityLabel = archiveLabel ?? t("sidebar.workspace.actions.archive");
   const handlePin = useCallback(
     (event: GestureResponderEvent) => {
       stopRowPress(event);
       onTogglePin?.();
     },
     [onTogglePin],
-  );
-  const handleArchive = useCallback(
-    (event: GestureResponderEvent) => {
-      stopRowPress(event);
-      onArchive?.();
-    },
-    [onArchive],
   );
   return (
     <View style={styles.hoverActions}>
@@ -156,28 +146,43 @@ export function SidebarWorkspaceHoverActions({
           )}
         </ToolbarButton>
       ) : null}
-      {onArchive ? (
-        <ToolbarButton
-          label={archiveAccessibilityLabel}
-          disabled={archiveStatus === "pending"}
-          onPress={handleArchive}
-          style={styles.hoverIconButton}
-          testID={`sidebar-workspace-archive-${workspaceKey}`}
-        >
-          <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />
-        </ToolbarButton>
-      ) : null}
       {children}
     </View>
   );
 }
 
+/** Pointer-only, so it is always the kebab's pointer size. */
+const ARCHIVE_BUTTON_SIZE = 18;
+/** Keeps a press aimed at the kebab from landing on the one-click archive. */
+const ARCHIVE_BUTTON_KEBAB_GAP = 8;
+/** The width the archive button and its gap take up left of the kebab. */
+export const ARCHIVE_BUTTON_FOOTPRINT = ARCHIVE_BUTTON_SIZE + ARCHIVE_BUTTON_KEBAB_GAP;
+
+const triggerIconProps = densityIconProps("sm", foregroundMutedColorMapping);
+const triggerIconHoveredProps = densityIconProps("sm", foregroundColorMapping);
+
 function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
+  return <ThemedMoreVertical uniProps={hovered ? triggerIconHoveredProps : triggerIconProps} />;
+}
+
+/** One-click archive beside the kebab, for pointer rows that reveal it on hover. */
+export function SidebarWorkspaceArchiveButton({
+  workspaceKey,
+  onArchive,
+}: {
+  workspaceKey: string;
+  onArchive: () => void;
+}) {
+  const { t } = useTranslation();
   return (
-    <ThemedMoreVertical
-      size={14}
-      uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-    />
+    <ToolbarButton
+      label={t("sidebar.workspace.actions.archiveWorkspace")}
+      onPress={onArchive}
+      style={styles.hoverIconButton}
+      testID={`sidebar-workspace-archive-button-${workspaceKey}`}
+    >
+      <ThemedArchive size={14} uniProps={foregroundMutedColorMapping} />
+    </ToolbarButton>
   );
 }
 
@@ -198,6 +203,7 @@ export interface SidebarWorkspaceMenuProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
+  deleteShortcutKeys?: ShortcutKey[][] | null;
   onDelete?: () => void;
   isPinned?: boolean;
   onTogglePin?: () => void;
@@ -308,6 +314,7 @@ function SidebarWorkspaceMenuItems({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -318,6 +325,23 @@ function SidebarWorkspaceMenuItems({
     () => (archiveShortcutKeys ? <Shortcut chord={archiveShortcutKeys} /> : null),
     [archiveShortcutKeys],
   );
+  const deleteTrailing = useMemo(
+    () => (deleteShortcutKeys ? <Shortcut chord={deleteShortcutKeys} /> : null),
+    [deleteShortcutKeys],
+  );
+  // The items are mounted only while the menu is open. Claim Delete here at a higher
+  // priority than the global handler so the key acts on the row whose menu is on screen,
+  // not on whichever workspace happens to be routed. It opens the same confirmation.
+  useKeyboardActionHandler({
+    handlerId: `workspace-menu-delete-${workspaceKey}`,
+    actions: ["workspace.delete" as KeyboardActionId],
+    enabled: Boolean(onDelete),
+    priority: 10,
+    handle: () => {
+      onDelete?.();
+      return true;
+    },
+  });
   const labelLeading = useMemo(
     () => <ThemedTag size={14} uniProps={foregroundMutedColorMapping} />,
     [],
@@ -481,6 +505,7 @@ function SidebarWorkspaceMenuItems({
             surface={surface}
             testID={`sidebar-workspace-menu-delete-${workspaceKey}`}
             leading={deleteLeadingIcon}
+            trailing={deleteTrailing}
             destructive
             onSelect={onDelete}
           >
@@ -534,6 +559,7 @@ export function SidebarWorkspaceMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -583,6 +609,7 @@ export function SidebarWorkspaceMenu({
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
           archiveShortcutKeys={archiveShortcutKeys}
+          deleteShortcutKeys={deleteShortcutKeys}
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
@@ -616,6 +643,7 @@ export function SidebarWorkspaceContextMenu({
   archiveStatus,
   archivePendingLabel,
   archiveShortcutKeys,
+  deleteShortcutKeys,
   onDelete,
   isPinned,
   onTogglePin,
@@ -700,6 +728,7 @@ export function SidebarWorkspaceContextMenu({
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
           archiveShortcutKeys={archiveShortcutKeys}
+          deleteShortcutKeys={deleteShortcutKeys}
           isPinned={isPinned}
           onTogglePin={onTogglePin}
           openInFileManagerPath={openInFileManagerPath}
@@ -715,12 +744,17 @@ function triggerStyle({ hovered = false }: PressableStateCallbackType & { hovere
 
 const styles = StyleSheet.create((theme) => ({
   trigger: {
-    padding: 2,
+    // Larger on touch so the kebab is an easy tap target.
+    width: bySizing({ touch: 32, pointer: 18 }),
+    height: bySizing({ touch: 32, pointer: 18 }),
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 4,
-    marginLeft: 2,
+    // Center the touch box on the 20px title line it is anchored to.
+    marginTop: bySizing({ touch: -6, pointer: 0 }),
     // MoreVertical paints only around the center of its SVG. Keep the padded hit box, but
     // pull the painted dots through that unused view-box space onto the trailing-content rail.
-    marginRight: -7,
+    marginRight: bySizing({ touch: -14, pointer: -7 }),
   },
   triggerHovered: {
     backgroundColor: theme.colors.surface2,

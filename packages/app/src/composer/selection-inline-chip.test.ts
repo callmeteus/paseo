@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInlineParts, serializeInlineChip } from "@getpaseo/protocol/inline-chip";
+import { parseInlineParts } from "@getpaseo/protocol/inline-chip";
 import { insertSelectionAsInlineChip } from "./selection-inline-chip";
 
 describe("insertSelectionAsInlineChip", () => {
@@ -10,6 +10,7 @@ describe("insertSelectionAsInlineChip", () => {
     });
 
     expect(result.text).toContain("Arruma isso por favor ");
+    expect(result.text.endsWith(" ")).toBe(true);
     const parts = parseInlineParts(result.text);
     const chip = parts.find((part) => part.kind === "chip");
     expect(chip).toBeDefined();
@@ -42,17 +43,13 @@ describe("insertSelectionAsInlineChip", () => {
     expect(chip.chip.label).toBe(`"${"x".repeat(40)}..."`);
   });
 
-  it("does not add a separator to an empty draft or a trailing whitespace", () => {
+  it("adds a trailing space without doubling an existing leading separator", () => {
     const empty = insertSelectionAsInlineChip({
       currentText: "",
       selectionText: "texto",
     });
-    expect(empty.text).toBe(
-      parseInlineParts(empty.text)
-        .map((p) => (p.kind === "text" ? p.text : serializeInlineChip(p.chip)))
-        .join(""),
-    );
     expect(parseInlineParts(empty.text)[0]?.kind).toBe("chip");
+    expect(empty.text.endsWith(" ")).toBe(true);
 
     const spaced = insertSelectionAsInlineChip({
       currentText: "oi ",
@@ -60,6 +57,7 @@ describe("insertSelectionAsInlineChip", () => {
     });
     expect(spaced.text.startsWith("oi ")).toBe(true);
     expect(spaced.text.startsWith("oi  ")).toBe(false);
+    expect(spaced.text.endsWith(" ")).toBe(true);
   });
 
   it("ignores blank selections", () => {

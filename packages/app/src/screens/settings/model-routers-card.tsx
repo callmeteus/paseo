@@ -214,12 +214,10 @@ export function ModelRoutersCard({ serverId }: { serverId: string }) {
   );
   const providers = useMemo(
     () =>
-      buildSelectableProviderSelectorProviders(
-        snapshot.entries,
-        true,
-        undefined,
+      buildSelectableProviderSelectorProviders(snapshot.entries, {
+        selectedProvider: null,
         disabledModelIdsByProvider,
-      ),
+      }),
     [disabledModelIdsByProvider, snapshot.entries],
   );
   const presets = useMemo(

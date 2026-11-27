@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import type {
   AgentMode,
   AgentModelDefinition,
   AgentProvider,
+  ProviderOptions,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
@@ -33,14 +34,13 @@ import {
   mergeSelectedComposerPreferences,
   buildProviderDefinitionMap,
   buildProviderDefinitionMapForStatuses,
-  INITIAL_AGENT_FORM_RESOLUTION,
-  INITIAL_USER_MODIFIED,
   RESOLVABLE_PROVIDER_STATUSES,
   SELECTABLE_PROVIDER_STATUSES,
   type FormInitialValues,
   type FormState,
   type ProviderModelsByProvider,
 } from "@/provider-selection/resolve-agent-form";
+import { openAgentForm, type AgentFormCatalog } from "@/provider-selection/agent-form-store";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { pinRouterEntry, routerPickAsModel } from "@/model-routers/entry-target";
@@ -59,6 +59,8 @@ export interface UseAgentFormStateOptions {
 export interface UseAgentFormStateResult {
   selectedServerId: string | null;
   selectedProvider: AgentProvider | null;
+  /** The provider as it is now, which a render may not have reached yet. */
+  getSelectedProvider: () => AgentProvider | null;
   selectedMode: string;
   setModeFromUser: (modeId: string) => void;
   selectedWorkflowMode: string;
@@ -66,7 +68,7 @@ export interface UseAgentFormStateResult {
   selectedModel: string;
   setModelFromUser: (modelId: string) => void;
   selectedThinkingOptionId: string;
-  setThinkingOptionFromUser: (thinkingOptionId: string) => void;
+  setThinkingOptionFromUser: (thinkingOptionId: string, retainedOptions?: ProviderOptions) => void;
   workingDir: string;
   providerDefinitions: AgentProviderDefinition[];
   providerDefinitionMap: Map<AgentProvider, AgentProviderDefinition>;
@@ -83,7 +85,8 @@ export interface UseAgentFormStateResult {
   modelError: string | null;
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
-  setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
+  /** `false` when the provider is unknown or not ready. */
+  setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => boolean;
   /** Binds a router and switches the draft to that router's entry model. */
   applyRouterFromUser: (routerId: string | null) => void;
   applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
@@ -91,6 +94,12 @@ export interface UseAgentFormStateResult {
   workingDirIsEmpty: boolean;
   persistFormPreferences: () => Promise<void>;
 }
+
+const EMPTY_CATALOG: AgentFormCatalog = {
+  selectableProviders: new Map(),
+  models: new Map(),
+  providerPreferences: () => undefined,
+};
 
 function resolveSelectedProviderModes(input: {
   selectedEntry: ProviderSnapshotEntry | null;
@@ -197,11 +206,15 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     [updatePreferences],
   );
 
-  const [{ form: formState, userModified, resolution }, dispatch] = useReducer(resolveAgentForm, {
-    form: { provider: null, modeId: "", workflowModeId: "agent", model: "", thinkingOptionId: "" },
-    userModified: INITIAL_USER_MODIFIED,
-    resolution: INITIAL_AGENT_FORM_RESOLUTION,
-  });
+  // The store reads what the host offers when a command runs; each render publishes the latest.
+  const catalogRef = useRef<AgentFormCatalog>(EMPTY_CATALOG);
+  const [formStore] = useState(() => openAgentForm(() => catalogRef.current));
+  const { form: formState, resolution } = useSyncExternalStore(
+    formStore.subscribe,
+    formStore.getState,
+    formStore.getState,
+  );
+  const dispatch = formStore.dispatch;
 
   const {
     entries: snapshotEntries,
@@ -262,13 +275,12 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   );
   const snapshotModelSelectorProviders = useMemo(
     () =>
-      buildSelectableProviderSelectorProviders(
-        snapshotEntries,
+      buildSelectableProviderSelectorProviders(snapshotEntries, {
         isConnected,
-        undefined,
+        selectedProvider: formState.provider || null,
         disabledModelIdsByProvider,
-      ),
-    [disabledModelIdsByProvider, isConnected, snapshotEntries],
+      }),
+    [disabledModelIdsByProvider, isConnected, formState.provider, snapshotEntries],
   );
   const snapshotSelectedEntry = useMemo(
     () =>
@@ -291,6 +303,12 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   const providerDefinitionMap = snapshotProviderDefinitionMap;
   const selectableProviderDefinitionMap = snapshotSelectableProviderDefinitionMap;
   const allProviderModels = snapshotAllProviderModels;
+  catalogRef.current = {
+    selectableProviders: selectableProviderDefinitionMap,
+    models: allProviderModels,
+    providerPreferences: (provider) =>
+      preferenceOverlayRef.current.current().providerPreferences?.[provider],
+  };
   const modelSelectorProviders = snapshotModelSelectorProviders;
   const availableModels = snapshotSelectedProviderModels;
   const modeOptions = snapshotSelectedProviderModes;
@@ -324,39 +342,15 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     snapshotProviderModelsByProvider,
     snapshotResolvableProviderDefinitionMap,
     unavailableProviders,
+    dispatch,
   ]);
 
-  const applySelectedProviderAndModel = useCallback(
-    (provider: AgentProvider, modelId: string, keepRouter: boolean) => {
-      if (!selectableProviderDefinitionMap.has(provider)) {
-        return;
-      }
-      const providerDef = selectableProviderDefinitionMap.get(provider);
+  const setProviderAndModelFromUser = useCallback(
+    (provider: AgentProvider, modelId: string): boolean => {
+      if (!formStore.setProviderAndModel(provider, modelId)) return false;
       const providerModels = allProviderModels.get(provider) ?? null;
-      const providerPrefs = preferenceOverlayRef.current.current().providerPreferences?.[provider];
-      const normalizedModelId = normalizeSelectedModelId(modelId);
-      const nextModelId = normalizedModelId || resolveDefaultModelId(providerModels);
-
-      dispatch({
-        type: "SET_PROVIDER_AND_MODEL_FROM_USER",
-        provider,
-        modelId,
-        providerDef,
-        providerModels,
-        providerPrefs,
-      });
-      // A new chat runs on a model or on a router, never both: picking a model
-      // stops the default router from overriding it on creation.
-      if (!keepRouter && isCreateFlow && config?.modelRouters?.defaultRouterId) {
-        void patchConfig({
-          modelRouters: {
-            routers: config.modelRouters.routers ?? [],
-            defaultRouterId: null,
-          },
-        }).catch((error: unknown) => {
-          console.warn("[AgentForm] failed to clear the default router", error);
-        });
-      }
+      const nextModelId =
+        normalizeSelectedModelId(modelId) || resolveDefaultModelId(providerModels);
       void updateCurrentPreferences((current) =>
         mergeSelectedComposerPreferences({
           preferences: current,
@@ -366,22 +360,29 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
           },
         }),
       );
+      // A new chat runs on a model or on a router, never both: picking a model
+      // stops the default router from overriding it on creation.
+      if (isCreateFlow && config?.modelRouters?.defaultRouterId) {
+        void patchConfig({
+          modelRouters: {
+            routers: config.modelRouters.routers ?? [],
+            defaultRouterId: null,
+          },
+        }).catch((error: unknown) => {
+          console.warn("[AgentForm] failed to clear the default router", error);
+        });
+      }
+      return true;
     },
     [
       allProviderModels,
       config?.modelRouters?.defaultRouterId,
       config?.modelRouters?.routers,
+      formStore,
       isCreateFlow,
       patchConfig,
-      selectableProviderDefinitionMap,
       updateCurrentPreferences,
     ],
-  );
-  const setProviderAndModelFromUser = useCallback(
-    (provider: AgentProvider, modelId: string) => {
-      applySelectedProviderAndModel(provider, modelId, false);
-    },
-    [applySelectedProviderAndModel],
   );
 
   const applyRouterFromUser = useCallback(
@@ -400,9 +401,11 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
       const staged = router
         ? routerPickAsModel({ targetServerId: serverId ?? "", routerId, router })
         : null;
-      if (staged && selectableProviderDefinitionMap.has(staged.provider as AgentProvider)) {
+      if (
+        staged &&
+        formStore.setProviderAndModel(staged.provider as AgentProvider, staged.modelId)
+      ) {
         pinRouterEntry(routerId, staged.provider, staged.modelId || null);
-        applySelectedProviderAndModel(staged.provider as AgentProvider, staged.modelId, true);
       }
       void patchConfig({ modelRouters: { routers, defaultRouterId: routerId } }).catch(
         (error: unknown) => {
@@ -410,18 +413,12 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         },
       );
     },
-    [
-      config?.modelRouters,
-      patchConfig,
-      selectableProviderDefinitionMap,
-      applySelectedProviderAndModel,
-      serverId,
-    ],
+    [config?.modelRouters, formStore, patchConfig, serverId],
   );
 
   const clearProviderSelectionFromUser = useCallback(() => {
     dispatch({ type: "CLEAR_PROVIDER_SELECTION_FROM_USER" });
-  }, []);
+  }, [dispatch]);
 
   const applyProfileFromUser = useCallback(
     (profile: MaterializedAgentProfile) => {
@@ -430,7 +427,8 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         return;
       }
 
-      const previousProvider = formState.provider;
+      const formBefore = formStore.getState();
+      const previousProvider = formBefore.form.provider;
       const providerDef = selectableProviderDefinitionMap.get(provider);
       const providerModels = allProviderModels.get(provider) ?? null;
       const providerPrefs = preferenceOverlayRef.current.current().providerPreferences?.[provider];
@@ -444,7 +442,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         providerModels,
         providerPrefs,
       };
-      const nextState = resolveAgentForm({ form: formState, userModified, resolution }, action);
+      const nextState = resolveAgentForm(formBefore, action);
       const previousProviderModeIds = previousProvider
         ? (providerDefinitionMap.get(previousProvider)?.modes.map((mode) => mode.id) ?? [])
         : [];
@@ -460,7 +458,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
           modelId: model,
           modeId,
           thinkingOptionId,
-          featureValues: profile.featureValues,
+          options: profile.options,
         });
       }).catch((error) => {
         console.warn("[useAgentFormState] persist profile preference failed", error);
@@ -468,19 +466,18 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     },
     [
       allProviderModels,
-      formState,
+      dispatch,
+      formStore,
       providerDefinitionMap,
-      resolution,
       selectableProviderDefinitionMap,
       updateCurrentPreferences,
-      userModified,
     ],
   );
 
   const setModeFromUser = useCallback(
     (modeId: string) => {
       dispatch({ type: "SET_MODE_FROM_USER", modeId });
-      const provider = formState.provider;
+      const { provider } = formStore.getState().form;
       if (provider) {
         void updateCurrentPreferences((current) =>
           mergeSelectedComposerPreferences({
@@ -493,28 +490,25 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         );
       }
     },
-    [formState.provider, updateCurrentPreferences],
+    [dispatch, formStore, updateCurrentPreferences],
   );
 
-  const setWorkflowModeFromUser = useCallback((workflowModeId: string) => {
-    dispatch({ type: "SET_WORKFLOW_MODE_FROM_USER", workflowModeId });
-  }, []);
+  const setWorkflowModeFromUser = useCallback(
+    (workflowModeId: string) => {
+      dispatch({ type: "SET_WORKFLOW_MODE_FROM_USER", workflowModeId });
+    },
+    [dispatch],
+  );
 
   const setModelFromUser = useCallback(
     (modelId: string) => {
-      const provider = formState.provider;
-      const providerPrefs = provider
-        ? preferenceOverlayRef.current.current().providerPreferences?.[provider]
-        : undefined;
-      dispatch({
-        type: "SET_MODEL_FROM_USER",
-        modelId,
-        availableModels,
-        providerPrefs,
-      });
+      formStore.setModel(modelId);
+      const { provider } = formStore.getState().form;
       if (provider) {
-        const normalizedModelId = normalizeSelectedModelId(modelId);
-        const nextModelId = normalizedModelId || resolveDefaultModelId(availableModels);
+        const listed = allProviderModels.get(provider);
+        const nextModelId =
+          normalizeSelectedModelId(modelId) ||
+          resolveDefaultModelId(listed?.length ? listed : null);
         void updateCurrentPreferences((current) =>
           mergeSelectedComposerPreferences({
             preferences: current,
@@ -526,13 +520,13 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
         );
       }
     },
-    [availableModels, formState.provider, updateCurrentPreferences],
+    [allProviderModels, formStore, updateCurrentPreferences],
   );
 
   const setThinkingOptionFromUser = useCallback(
-    (thinkingOptionId: string) => {
+    (thinkingOptionId: string, retainedOptions?: ProviderOptions) => {
       dispatch({ type: "SET_THINKING_OPTION_FROM_USER", thinkingOptionId });
-      const { provider, model: modelId } = formState;
+      const { provider, model: modelId } = formStore.getState().form;
       if (provider && modelId) {
         void updateCurrentPreferences((current) =>
           mergeSelectedComposerPreferences({
@@ -542,13 +536,16 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
               thinkingByModel: {
                 [modelId]: thinkingOptionId,
               },
+              options: retainedOptions,
             },
           }),
         );
       }
     },
-    [formState, updateCurrentPreferences],
+    [dispatch, formStore, updateCurrentPreferences],
   );
+
+  const getSelectedProvider = useCallback(() => formStore.getState().form.provider, [formStore]);
 
   const refreshProviderModels = useCallback(
     (provider?: AgentProvider) => {
@@ -591,6 +588,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     () => ({
       selectedServerId: serverId,
       selectedProvider: formState.provider,
+      getSelectedProvider,
       selectedMode: formState.modeId,
       setModeFromUser,
       selectedWorkflowMode: formState.workflowModeId,
@@ -624,6 +622,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     }),
     [
       serverId,
+      getSelectedProvider,
       formState.provider,
       formState.modeId,
       formState.workflowModeId,

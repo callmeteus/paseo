@@ -5,7 +5,8 @@ export type ClientSlashCommandKind =
   | "archive-agent"
   | "replace-agent-with-draft"
   | "toggle-chat-mode"
-  | "open-side-chat";
+  | "open-side-chat"
+  | "paseo-update";
 export type ClientSlashCommandExecution = "immediate" | "insert";
 
 export interface ClientSlashCommand {
@@ -16,7 +17,8 @@ export interface ClientSlashCommand {
     | "composer.clientCommands.archiveAgent"
     | "composer.clientCommands.freshDraft"
     | "composer.clientCommands.chatMode"
-    | "composer.clientCommands.sideChat";
+    | "composer.clientCommands.sideChat"
+    | "composer.clientCommands.paseoUpdate";
   argumentHint: string;
   kind: ClientSlashCommandKind;
   execution: ClientSlashCommandExecution;
@@ -64,6 +66,15 @@ export const CLIENT_SLASH_COMMANDS: readonly ClientSlashCommand[] = [
     kind: "open-side-chat",
     execution: "immediate",
     acceptsArgument: true,
+  },
+  {
+    name: "paseo-update",
+    aliases: [],
+    description: "Update Paseo and Hub from the main branch on this host",
+    descriptionKey: "composer.clientCommands.paseoUpdate",
+    argumentHint: "",
+    kind: "paseo-update",
+    execution: "immediate",
   },
 ];
 
@@ -115,17 +126,12 @@ export function resolveClientSlashCommand(input: {
 }
 
 export function buildDraftAgentSetup(agent: Agent): WorkspaceDraftTabSetup {
-  const featureValues: Record<string, unknown> = {};
-  for (const feature of agent.features ?? []) {
-    featureValues[feature.id] = feature.value;
-  }
-
   return {
     provider: agent.provider,
     cwd: agent.cwd,
     modeId: agent.currentModeId ?? agent.runtimeInfo?.modeId ?? null,
     model: agent.model ?? agent.runtimeInfo?.model ?? null,
     thinkingOptionId: agent.thinkingOptionId ?? agent.runtimeInfo?.thinkingOptionId ?? null,
-    featureValues,
+    providerOptions: { ...agent.options },
   };
 }

@@ -557,6 +557,33 @@ describe("normalizeWorkspaceDescriptor", () => {
     expect(blank.workspaceDirectory).toBe("");
   });
 
+  it("preserves informational workspace parentage", () => {
+    const payload = {
+      id: "child",
+      parentWorkspaceId: "parent",
+      projectId: "1",
+      projectDisplayName: "Project 1",
+      projectRootPath: "/repo",
+      workspaceDirectory: "/repo",
+      projectKind: "git",
+      workspaceKind: "checkout",
+      name: "main",
+      archivingAt: null,
+      status: "done",
+      statusEnteredAt: null,
+      activityAt: null,
+      diffStat: null,
+      scripts: [],
+    } as WorkspaceDescriptorPayload;
+
+    const workspace = normalizeWorkspaceDescriptor(payload);
+
+    expect(workspace.parentWorkspaceId).toBe("parent");
+    expect(
+      normalizeWorkspaceDescriptor({ ...payload, parentWorkspaceId: undefined }).parentWorkspaceId,
+    ).toBeUndefined();
+  });
+
   it("defaults missing scripts to an empty array", () => {
     const payload = {
       id: "1",
@@ -820,5 +847,54 @@ describe("removeWorkspace", () => {
     expect(after.sessions).toBe(before.sessions);
     expect(after.session).toBe(before.session);
     expect(after.workspaces).toBe(before.workspaces);
+  });
+});
+
+describe("queued message tombstones", () => {
+  it("does not let a stale daemon snapshot restore a removed message id", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "already sent", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    store.markQueuedMessageRemoved("test-server", "agent", item.id);
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [],
+    );
+  });
+
+  it("allows a rejected send to restore the same message id", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "retry me", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+    store.markQueuedMessageRemoved("test-server", "agent", item.id);
+
+    store.restoreQueuedMessage("test-server", "agent", item.id);
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [item],
+    );
+  });
+
+  it("retires a queued id when the canonical timeline acknowledges it", () => {
+    const store = useSessionStore.getState();
+    initializeTestSession();
+    const item = { id: "msg-1", text: "delivered elsewhere", attachments: [] };
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    store.setAgentStreamState("test-server", "agent", {
+      tail: [],
+      head: [],
+      acknowledgedClientMessageIds: [item.id],
+    });
+    store.setQueuedMessages("test-server", new Map([["agent", [item]]]));
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages.get("agent")).toEqual(
+      [],
+    );
   });
 });

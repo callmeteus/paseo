@@ -4,11 +4,12 @@ import {
   buildHostRootRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
+  buildNewAgentRoute,
   buildNewWorkspaceRoute,
   buildOpenProjectRoute,
   resolveKnownHostRoute,
   buildSessionsRoute,
-  buildSettingsAddHostRoute,
+  buildSettingsSectionRoute,
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
@@ -18,6 +19,7 @@ import {
   isSettingsSectionSlug,
   normalizeHostSectionSlug,
   normalizeProjectSettingsRouteId,
+  buildProviderSettingsRoute,
   parseHostAgentRouteFromPathname,
   parseHostWorkspaceOpenIntentFromPathname,
   parseHostWorkspaceRouteFromPathname,
@@ -185,14 +187,6 @@ describe("workspace route parsing", () => {
 });
 
 describe("projects settings routes", () => {
-  it("buildSettingsAddHostRoute opens settings with the add-host flag", () => {
-    expect(buildSettingsAddHostRoute()).toBe("/settings/general?addHost=1");
-  });
-
-  it("buildSettingsAddHostRoute accepts a repeatable intent id", () => {
-    expect(buildSettingsAddHostRoute("retry 1")).toBe("/settings/general?addHost=retry%201");
-  });
-
   it("buildProjectsSettingsRoute scopes the list to a host", () => {
     expect(buildProjectsSettingsRoute("host a")).toBe("/settings/hosts/host%20a/projects");
   });
@@ -208,6 +202,14 @@ describe("projects settings routes", () => {
   });
 });
 
+describe("provider settings routes", () => {
+  it("buildProviderSettingsRoute addresses one provider on a host", () => {
+    expect(buildProviderSettingsRoute("host a", "acp/gemini")).toBe(
+      "/settings/hosts/host%20a/providers/acp%2Fgemini",
+    );
+  });
+});
+
 describe("global routes", () => {
   it("buildSessionsRoute returns the all-host Sessions route", () => {
     expect(buildSessionsRoute()).toBe("/sessions");
@@ -219,6 +221,16 @@ describe("global routes", () => {
 
   it("buildNewWorkspaceRoute accepts an initial host", () => {
     expect(buildNewWorkspaceRoute({ serverId: "local" })).toBe("/new?serverId=local");
+  });
+
+  it("buildNewAgentRoute scopes the setup to a workspace", () => {
+    expect(buildNewAgentRoute()).toBe("/new-agent");
+    expect(buildNewAgentRoute({ serverId: "local", workspaceId: "workspace-1" })).toBe(
+      "/new-agent?serverId=local&workspaceId=workspace-1",
+    );
+    expect(
+      buildNewAgentRoute({ serverId: "local", workspaceId: "workspace-1", draftId: "draft-1" }),
+    ).toBe("/new-agent?serverId=local&workspaceId=workspace-1&draftId=draft-1");
   });
 
   it("buildNewWorkspaceRoute accepts initial project context", () => {
@@ -267,6 +279,11 @@ describe("host settings section slugs", () => {
 describe("settings section slugs", () => {
   it("includes desktop notification settings", () => {
     expect(isSettingsSectionSlug("notifications")).toBe(true);
+  });
+
+  it("exposes the App label manager as a settings section", () => {
+    expect(isSettingsSectionSlug("labels")).toBe(true);
+    expect(buildSettingsSectionRoute("labels")).toBe("/settings/labels");
   });
 
   it("no longer treats daemon as a valid app-level settings section", () => {

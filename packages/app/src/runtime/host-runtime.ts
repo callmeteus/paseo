@@ -1,5 +1,7 @@
+import { createHostPluginClientBundleStore } from "@/plugins/client-bundles";
 import { watchdog } from "@/watchdog";
 import { getClusterPreferencesFromCache, type ClusterPreferences } from "@/hooks/use-settings";
+import { createHostLogger } from "./host-logger";
 import { createHostChannelTransport } from "@getpaseo/client/internal/hosts";
 import type { OwnedSubscription } from "@getpaseo/client";
 import type { HostDirectory, HostSummary, HostUpdate } from "@getpaseo/protocol/hosts";
@@ -16,15 +18,17 @@ import {
 import {
   connectionFromListen,
   createRemoteSshHostConnection,
-  normalizeStoredHostProfile,
+  forgetUnreadableHost,
   pinRelayProtectedSecurityInProfiles,
+  readHostRegistry,
   upsertHostConnectionInProfiles,
   registryHasConnection,
   relayConnectionFromOffer,
   hostHasConnection,
-  StoredHostRegistrySchema,
+  writeHostRegistry,
   type HostConnection,
   type HostProfile,
+  type UnreadableHostEntries,
 } from "@/types/host-connection";
 import { defaultHostAppearance, type HostBadgeDisplay, type HostColor } from "@/hosts/appearance";
 import { hostIsAnnounced, hostSyncsName } from "@/hosts/cluster-membership";
@@ -47,7 +51,7 @@ import { isWeb } from "@/constants/platform";
 import { connectToDaemon, getConnectionAuthFailureReason } from "@/utils/test-daemon-connection";
 import { getOrCreateClientId } from "@/utils/client-id";
 import { z } from "zod";
-import { readValidatedJson, readValidatedString } from "@/storage/validated-storage";
+import { readValidatedString } from "@/storage/validated-storage";
 import {
   selectBestConnection,
   type ConnectionCandidate,
@@ -57,10 +61,8 @@ import {
   buildDesktopDaemonTransportUrl,
   createDesktopDaemonTransportFactory,
 } from "@/desktop/daemon/desktop-daemon-transport";
-import { getDesktopHost } from "@/desktop/host";
 import { readDesktopManagedLocalCredential } from "@/desktop/daemon/local-credential";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
-import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import {
   useSessionStore,
   toDaemonServerInfo,
@@ -76,10 +78,15 @@ import {
   invalidateServerDataQueriesAfterReconnect,
   mountServerDataPushRouter,
 } from "@/data/push-router";
-import { mountBrowserAutomationDaemonClientHandler } from "@/desktop/browser/automation/handler";
+import {
+  getDesktopBrowserHostRegistration,
+  mountBrowserAutomationDaemonClientHandler,
+} from "@/desktop/browser/automation/handler";
 import { schedulesQueryBaseKey } from "@/schedules/aggregated-schedules";
 import { dispatchComposerAgentMessage, sendQueuedComposerMessageNow } from "@/composer/actions";
-import { hydrateQueuedMessages, persistAgentMessageQueue } from "@/composer/queue-persistence";
+import { hydrateQueuedMessages } from "@/composer/queue-persistence";
+import { mergeQueuedMessages } from "@/composer/queue-merge";
+import { persistQueueWithReplicas } from "@/composer/queue-replication";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { resolveComposerAttachmentSubmitFormat } from "@/composer/attachments/submit";
 import { encodeImages } from "@/utils/encode-images";
@@ -605,19 +612,10 @@ function probeIntervalForConnection(
 function createDefaultDeps(
   resolveOrigin: (serverId: string) => DaemonClient | null = () => null,
 ): HostRuntimeControllerDeps {
-  const browserHostAvailable =
-    typeof getDesktopHost()?.browser?.executeAutomationCommand === "function";
-  const browserAutomationCapabilities = browserHostAvailable
-    ? {
-        [CLIENT_CAPS.browserHost]: {
-          supportedCommands: [...BROWSER_AUTOMATION_COMMAND_NAMES],
-          hostKind: "desktop app",
-        },
-      }
-    : undefined;
-  const appCapabilities = {
-    ...browserAutomationCapabilities,
-  };
+  const browserHostRegistration = getDesktopBrowserHostRegistration();
+  const appCapabilities = browserHostRegistration
+    ? { [CLIENT_CAPS.browserHost]: browserHostRegistration }
+    : {};
 
   return {
     createClient: ({ host, connection, clientId, runtimeGeneration }) => {
@@ -631,7 +629,9 @@ function createDefaultDeps(
         runtimeGeneration,
         capabilities: appCapabilities,
         trace: createPerformanceTrace({ host: host.serverId, connection: connection.id }),
+        logger: createHostLogger(() => host.serverId),
         providerSnapshots: "wire",
+        createPluginClientBundleStore: createHostPluginClientBundleStore,
         ...(host.password ? { password: host.password } : {}),
         localCredential: () => readDesktopManagedLocalCredential(connection),
       } satisfies Omit<DaemonClientConfig, "url">;
@@ -715,7 +715,9 @@ function createDefaultDeps(
             null,
           ),
           reconnect: { enabled: false },
+          logger: createHostLogger(() => host.serverId),
           appVersion: resolveAppVersion() ?? undefined,
+          createPluginClientBundleStore: createHostPluginClientBundleStore,
         });
         try {
           await client.connect();
@@ -732,6 +734,7 @@ function createDefaultDeps(
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         capabilities: appCapabilities,
         trace: createPerformanceTrace({ host: host.serverId, connection: connection.id }),
+        createPluginClientBundleStore: createHostPluginClientBundleStore,
       });
     },
     getClientId: () => getOrCreateClientId(),
@@ -741,12 +744,14 @@ function createDefaultDeps(
         queryClient,
         serverId: host.serverId,
       });
-      if (!browserAutomationCapabilities) {
+      if (!browserHostRegistration) {
         return unmountServerData;
       }
-      const unmountBrowserAutomation = mountBrowserAutomationDaemonClientHandler(client, {
-        serverId: host.serverId,
-      });
+      const unmountBrowserAutomation = mountBrowserAutomationDaemonClientHandler(
+        client,
+        browserHostRegistration,
+        { serverId: host.serverId },
+      );
       return () => {
         unmountBrowserAutomation();
         unmountServerData();
@@ -956,6 +961,22 @@ export class HostRuntimeController {
     });
   }
 
+  async reconnectVia(originServerId: string): Promise<void> {
+    const routes = this.host.connections.filter(
+      (connection) =>
+        connection.type === "routed" &&
+        connection.originServerId === originServerId &&
+        !this.authRejectedConnectionIds.has(connection.id),
+    );
+    if (routes.length === 0 || !this.started || isHostRuntimeConnected(this.snapshot)) return;
+    if (routes.some((route) => route.id === this.snapshot.activeConnectionId))
+      this.ensureConnected();
+    await this.probeCycleInFlight;
+    if (!this.started || this.snapshot.connectionStatus === "online") return;
+    for (const route of routes) this.connectionLastProbedAt.delete(route.id);
+    await this.runProbeCycleNow();
+  }
+
   markAgentDirectorySyncLoading(): void {
     const status = this.snapshot.hasEverLoadedAgentDirectory ? "revalidating" : "initial_loading";
     this.updateSnapshot({
@@ -1144,6 +1165,9 @@ export class HostRuntimeController {
       }
 
       const currentActiveConnectionId = this.snapshot.activeConnectionId;
+      if (currentActiveConnectionId) {
+        this.reconcileActiveProbeWithClient(currentActiveConnectionId, probeByConnectionId);
+      }
       const activeProbe = currentActiveConnectionId
         ? probeByConnectionId.get(currentActiveConnectionId)
         : null;
@@ -1187,37 +1211,46 @@ export class HostRuntimeController {
             authFailureReason: probeAuthFailure,
           });
         }
-        this.switchCandidateConnectionId = null;
-        this.switchCandidateHitCount = 0;
+        this.resetSwitchCandidate();
         return;
       }
 
-      if (!activeProbe || activeProbe.status !== "available") {
+      // Adaptive switching counts fresh comparisons only. The probe map keeps the last known
+      // sample per connection for display and failover; a streak hit needs a candidate measured
+      // in this cycle and a heartbeat RTT from the socket that is active right now. Re-reading
+      // the cached map at every ten-second active tick turned one idle-probe sample into three
+      // "consecutive" wins, and a reconnected socket inherited its predecessor's RTT, so a
+      // working relay connection was replaced within seconds of coming online.
+      const sampledCandidates = connectionsToProbe.filter(
+        (connection) => connection.id !== currentActiveConnectionId,
+      );
+      if (sampledCandidates.length === 0) {
+        // An active-only tick carries no evidence about any candidate.
+        return;
+      }
+      const fastest =
+        sampledCandidates
+          .flatMap((connection) => {
+            const probe = probeByConnectionId.get(connection.id);
+            return probe?.status === "available"
+              ? [{ connectionId: connection.id, latencyMs: probe.latencyMs }]
+              : [];
+          })
+          .sort((left, right) => left.latencyMs - right.latencyMs)[0] ?? null;
+      if (!fastest) {
+        // Every candidate sampled this cycle failed: that breaks the streak.
+        this.resetSwitchCandidate();
         return;
       }
 
-      const available = Array.from(probeByConnectionId.entries())
-        .filter(
-          (entry): entry is [string, Extract<ConnectionProbeState, { status: "available" }>] =>
-            entry[1].status === "available",
-        )
-        .map(([connectionId, probe]) => ({
-          connectionId,
-          latencyMs: probe.latencyMs,
-        }))
-        .sort((left, right) => left.latencyMs - right.latencyMs);
-
-      const fastest = available[0] ?? null;
-      if (!fastest || fastest.connectionId === currentActiveConnectionId) {
-        this.switchCandidateConnectionId = null;
-        this.switchCandidateHitCount = 0;
+      const activeRttMs = this.currentActiveSocketRttMs();
+      if (activeRttMs === null) {
         return;
       }
 
-      const improvement = activeProbe.latencyMs - fastest.latencyMs;
+      const improvement = activeRttMs - fastest.latencyMs;
       if (improvement < ADAPTIVE_SWITCH_THRESHOLD_MS) {
-        this.switchCandidateConnectionId = null;
-        this.switchCandidateHitCount = 0;
+        this.resetSwitchCandidate();
         return;
       }
 
@@ -1229,8 +1262,7 @@ export class HostRuntimeController {
       }
 
       if (this.switchCandidateHitCount >= ADAPTIVE_SWITCH_CONSECUTIVE_PROBES) {
-        this.switchCandidateConnectionId = null;
-        this.switchCandidateHitCount = 0;
+        this.resetSwitchCandidate();
         await this.switchToConnection({
           connectionId: fastest.connectionId,
           expectedProbeVersion: requestVersion,
@@ -1339,6 +1371,40 @@ export class HostRuntimeController {
         })();
       }
     });
+  }
+
+  // The client clears its heartbeat RTT when a socket connects, so a connected client's RTT
+  // describes the socket in use right now; a reconnecting client still carries the old one.
+  private currentActiveSocketRttMs(): number | null {
+    const client = this.snapshot.client;
+    if (!client || client.getConnectionState().status !== "connected") return null;
+    return client.getLastLivenessRttMs();
+  }
+
+  private resetSwitchCandidate(): void {
+    this.switchCandidateConnectionId = null;
+    this.switchCandidateHitCount = 0;
+  }
+
+  // The active connection is probed through its own client, which may still be
+  // reconnecting when the probe starts. A verdict taken then is stale if the client
+  // has since connected, so the decision uses the client's current state.
+  private reconcileActiveProbeWithClient(
+    connectionId: string,
+    probeByConnectionId: Map<string, ConnectionProbeState>,
+  ): void {
+    if (probeByConnectionId.get(connectionId)?.status !== "unavailable") return;
+    if (this.authRejectedConnectionIds.has(connectionId)) return;
+    const client = this.snapshot.client;
+    if (!client || client.getConnectionState().status !== "connected") return;
+    const rttMs = client.getLastLivenessRttMs();
+    probeByConnectionId.set(
+      connectionId,
+      rttMs === null
+        ? { status: "pending", latencyMs: null }
+        : { status: "available", latencyMs: rttMs },
+    );
+    this.updateSnapshot({ probeByConnectionId: new Map(probeByConnectionId) });
   }
 
   private isConnectionUnavailable(
@@ -1651,6 +1717,8 @@ export class HostRuntimeController {
           return;
         }
         if (state.status === "connected") this.learnRelaySecurity(client, connection.id);
+        // Switch evidence belongs to the socket it was measured against.
+        if (state.status !== "connected") this.resetSwitchCandidate();
         this.applyConnectionEvent({ type: "client_state", state, lastError: client.lastError });
         this.updateSnapshot({
           ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
@@ -1939,7 +2007,12 @@ export class HostRuntimeStore {
   private controllers = new Map<string, HostRuntimeController>();
   private hostObservations = new Map<
     string,
-    { client: DaemonClient; observation: OwnedSubscription<HostDirectory>; unsubscribe: () => void }
+    {
+      client: DaemonClient;
+      epoch: number;
+      observation: OwnedSubscription<HostDirectory>;
+      unsubscribe: () => void;
+    }
   >();
   private fleetDirectoryDemand = new Map<string, () => void>();
   private serverListeners = new Map<string, Set<() => void>>();
@@ -1949,13 +2022,15 @@ export class HostRuntimeStore {
   private hostListVersion = 0;
   private hostRegistryLoaded = false;
   private hosts: HostProfile[] = [];
+  private unreadableHosts: UnreadableHostEntries = { hosts: [], connectionsByServerId: new Map() };
   private hostAppearanceMutationTail: Promise<void> = Promise.resolve();
   private hostRegistryStatus: HostRegistryStatus = "loading";
   private deps: HostRuntimeControllerDeps;
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private queuedAgentDrainInFlight = new Set<string>();
-  private messageQueuesHydratedServers = new Set<string>();
+  /** Epoch of the last successful queue hydration, so a restarted daemon refetches. */
+  private messageQueuesHydratedEpochs = new Map<string, number>();
   private messageQueueHydrationInFlight = new Set<string>();
   private onlineServerIds = new Set<string>();
   private observedServerIds = new Set<string>();
@@ -2092,40 +2167,23 @@ export class HostRuntimeStore {
     let shouldPersistHosts = false;
     let profiles: HostProfile[] = [];
     try {
-      const stored = await readValidatedJson(
-        this.storage,
-        REGISTRY_STORAGE_KEY,
-        StoredHostRegistrySchema,
-      );
+      const stored = await this.readStoredRegistry();
       if (stored) {
-        const normalizedProfiles: HostProfile[] = [];
-        for (const entry of stored) {
-          const profile = normalizeStoredHostProfile(entry);
-          if (!profile) {
-            await this.storage.removeItem(REGISTRY_STORAGE_KEY);
-            normalizedProfiles.length = 0;
-            break;
-          }
-          // COMPAT(connectionPassword): added in v0.9.1, remove after 2027-03-24 with stored-password migration.
-          if (
-            entry.connections.some(
-              (connection) => connection.type === "directTcp" && connection.password,
-            )
-          ) {
-            shouldPersistHosts = true;
-          }
-          normalizedProfiles.push(profile);
+        // An entry this build can't read skips only that host or connection, and stays stored.
+        const registry = readHostRegistry(stored);
+        this.unreadableHosts = registry.unreadable;
+        // COMPAT(connectionPassword): added in v0.9.1, remove after 2027-03-24 with stored-password migration.
+        if (registry.movedConnectionPassword) {
+          shouldPersistHosts = true;
         }
-        profiles = normalizedProfiles.filter((entry) => !isPlaceholderServerId(entry.serverId));
-        if (profiles.length !== normalizedProfiles.length) {
+        profiles = registry.hosts.filter((entry) => !isPlaceholderServerId(entry.serverId));
+        if (profiles.length !== registry.hosts.length) {
           shouldPersistHosts = true;
         }
       }
-      this.hosts = profiles;
-      this.replicaCache.setHosts(profiles.map((profile) => profile.serverId));
       projectIconCache.setHosts(profiles.map((profile) => profile.serverId));
       await projectIconCache.restore();
-      this.syncHosts(profiles);
+      this.setHostsAndSync(profiles);
       for (const profile of profiles) {
         void this.directorySyncByServer
           .get(profile.serverId)
@@ -2618,6 +2676,7 @@ export class HostRuntimeStore {
   async removeHost(serverId: string): Promise<void> {
     await this.revokePushNotifications({ client: this.getClient(serverId), serverId });
     const remaining = this.hosts.filter((daemon) => daemon.serverId !== serverId);
+    this.unreadableHosts = forgetUnreadableHost(this.unreadableHosts, serverId);
     this.setHostsAndSync(remaining);
     await this.persistHosts();
   }
@@ -2707,7 +2766,27 @@ export class HostRuntimeStore {
   }
 
   private async persistHosts(hosts = this.hosts): Promise<void> {
-    await this.storage.setItem(REGISTRY_STORAGE_KEY, JSON.stringify(hosts));
+    await this.storage.setItem(
+      REGISTRY_STORAGE_KEY,
+      JSON.stringify(writeHostRegistry(hosts, this.unreadableHosts)),
+    );
+  }
+
+  /**
+   * Reads the stored registry without removing it. A value that isn't a JSON array is copied to
+   * `<key>:unreadable` first, because the next save overwrites the key.
+   */
+  private async readStoredRegistry(): Promise<unknown[] | null> {
+    const raw = await this.storage.getItem(REGISTRY_STORAGE_KEY);
+    if (raw === null) return null;
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (Array.isArray(value)) return value;
+    } catch {
+      // Not JSON: copied aside below.
+    }
+    await this.storage.setItem(`${REGISTRY_STORAGE_KEY}:unreadable`, raw);
+    return null;
   }
 
   private emitHostList(): void {
@@ -2798,7 +2877,7 @@ export class HostRuntimeStore {
         const snapshot = controller.getSnapshot();
         this.syncSessionReplica(snapshot.serverId, snapshot);
         this.syncDirectoryConnection(snapshot.serverId);
-        this.syncHostDiscovery(snapshot.serverId);
+        this.syncHostDiscovery(snapshot.serverId, snapshot.connectionEpoch);
         this.emit(snapshot.serverId);
       });
       void controller
@@ -2817,10 +2896,12 @@ export class HostRuntimeStore {
     }
   }
 
-  private syncHostDiscovery(serverId: string): void {
+  private syncHostDiscovery(serverId: string, epoch: number): void {
     const client = this.getClient(serverId);
     const previous = this.hostObservations.get(serverId);
-    if (previous?.client === client) return;
+    // A daemon restart keeps the same client object but bumps the connection epoch. Rebuild
+    // the observation so the new daemon's features and host catalog are re-evaluated.
+    if (previous && previous.client === client && previous.epoch === epoch) return;
     previous?.unsubscribe();
     void previous?.observation.release();
     this.hostObservations.delete(serverId);
@@ -2833,7 +2914,8 @@ export class HostRuntimeStore {
       return;
     const observation = client.observeHosts();
     const apply = (directory: HostDirectory) => {
-      if (this.hostObservations.get(serverId)?.client !== client) return;
+      const current = this.hostObservations.get(serverId);
+      if (!current || current.client !== client || current.epoch !== epoch) return;
       const prefs = this.clusterPrefs();
       const observerName =
         directory.self.label?.trim() || client.getLastServerInfoMessage()?.hostname?.trim() || null;
@@ -2877,7 +2959,7 @@ export class HostRuntimeStore {
         if (message.type === "hosts.changed") apply(message.payload.directory);
       },
     });
-    this.hostObservations.set(serverId, { client, observation, unsubscribe });
+    this.hostObservations.set(serverId, { client, epoch, observation, unsubscribe });
     void observation.ready.then(apply).catch(() => undefined);
   }
 
@@ -2900,10 +2982,10 @@ export class HostRuntimeStore {
       sessionStore.updateSessionServerInfo(serverId, toDaemonServerInfo(serverInfo));
       if (
         serverInfo.features?.agentMessageQueue === true &&
-        !this.messageQueuesHydratedServers.has(serverId) &&
+        this.messageQueuesHydratedEpochs.get(serverId) !== snapshot.connectionEpoch &&
         !this.messageQueueHydrationInFlight.has(serverId)
       ) {
-        void this.hydrateMessageQueues(serverId, snapshot.client);
+        void this.hydrateMessageQueues(serverId, snapshot.client, snapshot.connectionEpoch);
       }
     }
     this.syncOnlinePresence(serverId, snapshot);
@@ -2932,7 +3014,11 @@ export class HostRuntimeStore {
     }
   }
 
-  private async hydrateMessageQueues(serverId: string, client: DaemonClient): Promise<void> {
+  private async hydrateMessageQueues(
+    serverId: string,
+    client: DaemonClient,
+    epoch: number,
+  ): Promise<void> {
     this.messageQueueHydrationInFlight.add(serverId);
     try {
       const queues = await client.listAgentMessageQueues();
@@ -2941,14 +3027,17 @@ export class HostRuntimeStore {
           return [agentId, await hydrateQueuedMessages(items)] as const;
         }),
       );
+      // The connection may have been replaced while attachments were restored. An old
+      // snapshot must not overwrite the queue belonging to the new client.
+      if (useSessionStore.getState().sessions[serverId]?.client !== client) return;
       useSessionStore.getState().setQueuedMessages(serverId, (previous) => {
         const next = new Map(previous);
         for (const [agentId, items] of hydrated) {
-          if ((next.get(agentId)?.length ?? 0) === 0) next.set(agentId, items);
+          next.set(agentId, mergeQueuedMessages(next.get(agentId), items));
         }
         return next;
       });
-      this.messageQueuesHydratedServers.add(serverId);
+      this.messageQueuesHydratedEpochs.set(serverId, epoch);
       this.drainHydratedMessageQueues(serverId);
     } catch (error) {
       console.warn("[HostRuntime] Failed to restore persisted message queues", error);
@@ -2958,7 +3047,7 @@ export class HostRuntimeStore {
   }
 
   private drainHydratedMessageQueues(serverId: string): void {
-    if (!this.messageQueuesHydratedServers.has(serverId)) return;
+    if (!this.messageQueuesHydratedEpochs.has(serverId)) return;
     const session = useSessionStore.getState().sessions[serverId];
     if (!session) return;
     for (const agentId of session.queuedMessages.keys()) {
@@ -2971,15 +3060,17 @@ export class HostRuntimeStore {
     const session = useSessionStore.getState().sessions[serverId];
     if (session?.serverInfo?.features?.agentMessageQueue !== true) return;
     const items = session.queuedMessages.get(agentId) ?? [];
-    void persistAgentMessageQueue(client, agentId, items).catch((error) => {
-      console.error("[HostRuntime] Failed to persist queued agent messages", error);
-    });
+    void persistQueueWithReplicas({ source: { serverId, agentId }, client, items }).catch(
+      (error) => {
+        console.error("[HostRuntime] Failed to persist queued agent messages", error);
+      },
+    );
   }
 
   private clearHostReplica(serverId: string): void {
     useSessionStore.getState().clearSession(serverId);
     useWorkspaceSetupStore.getState().clearServer(serverId);
-    this.messageQueuesHydratedServers.delete(serverId);
+    this.messageQueuesHydratedEpochs.delete(serverId);
     this.messageQueueHydrationInFlight.delete(serverId);
     this.onlineServerIds.delete(serverId);
     this.observedServerIds.delete(serverId);
@@ -3016,6 +3107,7 @@ export class HostRuntimeStore {
       snapshot.connectionStatus === "online" && previousStatus !== "online";
     if (didTransitionOnline) {
       useSessionStore.getState().bumpHistorySyncGeneration(serverId);
+      for (const child of this.controllers.values()) void child.reconnectVia(serverId);
       // Checkout git data is push-driven; pushes emitted while disconnected are gone for
       // good (the daemon dedupes by snapshot fingerprint). Mark the caches stale so active
       // queries refetch now and evicted ones on their next mount.
@@ -3234,6 +3326,10 @@ export class HostRuntimeStore {
         read: (queuedAgentId) =>
           useSessionStore.getState().sessions[serverId]?.queuedMessages.get(queuedAgentId) ?? [],
         write: (update) => useSessionStore.getState().setQueuedMessages(serverId, update),
+        markRemoved: (id, messageId) =>
+          useSessionStore.getState().markQueuedMessageRemoved(serverId, id, messageId),
+        restore: (id, messageId) =>
+          useSessionStore.getState().restoreQueuedMessage(serverId, id, messageId),
       },
       submitMessage: async ({ text, attachments }) => {
         const supportsForgeAttachments =
@@ -3494,7 +3590,22 @@ export class HostRuntimeStore {
       replica,
       replaceDemandedAgentIds: (agentIds) => directory.setAgentRouteDemand(agentIds),
       drainQueuedAgentMessage: (agentId) => this.drainQueuedAgentMessage(serverId, agentId),
-      ports,
+      applyTurnLiveness: (agentId, transitions) =>
+        directory.applyAgentTurnLiveness(agentId, transitions),
+      ports: {
+        ...ports,
+        observe: (agentIds, cursors) => {
+          const keepAgents = directory.captureSubscribedAgents(agentIds);
+          const observation = ports.observe(agentIds, cursors);
+          return {
+            ready: observation.ready.then((answer) => {
+              if (answer?.agents) keepAgents(answer.agents);
+              return answer;
+            }),
+            release: () => observation.release(),
+          };
+        },
+      },
     });
   }
 

@@ -19,6 +19,68 @@ import {
   type TimelineCursor,
 } from "./session-stream-reducers";
 
+it("keeps streamed reasoning together while the initial history is loading", () => {
+  let head: StreamItem[] = [];
+  const chunks = ["Checking a long oper", "ation before", " the re", "sult arrives."];
+  for (const [index, text] of chunks.entries()) {
+    const result = processAgentStreamEvent({
+      event: {
+        type: "timeline",
+        provider: "codex",
+        turnId: "turn-18",
+        item: { type: "reasoning", text },
+      },
+      seq: index + 1,
+      epoch: "epoch-1",
+      currentTail: [],
+      currentHead: head,
+      currentCursor: undefined,
+      timestamp: new Date(1000 + index),
+      hasAuthoritativeBaseline: false,
+    });
+    head = result.head;
+    expect(head).toHaveLength(1);
+    expect(head[0]).toMatchObject({
+      kind: "thought",
+      text: chunks.slice(0, index + 1).join(""),
+      turnId: "turn-18",
+    });
+  }
+});
+
+it.each([false, true])(
+  "keeps adjacent reasoning from different turns separate (history loaded: %s)",
+  (hasAuthoritativeBaseline) => {
+    let head: StreamItem[] = [];
+    let tail: StreamItem[] = [];
+    let cursor: TimelineCursor | undefined;
+    for (const [index, turnId] of ["turn-1", "turn-2"].entries()) {
+      const result = processAgentStreamEvent({
+        event: {
+          type: "timeline",
+          provider: "codex",
+          turnId,
+          item: { type: "reasoning", text: turnId },
+        },
+        seq: index + 1,
+        epoch: "epoch-1",
+        currentTail: tail,
+        currentHead: head,
+        currentCursor: cursor,
+        timestamp: new Date(1000),
+        hasAuthoritativeBaseline,
+      });
+      head = result.head;
+      tail = result.tail;
+      cursor = result.cursor ?? cursor;
+    }
+    expect([...tail, ...head]).toMatchObject([
+      { kind: "thought", text: "turn-1", turnId: "turn-1" },
+      { kind: "thought", text: "turn-2", turnId: "turn-2" },
+    ]);
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
@@ -2815,7 +2877,7 @@ describe("processTimelineResponse", () => {
       ],
       currentTail: [],
       currentHead: [],
-      currentCursor: undefined,
+      currentCursor: { epoch: "epoch-1", startSeq: 60, endSeq: 79 },
     });
     expect(getAssistantTexts([...live.tail, ...live.head])).toEqual([
       "First paragraph.\n\nSecond paragraph.",
@@ -3644,6 +3706,7 @@ describe("processAgentStreamEvent", () => {
       event: makeAssistantTimelineEvent("[System Error] failed"),
       epoch: "timeline-1",
       seq: 42,
+      currentCursor: { epoch: "timeline-1", startSeq: 1, endSeq: 41 },
     });
 
     expect(result.head).toEqual([
@@ -3864,6 +3927,24 @@ describe("processAgentStreamEvent", () => {
     });
   });
 
+  it("catches up from the first row when a chat that was empty receives a later row", () => {
+    const result = processAgentStreamEvent({
+      ...baseStreamInput,
+      event: makeTimelineEvent("word3"),
+      seq: 6,
+      epoch: "epoch-1",
+      currentCursor: undefined,
+    });
+
+    expect(result).toMatchObject({
+      head: [],
+      changedHead: false,
+      cursor: null,
+      cursorChanged: false,
+      sideEffects: [{ type: "catch_up", cursor: { epoch: "epoch-1", endSeq: 0 } }],
+    });
+  });
+
   it("renders a live row over painted items without creating an authoritative cursor", () => {
     const result = processAgentStreamEvent({
       ...baseStreamInput,
@@ -4054,7 +4135,7 @@ describe("processAgentStreamEvents", () => {
       ],
       currentTail: [],
       currentHead: [],
-      currentCursor: undefined,
+      currentCursor: { epoch: "epoch-1", startSeq: 1, endSeq: 237 },
     });
 
     expect(result.changedTail).toBe(false);
@@ -4228,6 +4309,7 @@ describe("processAgentStreamEvents", () => {
       currentTail: [],
       currentHead: [],
       currentCursor: undefined,
+      hasAuthoritativeBaseline: false,
       timestamp: new Date("2026-05-02T10:00:00.186Z"),
     });
 
@@ -4429,7 +4511,7 @@ describe("createAgentStreamReducerQueue", () => {
     const scheduler = createManualScheduler();
     let currentTail: StreamItem[] = [];
     let currentHead: StreamItem[] = [];
-    let currentCursor: TimelineCursor | undefined;
+    let currentCursor: TimelineCursor | undefined = { epoch: "epoch-1", startSeq: 1, endSeq: 1 };
 
     const queue = createAgentStreamReducerQueue({
       getSnapshot: () => ({
@@ -4472,7 +4554,7 @@ describe("createAgentStreamReducerQueue", () => {
     expect(getAssistantTexts(currentHead)).toEqual(["This is a paragraph continues."]);
     expect(currentCursor).toEqual({
       epoch: "epoch-1",
-      startSeq: 2,
+      startSeq: 1,
       endSeq: 4,
     });
   });

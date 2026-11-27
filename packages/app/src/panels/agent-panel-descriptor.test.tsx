@@ -44,6 +44,16 @@ describe("buildDraftPanelDescriptor", () => {
     });
   });
 
+  it("labels workspace side chats with the side chat title", () => {
+    const descriptor = buildDraftPanelDescriptor({
+      isCreating: false,
+      draftId: "side:workspace-1",
+      icon: TestIcon,
+    });
+
+    expect(descriptor.label).toBe("Side chat");
+  });
+
   it("uses the active language for draft descriptor chrome", async () => {
     await i18n.changeLanguage("zh-CN");
     const idleDescriptor = buildDraftPanelDescriptor({
@@ -103,6 +113,29 @@ describe("shared agent descriptor", () => {
 
   it("shows an active turn as running before the lifecycle update arrives", () => {
     expect(describeAgent({ isTurnActive: true }).statusBucket).toBe("running");
+  });
+
+  it("shows background work as running without making the turn active", () => {
+    expect(describeAgent({ backgroundWork: { count: 1 } })).toMatchObject({
+      statusBucket: "running",
+      subtitle: "Background work running",
+    });
+    expect(
+      describeAgent({
+        backgroundWork: { count: 1 },
+        attentionReason: "error",
+        requiresAttention: true,
+      }).statusBucket,
+    ).toBe("failed");
+    expect(describeAgent({ backgroundWork: { count: 1 }, status: "error" }).statusBucket).toBe(
+      "running",
+    );
+  });
+
+  it("localizes the background work detail", async () => {
+    await i18n.changeLanguage("zh-CN");
+    expect(describeAgent({ backgroundWork: { count: 1 } }).subtitle).toBe("后台任务运行中");
+    await i18n.changeLanguage("en");
   });
 
   it("surfaces pending permissions even while the turn is running", () => {

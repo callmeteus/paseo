@@ -1,3 +1,4 @@
+import { isTurnBoundary } from "./turn-membership";
 import type { ChatDisplay } from "@/hooks/use-settings";
 import { localizeGoalNotice } from "@/agent-stream/goal-copy";
 import type { TimelineItemTransform } from "@/plugins/timeline/model";
@@ -11,21 +12,40 @@ import {
 } from "@/tool-calls/detail-level/projection";
 import type { StreamItem, UserMessageItem } from "@/types/stream";
 import { collapseTurns, type TurnCollapse } from "./turn-collapse/model";
+import type { ReadingRowReplacements } from "./reading-anchor";
 
 interface PresentationInput {
   tail: StreamItem[];
   head: StreamItem[];
   transform: TimelineItemTransform | undefined;
   display: ChatDisplay;
+  autoExpandReasoning?: boolean;
   /** User messages whose collapsed turn the reader opened. */
   expandedTurnHostIds: ReadonlySet<string>;
   isTurnActive: boolean;
   /** Reasoning keeps its own always-visible row when the reader turned on auto-expand. */
   groupReasoning?: boolean;
+  activeTurnId?: string | null;
 }
 
 export interface StreamPresentation extends ToolCallDetailProjection {
   turns: Omit<TurnCollapse, "tail">;
+  readingRowReplacements: ReadingRowReplacements;
+}
+
+function groupedRowHosts(
+  rows: readonly StreamItem[],
+  groups: ToolCallDetailProjection["groupsByHostId"],
+): ReadonlyMap<string, string> {
+  const hosts = new Map<string, string>();
+  for (const row of rows) {
+    const group = groups.get(row.id);
+    if (!group) continue;
+    for (const call of group.run.calls) {
+      if (call.id !== row.id) hosts.set(call.id, row.id);
+    }
+  }
+  return hosts;
 }
 
 const NO_COLLAPSED_TURNS: StreamPresentation["turns"] = collapseTurns({
@@ -33,6 +53,7 @@ const NO_COLLAPSED_TURNS: StreamPresentation["turns"] = collapseTurns({
   isLatestTurnOpen: false,
   expandedHostIds: new Set(),
   getGroupedCalls: () => undefined,
+  previousSummaryRowsByHostId: new Map(),
 });
 
 /** Source messages reach plugins before display projection. */
@@ -66,13 +87,32 @@ export function createStreamPresentation() {
   let preparedTail: StreamItem[] | undefined;
   let preparedLevel: ToolCallDetailLevel | undefined;
   let preparedGroupReasoning: boolean | undefined;
+  let preparedAutoExpandReasoning: boolean | undefined;
   let preparedHistory: PreparedToolCallHistory | null = null;
+  let historyGroupHosts: ReadonlyMap<string, string> = new Map();
   let collapsedSource: StreamItem[] | undefined;
   let collapsedIsLatestTurnOpen = false;
   let collapsedExpandedHostIds: ReadonlySet<string> | undefined;
   let collapsed: TurnCollapse | undefined;
 
   function presentRows(item: StreamItem): StreamItem[] {
+    // A received agent message is a user bubble at the tool call's timeline position.
+    if (item.kind === "tool_call" && item.payload.source === "agent") {
+      const message = item.payload.data.agentMessage;
+      if (message?.event === "message") {
+        return [
+          presentUserMessage({
+            kind: "user_message",
+            id: item.id,
+            turnId: item.turnId,
+            timelineCursor: item.timelineCursor,
+            timestamp: item.timestamp,
+            text: message.text,
+            sender: message.sender,
+          }),
+        ];
+      }
+    }
     if (item.kind === "user_message") {
       // Goal preambles are injected context; they never belong in the transcript.
       if (item.text.trimStart().startsWith(GOAL_PROMPT_PREFIX)) return [];
@@ -96,13 +136,22 @@ export function createStreamPresentation() {
   function collapse(
     projection: ToolCallDetailProjection,
     input: PresentationInput,
-  ): StreamPresentation {
+  ): Omit<StreamPresentation, "readingRowReplacements"> {
     if (input.display !== "collapseTurns") {
       return { ...projection, turns: NO_COLLAPSED_TURNS };
     }
     // Live text updates reach the head only, so the folded history is reused until the
     // retained rows, the latest turn's liveness, or the reader's expanded turns change.
-    const isLatestTurnOpen = input.isTurnActive || projection.head.length > 0;
+    const last = projection.tail.at(-1) ?? null;
+    const first = projection.head[0] ?? null;
+    const activeTurnIsAnother = Boolean(
+      input.activeTurnId && last?.turnId && input.activeTurnId !== last.turnId,
+    );
+    // Without head rows, the latest retained turn is live only while the active run is that
+    // turn. A run that has not opened yet carries no id and belongs to the next turn.
+    const isLatestTurnOpen = first
+      ? !isTurnBoundary(last, first) && !activeTurnIsAnother
+      : input.isTurnActive && (last?.turnId === undefined || input.activeTurnId === last.turnId);
     if (
       !collapsed ||
       collapsedSource !== projection.tail ||
@@ -114,13 +163,28 @@ export function createStreamPresentation() {
         isLatestTurnOpen,
         expandedHostIds: input.expandedTurnHostIds,
         getGroupedCalls: (itemId) => projection.groupsByHostId.get(itemId)?.run.calls,
+        previousSummaryRowsByHostId:
+          collapsed?.summaryRowsByHostId ?? NO_COLLAPSED_TURNS.summaryRowsByHostId,
       });
       collapsedSource = projection.tail;
       collapsedIsLatestTurnOpen = isLatestTurnOpen;
       collapsedExpandedHostIds = input.expandedTurnHostIds;
     }
     const { tail, ...turns } = collapsed;
-    return { ...projection, tail, turns };
+    if (turns.nestedItemIds.size === 0) return { ...projection, tail, turns };
+    // Opening a turn reveals its raw calls; those rows must not become group hosts again.
+    const withoutExpandedRows = (groups: StreamPresentation["groupsByHostId"]) => ({
+      size: groups.size - [...turns.nestedItemIds].filter((id) => groups.has(id)).length,
+      get: (id: string) => (turns.nestedItemIds.has(id) ? undefined : groups.get(id)),
+      has: (id: string) => !turns.nestedItemIds.has(id) && groups.has(id),
+    });
+    return {
+      ...projection,
+      tail,
+      turns,
+      groupsByHostId: withoutExpandedRows(projection.groupsByHostId),
+      historyGroupUpdatesByHostId: withoutExpandedRows(projection.historyGroupUpdatesByHostId),
+    };
   }
 
   return (input: PresentationInput): StreamPresentation => {
@@ -138,27 +202,60 @@ export function createStreamPresentation() {
       const blocks = presentRows(item);
       head.push(...blocks);
     }
-    const groupReasoning = input.groupReasoning ?? true;
+    // Our step grouping and the upstream Expand-thinking setting are two views of the same
+    // switch: a turn groups reasoning into its steps unless the reader expanded it.
+    const groupReasoning = input.groupReasoning ?? !(input.autoExpandReasoning ?? false);
     if (
       preparedTail !== historyRows ||
       preparedLevel !== level ||
-      preparedGroupReasoning !== groupReasoning
+      preparedGroupReasoning !== groupReasoning ||
+      preparedAutoExpandReasoning !== input.autoExpandReasoning
     ) {
-      preparedHistory = prepareToolCallHistory(level, historyRows, groupReasoning, true);
+      preparedHistory = prepareToolCallHistory(
+        level,
+        historyRows,
+        groupReasoning,
+        true,
+        input.autoExpandReasoning ?? false,
+      );
+      historyGroupHosts = preparedHistory
+        ? groupedRowHosts(preparedHistory.grouped.tail, preparedHistory.grouped.groupsByHostId)
+        : new Map();
       preparedTail = historyRows;
       preparedLevel = level;
       preparedGroupReasoning = groupReasoning;
+      preparedAutoExpandReasoning = input.autoExpandReasoning;
     }
-    return collapse(
-      projectToolCallDetailLevel({
-        level,
-        tail: historyRows,
-        head,
-        preparedHistory,
-        isTurnActive: input.isTurnActive,
-        includeThought: groupReasoning,
-      }),
-      input,
+    const projection = projectToolCallDetailLevel({
+      level,
+      tail: historyRows,
+      head,
+      preparedHistory,
+      isTurnActive: input.isTurnActive,
+      includeThought: groupReasoning,
+    });
+    const result = collapse(projection, input);
+    // Only the trailing retained group can absorb head rows. Reuse the retained
+    // index across streaming updates rather than walking the full history again.
+    const last = projection.tail.at(-1);
+    const liveGroupHosts = groupedRowHosts(
+      last ? [last, ...projection.head] : projection.head,
+      projection.groupsByHostId,
     );
+    const retainedGroupHosts = historyGroupHosts;
+    return {
+      ...result,
+      readingRowReplacements: {
+        get(id) {
+          if (result.turns.nestedItemIds.has(id)) return undefined;
+          const groupHost = liveGroupHosts.get(id) ?? retainedGroupHosts.get(id) ?? id;
+          return (
+            result.turns.hostIdByHiddenRowId.get(id) ??
+            result.turns.hostIdByHiddenRowId.get(groupHost) ??
+            (groupHost === id ? undefined : groupHost)
+          );
+        },
+      },
+    };
   };
 }

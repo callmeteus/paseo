@@ -6,6 +6,7 @@ import {
   hasInlineChip,
   inlineChipDisplayText,
   insertInlineChip,
+  insertInlineChipWithSpacing,
   insertTextAtSelection,
   maskInlineChips,
   mentionChipCoversAttachment,
@@ -85,6 +86,50 @@ describe("paste chips", () => {
     ]);
     expect(expandInlineChips(inserted.text, "prompt")).toBe(`${before}${body}${after}`);
     expect(expandInlineChips(inserted.text, "copy")).toBe(`${before}${body}${after}`);
+  });
+});
+
+describe("insertInlineChipWithSpacing", () => {
+  const chip: InlineChip = {
+    id: "paste:spacing",
+    kind: "paste",
+    label: '"colado"',
+    body: "colado",
+  };
+  const atom = serializeInlineChip(chip);
+
+  it("pads both sides at the end of a draft and leaves the caret after the trailing space", () => {
+    const result = insertInlineChipWithSpacing({
+      text: "olha isso",
+      selection: { start: 9, end: 9 },
+      chip,
+    });
+
+    expect(result.text).toBe(`olha isso ${atom} `);
+    expect(result.selection).toEqual({
+      start: result.text.length,
+      end: result.text.length,
+    });
+  });
+
+  it("pads a chip pasted into glued text without duplicating existing whitespace", () => {
+    const result = insertInlineChipWithSpacing({
+      text: "antes  depois",
+      selection: { start: 7, end: 7 },
+      chip,
+    });
+
+    expect(result.text).toBe(`antes  ${atom} depois`);
+  });
+
+  it("does not pad a chip at the very start when the following text already has a space", () => {
+    const result = insertInlineChipWithSpacing({
+      text: " depois",
+      selection: { start: 0, end: 0 },
+      chip,
+    });
+
+    expect(result.text).toBe(`${atom} depois`);
   });
 });
 

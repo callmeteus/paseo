@@ -17,7 +17,9 @@ workspace:
 
 ci:
   - ".github/actions/**"
-  - ".github/workflows/ci.yml"
+  - ".forgejo/workflows/ci.yml"
+  - ".forgejo/workflows/nightly.yml"
+  - "scripts/forgejo-ci-paths.mjs"
 
 format:
   - ".agents/**/*.{cjs,css,html,js,json,jsonc,jsx,md,mjs,ts,tsx,yaml,yml}"

@@ -8,6 +8,7 @@ import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
 export interface WorkspaceAgentVisibility {
   activeAgentIds: Set<string>;
   autoOpenAgentIds: Set<string>;
+  foreignAgentIds: Set<string>;
   /**
    * Agents whose tab was closed on any client. The daemon keeps the label, so
    * every client sees the same closed state and prunes the tab.
@@ -17,10 +18,6 @@ export interface WorkspaceAgentVisibility {
   openedAgentIds: Set<string>;
   /** The close marker's `updatedAt`, used to keep a tab reopened after the close. */
   hiddenAgentUpdatedAtById: Map<string, number>;
-}
-
-function agentBelongsToWorkspace(agent: Agent, workspaceId: string): boolean {
-  return normalizeWorkspaceOpaqueId(agent.workspaceId) === workspaceId;
 }
 
 function trackAgentTabLabels(input: {
@@ -76,6 +73,7 @@ export function deriveWorkspaceAgentVisibility(input: {
     return {
       activeAgentIds: new Set<string>(),
       autoOpenAgentIds: new Set<string>(),
+      foreignAgentIds: new Set<string>(),
       hiddenAgentIds: new Set<string>(),
       openedAgentIds: new Set<string>(),
       hiddenAgentUpdatedAtById: new Map<string, number>(),
@@ -84,11 +82,16 @@ export function deriveWorkspaceAgentVisibility(input: {
 
   const activeAgentIds = new Set<string>();
   const autoOpenAgentIds = new Set<string>();
+  const foreignAgentIds = new Set<string>();
   const hiddenAgentIds = new Set<string>();
   const openedAgentIds = new Set<string>();
   const hiddenAgentUpdatedAtById = new Map<string, number>();
   for (const agent of sessionAgents?.values() ?? []) {
-    if (!agentBelongsToWorkspace(agent, workspaceId)) {
+    const ownerId = normalizeWorkspaceOpaqueId(agent.workspaceId);
+    if (ownerId !== workspaceId) {
+      if (ownerId) {
+        foreignAgentIds.add(agent.id);
+      }
       continue;
     }
     trackAgentTabLabels({
@@ -98,26 +101,49 @@ export function deriveWorkspaceAgentVisibility(input: {
       hiddenAgentUpdatedAtById,
     });
     if (!agent.archivedAt) {
+      // A background agent stays active so a tab opened by id isn't pruned, but never auto-opens.
       activeAgentIds.add(agent.id);
-      const parentAgent = agent.parentAgentId
-        ? (sessionAgents?.get(agent.parentAgentId) ?? agentDetails?.get(agent.parentAgentId))
-        : undefined;
       // A ported chat stays out of the tab bar while its source port is running,
       // even though it already carries the source's historical user messages. The
       // caller navigates to it explicitly once the port finishes.
       const isPendingPort = isPortPending({ serverId: input.serverId, agent });
-      if (isWorkspaceRootAgent(agent, parentAgent) && !isPendingPort) {
+      if (shouldAutoOpenAgent({ agent, sessionAgents, agentDetails }) && !isPendingPort) {
         autoOpenAgentIds.add(agent.id);
       }
+    }
+  }
+  for (const agent of agentDetails?.values() ?? []) {
+    if (sessionAgents?.has(agent.id)) {
+      continue;
+    }
+    const ownerId = normalizeWorkspaceOpaqueId(agent.workspaceId);
+    if (ownerId && ownerId !== workspaceId) {
+      foreignAgentIds.add(agent.id);
     }
   }
   return {
     activeAgentIds,
     autoOpenAgentIds,
+    foreignAgentIds,
     hiddenAgentIds,
     openedAgentIds,
     hiddenAgentUpdatedAtById,
   };
+}
+
+function shouldAutoOpenAgent(input: {
+  agent: Agent;
+  sessionAgents: Map<string, Agent> | undefined;
+  agentDetails: Map<string, Agent> | undefined;
+}): boolean {
+  const { agent, sessionAgents, agentDetails } = input;
+  if (agent.background) {
+    return false;
+  }
+  const parentAgent = agent.parentAgentId
+    ? (sessionAgents?.get(agent.parentAgentId) ?? agentDetails?.get(agent.parentAgentId))
+    : undefined;
+  return isWorkspaceRootAgent(agent, parentAgent);
 }
 
 interface AgentMapsSnapshot {
@@ -175,6 +201,7 @@ export function buildWorkspaceTabSnapshot(input: {
     terminalsHydrated: input.terminalsHydrated,
     activeAgentIds: input.agentVisibility.activeAgentIds,
     autoOpenAgentIds: input.agentVisibility.autoOpenAgentIds,
+    foreignAgentIds: input.agentVisibility.foreignAgentIds,
     hiddenAgentIds: input.agentVisibility.hiddenAgentIds,
     openedAgentIds: input.agentVisibility.openedAgentIds,
     hiddenAgentUpdatedAtById: input.agentVisibility.hiddenAgentUpdatedAtById,
@@ -193,9 +220,23 @@ export function workspaceAgentVisibilityEqual(
     a === b ||
     (setsEqual(a.activeAgentIds, b.activeAgentIds) &&
       setsEqual(a.autoOpenAgentIds, b.autoOpenAgentIds) &&
+      setsEqual(a.foreignAgentIds, b.foreignAgentIds) &&
       setsEqual(a.hiddenAgentIds, b.hiddenAgentIds) &&
-      setsEqual(a.openedAgentIds, b.openedAgentIds))
+      setsEqual(a.openedAgentIds, b.openedAgentIds) &&
+      mapsEqual(a.hiddenAgentUpdatedAtById, b.hiddenAgentUpdatedAtById))
   );
+}
+
+function mapsEqual(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {

@@ -69,6 +69,7 @@ const sessionMock = vi.hoisted(() => {
       void this.delivery.detach(source);
     });
     getClientActivity = vi.fn(() => null);
+    setHopContext = vi.fn();
     wantsSourceEvent = (source: object) => !this.delivery.isModern(source);
     getSessionId = vi.fn(() => "mock-session-id");
     getPermissions = vi.fn(() => this.args.permissions as string[]);
@@ -83,6 +84,8 @@ const sessionMock = vi.hoisted(() => {
     setHostSource = (sourceId: string) => {
       this.args.sourceId = sourceId;
     };
+    setRemoteToolSource = vi.fn();
+    setOriginServerId = vi.fn();
     getHostSourceId = () => this.args.sourceId as string;
     allowsInbound = vi.fn(() => true);
     allowsPermission = vi.fn(() => true);
@@ -1153,10 +1156,12 @@ describe("relay external socket reconnect behavior", () => {
     expect(serverInfo.features?.canonicalSubmittedPrompts).toBe(true);
     expect(serverInfo.features?.providersSnapshotCwd).toBe(true);
     expect(serverInfo.features?.hopliteProvider).toBe(false);
+    expect(serverInfo.features?.fxProvider).toBe(false);
     expect(serverInfo.features?.pluginLogs).toBe(true);
     expect(serverInfo.features?.workspaceMarkUnread).toBe(true);
     expect(serverInfo.features?.["terminal-input-mode-replay"]).toBe(true);
     expect(serverInfo.features?.["terminal-size-ownership"]).toBe(true);
+    expect(serverInfo.features?.["terminal-grapheme-widths"]).toBe(true);
     expect(serverInfo.features?.agentTurnIdentity).toBeUndefined();
     expect(serverInfo.permissions).toEqual(DAEMON_PERMISSIONS);
     await server.close();

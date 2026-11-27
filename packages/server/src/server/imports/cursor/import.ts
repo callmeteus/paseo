@@ -26,7 +26,7 @@ export const CURSOR_IMPORT_PARENT_SOURCE_ID_LABEL = "paseo.import.parent-source-
 const MAX_TITLE_CHARS = 80;
 
 export interface ImportCursorChatsInput {
-  agentStorage: Pick<AgentStorage, "list" | "upsert">;
+  agentStorage: Pick<AgentStorage, "listAll" | "upsert">;
   workspaceProvisioning: Pick<WorkspaceProvisioningService, "createWorkspaceForDirectory">;
   logger: Logger;
   /** Explicit selection. Omit to import every chat that matches the filters. */
@@ -258,10 +258,10 @@ function resolveParentImport(input: {
 }
 
 async function collectExistingImports(
-  agentStorage: Pick<AgentStorage, "list">,
+  agentStorage: Pick<AgentStorage, "listAll">,
 ): Promise<Map<string, ExistingCursorImport>> {
   const existing = new Map<string, ExistingCursorImport>();
-  for (const record of await agentStorage.list()) {
+  for (const record of await agentStorage.listAll()) {
     if (!isCursorImportedRecord(record)) {
       continue;
     }
@@ -314,6 +314,7 @@ function buildRecord(input: {
     lastUserMessageAt: lastUserMessage?.createdAt || chat.lastUpdatedAt,
     title: resolveTitle(chat),
     labels,
+    metadata: {},
     lastStatus: "closed",
     lastModeId: null,
     config: {
@@ -321,7 +322,7 @@ function buildRecord(input: {
       // Cursor's own default is auto-accept. Imported chats start a fresh
       // Cursor session on first prompt, so keep that behavior without asking
       // the user to flip the toggle for every import.
-      featureValues: { auto_accept: true },
+      providerOptions: { auto_accept: true },
     },
     runtimeInfo: {
       provider: CURSOR_IMPORT_PROVIDER,

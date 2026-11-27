@@ -57,3 +57,14 @@ export type AgentMessageQueueListRequest = z.infer<typeof AgentMessageQueueListR
 export type AgentMessageQueueListResponse = z.infer<typeof AgentMessageQueueListResponseSchema>;
 export type AgentMessageQueueSetRequest = z.infer<typeof AgentMessageQueueSetRequestSchema>;
 export type AgentMessageQueueSetResponse = z.infer<typeof AgentMessageQueueSetResponseSchema>;
+
+/**
+ * Daemon-wide notification that one agent's persisted queue changed. Clients
+ * merge it by message id so simultaneous edits on different sessions converge.
+ */
+export const AgentMessageQueueChangedEventSchema = z.object({
+  type: z.literal("agent.message_queue.changed"),
+  agentId: z.string().min(1),
+  items: z.array(AgentQueuedMessageSchema),
+});
+export type AgentMessageQueueChangedEvent = z.infer<typeof AgentMessageQueueChangedEventSchema>;

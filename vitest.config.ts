@@ -45,6 +45,14 @@ export default defineConfig({
         find: /^@getpaseo\/server\/hub-local$/,
         replacement: path.resolve(__dirname, "packages/server/src/server/hub/local-install.ts"),
       },
+      {
+        find: /^@getpaseo\/server\/daemon-control$/,
+        replacement: path.resolve(__dirname, "packages/server/src/server/daemon-instance.ts"),
+      },
+      {
+        find: /^@getpaseo\/server\/process$/,
+        replacement: path.resolve(__dirname, "packages/server/src/utils/spawn.ts"),
+      },
       { find: "@", replacement: path.resolve(appDir, "src") },
       // The website's `~/` path alias, as in packages/website/tsconfig.json.
       { find: /^~\/(.*)$/, replacement: path.resolve(__dirname, "packages/website/src/$1") },
@@ -70,7 +78,17 @@ export default defineConfig({
     env: {
       PASEO_GIT_MAX_PROCESSES_PER_SECOND: "10000",
     },
-    exclude: [...configDefaults.exclude, "**/.claude/**", "**/.dev/**"],
+    exclude: [
+      ...configDefaults.exclude,
+      "**/.claude/**",
+      "**/.dev/**",
+      // The Forgejo runner cannot execute Playwright's browser binary.
+      ...(process.env.CI === "true" ||
+      process.env.GITHUB_ACTIONS === "true" ||
+      process.env.PASEO_CI === "true"
+        ? ["**/*.browser.test.*"]
+        : []),
+    ],
     // The website installs its own React; bundling its router lets tests render website components
     // that use router hooks against the one React the tests use.
     server: { deps: { inline: [/packages\/website\/node_modules\/@tanstack\/(react-)?router/] } },

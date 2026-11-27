@@ -56,9 +56,64 @@ function mount() {
 }
 
 describe("ProviderErrorRetry", () => {
-  it("hides when no prompt was restored to the composer", () => {
+  it("stays visible with a fallback prompt when the draft was not restored", () => {
+    act(() =>
+      root?.render(
+        <ProviderErrorRetry serverId={serverId} agentId={agentId} fallbackText="faz deploy" />,
+      ),
+    );
+
+    const button = container.querySelector("[data-testid='provider-error-retry']");
+    expect(button).not.toBeNull();
+    expect(button?.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("is disabled when neither the draft nor a fallback prompt exists", () => {
     mount();
-    expect(container.querySelector("[data-testid='provider-error-retry']")).toBeNull();
+    const button = container.querySelector("[data-testid='provider-error-retry']");
+    expect(button).not.toBeNull();
+    expect(button?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("resends the fallback prompt when the draft was not restored", async () => {
+    act(() =>
+      root?.render(
+        <ProviderErrorRetry serverId={serverId} agentId={agentId} fallbackText="faz deploy" />,
+      ),
+    );
+
+    const button = container.querySelector("[data-testid='provider-error-retry']");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mocks.sendAgentMessage).toHaveBeenCalledWith(
+      agentId,
+      "faz deploy",
+      expect.objectContaining({ messageId: expect.any(String) }),
+    );
+  });
+
+  it("prefers the restored draft over the transcript fallback", async () => {
+    useDraftStore
+      .getState()
+      .saveDraftInput({ draftKey, draft: { text: "texto do draft", attachments: [] } });
+    act(() =>
+      root?.render(
+        <ProviderErrorRetry serverId={serverId} agentId={agentId} fallbackText="texto antigo" />,
+      ),
+    );
+
+    const button = container.querySelector("[data-testid='provider-error-retry']");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mocks.sendAgentMessage).toHaveBeenCalledWith(
+      agentId,
+      "texto do draft",
+      expect.objectContaining({ messageId: expect.any(String) }),
+    );
   });
 
   it("resends the restored prompt and clears the draft", async () => {

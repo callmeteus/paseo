@@ -9,6 +9,7 @@ import {
   nativeTheme,
   shell,
 } from "electron";
+import { fileURLToPath } from "node:url";
 
 import {
   MIN_WINDOW_HEIGHT,
@@ -220,7 +221,11 @@ export function registerWindowManager(input: { mode: DesktopWindowChromeMode }):
       return;
     }
 
-    if (nextUpdate.backgroundColor) {
+    // Overlay windows are transparent by design; the app theme color must not
+    // repaint them opaque when the renderer reports its chrome update.
+    const url = win.webContents.getURL();
+    const isOverlay = url.includes("overlay=");
+    if (nextUpdate.backgroundColor && !isOverlay) {
       win.setBackgroundColor(nextUpdate.backgroundColor);
     }
 
@@ -392,8 +397,9 @@ export function buildStandardContextMenuItems(
       });
     }
     items.push({
-      label: "Copy Link Address",
-      click: () => clipboard.writeText(copyAddress),
+      label: /^file:/i.test(copyAddress) ? "Copy Path" : "Copy Link Address",
+      click: () =>
+        clipboard.writeText(/^file:/i.test(copyAddress) ? fileURLToPath(copyAddress) : copyAddress),
     });
     items.push({ type: "separator" });
   }

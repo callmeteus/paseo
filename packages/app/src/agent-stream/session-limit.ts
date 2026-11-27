@@ -14,8 +14,9 @@ import { isSystemErrorText, systemErrorMessage } from "@getpaseo/protocol/provid
  * shift the hour into the machine's timezone.
  */
 const SESSION_LIMIT_LINE =
-  /^you['\u2019]ve hit your session limit(?:\s*(?:\u00b7|•|\||-|\u2013|\u2014)\s*resets\s+(.+))?$/i;
-const RESET_CLOCK = /^(\d{1,2}):(\d{2})\s*([ap]m)\s+\(([^)]+)\)$/i;
+  /^you['\u2019]ve hit your (?:session|5-hour) limit(?:\s*(?:\u00b7|•|\||-|\u2013|\u2014)\s*resets\s+(.+))?$/i;
+// Both "12:40am (Zone)" and Claude's bare "3am (Zone)".
+const RESET_CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*([ap]m)\s+\(([^)]+)\)$/i;
 
 /**
  * America/Sao_Paulo names the city São Paulo. The id drops the accent, and the
@@ -96,7 +97,7 @@ function clockFromResetClause(reset: string): SessionLimitClock | null {
   const match = RESET_CLOCK.exec(reset.trim());
   if (!match) return null;
   const hour = Number(match[1]);
-  const minute = Number(match[2]);
+  const minute = match[2] === undefined ? 0 : Number(match[2]);
   const meridiem = match[3]?.toLowerCase();
   const timeZone = match[4]?.trim() ?? "";
   if (!Number.isInteger(hour) || hour < 1 || hour > 12) return null;

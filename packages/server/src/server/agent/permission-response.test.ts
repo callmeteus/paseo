@@ -40,9 +40,33 @@ class FakePermissionAgentManager {
     return undefined;
   }
 
+  async reloadStalePluginSession(): Promise<void> {}
+
   hasInFlightRun(): boolean {
     return this.hasRunInFlight;
   }
+
+  async steerOrReplaceActiveTurn() {
+    return { status: "inactive" as const };
+  }
+
+  async planGoalTurn() {
+    return null;
+  }
+
+  async planSkillTurn() {
+    return null;
+  }
+
+  planWorkflowTurn() {
+    return null;
+  }
+
+  planCursorRulesTurn() {
+    return null;
+  }
+
+  async reloadAgentSession() {}
 
   streamAgent(
     agentId: string,

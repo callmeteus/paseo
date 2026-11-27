@@ -37,6 +37,15 @@ describe("desktop-updates helpers", () => {
     expect(formatVersionWithPrefix(null)).toBe("\u2014");
   });
 
+  it("labels source installs by main commit and detects a newer main", async () => {
+    const { formatDaemonVersionLabel, hasNewerMainCommit } = await loadModuleForPlatform("web");
+
+    expect(formatDaemonVersionLabel({ commit: "abc1234", version: "0.13.1" })).toBe("main@abc1234");
+    expect(formatDaemonVersionLabel({ version: "0.13.1" })).toBe("v0.13.1");
+    expect(hasNewerMainCommit({ commit: "abc1234", mainCommit: "def5678" })).toBe(true);
+    expect(hasNewerMainCommit({ commit: "abc1234", mainCommit: "abc1234" })).toBe(false);
+  });
+
   it("parses valid local daemon version result", async () => {
     const { parseLocalDaemonVersionResult } = await loadModuleForPlatform("web");
 

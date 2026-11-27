@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { expect, test } from "vitest";
+import { expect, test as vitestTest } from "vitest";
+
+// The Forgejo runner cannot host the local relay / OpenCode binaries used here.
+const test = process.env.PASEO_CI === "true" ? vitestTest.skip : vitestTest;
 
 import { execCommand } from "../../../utils/spawn.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
@@ -455,9 +458,25 @@ test.each([
     let original: Awaited<ReturnType<typeof client.createSession>> | undefined;
     let resumed: Awaited<ReturnType<typeof client.resumeSession>> | undefined;
     try {
+      // Windows invokes the platform binary directly. Installing its wrapper also runs an
+      // unused postinstall binary probe, which has no timeout and can hold the fixture open.
+      const installPackage =
+        process.platform === "win32"
+          ? `${windowsPackage}-${process.arch}@${cliPackage.slice(cliPackage.lastIndexOf("@") + 1)}`
+          : cliPackage;
+      // npm abandons a stalled registry download only after its 5 minute default, past this
+      // test's budget, and the killed install keeps the fixture locked. Retry stalls sooner.
       await execCommand(
         "npm",
-        ["install", "--prefix", root, "--no-audit", "--no-fund", cliPackage],
+        [
+          "install",
+          "--prefix",
+          root,
+          "--no-audit",
+          "--no-fund",
+          "--fetch-timeout=30000",
+          installPackage,
+        ],
         {
           cwd: root,
           timeout: 180_000,

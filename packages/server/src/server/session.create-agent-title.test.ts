@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { formatPasteChipLabel, serializeInlineChip } from "@getpaseo/protocol/inline-chip";
 
 import {
   applyGeneratedChatTitle,
@@ -16,6 +17,19 @@ describe("resolveCreateAgentTitles", () => {
 
     expect(resolved.explicitTitle).toBeNull();
     expect(resolved.provisionalTitle).toBe("Implement auth retries with backoff");
+  });
+
+  test("names a leading paste chip from its body, not the serialized atom", () => {
+    const body = "Investigate the failed deployment on the staging host";
+    const chip = serializeInlineChip({
+      id: "paste:ff538e0-72ac",
+      kind: "paste",
+      label: formatPasteChipLabel({ body }),
+      body,
+    });
+
+    expect(deriveInitialAgentTitle(chip)).toBe(body);
+    expect(deriveInitialAgentTitle(`${chip}\n\nand fix it`)).toBe(body);
   });
 
   test("preserves explicit title and does not treat it as provisional", () => {
@@ -156,6 +170,7 @@ describe("applyGeneratedChatTitle", () => {
       previousTitle: null,
       workspaceTitle: "Servers, Deploys e Peças",
       agentTitles: [{ id: "opencode", title: "Servers, Deploys e Peças" }],
+      reportingAgentId: "opencode",
     });
 
     // The workspace keeps its own name, but the agent's tab takes the title
@@ -163,6 +178,28 @@ describe("applyGeneratedChatTitle", () => {
     expect(applied.workspaceTitle).toBe("Servers, Deploys e Peças");
     expect(applied.agents).toEqual([
       { id: "opencode", title: "Pendrive multiboot Windows 10 e Debian" },
+    ]);
+  });
+
+  test("only renames the reporting agent when several share the workspace title", () => {
+    // `adoptWorkspaceTitleForAgent` stamps the workspace name onto every agent
+    // created in it, so several tabs can carry it. One agent's title event must
+    // not rename all of them.
+    const applied = applyGeneratedChatTitle({
+      generatedTitle: "Dados da viagem para a Feira",
+      promptTitle: null,
+      previousTitle: null,
+      workspaceTitle: "Pesquisas Diárias",
+      agentTitles: [
+        { id: "reporter", title: "Pesquisas Diárias" },
+        { id: "other", title: "Pesquisas Diárias" },
+      ],
+      reportingAgentId: "reporter",
+    });
+
+    expect(applied.agents).toEqual([
+      { id: "reporter", title: "Dados da viagem para a Feira" },
+      { id: "other", title: "Pesquisas Diárias" },
     ]);
   });
 });

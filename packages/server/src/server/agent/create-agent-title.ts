@@ -1,4 +1,5 @@
 import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "@getpaseo/protocol/agent-title-limits";
+import { expandInlineChips } from "@getpaseo/protocol/inline-chip";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 import { goalInstructionCorpus, parseGoalCommand } from "./agent-goal.js";
 import { workflowInstructionCorpus } from "./workflow-modes.js";
@@ -43,7 +44,10 @@ function goalObjective(body: string): string | null {
  */
 export function promptTextForTitle(prompt: string): string {
   const objectives: string[] = [];
-  const withoutWorkflow = prompt.replace(WORKFLOW_BLOCK, "");
+  // Chips are stored as serialized atoms in the submitted text. Decode them so
+  // a leading paste chip names the chat from its body instead of its JSON.
+  const decoded = expandInlineChips(prompt, "prompt");
+  const withoutWorkflow = decoded.replace(WORKFLOW_BLOCK, "");
   const withoutGoal = withoutWorkflow.replace(GOAL_BLOCK, (_match, body: string) => {
     const objective = goalObjective(body);
     if (objective) objectives.push(objective);
@@ -172,6 +176,8 @@ export function applyGeneratedChatTitle(input: {
   previousTitle?: string | null;
   workspaceTitle: string | null;
   agentTitles: readonly ChatTitleTarget[];
+  /** Only this agent may adopt the generated title via the workspace-name fallback. */
+  reportingAgentId?: string | null;
 }): AppliedChatTitle {
   const generated = normalizeChatTitle(input.generatedTitle);
   const promptTitle = normalizeChatTitle(input.promptTitle);
@@ -200,7 +206,14 @@ export function applyGeneratedChatTitle(input: {
     tabTitle: nextWorkspace,
     wroteGeneratedTitle: nextWorkspace === generated,
     agents: agents.map((agent) => {
-      if (!followsGeneratedChatTitle(agent.title, promptTitle, previousTitle, workspaceTitle)) {
+      // The workspace-name fallback is scoped to the agent that reported this title.
+      // Other agents in the workspace can carry the same stamp (every new agent gets
+      // it), so matching them here would rename several tabs from one title event.
+      const agentWorkspaceTitle =
+        input.reportingAgentId && agent.id === input.reportingAgentId ? workspaceTitle : null;
+      if (
+        !followsGeneratedChatTitle(agent.title, promptTitle, previousTitle, agentWorkspaceTitle)
+      ) {
         return agent;
       }
       // An agent still carrying the workspace title follows this chat's own
@@ -209,7 +222,7 @@ export function applyGeneratedChatTitle(input: {
       // created after it, and after a daemon restart that stamp is the only
       // remaining link between the agent and the title the provider later emits.
       const next =
-        workspaceTitle !== null && agent.title === workspaceTitle
+        agentWorkspaceTitle !== null && agent.title === agentWorkspaceTitle
           ? generated
           : (nextWorkspace ?? generated);
       return { id: agent.id, title: next };

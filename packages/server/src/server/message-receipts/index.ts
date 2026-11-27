@@ -13,14 +13,23 @@ interface SendMessageInput {
   agentId: string;
   messageId: string;
   request: unknown;
-  send: () => Promise<void>;
-  prepare?: () => Promise<void>;
+  /**
+   * Delivers the message. It awaits `beforeDispatch` immediately before the provider can receive
+   * the message; a failure before that call proves nothing was submitted and leaves no receipt.
+   */
+  send: (beforeDispatch: () => Promise<void>) => Promise<void>;
 }
+
+export type DeliveredProbe = (agentId: string, messageId: string) => Promise<boolean> | boolean;
 
 /** Owns message delivery receipts; creation is owned by CreationService. */
 export class MessageReceipts {
   private readonly pending = new Map<string, Promise<void>>();
-  constructor(private readonly directory: string) {}
+  constructor(
+    private readonly directory: string,
+    /** Resolves an ambiguous pending receipt when the prompt is already in the agent's timeline. */
+    private readonly hasDelivered?: DeliveredProbe,
+  ) {}
 
   send(input: SendMessageInput): Promise<void> {
     // Preserve the existing on-disk identity and shape across daemon upgrades.
@@ -45,13 +54,21 @@ export class MessageReceipts {
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new Error("agent_request_key_conflict");
       if (existing.state === "completed") return;
+      // The prompt reached the timeline but the completion write was lost, e.g. to a restart.
+      // Treat it as delivered so a retry does not block the chat or duplicate the prompt.
+      if (this.hasDelivered && (await this.hasDelivered(input.agentId, input.messageId))) {
+        await writeJsonFileAtomic(file, { ...existing, state: "completed" });
+        return;
+      }
       // A provider may have accepted the message before its receipt was committed.
       throw new Error("agent_request_outcome_unknown");
     }
-    await input.prepare?.();
     const receipt = { fingerprint, agentId: input.agentId };
-    await writeJsonFileAtomic(file, { ...receipt, state: "pending" });
-    await input.send();
+    let pending: Promise<void> | null = null;
+    await input.send(() => {
+      pending ??= writeJsonFileAtomic(file, { ...receipt, state: "pending" });
+      return pending;
+    });
     await writeJsonFileAtomic(file, { ...receipt, state: "completed" });
   }
 }

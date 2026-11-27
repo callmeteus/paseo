@@ -18,7 +18,7 @@ export interface QuestionFormQuestion {
    * differently from a text field or a list of options. Providers that send an MCP
    * elicitation mark it; anything else is a text question.
    */
-  type: "text" | "boolean" | "link";
+  type: "text" | "boolean" | "link" | "fact";
   url?: string;
   /** A checkbox the server already considers checked. */
   defaultChecked?: boolean;
@@ -104,6 +104,7 @@ function parseQuestionOptions(raw: unknown): QuestionOption[] | null {
 function questionType(value: unknown): QuestionFormQuestion["type"] {
   if (value === "boolean") return "boolean";
   if (value === "link") return "link";
+  if (value === "fact") return "fact";
   return "text";
 }
 
@@ -151,7 +152,7 @@ export function isQuestionAnswered(
 ): boolean {
   // A checkbox and a link are never blocking: leaving the box unchecked and
   // submitting is the answer, the way the MCP client itself treats them.
-  if (question.type === "boolean" || question.type === "link") {
+  if (question.type === "boolean" || question.type === "link" || question.type === "fact") {
     return true;
   }
 

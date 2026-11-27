@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { PluginRegistriesSchema } from "@getpaseo/protocol/plugin-registry";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -9,7 +10,12 @@ import {
   ProviderOverridesSchema,
 } from "./agent/provider-launch-config.js";
 import type { AgentProviderRuntimeSettingsMap } from "./agent/provider-launch-config.js";
-import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.js";
+import {
+  ensurePrivateFile,
+  ensurePrivateFileAsync,
+  writePrivateFileAtomic,
+  writePrivateFileAtomicSync,
+} from "./private-files.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protocol/agent-profile";
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
@@ -19,7 +25,7 @@ import {
   McpBridgeSchema,
   McpServerConfigSchema,
   McpShareSchema,
-} from "@getpaseo/protocol/messages";
+} from "@getpaseo/protocol/daemon-config-schemas";
 import { RemoteAccessConfigSchema } from "@getpaseo/protocol/remote-access";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
@@ -201,16 +207,32 @@ function isLegacyProviderEntry(value: unknown): boolean {
 }
 
 function normalizeAgentProviders(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
+  if (!isConfigRecord(value)) return value;
+
+  let rawProviders = value;
+  const goose = configRecord(value.goose);
+  // COMPAT(gooseProvider): added in v0.17.0, remove after 2027-05-20 once legacy configs have migrated.
+  if (goose?.extends === "acp") {
+    const { extends: _base, description: _description, command, ...overrides } = goose;
+    const usesDefaultCommand =
+      Array.isArray(command) &&
+      command.length === 2 &&
+      command[0] === "goose" &&
+      command[1] === "acp";
+    rawProviders = {
+      ...value,
+      goose: {
+        ...overrides,
+        ...(command !== undefined && !usesDefaultCommand ? { command } : {}),
+      },
+    };
   }
 
-  const rawProviders = value as Record<string, unknown>;
   const hasLegacyEntries = Object.values(rawProviders).some((entry) =>
     isLegacyProviderEntry(entry),
   );
   if (!hasLegacyEntries) {
-    return value;
+    return rawProviders;
   }
 
   const legacyEntries: Record<string, unknown> = {};
@@ -226,7 +248,7 @@ function normalizeAgentProviders(value: unknown): unknown {
 
   const parsedLegacyEntries = AgentProviderRuntimeSettingsMapSchema.safeParse(legacyEntries);
   if (!parsedLegacyEntries.success) {
-    return value;
+    return rawProviders;
   }
 
   return {
@@ -261,6 +283,7 @@ export const PersistedConfigSchema = z
           })
           .passthrough()
           .optional(),
+        usage: z.object({ enabled: z.boolean().optional() }).optional(),
         browserTools: z
           .object({
             enabled: z.boolean().optional(),
@@ -278,6 +301,8 @@ export const PersistedConfigSchema = z
         enableTerminalAgentHooks: z.boolean().optional(),
         remoteAccess: RemoteAccessConfigSchema.optional(),
         appendSystemPrompt: z.string().optional(),
+        // Name this daemon announces as its own host label (for example `@gio/home-pc`).
+        selfLabel: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
@@ -375,6 +400,16 @@ export const PersistedConfigSchema = z
         idleRuntimeCleanupAfter: IdleRuntimeCleanupAfterSchema.optional().describe(
           "How long a resumable agent stays idle before its process is released. One of 15m, 30m, 1h, 2h, 4h, 8h, 24h. Defaults to 1h.",
         ),
+        resumeOnStartup: z
+          .boolean()
+          .optional()
+          .describe("Resume agents interrupted by a daemon restart. Defaults to true."),
+        resumePrompt: z
+          .string()
+          .optional()
+          .describe(
+            "Prompt sent to an interrupted agent when it resumes. Defaults to 'Resume working.'",
+          ),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
         modelRouters: ModelRouterSettingsSchema.optional(),
@@ -557,6 +592,40 @@ export function loadPersistedConfig(paseoHome: string, logger?: LoggerLike): Per
   return config;
 }
 
+/** Runtime config IO. Startup and offline CLI consumers retain their synchronous entry points. */
+export async function loadPersistedConfigAsync(
+  paseoHome: string,
+  logger?: LoggerLike,
+): Promise<PersistedConfig> {
+  const log = getLogger(logger);
+  const configPath = getConfigPath(paseoHome);
+  let raw: string;
+  await ensurePrivateFileAsync(configPath);
+  try {
+    raw = await readFile(configPath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw new Error(
+        `[Config] Failed to read ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+    try {
+      raw = JSON.stringify(DEFAULT_PERSISTED_CONFIG, null, 2) + "\n";
+      await writePrivateFileAtomic(configPath, raw);
+      log?.info(`Initialized config file at ${configPath}`);
+    } catch (initializationError) {
+      throw new Error(
+        `[Config] Failed to initialize ${configPath}: ${initializationError instanceof Error ? initializationError.message : String(initializationError)}`,
+        { cause: initializationError },
+      );
+    }
+  }
+  const config = parseConfigFile(configPath, raw, log);
+  log?.info(`Loaded from ${configPath}`);
+  return config;
+}
+
 /** Observe the file without initializing a home, identity, or default configuration. */
 export function readPersistedConfig(
   paseoHome: string,
@@ -676,6 +745,20 @@ export function savePersistedConfig(
   const log = getLogger(logger);
   const configPath = getConfigPath(paseoHome);
 
+  const data = serializePersistedConfig(config);
+
+  try {
+    writePrivateFileAtomicSync(configPath, data);
+    log?.info(`Saved to ${configPath}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`[Config] Failed to write ${configPath}: ${message}`, {
+      cause: err,
+    });
+  }
+}
+
+function serializePersistedConfig(config: PersistedConfig): string {
   const result = PersistedConfigSchema.safeParse(config);
   if (!result.success) {
     const issues = result.error.issues
@@ -684,13 +767,23 @@ export function savePersistedConfig(
     throw new Error(`[Config] Invalid config to save:\n${issues}`);
   }
 
+  return JSON.stringify(result.data, null, 2) + "\n";
+}
+
+export async function savePersistedConfigAsync(
+  paseoHome: string,
+  config: PersistedConfig,
+  logger?: LoggerLike,
+): Promise<void> {
+  const configPath = getConfigPath(paseoHome);
+  const data = serializePersistedConfig(config);
   try {
-    writePrivateFileAtomicSync(configPath, JSON.stringify(result.data, null, 2) + "\n");
-    log?.info(`Saved to ${configPath}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`[Config] Failed to write ${configPath}: ${message}`, {
-      cause: err,
-    });
+    await writePrivateFileAtomic(configPath, data);
+    getLogger(logger)?.info(`Saved to ${configPath}`);
+  } catch (error) {
+    throw new Error(
+      `[Config] Failed to write ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
 }

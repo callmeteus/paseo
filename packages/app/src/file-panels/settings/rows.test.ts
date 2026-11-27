@@ -7,6 +7,7 @@ type HostedCandidate = FilePanelCandidate & { serverId?: string };
 
 const builtinMarkdown: HostedCandidate = filePanelCatalog([])[0];
 const builtinImage: HostedCandidate = filePanelCatalog([])[2];
+const builtinPdf: HostedCandidate = filePanelCatalog([])[5];
 const source: HostedCandidate = sourceFilePanel;
 
 /** What Settings reads: the built-ins and every host's plugin panels, in catalog order. */
@@ -98,7 +99,11 @@ describe("buildFilePanelSettingsRows", () => {
 
   it("keeps a remembered key whose panel is on no connected host", () => {
     expect(rows(catalog(), { "ext:pdf": "plugin:pdf-panel/pdf" })).toEqual([
-      { selectorKey: "ext:pdf", candidates: [source], associatedPanelId: "plugin:pdf-panel/pdf" },
+      {
+        selectorKey: "ext:pdf",
+        candidates: [builtinPdf],
+        associatedPanelId: "plugin:pdf-panel/pdf",
+      },
     ]);
   });
 

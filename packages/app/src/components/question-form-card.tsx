@@ -47,7 +47,8 @@ const OPTION_PREVIEW_MAX_HEIGHT = IS_WEB ? 240 : undefined;
 // Web clicks that must not answer: a link in the label, the second click of a double-click
 // (which would otherwise land on the next question's options), and the release of a drag that
 // selected text inside the row. A plain click anywhere else in the row answers, description
-// included — the whole box is the control, not just the label.
+// included, the whole box is the control, not just the label. Links are independent actions,
+// and ignoring repeat clicks makes double-click text selection toggle an option only once.
 function isNonAnsweringClick(event: GestureResponderEvent): boolean {
   if (!IS_WEB) return false;
   const click = event.nativeEvent as unknown as MouseEvent;
@@ -368,6 +369,16 @@ function QuestionOtherInput({
   );
 }
 
+const NO_GROUP_PROPS = {} as const;
+
+function isElicitationInput(input: unknown): boolean {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    (input as Record<string, unknown>).elicitation === true
+  );
+}
+
 interface QuestionFormMessageProps {
   title?: string;
   message?: string;
@@ -380,10 +391,25 @@ function QuestionFormMessage({ title, message }: QuestionFormMessageProps) {
   const text = message?.trim();
   if (!text) return null;
   const heading = title?.trim();
+  const showHeading = heading && !text.toLowerCase().startsWith(heading.toLowerCase());
+  const lines = text.split("\n").filter((line) => line.trim().length > 0);
   return (
     <View style={styles.messageBlock} testID="question-form-message">
-      {heading ? <Text style={styles.messageTitle}>{heading}</Text> : null}
-      <MarkdownRenderer text={text} compact />
+      {showHeading ? <Text style={styles.messageTitle}>{heading}</Text> : null}
+      {lines.map((line, index) => {
+        const separator = line.indexOf(":");
+        const label = separator > 0 ? line.slice(0, separator + 1) : null;
+        const value = label ? line.slice(separator + 1).trim() : line;
+        const isTitle = !showHeading && index === 0;
+        return (
+          <View key={line} style={styles.messageLine}>
+            {label ? (
+              <Text style={isTitle ? styles.messageTitle : styles.messageLabel}>{label}</Text>
+            ) : null}
+            <Text style={isTitle ? styles.messageTitle : styles.messageValue}>{value}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -454,6 +480,11 @@ function QuestionField({
   if (!question) return null;
   return (
     <View key={question.header} style={styles.questionBlock}>
+      {question.type === "fact" ? (
+        <View style={styles.factBlock} testID="question-form-fact">
+          <Text style={styles.factText}>{question.question}</Text>
+        </View>
+      ) : null}
       {question.type === "text" ? (
         <View style={styles.questionHeader}>
           <View testID="question-form-current-question" style={styles.questionText}>
@@ -677,12 +708,8 @@ export function QuestionFormCard({
         });
         otherInputRef.current?.replaceText("");
       }
-
-      if (!multiSelect && next.size > 0 && qIndex === activeQuestionIndex && questions) {
-        setActiveQuestionIndex(Math.min(qIndex + 1, questions.length - 1));
-      }
     },
-    [activeQuestionIndex, otherTexts, questions, selections],
+    [otherTexts, selections],
   );
 
   const setOtherText = useCallback(
@@ -707,7 +734,14 @@ export function QuestionFormCard({
   const activeQuestionAnswered = activeQuestion
     ? isQuestionAnswered(activeQuestion, resolvedActiveQuestionIndex, selections, otherTexts)
     : false;
-  const isLastQuestion = questions ? resolvedActiveQuestionIndex === questions.length - 1 : true;
+  // An MCP elicitation is a form, not a conversation: show every field at once
+  // and submit once, the way the IDE renders it.
+  const isForm =
+    isElicitationInput(permission.request.input) ||
+    (questions?.some((question) => question.type === "boolean" || question.type === "link") ??
+      false);
+  const isLastQuestion =
+    isForm || (questions ? resolvedActiveQuestionIndex === questions.length - 1 : true);
 
   const handleSubmit = useCallback(() => {
     if (!questions || !allAnswered || isResponding) return;
@@ -810,27 +844,49 @@ export function QuestionFormCard({
           title={permission.request.title}
           message={permission.request.description}
         />
-        <QuestionNav
-          questions={questions}
-          activeIndex={resolvedActiveQuestionIndex}
-          isAnswered={navIsAnswered}
-          isResponding={isResponding}
-          onSelect={handleSelectQuestion}
-        />
-        <QuestionField
-          question={activeQuestion}
-          qIndex={resolvedActiveQuestionIndex}
-          selected={selected}
-          otherText={otherText}
-          isResponding={isResponding}
-          inputRef={otherInputRef}
-          groupProps={optionsGroupAccessibility}
-          answerPlaceholder={t("message.question.answerPlaceholder")}
-          otherPlaceholder={t("message.question.otherPlaceholder")}
-          onToggle={toggleOption}
-          onChangeOther={setOtherText}
-          onSubmit={handlePrimaryAction}
-        />
+        {isForm ? null : (
+          <QuestionNav
+            questions={questions}
+            activeIndex={resolvedActiveQuestionIndex}
+            isAnswered={navIsAnswered}
+            isResponding={isResponding}
+            onSelect={handleSelectQuestion}
+          />
+        )}
+        {isForm ? (
+          questions.map((question, qIndex) => (
+            <QuestionField
+              key={question.header}
+              question={question}
+              qIndex={qIndex}
+              selected={selections[qIndex] ?? new Set<number>()}
+              otherText={otherTexts[qIndex] ?? ""}
+              isResponding={isResponding}
+              inputRef={otherInputRef}
+              groupProps={NO_GROUP_PROPS}
+              answerPlaceholder={t("message.question.answerPlaceholder")}
+              otherPlaceholder={t("message.question.otherPlaceholder")}
+              onToggle={toggleOption}
+              onChangeOther={setOtherText}
+              onSubmit={handlePrimaryAction}
+            />
+          ))
+        ) : (
+          <QuestionField
+            question={activeQuestion}
+            qIndex={resolvedActiveQuestionIndex}
+            selected={selected}
+            otherText={otherText}
+            isResponding={isResponding}
+            inputRef={otherInputRef}
+            groupProps={optionsGroupAccessibility}
+            answerPlaceholder={t("message.question.answerPlaceholder")}
+            otherPlaceholder={t("message.question.otherPlaceholder")}
+            onToggle={toggleOption}
+            onChangeOther={setOtherText}
+            onSubmit={handlePrimaryAction}
+          />
+        )}
       </View>
 
       {responseError ? <Alert variant="error" description={responseError} size="sm" /> : null}
@@ -866,7 +922,21 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   messageTitle: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foreground,
+    fontWeight: "600",
+  },
+  messageLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  messageLabel: {
+    color: theme.colors.foreground,
+    fontWeight: "600",
+  },
+  messageValue: {
+    flexShrink: 1,
     color: theme.colors.foregroundMuted,
   },
   questionHeader: {
@@ -877,6 +947,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   questionText: {
     flex: 1,
+  },
+  factBlock: {
+    paddingVertical: 4,
+  },
+  factText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 20,
   },
   optionsWrap: {
     gap: theme.spacing[1],

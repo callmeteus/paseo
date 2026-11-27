@@ -1,0 +1,136 @@
+name: Nightly
+
+# Paseo's Forgejo repo is a read-only pull mirror of GitHub, so push events do
+# not trigger workflows here. This runs on a schedule against the mirrored
+# `develop` branch and publishes binaries to a rolling GitHub release.
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  # GitHub is the source of truth; GH_TOKEN is a Forgejo secret with release
+  # write access to callmeteus/paseo.
+  GH_REPO: callmeteus/paseo
+  NIGHTLY_TAG: nightly
+
+jobs:
+  desktop-linux:
+    name: Desktop (Linux x64)
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Install packaging dependencies
+        run: apt-get update && apt-get install -y xvfb xauth rpm squashfs-tools
+
+      - name: Build Linux desktop artifacts
+        run: npm run build:desktop -- --publish never --linux --x64
+        env:
+          EP_GH_IGNORE_TIME: "true"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-nightly-desktop-linux-x64
+          path: |
+            packages/desktop/release/*.AppImage
+            packages/desktop/release/*.deb
+            packages/desktop/release/*.rpm
+            packages/desktop/release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  android-apk:
+    name: Android APK (local build)
+    runs-on: docker
+    container:
+      image: mingc/android-build-box:latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Build Android APK (arm64)
+        run: npm run build:apk:arm64
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-nightly-android
+          path: artifacts/paseo-dogfood-arm64.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish nightly release
+    needs: [desktop-linux, android-apk]
+    runs-on: docker
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          sparse-checkout: scripts
+
+      - name: Install GitHub CLI
+        run: apt-get update && apt-get install -y gh
+
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: paseo-nightly-desktop-linux-x64
+          path: nightly-artifacts
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: paseo-nightly-android
+          path: nightly-artifacts
+
+      - name: Refresh rolling nightly release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GH_REPO"
+          tag="$NIGHTLY_TAG"
+
+          # The nightly tag is deleted and recreated so the rolling release
+          # always points at the latest successful develop build.
+          gh release delete "$tag" --repo "$repo" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" \
+            --repo "$repo" \
+            --title "Paseo nightly" \
+            --notes "Nightly build from \`develop\` at $(date -u +%Y-%m-%dT%H:%M:%SZ). Not a stable release." \
+            --prerelease \
+            nightly-artifacts/*
+
+          echo "Published nightly: https://github.com/$repo/releases/tag/$tag"

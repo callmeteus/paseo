@@ -86,6 +86,26 @@ export interface QueueWriter {
   write: (
     updater: (prev: Map<string, QueuedComposerMessage[]>) => Map<string, QueuedComposerMessage[]>,
   ) => void;
+  /** Remember an intentional removal so a stale daemon snapshot cannot restore it. */
+  markRemoved?: (agentId: string, messageId: string) => void;
+  /** Allow a genuinely rejected send to put the same message id back. */
+  restore?: (agentId: string, messageId: string) => void;
+}
+
+/** The provider accepted the prompt even though its RPC response was lost. */
+export class AcceptedComposerMessageError extends Error {
+  constructor(readonly originalError: unknown) {
+    super(
+      originalError instanceof Error ? originalError.message : "Message delivery was confirmed",
+    );
+    this.name = "AcceptedComposerMessageError";
+  }
+}
+
+export function isAcceptedComposerMessageError(
+  error: unknown,
+): error is AcceptedComposerMessageError {
+  return error instanceof AcceptedComposerMessageError;
 }
 
 export async function pickAndPersistImages(input: {
@@ -232,8 +252,8 @@ export async function dispatchComposerAgentMessage(
     input.submission.accept(input.agentId, clientMessageId);
     return { clientMessageId };
   } catch (error) {
-    input.submission.reject(input.agentId, clientMessageId);
-    throw error;
+    const outcome = input.submission.reject(input.agentId, clientMessageId);
+    throw outcome === "accepted" ? new AcceptedComposerMessageError(error) : error;
   }
 }
 
@@ -315,6 +335,7 @@ export function removeQueuedComposerMessage(input: {
   queue: QueueWriter;
 }): boolean {
   if (!input.queue.read(input.agentId).some((item) => item.id === input.messageId)) return false;
+  input.queue.markRemoved?.(input.agentId, input.messageId);
   input.queue.write((prev) => {
     const next = new Map(prev);
     next.set(
@@ -331,6 +352,7 @@ export function editQueuedComposerMessage(
 ): EditQueuedComposerMessageResult | null {
   const item = input.queue.read(input.agentId).find((q) => q.id === input.messageId);
   if (!item) return null;
+  input.queue.markRemoved?.(input.agentId, input.messageId);
   input.queue.write((prev) => {
     const next = new Map(prev);
     next.set(
@@ -367,6 +389,7 @@ export async function sendQueuedComposerMessageNow(
 ): Promise<SendQueuedComposerMessageNowResult> {
   const item = input.queue.read(input.agentId).find((q) => q.id === input.messageId);
   if (!item) return { status: "missing" };
+  input.queue.markRemoved?.(input.agentId, input.messageId);
   input.queue.write((prev) => {
     const next = new Map(prev);
     next.set(
@@ -383,6 +406,10 @@ export async function sendQueuedComposerMessageNow(
     });
     return { status: "submitted" };
   } catch (error) {
+    // A canonical user_message means the daemon already accepted this id. Keep it out of
+    // the queue even though the transport response was lost.
+    if (isAcceptedComposerMessageError(error)) return { status: "submitted" };
+    input.queue.restore?.(input.agentId, input.messageId);
     input.queue.write((prev) => {
       const next = new Map(prev);
       next.set(input.agentId, [item, ...(prev.get(input.agentId) ?? [])]);

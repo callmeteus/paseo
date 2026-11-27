@@ -15,7 +15,7 @@ export interface ACPCardQuestion {
   multiSelect: boolean;
   allowOther: boolean;
   allowEmpty: boolean;
-  type?: "text" | "boolean" | "link";
+  type?: "text" | "boolean" | "link" | "fact";
   url?: string;
   placeholder?: string;
   defaultChecked?: boolean;
@@ -123,6 +123,21 @@ function fieldFromProperty(
   }
 
   const options = enumOptions(property);
+  // Old MCP dialogs ship facts as string fields with a default and no choices.
+  // They are not answers to collect: show them as text, not as inputs.
+  if (options.length === 0 && typeof property.default === "string") {
+    return {
+      question: {
+        ...base,
+        question: `${header}: ${property.default}`,
+        options: [],
+        multiSelect: false,
+        type: "fact",
+        allowEmpty: true,
+      },
+      field: { key, header, type },
+    };
+  }
   return {
     question: {
       ...base,
@@ -175,7 +190,8 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
     };
   }
 
-  if (request.mode !== "form") return null;
+  // MCP's `elicitation/create` omits `mode` for form requests; ACP sends it explicitly.
+  if (request.mode !== undefined && request.mode !== "form") return null;
   const schema = record(request.requestedSchema);
   const properties = record(schema?.properties);
   const required = Array.isArray(schema?.required)
@@ -189,9 +205,14 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
     questions.push(parsed.question);
     fields.push(parsed.field);
   }
-  if (questions.length === 0) {
-    // A schema with no fields is a confirmation: the card renders a button.
-    questions.push({
+  // The message already carries the fact lines. Don't print the same facts
+  // again as read-only questions below the form.
+  const visibleQuestions = questions.filter(
+    (question) => question.type !== "fact" || !message.includes(question.question),
+  );
+  if (visibleQuestions.length === 0) {
+    // A schema with no interactive fields is a confirmation: render a button.
+    visibleQuestions.push({
       header: message,
       question: message,
       options: [],
@@ -200,7 +221,7 @@ export function readACPElicitation(params: unknown): ACPElicitationForm | null {
       allowEmpty: true,
     });
   }
-  return { questions, fields, urlMode: null };
+  return { questions: visibleQuestions, fields, urlMode: null };
 }
 
 /** Map the card's string answers back to the schema values the agent expects. */

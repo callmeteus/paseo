@@ -2,6 +2,7 @@ import type pino from "pino";
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import { getPidLockInfo } from "../../pid-lock.js";
+import { readUnconfirmedTerminalCleanup } from "../../../terminal/terminal-worker-reaper.js";
 import { generateLocalPairingOffer } from "../../pairing-offer.js";
 import {
   collectDaemonDiagnostics,
@@ -13,6 +14,7 @@ import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../wor
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
 import { daemonHubLocalInstaller, type HubLocalInstaller } from "../../hub/local-install.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
+import type { ApiTokenStore } from "../../api-tokens.js";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -21,6 +23,7 @@ export interface DaemonRuntimeConfig {
   desktopManaged?: boolean;
   /** Origin other machines reach this computer's local Hub on, from `hub.publicOrigin`. */
   hubPublicOrigin?: string;
+  apiTokens?: ApiTokenStore;
   getRelayConfig(): {
     enabled: boolean;
     endpoint: string;
@@ -38,6 +41,7 @@ export interface DaemonSessionHost {
     clientId: string;
     requestId: string;
     reason: string;
+    keepTerminals: boolean;
   }): void;
 }
 
@@ -52,12 +56,14 @@ export interface DaemonSessionOptions {
   listProjects: () => Promise<PersistedProjectRecord[]>;
   listWorkspaces: () => Promise<PersistedWorkspaceRecord[]>;
   listProviderAvailability: () => Promise<ProviderAvailability[]>;
+  /** Why this host's terminals cannot be served (held by a newer Paseo's worker), if so. */
+  getTerminalsUnavailable?: () => string | null;
   getWebSocketRuntimeMetrics?: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   getObservationMetrics?: () => Record<string, number>;
   logger: pino.Logger;
   hubRelationships?: HubRelationshipManagement;
   hubLocalInstaller?: HubLocalInstaller;
-  reloadConfig: () => DaemonConfigReloadResult;
+  reloadConfig: () => Promise<DaemonConfigReloadResult>;
 }
 
 /**
@@ -78,13 +84,14 @@ export class DaemonSession {
   private readonly listProjects: () => Promise<PersistedProjectRecord[]>;
   private readonly listWorkspaces: () => Promise<PersistedWorkspaceRecord[]>;
   private readonly listProviderAvailability: () => Promise<ProviderAvailability[]>;
+  private readonly getTerminalsUnavailable: () => string | null;
   private readonly getWebSocketRuntimeMetrics: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   private readonly getObservationMetrics: DaemonSessionOptions["getObservationMetrics"];
   private readonly logger: pino.Logger;
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private readonly hubLocalInstaller: HubLocalInstaller;
-  private readonly reloadConfig: () => DaemonConfigReloadResult;
+  private readonly reloadConfig: () => Promise<DaemonConfigReloadResult>;
 
   constructor(options: DaemonSessionOptions) {
     this.host = options.host;
@@ -97,6 +104,7 @@ export class DaemonSession {
     this.listProjects = options.listProjects;
     this.listWorkspaces = options.listWorkspaces;
     this.listProviderAvailability = options.listProviderAvailability;
+    this.getTerminalsUnavailable = options.getTerminalsUnavailable ?? (() => null);
     this.getWebSocketRuntimeMetrics = options.getWebSocketRuntimeMetrics ?? (() => null);
     this.getObservationMetrics = options.getObservationMetrics;
     this.logger = options.logger;
@@ -232,6 +240,12 @@ export class DaemonSession {
   async handleGetStatusRequest(
     msg: Extract<SessionInboundMessage, { type: "daemon.get_status.request" }>,
   ): Promise<void> {
+    // Read outside the degraded-status fallback below: a status that cannot say whether
+    // terminal cleanup finished must fail the request, not report that nothing is left.
+    const terminalCleanupUnconfirmed = (await readUnconfirmedTerminalCleanup(this.paseoHome)).map(
+      ({ pid, role, reason, detail }) => ({ pid, role, reason, detail }),
+    );
+    const terminalsUnavailable = this.getTerminalsUnavailable();
     try {
       const pidInfo = await getPidLockInfo(this.paseoHome);
       const providers = (await this.listProviderAvailability()).map((p) => ({
@@ -251,6 +265,8 @@ export class DaemonSession {
           listen: this.daemonRuntimeConfig?.listen ?? null,
           relay: this.daemonRuntimeConfig?.getRelayConfig() ?? null,
           providers,
+          terminalCleanupUnconfirmed,
+          ...(terminalsUnavailable ? { terminalsUnavailable } : {}),
         },
       });
     } catch (error) {
@@ -267,6 +283,8 @@ export class DaemonSession {
           listen: null,
           relay: null,
           providers: [],
+          terminalCleanupUnconfirmed,
+          ...(terminalsUnavailable ? { terminalsUnavailable } : {}),
         },
       });
     }
@@ -311,13 +329,13 @@ export class DaemonSession {
     }
   }
 
-  handleConfigReloadRequest(
+  async handleConfigReloadRequest(
     msg: Extract<SessionInboundMessage, { type: "daemon.config.reload.request" }>,
-  ): void {
+  ): Promise<void> {
     try {
       this.host.emit({
         type: "daemon.config.reload.response",
-        payload: { requestId: msg.requestId, ...this.reloadConfig() },
+        payload: { requestId: msg.requestId, ...(await this.reloadConfig()) },
       });
     } catch (error) {
       this.logger.error({ err: error }, "Failed to reload daemon config");
@@ -331,6 +349,117 @@ export class DaemonSession {
         },
       });
     }
+  }
+
+  handleApiTokenListRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.list.request" }>,
+  ): void {
+    try {
+      this.host.emit({
+        type: "daemon.api_token.list.response",
+        payload: { requestId: msg.requestId, tokens: this.requireApiTokenStore().list() },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "list API tokens");
+    }
+  }
+
+  async handleApiTokenCreateRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.create.request" }>,
+  ): Promise<void> {
+    try {
+      const created = await this.requireApiTokenStore().create(msg.name);
+      this.host.emit({
+        type: "daemon.api_token.create.response",
+        payload: { requestId: msg.requestId, token: created.token, secret: created.secret },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "create API token");
+    }
+  }
+
+  handleApiTokenRenameRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.rename.request" }>,
+  ): void {
+    try {
+      const token = this.requireApiTokenStore().rename(msg.id, msg.name);
+      if (!token) {
+        this.emitApiTokenError(
+          msg.requestId,
+          msg.type,
+          new Error("API token not found"),
+          "rename API token",
+        );
+        return;
+      }
+      this.host.emit({
+        type: "daemon.api_token.rename.response",
+        payload: { requestId: msg.requestId, token },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "rename API token");
+    }
+  }
+
+  async handleApiTokenRotateRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.rotate.request" }>,
+  ): Promise<void> {
+    try {
+      const rotated = await this.requireApiTokenStore().rotate(msg.id);
+      if (!rotated) {
+        this.emitApiTokenError(
+          msg.requestId,
+          msg.type,
+          new Error("API token not found"),
+          "rotate API token",
+        );
+        return;
+      }
+      this.host.emit({
+        type: "daemon.api_token.rotate.response",
+        payload: { requestId: msg.requestId, token: rotated.token, secret: rotated.secret },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "rotate API token");
+    }
+  }
+
+  handleApiTokenRevokeRequest(
+    msg: Extract<SessionInboundMessage, { type: "daemon.api_token.revoke.request" }>,
+  ): void {
+    try {
+      const revoked = this.requireApiTokenStore().revoke(msg.id);
+      this.host.emit({
+        type: "daemon.api_token.revoke.response",
+        payload: { requestId: msg.requestId, revoked },
+      });
+    } catch (error) {
+      this.emitApiTokenError(msg.requestId, msg.type, error, "revoke API token");
+    }
+  }
+
+  private requireApiTokenStore(): ApiTokenStore {
+    const store = this.daemonRuntimeConfig?.apiTokens;
+    if (!store) throw new Error("Daemon API token store is unavailable");
+    return store;
+  }
+
+  private emitApiTokenError(
+    requestId: string,
+    requestType: SessionInboundMessage["type"],
+    error: unknown,
+    operation: string,
+  ): void {
+    this.logger.error({ err: error }, `Failed to ${operation}`);
+    this.host.emit({
+      type: "rpc_error",
+      payload: {
+        requestId,
+        requestType,
+        error: error instanceof Error ? error.message : String(error),
+        code: "handler_error",
+      },
+    });
   }
 
   async handleDiagnosticsRequest(

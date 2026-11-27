@@ -4,6 +4,7 @@ export type ShortcutOs = "mac" | "non-mac";
 
 const KEY_DISPLAY: Record<string, string> = {
   Backspace: "⌫",
+  Delete: "Del",
   Enter: "⏎",
   Esc: "Esc",
   Space: "␣",

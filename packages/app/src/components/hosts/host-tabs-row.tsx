@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, type ReactElement } from "react";
 import { ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
-import { Server } from "lucide-react-native";
+import { LayoutDashboard, Server } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SortableInlineList } from "@/components/sortable-inline-list";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { SidebarHostContextMenu } from "@/components/sidebar/sidebar-host-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHostTabOrderStore } from "@/stores/host-tab-order-store";
-import { connectionLabelKey, HostStatusDot } from "@/components/host-status-dot";
+import { connectionLabelKey } from "@/components/host-status-dot";
 import { StatusIcon } from "@/components/status-icon";
 import { useTranslation } from "react-i18next";
 import { useHostRuntimeConnectionStatus, useHostRuntimeLastError } from "@/runtime/host-runtime";
@@ -24,6 +25,7 @@ import { useHosts } from "@/runtime/host-runtime";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 
 const ThemedServer = withUnistyles(Server);
+const ThemedLayoutDashboard = withUnistyles(LayoutDashboard);
 
 // A row tab's glyph is the same 14px the workspace tab rail uses. The 12px badge
 // glyph is too small here: the status overlay covers the host icon completely.
@@ -54,6 +56,8 @@ const SERVER_ICON_MAPPINGS: Record<HostColor, (theme: Theme) => { color: string 
 export interface HostTabsRowProps {
   activeServerId: string | null;
   onSelectHost: (serverId: string) => void;
+  showAllActive: boolean;
+  onSelectAll: () => void;
 }
 
 /** A saved drag order wins; hosts added since then keep registry order at the end. */
@@ -84,8 +88,11 @@ function orderHostsForTabs(
 export function HostTabsRow({
   activeServerId,
   onSelectHost,
+  showAllActive,
+  onSelectAll,
 }: HostTabsRowProps): ReactElement | null {
   const hosts = useHosts();
+  const { t } = useTranslation();
   const localServerId = useLocalDaemonServerId();
   const savedOrder = useHostTabOrderStore((state) => state.order);
   const setOrder = useHostTabOrderStore((state) => state.setOrder);
@@ -97,11 +104,24 @@ export function HostTabsRow({
     (next: HostProfile[]) => setOrder(next.map((host) => host.serverId)),
     [setOrder],
   );
+  const allAccessibilityState = useMemo(() => ({ selected: showAllActive }), [showAllActive]);
+  const allChipStyle = useMemo(
+    () => [styles.chip, showAllActive ? styles.chipActive : null],
+    [showAllActive],
+  );
+  const allChipLabelStyle = useMemo(
+    () => [styles.label, showAllActive ? styles.labelActive : null],
+    [showAllActive],
+  );
   const renderHostTab = useCallback(
     ({ item: host }: { item: HostProfile }) => (
-      <HostTabChip host={host} active={host.serverId === activeServerId} onPress={onSelectHost} />
+      <HostTabChip
+        host={host}
+        active={!showAllActive && host.serverId === activeServerId}
+        onPress={onSelectHost}
+      />
     ),
-    [activeServerId, onSelectHost],
+    [activeServerId, onSelectHost, showAllActive],
   );
 
   // dnd-kit can keep DOM focus on the previously pressed chip after a selection
@@ -130,6 +150,23 @@ export function HostTabsRow({
         contentContainerStyle={styles.row}
         keyboardShouldPersistTaps="handled"
       >
+        <PressHighlight
+          testID="host-tab-all"
+          accessibilityRole="tab"
+          accessibilityState={allAccessibilityState}
+          accessibilityLabel={t("workspace.tabs.allHosts")}
+          onPress={onSelectAll}
+          style={allChipStyle}
+        >
+          <ThemedLayoutDashboard
+            size={HOST_TAB_ICON_SIZE}
+            strokeWidth={2.25}
+            uniProps={noneMapping}
+          />
+          <Text style={allChipLabelStyle} numberOfLines={1}>
+            {t("workspace.tabs.allHosts")}
+          </Text>
+        </PressHighlight>
         <SortableInlineList
           data={orderedHosts}
           keyExtractor={hostTabKeyExtractor}
@@ -195,7 +232,6 @@ function HostTabChip({
               uniProps={SERVER_ICON_MAPPINGS[host.appearance.color]}
             />
           </StatusIcon>
-          <HostStatusDot serverId={host.serverId} status={hostStatus} />
           <Text
             style={[styles.label, active ? styles.labelActive : null]}
             numberOfLines={1}

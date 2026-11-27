@@ -26,6 +26,10 @@ checkout root. They intentionally differ for an exact subproject inside a worktr
 restore, branch auto-name, and descriptor flows consume those persisted facts rather than
 rediscovering ownership from a directory that may already be gone. Reconciliation may refresh
 mutable placement facts, but never changes `projectId`, `cwd`, `displayName`, or `baseBranch`.
+An explicit base selection is stored in the checkout's Git-directory Paseo metadata and
+mirrored to `baseBranch` in every workspace record sharing that checkout. The record keeps
+recovery possible after the checkout metadata is deleted. A newly opened workspace inherits
+the checkout's selected base; separate worktrees keep separate bases.
 Workspace archive runs lifecycle teardown from the exact `cwd` but removes only the backing
 `worktreeRoot` after its last active reference disappears. Worktree recovery recreates that backing
 checkout from `mainRepoRoot`, then restores the relative path from `worktreeRoot` to `cwd`.
@@ -49,6 +53,7 @@ $PASEO_HOME/
 ├── daemon-keypair.json                  # E2EE keypair for relay (mode 0600)
 ├── paseo.pid                            # Daemon PID lock file
 ├── local-credential                     # Per-run local client credential (mode 0600)
+├── api-tokens.json                      # Named daemon API tokens, hashes only (mode 0600)
 ├── daemon.log                           # Default log file (path configurable)
 ├── agents/
 │   └── {sanitized-cwd}/
@@ -56,6 +61,7 @@ $PASEO_HOME/
 ├── plans/
 │   └── {workspaceId}/
 │       └── {name}.md                    # Sidebar plan. Not part of the workspace checkout.
+├── plan-builds.json                     # Plan builds pending dispatch; re-dispatched on boot
 ├── schedules/
 │   └── {scheduleId}.json                # One file per schedule
 ├── projects/
@@ -97,7 +103,9 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `lastUserMessageAt`  | `string?` (ISO 8601)                     | Last user message timestamp                                                                                                                                                                                                                                                                                                                                                         |
 | `title`              | `string?`                                | User-visible title                                                                                                                                                                                                                                                                                                                                                                  |
 | `labels`             | `Record<string, string>`                 | Key-value labels (default `{}`). Paseo uses `paseo.parent-agent-id` for parentage and shared `paseo.open-agent-tab` plus legacy client-scoped `paseo.open-agent-tab.*` labels while managed agent tabs are open — see [agent-lifecycle.md](./agent-lifecycle.md)                                                                                                                    |
+| `metadata`           | `Record<string, JsonValue>`              | Plugin-owned data (default `{}`). Paseo stores and forwards it and never reads a key. Set at creation or through `agent.metadata.update.request`; `null` in a patch removes a key                                                                                                                                                                                                   |
 | `lastStatus`         | `AgentStatus`                            | One of: `"initializing"`, `"idle"`, `"running"`, `"error"`, `"closed"`. `closed` means the record is resumable but has no live provider runtime; archive remains represented separately by `archivedAt`.                                                                                                                                                                            |
+| `resumeOnStartup`    | `boolean?`                               | Pending intent to resume an interrupted turn after a daemon restart. Consumed once when the resume prompt is dispatched.                                                                                                                                                                                                                                                            |
 | `lastModeId`         | `string?`                                | Last active mode ID                                                                                                                                                                                                                                                                                                                                                                 |
 | `config`             | `SerializableConfig?`                    | Agent session configuration (see below)                                                                                                                                                                                                                                                                                                                                             |
 | `runtimeInfo`        | `RuntimeInfo?`                           | Live runtime state (see below)                                                                                                                                                                                                                                                                                                                                                      |
@@ -108,6 +116,7 @@ Each agent is stored as a separate JSON file, grouped by project directory.
 | `attentionReason`    | `"finished" \| "error" \| "permission"?` | Why attention is needed                                                                                                                                                                                                                                                                                                                                                             |
 | `attentionTimestamp` | `string?` (ISO 8601)                     | When attention was flagged                                                                                                                                                                                                                                                                                                                                                          |
 | `internal`           | `boolean?`                               | Whether this is a system-internal agent                                                                                                                                                                                                                                                                                                                                             |
+| `notifyUser`         | `boolean?`                               | `false` means no user attention or push notifications. Omitted means the default, `true`.                                                                                                                                                                                                                                                                                           |
 | `archivedAt`         | `string?` (ISO 8601)                     | Soft-delete timestamp                                                                                                                                                                                                                                                                                                                                                               |
 
 ### Nested: SerializableConfig
@@ -186,11 +195,13 @@ Terminal activity contributes to the workspace status bucket **per `workspaceId`
 
 Single file, validated with `PersistedConfigSchema`.
 
-`agents.skills.selection` is the daemon host's orchestration-skill preference. Missing means
-`{ mode: "all" }`. Installed state is not persisted; the daemon derives it from the shared
-`~/.agents/skills` and Claude skill directories and keeps config plus filesystem convergence behind
-one serialized owner. Codex discovers the shared directory. Updates retire unchanged files from
-Paseo-managed copies in `~/.codex/skills`, preserving user edits and untracked files.
+`agents.skills.selection` stores the orchestration-skill preference for the daemon host, and a
+missing value defaults to `{ mode: "all" }`. The daemon does not persist installed state. It
+derives installed state from `~/.agents/skills`, `~/.claude/skills`, and `~/.gemini/config/skills`,
+and serializes configuration and filesystem convergence through one owner. Codex and Gemini CLI
+discover `~/.agents/skills`, while Antigravity discovers `~/.gemini/config/skills`. Updates retire
+unchanged files from Paseo-managed copies in `~/.codex/skills` and preserve user edits and
+untracked files.
 
 The skills status also reports read-only global skills found in the user skill directories of
 Agents, Claude, Codex, Cursor, Grok, OpenCode, and Pi. Paseo never writes to those directories.
@@ -215,6 +226,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     mcpBridges: Record<string, { host: string; via?: string; server: string }>, // consumer-side bridge references
     git: { maxProcessesPerSecond: number, maxProcessConcurrency: number },
     appendSystemPrompt: string,    // appended to supported provider system/developer prompts
+    selfLabel: string,             // host label this daemon announces; defaults to the machine hostname
     terminalProfiles: TerminalProfile[],  // named shell commands; omitted means DEFAULT_TERMINAL_PROFILES
     agentProfiles: AgentProfile[],        // named agent launch bundles; omitted means none
     cors: { allowedOrigins: string[] },
@@ -336,8 +348,13 @@ owner host.
 
 `$PASEO_HOME/message-queues/` stores composer queues per agent. Each file keeps the composer
 attachment payload and any image bytes so a different client can restore the queue after a refresh.
-The daemon only persists the queue; the client drains it when the agent goes idle. Deleting an agent
-deletes its queue file.
+The daemon persists the queue and publishes `agent.message_queue.changed` to every connected client;
+the client drains it when the agent goes idle. Hydration merges by message id, preserving local
+items that have not reached the daemon yet. Deleting an agent deletes its queue file.
+
+The app mirrors a queue to delegated children on connected hosts. Agent ids are generated per daemon,
+so the parent address in the child's `paseo.parent-*` labels is the identity mapping; replication
+runs parent to child only and requires `agentMessageQueue` on the destination.
 
 `agents.metadataGeneration.providers` selects the models for daemon-side metadata tasks: commit messages, PR text, branch names, and generated titles. An empty list is Automatic; a non-empty list is Manual and only those models are tried. See [public-docs/metadata-generation.md](../public-docs/metadata-generation.md#how-a-model-is-chosen).
 
@@ -362,6 +379,14 @@ start as a burst; it does not wait for earlier processes to exit. `maxProcessCon
 the number of Git processes that have started but not exited. Every Git command uses both limits,
 including initial workspace reads, filesystem-triggered refreshes, background checks, and explicit
 requests.
+
+Commands wait in one of three lanes, drained in order: `high` (worktree creation and archive),
+`normal` (everything a caller waits for, including diffs and explicit refreshes), and `background`
+(workspace reconciliation, refreshes triggered by watchers, polls and fetches, and the fetches
+themselves). Daemon-initiated fan-out must run in the background lane: one rescan over ~90 worktrees
+queues over 1,000 commands, and in the normal lane every command a cold diff runs waited behind
+them. Set the lane on the runner with `createRunGitCommand(provenance, { priority })`, or around a
+whole operation with `runWithGitCommandPriority`.
 
 Environment variables override `config.json`:
 
@@ -498,7 +523,7 @@ Array of workspace records. A workspace is a specific working directory within a
 | `title`                        | `string \| null`                                             | User-set name override layered over `displayName`. Null means "use `displayName`".                                                                                                            |
 | `branch`                       | `string \| null`                                             | The current Git branch for git-backed workspaces. Separate from `displayName`/`title`; a background branch refresh never rewrites the name.                                                   |
 | `worktreeRoot`                 | `string \| null`                                             | Backing checkout/worktree root. May differ from `cwd` for exact subprojects and remains persisted after the worktree is deleted so restore can reproduce the placement.                       |
-| `baseBranch`                   | `string \| null`                                             | Comparison base retained across archive and restore. Branch-off creation stores the resolved ref; legacy and PR-checkout records hold a bare name. Null means no recorded base.               |
+| `baseBranch`                   | `string \| null`                                             | Current base retained across archive and restore. Explicit selections and branch-off creation store exact refs; older records may store branch names. Null means no recorded base.            |
 | `isPaseoOwnedWorktree`         | `boolean`                                                    | Whether Paseo owns and may remove/recreate the backing `worktreeRoot`                                                                                                                         |
 | `mainRepoRoot`                 | `string \| null`                                             | Main repository root for worktree checkouts, independent of both exact `cwd` and backing `worktreeRoot`                                                                                       |
 | `createdAt`                    | `string` (ISO 8601)                                          |                                                                                                                                                                                               |
@@ -506,6 +531,7 @@ Array of workspace records. A workspace is a specific working directory within a
 | `archivedAt`                   | `string \| null` (ISO 8601)                                  | Soft-delete; required nullable                                                                                                                                                                |
 | `autoArchivedChangeRequestUrl` | `string \| null`                                             | Change request whose merged state triggered auto-archive. Restore replaces it with the current merged change request, when present, so repeated snapshots cannot archive the workspace again. |
 | `labels`                       | `string[]?`                                                  | Normalized display names assigned from this host's shared label catalog. Missing means unlabelled.                                                                                            |
+| `metadata`                     | `Record<string, JsonValue>`                                  | Plugin-owned data (default `{}`). Paseo stores and forwards it and never reads a key. Set at creation or through `workspace.metadata.update.request`.                                         |
 | `pinnedAt`                     | `string \| null` (ISO 8601)                                  | Pinned-to-top-of-sidebar timestamp; null means "not pinned"                                                                                                                                   |
 | `untrustedSource`              | `{ kind: "change_request", forge, number, headRepository }?` | Provenance captured when a cross-repository change request creates the workspace. Missing means repository automation is allowed; explicit setup removes the field.                           |
 
@@ -594,15 +620,30 @@ host, kinds, and ids. Opening a cached workspace uses exact workspace and projec
 directory scan. One invalid row is deleted and returned as a miss without affecting other rows.
 An invalid directory row and its affected checkpoint cursor are repaired in one transaction, so a
 later launch cannot accept a checkpoint for a partial baseline. Directory changes and their
-checkpoint are also applied in one transaction. Reads wait for accepted changes to reach storage,
+checkpoint are also applied in one transaction. A stored checkpoint carries a version. When a writer
+bug could have stored a checkpoint without its directory, bump the version: older checkpoints are
+rejected on read, cached rows still paint, and each host re-syncs its directory once. Reads wait for
+accepted changes to reach storage,
 then retry only when a requested row changes during the read. Unrelated agent streams do not
 invalidate the read. Directory baseline replacements and host removal or renaming still invalidate
 the affected reads.
 
-The cache is capped at 32 MiB and evicts whole hosts in least-recently-written order. Budget
+The cache is capped at 32 MiB and evicts whole hosts in least-recently-written order. After an
+eviction, only a baseline replacement stores that host's directory again. Mutations queued around
+the eviction are dropped when they are written, so a checkpoint never outlives its rows. Budget
 bookkeeping may scan opaque row sizes during a deferred write, never during host registry startup or
 before a requested cache row can paint. The row store is not encrypted. A cached timeline can contain
 source code, prompts, and tool output; encrypted-at-rest storage is a separate security decision.
+
+### Saved hosts
+
+**AsyncStorage key:** `@paseo:daemon-registry`, an array of host profiles.
+
+Every app build on a device shares this key, including an older build after a downgrade and a newer
+one that saves a connection kind this build doesn't know. The key holds every saved host and its
+password, so never remove it. Read each host and connection on its own, skip the ones this build
+can't read, and write them back on every save. A value that isn't a JSON array is copied to
+`@paseo:daemon-registry:unreadable` before the next save overwrites it.
 
 ### Draft Store
 

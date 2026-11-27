@@ -1,14 +1,35 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getAutocompleteFallbackIndex,
+  orderAutocompleteOptions,
+} from "@/components/ui/autocomplete-utils";
+import {
   applySlashCommandReplacement,
   filterAndRankCommandAutocompleteEntries,
   filterInlineSkillCommandEntries,
   findActiveSlashCommand,
   findSkillHighlightRanges,
   highlightedCommandNames,
+  mergeHighlightedCommandNames,
   skillCommandNames,
 } from "./agent-command-autocomplete";
+
+describe("mergeHighlightedCommandNames", () => {
+  it("keeps names from every source without case-insensitive duplicates", () => {
+    expect(
+      mergeHighlightedCommandNames([
+        ["goal", "improve-codebase-architecture"],
+        ["/Goal", "/untangle-codebase", "  "],
+        ["improve-codebase-architecture", "gti"],
+      ]),
+    ).toEqual(["goal", "gti", "improve-codebase-architecture", "untangle-codebase"]);
+  });
+
+  it("returns an empty list when no source reports a name", () => {
+    expect(mergeHighlightedCommandNames([[], [], []])).toEqual([]);
+  });
+});
 
 describe("filterAndRankCommandAutocompleteEntries", () => {
   const entries = [
@@ -33,6 +54,53 @@ describe("filterAndRankCommandAutocompleteEntries", () => {
     );
 
     expect(result.map((entry) => entry.command.name)).toEqual(["exit"]);
+  });
+});
+
+describe("filterAndRankCommandAutocompleteEntries on an empty query", () => {
+  const rootEntries = [
+    { source: "client" as const, command: { name: "exit", aliases: ["quit", "q"] } },
+    { source: "client" as const, command: { name: "clear", aliases: ["new"] } },
+    { source: "plugin" as const, command: { name: "handoff" } },
+    { source: "provider" as const, command: { name: "compact" } },
+    { source: "provider" as const, command: { name: "review" } },
+  ];
+
+  function selectedOnEnter(query: string) {
+    const listed = orderAutocompleteOptions(
+      filterAndRankCommandAutocompleteEntries(rootEntries, query),
+    );
+    return listed[getAutocompleteFallbackIndex(listed.length)]?.command.name;
+  }
+
+  it("selects a provider command, never an immediate Paseo action", () => {
+    expect(selectedOnEnter("")).toBe("compact");
+  });
+
+  it("lists Paseo actions farthest from the input", () => {
+    const listed = orderAutocompleteOptions(
+      filterAndRankCommandAutocompleteEntries(rootEntries, ""),
+    );
+    expect(listed.map((entry) => entry.command.name)).toEqual([
+      "clear",
+      "exit",
+      "handoff",
+      "review",
+      "compact",
+    ]);
+  });
+
+  it("still selects a typed Paseo action", () => {
+    expect(selectedOnEnter("exit")).toBe("exit");
+  });
+
+  it("waits for a search when Paseo actions are all there is", () => {
+    const clientOnly = rootEntries.filter((entry) => entry.source === "client");
+
+    expect(filterAndRankCommandAutocompleteEntries(clientOnly, "")).toEqual([]);
+    expect(
+      filterAndRankCommandAutocompleteEntries(clientOnly, "ex").map((entry) => entry.command.name),
+    ).toEqual(["exit"]);
   });
 });
 

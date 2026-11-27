@@ -7,10 +7,12 @@ import { z } from "zod";
 import {
   createHostClient,
   createHostChannelTransport,
+  createHostTransportFactory,
   parseHostTarget,
   HostTransportBudget,
 } from "@getpaseo/client/node";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { DaemonTransportFactory } from "@getpaseo/client/internal/daemon-client-transport-types";
 import {
   HostSummarySchema,
   HostAddSchema,
@@ -23,6 +25,7 @@ import {
 } from "@getpaseo/protocol/hosts";
 import type { ClusterConfig } from "@getpaseo/protocol/messages";
 import type { DaemonPermission, WSHelloMessage } from "@getpaseo/protocol/messages";
+import { webSocketProxyAgent } from "../network/index.js";
 
 export class HostError extends Error {
   constructor(
@@ -108,6 +111,7 @@ export class ConnectedHosts {
     private readonly home: string,
     private self: HostDirectory["self"],
     private readonly readClusterConfig: ReadClusterConfig = () => undefined,
+    private readonly persistSelfLabel: (label: string) => void = () => {},
   ) {
     this.ready = this.load();
     void this.ready.catch(() => {});
@@ -170,6 +174,7 @@ export class ConnectedHosts {
     const normalized = label.trim();
     if (!normalized || this.self.label === normalized) return;
     this.self = { ...this.self, label: normalized };
+    this.persistSelfLabel(normalized);
     this.changed();
   }
   observe(changed: () => void): () => void {
@@ -302,9 +307,7 @@ export class ConnectedHosts {
     if (this.readClusterConfig()?.syncHostNames !== true) return;
     const trimmed = label?.trim();
     if (!trimmed) return;
-    const registrationId = Array.from(this.live.entries()).find(
-      ([id]) => this.rows.find((row) => row.registrationId === id)?.serverId === serverId,
-    )?.[0];
+    const registrationId = this.registrationFor(serverId)?.registrationId;
     if (!registrationId) return;
     const live = this.live.get(registrationId);
     if (live?.accepted && live.client.isConnected)
@@ -330,6 +333,55 @@ export class ConnectedHosts {
     if (!row) throw new HostError("host_unknown", "Unknown host registration");
     return row;
   }
+
+  private registrationRank(row: Saved): number {
+    const live = this.live.get(row.registrationId);
+    if (row.status === "online" && live?.accepted && live.client.isConnected) return 5;
+    if (row.status === "online") return 4;
+    if (row.status === "connecting") return 3;
+    if (row.status === "offline") return 2;
+    if (row.status === "error") return 1;
+    return 0;
+  }
+
+  /** Picks the usable registration for a daemon, preferring a live accepted link. */
+  private registrationFor(serverId: string): Saved | undefined {
+    return this.rows
+      .filter((row) => row.serverId === serverId)
+      .sort(
+        (a, b) =>
+          this.registrationRank(b) - this.registrationRank(a) ||
+          (b.lastOnlineAt ?? "").localeCompare(a.lastOnlineAt ?? ""),
+      )[0];
+  }
+
+  /** Drops stale duplicate rows once another registration owns the daemon. */
+  private async pruneDuplicateRows(winner: Saved): Promise<void> {
+    if (winner.serverId === null) return;
+    const duplicates = this.rows.filter(
+      (row) =>
+        row !== winner && row.serverId === winner.serverId && row.error?.code === "duplicate_host",
+    );
+    await this.pruneRows(duplicates);
+  }
+
+  private pruneSelfIfDuplicate(row: Saved): Promise<void> {
+    if (row.error?.code !== "duplicate_host" || row.serverId === null) return Promise.resolve();
+    return this.mutate(async () => {
+      const owner = this.registrationFor(row.serverId ?? "");
+      if (!owner || owner === row || !owner.enabled || owner.status !== "online") return;
+      await this.pruneRows([row]);
+    });
+  }
+
+  private async pruneRows(rows: Saved[]): Promise<void> {
+    if (rows.length === 0) return;
+    const ids = new Set(rows.map((row) => row.registrationId));
+    await this.persist(this.rows.filter((row) => !ids.has(row.registrationId)));
+    this.rows = this.rows.filter((row) => !ids.has(row.registrationId));
+    for (const id of ids) this.stop(id, "host_unknown");
+    this.changed();
+  }
   private stop(id: string, code = "host_offline"): void {
     const live = this.live.get(id);
     live?.stop();
@@ -344,22 +396,32 @@ export class ConnectedHosts {
       if (route.registrationId === id)
         route.close(code, "Host access was disabled, replaced or removed");
   }
-  private start(row: Saved): void {
+  private start(
+    row: Saved,
+    resume?: { failures: number; transports: DaemonTransportFactory },
+  ): void {
     if (!row.enabled || this.closed) return;
+    // A duplicate row can be pruned while a startup loop is still iterating the old list.
+    if (!this.rows.includes(row)) return;
+    const transports =
+      resume?.transports ??
+      createHostTransportFactory(row.connection, this.budget, {
+        webSocketAgent: webSocketProxyAgent,
+      });
     let stopped = false;
-    const client = createHostClient(
-      row.connection,
-      {
-        clientId: `host-link-${this.self.serverId}-${row.registrationId}`,
-        connectTimeoutMs: 10000,
-      },
-      this.budget,
-    );
+    let attempts = resume?.failures ?? 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const client = createHostClient(row.connection, {
+      clientId: `host-link-${this.self.serverId}-${row.registrationId}`,
+      connectTimeoutMs: 10000,
+      transportFactory: transports,
+    });
     const live: Live = {
       client,
       accepted: false,
       stop: () => {
         stopped = true;
+        clearTimeout(retry);
         void client.close();
       },
     };
@@ -385,20 +447,22 @@ export class ConnectedHosts {
             "self_host",
             "This connection reaches this daemon. Remove it or replace the connection.",
           );
-        if (this.rows.find((entry) => entry.serverId === info.serverId) !== row)
+        const owner = this.registrationFor(info.serverId);
+        if (owner && owner !== row && owner.enabled)
           throw new HostError(
             "duplicate_host",
-            "Another registration already owns this daemon. Remove the duplicate registration.",
+            "Another registration already owns this daemon. The duplicate will be removed automatically once the owner is online.",
           );
         if (info.features?.connectedHosts !== true || info.features?.hostMultiplexing !== true)
           throw new HostError(
             "unsupported_capability",
-            "Update the destination daemon to use connected hosts.",
+            "Update the destination daemon to use connected hosts; retrying automatically.",
           );
         // Pin and persist under the same writer as management to prevent discovery races.
         await this.mutate(async () => {
           if (stopped) return;
-          if (this.rows.find((entry) => entry.serverId === info.serverId) !== row)
+          const currentOwner = this.registrationFor(info.serverId);
+          if (currentOwner && currentOwner !== row && currentOwner.enabled)
             throw new HostError("duplicate_host", "Another registration already owns this daemon");
           const next = {
             ...row,
@@ -414,18 +478,26 @@ export class ConnectedHosts {
           live.accepted = true;
           this.liveVia.set(live, info.serverId);
           if (this.readClusterConfig()?.announceHosts === true) this.startAnnouncing(live);
+          attempts = 0;
+          await this.pruneDuplicateRows(row);
           this.changed();
         });
       } catch (error) {
         if (stopped) return;
-        row.status = "error";
         row.error = connectionFailure(error, client.authFailureReason !== null) ?? {
           code: "host_offline",
           message: "Host connection failed",
         };
-        row.nextRetryAt = null;
+        if (terminalFailures.has(row.error.code)) {
+          row.status = "error";
+          row.nextRetryAt = null;
+        } else {
+          stopped = true;
+          retry = this.scheduleAcceptanceRetry(row, attempts, transports);
+        }
         this.changed();
         await client.close();
+        await this.pruneSelfIfDuplicate(row);
       }
     };
     client.subscribeConnectionStatus((state) => {
@@ -445,18 +517,17 @@ export class ConnectedHosts {
         if (route.registrationId === row.registrationId) route.close();
       row.status = state.status === "connecting" ? "connecting" : "offline";
       row.nextRetryAt = state.status === "disconnected" ? (state.nextRetryAt ?? null) : null;
-      row.error =
-        state.status === "disconnected"
-          ? (connectionFailure(
-              Object.assign(new Error("Check the SSH configuration and daemon credentials"), {
-                code: state.failureCode,
-              }),
-              client.authFailureReason !== null,
-            ) ?? {
-              code: "host_offline",
-              message: "Cannot reach host. Check the connection; retrying automatically.",
-            })
-          : null;
+      if (state.status === "disconnected")
+        row.error = connectionFailure(
+          Object.assign(new Error("Check the SSH configuration and daemon credentials"), {
+            code: state.failureCode,
+          }),
+          client.authFailureReason !== null,
+        ) ?? {
+          code: "host_offline",
+          message: "Cannot reach host. Check the connection; retrying automatically.",
+        };
+      else if (row.error?.code !== "unsupported_capability") row.error = null;
       if (row.error?.code === "authentication_failed") {
         row.status = "error";
         row.nextRetryAt = null;
@@ -514,6 +585,19 @@ export class ConnectedHosts {
     }
   }
 
+  private scheduleAcceptanceRetry(
+    row: Saved,
+    failures: number,
+    transports: DaemonTransportFactory,
+  ): ReturnType<typeof setTimeout> {
+    const delay = acceptanceRetryDelayMs(failures);
+    row.status = "offline";
+    row.nextRetryAt = new Date(Date.now() + delay).toISOString();
+    const retry = setTimeout(() => this.start(row, { failures: failures + 1, transports }), delay);
+    retry.unref();
+    return retry;
+  }
+
   async openRoute(input: {
     serverId: string;
     scopeId: string;
@@ -524,7 +608,7 @@ export class ConnectedHosts {
     maxHops?: number;
     permissions: readonly DaemonPermission[];
     signal: AbortSignal;
-    frame(data: string | Uint8Array): void;
+    frame(data: string | Uint8Array): void | Promise<void>;
     ended(code: string, message: string): void;
   }): Promise<{ send(data: string | Uint8Array): void; close(): void }> {
     await this.ready;
@@ -536,7 +620,9 @@ export class ConnectedHosts {
       hopPath,
       maxHops,
     });
-    const row = this.rows.find((entry) => entry.serverId === input.serverId);
+    // Several registrations can reach the same daemon (direct link plus a duplicate or a
+    // route). Always pick the usable one instead of the first row that matches the id.
+    const row = this.registrationFor(input.serverId);
     if (!row) throw new HostError("host_unknown", `Unknown host ${input.serverId}`, input.serverId);
     if (!row.enabled)
       throw new HostError(
@@ -647,7 +733,7 @@ export class ConnectedHosts {
           return;
         }
       }
-      input.frame(binary ? (data as Uint8Array) : String(data));
+      return input.frame(binary ? (data as Uint8Array) : String(data));
     });
     await ready;
     if (closed) throw new HostError("host_offline", "Host closed during connection");
@@ -687,10 +773,13 @@ export class ConnectedHosts {
           return;
         }
         if (!verified) throw new HostError("host_offline", "Host identity has not been verified");
-        try {
-          transport.send(data);
-        } catch {
+        const rejectWrite = () =>
           route.close("resource_limit", "Host buffer limit reached or transport unavailable");
+        try {
+          const write = transport.send(data);
+          if (write) void write.catch(rejectWrite);
+        } catch {
+          rejectWrite();
         }
       },
     };
@@ -704,6 +793,20 @@ export class ConnectedHosts {
     this.listeners.clear();
   }
 }
+
+const ACCEPTANCE_RETRY_BASE_MS = 1500;
+const ACCEPTANCE_RETRY_MAX_MS = 30_000;
+
+function acceptanceRetryDelayMs(failures: number): number {
+  return Math.min(ACCEPTANCE_RETRY_BASE_MS * 2 ** failures, ACCEPTANCE_RETRY_MAX_MS);
+}
+
+const terminalFailures = new Set([
+  "server_id_mismatch",
+  "self_host",
+  "duplicate_host",
+  "authentication_failed",
+]);
 
 function connectionFailure(error: unknown, authenticationFailed: boolean): HostSummary["error"] {
   if (error instanceof HostError) return { code: error.code, message: error.message };

@@ -3,7 +3,7 @@ import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type { WorkspaceTab, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { MIN_SPLIT_SIZE } from "@/stores/workspace-layout-constants";
 import { panelResourceKey, panelSupportsHost } from "@/panels/panel-manifest";
-import { defaultWorkspaceLayoutIds } from "@/stores/workspace-layout-ids";
+import { allocateWorkspaceTabId, defaultWorkspaceLayoutIds } from "@/stores/workspace-layout-ids";
 import type { WorkspaceLayoutNodeIdPrefix } from "@/stores/workspace-layout-ids";
 import {
   buildDeterministicWorkspaceTabId,
@@ -137,6 +137,8 @@ interface OpenTabInLayoutInput {
   placement: WorkspaceTabPlacement;
   /** Required so a new caller cannot silently opt out of Explorer placement rules. */
   explorerSidebarPaneId: string | null;
+  /** Live sheets share the workspace's panel-instance namespace with its tabs. */
+  reservedTabIds?: ReadonlySet<string>;
 }
 
 interface CreateTabInLayoutInput extends OpenTabInLayoutInput {
@@ -261,6 +263,7 @@ interface ReorderPaneTabsInLayoutInput {
 
 export interface WorkspaceTabReconcileState {
   layout: WorkspaceLayout;
+  reservedTabIds?: ReadonlySet<string>;
   pinnedAgentIds?: ReadonlySet<string> | null;
   hiddenAgentIds?: ReadonlySet<string> | null;
   explorerSidebarPaneId: string | null;
@@ -277,6 +280,7 @@ export interface WorkspaceTabSnapshot {
   openedAgentIds?: Iterable<string>;
   /** When each close marker was written, so a tab reopened afterwards survives. */
   hiddenAgentUpdatedAtById?: ReadonlyMap<string, number>;
+  foreignAgentIds?: Iterable<string>;
   knownTerminalIds?: Iterable<string>;
   standaloneTerminalIds: Iterable<string>;
   hasActivePendingTerminalCreate?: boolean;
@@ -403,15 +407,11 @@ function normalizeWorkspaceTabs(input: unknown): WorkspaceTab[] {
   if (!Array.isArray(input)) {
     return [];
   }
+  // Preserve colliding entries until the whole layout can assign each an identity.
   const next: WorkspaceTab[] = [];
-  const seen = new Set<string>();
   for (const value of input) {
     const tab = normalizeWorkspaceTab(value);
-    if (!tab || seen.has(tab.tabId)) {
-      continue;
-    }
-    seen.add(tab.tabId);
-    next.push(tab);
+    if (tab) next.push(tab);
   }
   return next;
 }
@@ -1027,13 +1027,65 @@ function insertSplitInternal(input: InsertSplitInternalInput): InsertSplitIntern
   };
 }
 
+function repairDuplicateTabIds(root: SplitNodeInternal): {
+  root: SplitNodeInternal;
+  ambiguousIds: ReadonlySet<string>;
+} {
+  const keepers = new Map<string, WorkspaceTab>();
+  const ambiguousIds = new Set<string>();
+  for (const tab of collectAllTabs(root)) {
+    const keeper = keepers.get(tab.tabId);
+    if (!keeper) {
+      keepers.set(tab.tabId, tab);
+      continue;
+    }
+    ambiguousIds.add(tab.tabId);
+    if (
+      buildDeterministicWorkspaceTabId(tab.target) === tab.tabId &&
+      buildDeterministicWorkspaceTabId(keeper.target) !== keeper.tabId
+    ) {
+      keepers.set(tab.tabId, tab);
+    }
+  }
+  if (ambiguousIds.size === 0) return { root, ambiguousIds };
+
+  // Reserve every original id before assigning replacements, including hidden panes.
+  const occupiedIds = new Set(keepers.keys());
+  function repair(node: SplitNodeInternal): SplitNodeInternal {
+    if (node.kind === "group") {
+      return { ...node, group: { ...node.group, children: node.group.children.map(repair) } };
+    }
+    const focusedCandidates = node.pane.tabs.filter((tab) => tab.tabId === node.pane.focusedTabId);
+    const focusedTab =
+      focusedCandidates.find((tab) => keepers.get(tab.tabId) === tab) ?? focusedCandidates[0];
+    let focusedTabId = node.pane.focusedTabId;
+    const tabs = node.pane.tabs.map((tab) => {
+      if (keepers.get(tab.tabId) === tab) return tab;
+      const tabId = allocateWorkspaceTabId(
+        buildDeterministicWorkspaceTabId(tab.target),
+        occupiedIds,
+      );
+      occupiedIds.add(tabId);
+      if (tab === focusedTab) focusedTabId = tabId;
+      return { ...tab, tabId };
+    });
+    return {
+      ...node,
+      pane: { ...node.pane, tabs, tabIds: tabs.map((tab) => tab.tabId), focusedTabId },
+    };
+  }
+  return { root: repair(root), ambiguousIds };
+}
+
 export function normalizeLayout(layout: unknown): WorkspaceLayout {
   if (!layout || typeof layout !== "object") {
     return createDefaultLayout();
   }
 
   const rawLayout = layout as WorkspaceLayout;
-  const root = normalizeNode(rawLayout.root) ?? asInternalNode(createDefaultLayout().root);
+  const { root, ambiguousIds } = repairDuplicateTabIds(
+    normalizeNode(rawLayout.root) ?? asInternalNode(createDefaultLayout().root),
+  );
   const focusedPaneId =
     rawLayout.focusedPaneId === null ? null : trimNonEmpty(rawLayout.focusedPaneId);
   const resolvedFocusedPaneId =
@@ -1052,7 +1104,16 @@ export function normalizeLayout(layout: unknown): WorkspaceLayout {
     openTabIds: new Set(collectAllTabs(root).map((tab) => tab.tabId)),
   });
 
-  return parentTabIdByTabId ? { ...normalizedLayout, parentTabIdByTabId } : normalizedLayout;
+  if (parentTabIdByTabId) {
+    // A duplicated id cannot identify either end of a parent relationship unambiguously.
+    for (const [childId, parentId] of Object.entries(parentTabIdByTabId)) {
+      if (ambiguousIds.has(childId) || ambiguousIds.has(parentId))
+        delete parentTabIdByTabId[childId];
+    }
+    if (Object.keys(parentTabIdByTabId).length > 0)
+      return { ...normalizedLayout, parentTabIdByTabId };
+  }
+  return normalizedLayout;
 }
 
 export function findPaneById(root: SplitNode, paneId: string | null | undefined): SplitPane | null {
@@ -1425,7 +1486,9 @@ function insertNewTabIntoPane(
     return null;
   }
 
-  const tabId = input.createTabId();
+  const occupiedIds = new Set(input.reservedTabIds);
+  for (const tab of collectAllTabs(layout.root)) occupiedIds.add(tab.tabId);
+  const tabId = allocateWorkspaceTabId(input.createTabId(), occupiedIds);
   const nextTab: WorkspaceTab = {
     tabId,
     target: input.target,
@@ -2345,6 +2408,7 @@ function openEntityTabWithoutFocusing(input: {
   layout: WorkspaceLayout;
   target: WorkspaceTabTarget;
   explorerSidebarPaneId: string | null;
+  reservedTabIds: ReadonlySet<string> | undefined;
 }): WorkspaceLayout {
   return (
     insertNewTabIntoPane({
@@ -2353,6 +2417,7 @@ function openEntityTabWithoutFocusing(input: {
       now: Date.now(),
       placement: AMBIENT_PLACEMENT,
       explorerSidebarPaneId: input.explorerSidebarPaneId,
+      reservedTabIds: input.reservedTabIds,
       createTabId: () => buildDeterministicWorkspaceTabId(input.target),
       focus: false,
     })?.layout ?? input.layout
@@ -2443,6 +2508,7 @@ function addMissingEntityTabs(input: {
   hasActivePendingTerminalCreate: boolean;
   hasActivePendingDraftCreate: boolean;
   explorerSidebarPaneId: string | null;
+  reservedTabIds: ReadonlySet<string> | undefined;
 }): WorkspaceLayout {
   const {
     autoOpenAgentIds,
@@ -2473,6 +2539,7 @@ function addMissingEntityTabs(input: {
       layout: nextLayout,
       target: { kind: "agent", agentId },
       explorerSidebarPaneId,
+      reservedTabIds: input.reservedTabIds,
     });
     currentAgentIds.add(agentId);
   }
@@ -2487,6 +2554,7 @@ function addMissingEntityTabs(input: {
         layout: nextLayout,
         target: { kind: "terminal", terminalId },
         explorerSidebarPaneId,
+        reservedTabIds: input.reservedTabIds,
       });
       currentTerminalIds.add(terminalId);
     }
@@ -2585,13 +2653,16 @@ export function reconcileWorkspaceTabs(
   const hiddenAgentIds = resolveHiddenAgentIds(state, snapshot, initialTabs);
   const activeAgentIds = normalizeStringSet(snapshot.activeAgentIds);
   const autoOpenAgentIds = normalizeStringSet(snapshot.autoOpenAgentIds);
-  // An explicit open owns the tab until the agent joins the active directory.
-  // From then on it follows the normal server archive lifecycle. Detail/cache
-  // hydration never decides whether the user's target is allowed to stay open.
+  const foreignAgentIds = normalizeStringSet(snapshot.foreignAgentIds ?? []);
+  // Explicit opens survive absent directory entries, but not known foreign ownership.
+  // Once an agent joins this workspace's active directory, normal archive rules apply.
   const pinnedAgentIds = new Set(
-    [...(state.pinnedAgentIds ?? [])].filter(
-      (agentId) => !snapshot.agentsHydrated || !activeAgentIds.has(agentId),
-    ),
+    [...(state.pinnedAgentIds ?? [])].filter((agentId) => {
+      if (!snapshot.agentsHydrated) {
+        return true;
+      }
+      return !activeAgentIds.has(agentId) && !foreignAgentIds.has(agentId);
+    }),
   );
   const standaloneTerminalIds = normalizeStringSet(snapshot.standaloneTerminalIds);
   const knownTerminalIds = snapshot.knownTerminalIds
@@ -2637,6 +2708,7 @@ export function reconcileWorkspaceTabs(
     hasActivePendingTerminalCreate: snapshot.hasActivePendingTerminalCreate ?? false,
     hasActivePendingDraftCreate: snapshot.hasActivePendingDraftCreate ?? false,
     explorerSidebarPaneId: state.explorerSidebarPaneId,
+    reservedTabIds: state.reservedTabIds,
   });
 
   if (reconciledFocusedTabId) {
@@ -2645,6 +2717,22 @@ export function reconcileWorkspaceTabs(
         layout: nextLayout,
         tabId: reconciledFocusedTabId,
       }) ?? nextLayout;
+  }
+
+  // A tab can be re-keyed or replaced while the agent directory hydrates. If the
+  // previously focused tab is gone, keep the focus on its target when a tab for
+  // it still exists instead of letting the pane fall back to the previous chat.
+  const focusedTarget = initialTabs.find((tab) => tab.tabId === originalFocusedTabId)?.target;
+  if (
+    focusedTarget &&
+    !collectAllTabs(nextLayout.root).some((tab) => tab.tabId === reconciledFocusedTabId)
+  ) {
+    const replacement = collectAllTabs(nextLayout.root).find((tab) =>
+      workspaceTabTargetsEqual(tab.target, focusedTarget),
+    );
+    if (replacement) {
+      nextLayout = focusTabInLayout({ layout: nextLayout, tabId: replacement.tabId }) ?? nextLayout;
+    }
   }
 
   return {

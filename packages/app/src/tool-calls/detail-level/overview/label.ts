@@ -90,6 +90,19 @@ function joinSections(sections: string[], conjunction: string): string {
   return `${head} ${conjunction} ${sections.at(-1)}`;
 }
 
+/**
+ * Paseo calls already have a translated action label from the protocol catalog.
+ * Keep them as named actions instead of folding them into the generic tool count.
+ */
+function paseoActionLabels(summary: OverviewSummary): string[] {
+  return Object.entries(summary.paseoActions ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([action, count]) =>
+      count === 1 ? action.toLocaleLowerCase() : `${action.toLocaleLowerCase()} ×${count}`,
+    );
+}
+
 export interface OverviewLabelSegment {
   text: string;
   /** The part carries a glyph, the way Cursor marks a block that used MCP tools. */
@@ -122,10 +135,12 @@ export function buildOverviewSummaryDisplay(
   t: TFunction,
   leadingParts: readonly string[] = [],
 ): OverviewLabel {
+  const namedActions = paseoActionLabels(summary);
   if (
     countSummarizedToolCalls(summary) === 0 &&
     summary.thoughtCount > 0 &&
-    leadingParts.length === 0
+    leadingParts.length === 0 &&
+    namedActions.length === 0
   ) {
     const duration = formatThoughtDuration(summary.thinkingDurationMs, t);
     const text = duration
@@ -144,17 +159,29 @@ export function buildOverviewSummaryDisplay(
 
   const action = t(`toolCallGroup.actions.${plan.action}`);
   const groupSentence = buildGroupSentence(action, parts, plan.fileChangeStats);
+  const conjunction = t("toolCallGroup.and");
 
   if (leadingParts.length === 0) {
-    return groupSentence;
+    if (namedActions.length === 0) {
+      return groupSentence;
+    }
+    // With no leading part this sentence starts the line, so keep its initial capital. Lowercasing
+    // only makes sense when the group sentence follows another section.
+    const text = [groupSentence.text, ...namedActions].join(` ${conjunction} `);
+    return { text, segments: [{ text }] };
   }
 
   const firstCharacter = leadingParts[0]?.[0];
   const capitalized = firstCharacter
     ? `${firstCharacter.toLocaleUpperCase()}${(leadingParts[0] ?? "").slice(1)}`
     : "";
-  const sections = [capitalized, ...leadingParts.slice(1), lowercaseFirst(groupSentence.text)];
-  const text = joinSections(sections, t("toolCallGroup.and"));
+  const sections = [
+    capitalized,
+    ...leadingParts.slice(1),
+    lowercaseFirst(groupSentence.text),
+    ...namedActions,
+  ];
+  const text = joinSections(sections, conjunction);
   return { text, segments: [{ text }] };
 }
 

@@ -1,0 +1,107 @@
+name: Android APK Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "android-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.1.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: android-apk-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  ensure-release:
+    runs-on: docker
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        shell: bash
+        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+
+      - name: Ensure GitHub release exists
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          release_args=(
+            release create "$RELEASE_TAG"
+            --repo "callmeteus/paseo"
+            --title "Paseo $RELEASE_TAG"
+            --notes ""
+            --draft
+          )
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          if ! gh "${release_args[@]}"; then
+            echo "Release creation raced with another workflow; continuing."
+            node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG" >/dev/null
+          fi
+
+  publish-android-apk:
+    needs: [ensure-release]
+    runs-on: docker
+    container:
+      image: mingc/android-build-box:latest
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GTI_CI_APP_ID }}
+          private-key: ${{ secrets.GTI_CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        shell: bash
+        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+
+      - name: Install JS dependencies
+        run: node scripts/npm-retry.mjs ci
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Build Android APK (arm64)
+        run: npm run build:apk:arm64
+
+      - name: Upload APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_lookup="$(node scripts/github-release.mjs --repo "callmeteus/paseo" --tag "$RELEASE_TAG")"
+          gh release upload "$release_lookup" "artifacts/paseo-dogfood-arm64.apk" \
+            --clobber --repo "callmeteus/paseo"

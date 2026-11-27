@@ -1,5 +1,13 @@
 import { isPaseoToolName } from "@getpaseo/protocol/tool-name-normalization";
-import { describeToolCall, type GroupableStep, type StepRun } from "../grouping";
+import { getPaseoToolActionLabel } from "@getpaseo/protocol/paseo-tool-presentation/index";
+import { isTurnTrigger } from "@/agent-stream/turn-membership";
+
+import {
+  describeToolCall,
+  type GroupableItem,
+  type GroupableStep,
+  type StepRun,
+} from "../grouping";
 
 const DIRECT_PASEO_TOOL_PREFIX = "paseo_";
 const DIRECT_SEARCH_TOOL_SUFFIX_PATTERN = /(?:^|[_.:/])(?:web_search|llm_context)$/;
@@ -10,6 +18,7 @@ export interface OverviewFileChangeStats {
 }
 
 export interface OverviewSummary {
+  thoughtCount: number;
   editedFileCount: number;
   commandCount: number;
   readFileCount: number;
@@ -17,14 +26,16 @@ export interface OverviewSummary {
   fetchCount: number;
   agentCount: number;
   otherToolCount: number;
+  /** Paseo calls as a count, for the activity sentence. */
   paseoCallCount: number;
+  /** The same Paseo calls as semantic action labels, for named summaries. */
+  paseoActions: Record<string, number>;
   /** Reads that failed or were rejected; a group of only these reads as "Skipped". */
   failedFileCount: number;
   /** Read paths, deduped. One entry lets the label name the file instead of counting. */
   readFiles: readonly string[];
   fileChangeStats?: OverviewFileChangeStats;
   thinkingDurationMs: number;
-  thoughtCount: number;
   hasText: boolean;
 }
 
@@ -100,6 +111,7 @@ export function countSummarizedToolCalls(summary: OverviewSummary): number {
 }
 
 /** Counts a stretch of agent work by what it did, for any summary of that stretch. */
+// eslint-disable-next-line complexity -- merge: combined two implementations
 export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary {
   const editedFiles = new Set<string>();
   const readFiles = new Set<string>();
@@ -114,6 +126,7 @@ export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary
   let thinkingDurationMs = 0;
   let thoughtCount = 0;
   let hasText = false;
+  const paseoActions: Record<string, number> = {};
 
   for (const step of steps) {
     if (step.kind === "thought") {
@@ -125,6 +138,9 @@ export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary
       hasText = true;
       continue;
     }
+    if (isTurnTrigger(step)) {
+      continue;
+    }
 
     const descriptor = describeToolCall(step);
     const normalizedName = descriptor.name.trim().toLowerCase();
@@ -132,6 +148,10 @@ export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary
 
     if (isPaseoCall(descriptor.name, normalizedName)) {
       paseoCallCount += 1;
+      const action =
+        getPaseoToolActionLabel(descriptor.name) ??
+        normalizedName.replace(DIRECT_PASEO_TOOL_PREFIX, "").replaceAll("_", " ");
+      paseoActions[action] = (paseoActions[action] ?? 0) + 1;
     } else if (descriptor.detail.type === "edit" || descriptor.detail.type === "write") {
       if (failed) {
         failedFileCount += 1;
@@ -161,6 +181,7 @@ export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary
   }
 
   return {
+    thoughtCount,
     editedFileCount: editedFiles.size,
     commandCount,
     readFileCount: readFiles.size,
@@ -169,13 +190,18 @@ export function summarizeSteps(steps: readonly GroupableStep[]): OverviewSummary
     agentCount,
     otherToolCount,
     paseoCallCount,
+    paseoActions,
     failedFileCount,
     readFiles: [...readFiles],
     ...(fileChangeStats.additions > 0 || fileChangeStats.deletions > 0 ? { fileChangeStats } : {}),
     thinkingDurationMs,
-    thoughtCount,
     hasText,
   };
+}
+
+/** Upstream-facing name for the same summary. Kept for callers that pass calls only. */
+export function summarizeToolCalls(calls: readonly GroupableItem[]): OverviewSummary {
+  return summarizeSteps(calls);
 }
 
 export function buildOverviewGroup(run: StepRun): OverviewToolCallGroup {

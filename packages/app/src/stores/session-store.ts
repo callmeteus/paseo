@@ -26,7 +26,9 @@ import type { ComposerAttachment } from "@/attachments/types";
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
 import type {
   AgentPermissionRequest,
-  AgentFeature,
+  AgentOptionControl,
+  JsonValue,
+  ProviderOptions,
   AgentProvider,
   AgentMode,
   AgentCapabilityFlags,
@@ -34,6 +36,7 @@ import type {
   AgentPersistenceHandle,
 } from "@getpaseo/protocol/agent-types";
 import type {
+  AgentBackgroundWorkSummary,
   ServerInfoStatusPayload,
   ProjectPlacementPayload,
   ServerCapabilities,
@@ -55,10 +58,12 @@ import {
   type WorkspaceAgentActivity,
 } from "@/utils/workspace-agent-activity";
 import {
+  resolveTimelineTurnPresentation,
   resolveTurnPresentation,
   TURN_LIVENESS_IDLE,
   type TurnLiveness,
   type TurnPresentation,
+  type UnsettledTurn,
 } from "@/timeline/turn-liveness";
 
 export interface AgentRuntimeInfo {
@@ -82,6 +87,7 @@ export interface Agent {
   id: string;
   provider: AgentProvider;
   status: AgentLifecycleStatus;
+  backgroundWork?: AgentBackgroundWorkSummary;
   turn: TurnLiveness;
   createdAt: Date;
   updatedAt: Date;
@@ -100,6 +106,7 @@ export interface Agent {
   pendingPermissions: AgentPermissionRequest[];
   persistence: AgentPersistenceHandle | null;
   runtimeInfo?: AgentRuntimeInfo;
+  usageScopeKey?: string;
   lastUsage?: AgentUsage;
   lastError?: string | null;
   title: string | null;
@@ -108,7 +115,8 @@ export interface Agent {
   /** Model router bound to this chat; absent means it runs on its model only. */
   modelRouterId?: string | null;
   model: string | null;
-  features?: AgentFeature[];
+  options?: ProviderOptions;
+  controls?: AgentOptionControl[];
   thinkingOptionId?: string | null;
   /** Daemon-level /goal state; only present while a goal is set. */
   goal?: AgentGoalState | null;
@@ -125,12 +133,16 @@ export interface Agent {
   archivedAt?: Date | null;
   migratedFrom?: AgentMigrationLink;
   migratedTo?: AgentMigrationLink;
+  /** Background agents stay out of tabs, the subagent track and agent lists. Open them by id. */
+  background?: boolean;
   parentAgentId: string | null;
   labels: Record<string, string>;
+  metadata?: Record<string, JsonValue>;
   projectPlacement?: ProjectPlacementPayload | null;
 }
 
 export interface WorkspaceDescriptor {
+  parentWorkspaceId?: string;
   createdAt: Date | null;
   lastUserMessageAt: Date | null;
   id: string;
@@ -157,6 +169,7 @@ export interface WorkspaceDescriptor {
   gitRuntime?: WorkspaceDescriptorPayload["gitRuntime"];
   githubRuntime?: WorkspaceDescriptorPayload["githubRuntime"];
   forge?: WorkspaceDescriptorPayload["forge"];
+  forgeWeb?: WorkspaceDescriptorPayload["forgeWeb"];
   project?: ProjectPlacementPayload;
 }
 
@@ -188,6 +201,7 @@ export function normalizeWorkspaceDescriptor(
     projectKind: payload.projectKind,
     workspaceKind: payload.workspaceKind,
     background: payload.background ?? false,
+    parentWorkspaceId: payload.parentWorkspaceId,
     name: payload.name,
     title: payload.title ?? null,
     pinnedAt: payload.pinnedAt ?? null,
@@ -201,6 +215,7 @@ export function normalizeWorkspaceDescriptor(
     gitRuntime: payload.gitRuntime,
     githubRuntime: payload.githubRuntime,
     forge: payload.forge,
+    forgeWeb: payload.forgeWeb,
     project: payload.project,
   };
 }
@@ -288,6 +303,7 @@ interface ExplorerRequestState {
 }
 
 export interface AgentFileExplorerState {
+  listingGeneration: number;
   directories: Map<string, ExplorerDirectory>;
   isLoading: boolean;
   lastError: string | null;
@@ -302,6 +318,8 @@ export interface DaemonServerInfo {
   serverId: string;
   hostname: string | null;
   version: string | null;
+  commit?: string | null;
+  mainCommit?: string | null;
   desktopManaged?: boolean;
   capabilities?: ServerCapabilities;
   features?: ServerInfoStatusPayload["features"];
@@ -312,6 +330,8 @@ export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonS
     serverId: serverInfo.serverId,
     hostname: serverInfo.hostname ?? null,
     version: serverInfo.version ?? null,
+    ...(serverInfo.commit ? { commit: serverInfo.commit } : {}),
+    ...(serverInfo.mainCommit ? { mainCommit: serverInfo.mainCommit } : {}),
     ...(serverInfo.desktopManaged !== undefined
       ? { desktopManaged: serverInfo.desktopManaged }
       : {}),
@@ -392,6 +412,64 @@ export function selectAgentTurnPresentation(
   );
 }
 
+/** Turn state for the chat's own timeline. Every other surface reads the true status above. */
+export function selectAgentTimelineTurnPresentation(
+  session: SessionState | undefined,
+  agentId: string,
+): TurnPresentation {
+  return resolveTimelineTurnPresentation(
+    selectAgentTurnPresentation(session, agentId),
+    session?.agentTimelineUnsettledTurn.get(agentId),
+  );
+}
+
+/** The unsettled turn a chat's messages carry: the one open right now, or the one it holds. */
+export function selectAgentUnsettledTurn(
+  session: SessionState | undefined,
+  agentId: string,
+): UnsettledTurn | undefined {
+  const turn = session?.agents.get(agentId)?.turn ?? session?.agentDetails.get(agentId)?.turn;
+  if (turn?.phase === "open") return { turnId: turn.turnId, startedAt: turn.startedAt };
+  return session?.agentTimelineUnsettledTurn.get(agentId);
+}
+
+function withUnsettledTurn(
+  current: Map<string, UnsettledTurn>,
+  agentId: string,
+  turn: UnsettledTurn,
+): Map<string, UnsettledTurn> {
+  const held = current.get(agentId);
+  // COMPAT(agentTurnIdentity): added in v0.2.6, remove after 2027-01-31 once daemon floor >= v0.2.6.
+  // Hosts without turn ids report null for every turn, so only the start time tells two turns apart.
+  if (held?.turnId === turn.turnId && held?.startedAt?.getTime() === turn.startedAt?.getTime()) {
+    return current;
+  }
+  const next = new Map(current);
+  next.set(agentId, turn);
+  return next;
+}
+
+function withoutUnsettledTurn(
+  current: Map<string, UnsettledTurn>,
+  agentId: string,
+): Map<string, UnsettledTurn> {
+  if (!current.has(agentId)) return current;
+  const next = new Map(current);
+  next.delete(agentId);
+  return next;
+}
+
+// The messages that bring a chat current settle its turn in this same commit.
+function commitUnsettledTurn(
+  current: Map<string, UnsettledTurn>,
+  agentId: string,
+  commit: { synchronized: boolean; unsettledTurn?: UnsettledTurn },
+): Map<string, UnsettledTurn> {
+  if (commit.synchronized) return withoutUnsettledTurn(current, agentId);
+  if (commit.unsettledTurn) return withUnsettledTurn(current, agentId, commit.unsettledTurn);
+  return current;
+}
+
 function latestTasksFromStream(items: readonly StreamItem[]): TodoEntry[] {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
@@ -444,6 +522,7 @@ export interface SessionState {
   agentTasks: Map<string, TodoEntry[]>;
   messageSubmissions: Map<string, MessageSubmissionRecord[]>;
   agentTimelineCursor: Map<string, AgentTimelineCursorState>;
+  agentTimelineUnsettledTurn: Map<string, UnsettledTurn>;
   agentTimelineHasOlder: Map<string, boolean>;
   agentTimelineHasNewer: Map<string, boolean>;
   agentTimelineOlderFetchInFlight: Map<string, boolean>;
@@ -476,6 +555,9 @@ export interface SessionState {
     string,
     Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
   >;
+  // Ids intentionally removed from the queue. Remote snapshots are additive and may be
+  // stale, so they must not resurrect a message that was sent, edited or deleted.
+  removedQueuedMessageIds: Map<string, Set<string>>;
 }
 
 // Global store state
@@ -587,7 +669,13 @@ interface SessionStoreActions {
       newer: boolean;
       synchronized: boolean;
       acknowledgedClientMessageIds: string[];
+      unsettledTurn?: UnsettledTurn;
     },
+  ) => void;
+  setAgentTimelineUnsettledTurn: (
+    serverId: string,
+    agentId: string,
+    turn: UnsettledTurn | null,
   ) => void;
 
   // Initializing agents
@@ -655,6 +743,8 @@ interface SessionStoreActions {
           prev: Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>,
         ) => Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>),
   ) => void;
+  markQueuedMessageRemoved: (serverId: string, agentId: string, messageId: string) => void;
+  restoreQueuedMessage: (serverId: string, agentId: string, messageId: string) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -668,6 +758,50 @@ interface SessionStoreActions {
 type SessionStore = SessionStoreState & SessionStoreActions;
 
 const agentLastActivityCoalescer = createAgentLastActivityCoalescer();
+const MAX_REMOVED_QUEUED_MESSAGE_IDS = 500;
+
+type QueuedMessageMap = Map<
+  string,
+  Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
+>;
+
+function addRemovedQueuedMessageIds(
+  removed: Map<string, Set<string>>,
+  agentId: string,
+  messageIds: Iterable<string>,
+): Map<string, Set<string>> {
+  const ids = [...new Set(messageIds)].filter((id) => id.length > 0);
+  if (ids.length === 0) return removed;
+  const existing = removed.get(agentId);
+  const newIds = ids.filter((id) => !existing?.has(id));
+  if (newIds.length === 0) return removed;
+  const next = new Map(removed);
+  const agentIds = new Set(existing ?? []);
+  for (const id of newIds) agentIds.add(id);
+  while (agentIds.size > MAX_REMOVED_QUEUED_MESSAGE_IDS) {
+    const oldest = agentIds.values().next().value;
+    if (oldest === undefined) break;
+    agentIds.delete(oldest);
+  }
+  next.set(agentId, agentIds);
+  return next;
+}
+
+function filterRemovedQueuedMessages(
+  queued: QueuedMessageMap,
+  removed: Map<string, Set<string>>,
+): QueuedMessageMap {
+  let next = queued;
+  for (const [agentId, items] of queued) {
+    const removedIds = removed.get(agentId);
+    if (!removedIds || removedIds.size === 0) continue;
+    const filtered = items.filter((item) => !removedIds.has(item.id));
+    if (filtered.length === items.length) continue;
+    if (next === queued) next = new Map(queued);
+    next.set(agentId, filtered);
+  }
+  return next;
+}
 
 // Helper to create initial session state
 function createInitialSessionState(
@@ -692,6 +826,7 @@ function createInitialSessionState(
     agentTasks: new Map(),
     messageSubmissions: new Map(),
     agentTimelineCursor: new Map(),
+    agentTimelineUnsettledTurn: new Map(),
     agentTimelineHasOlder: new Map(),
     agentTimelineHasNewer: new Map(),
     agentTimelineOlderFetchInFlight: new Map(),
@@ -708,6 +843,7 @@ function createInitialSessionState(
     pendingPermissions: new Map(),
     fileExplorer: new Map(),
     queuedMessages: new Map(),
+    removedQueuedMessageIds: new Map(),
   };
 }
 
@@ -1069,10 +1205,30 @@ export const useSessionStore = create<SessionStore>()(
             state.acknowledgedClientMessageIds ?? [],
           );
           const changedSubmissions = observedSubmissions !== currentSubmissions;
+          const acknowledgedIds = state.acknowledgedClientMessageIds ?? [];
+          const removedQueuedMessageIds =
+            acknowledgedIds.length > 0
+              ? addRemovedQueuedMessageIds(
+                  session.removedQueuedMessageIds,
+                  agentId,
+                  acknowledgedIds,
+                )
+              : session.removedQueuedMessageIds;
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
+          const changedQueue = queuedMessages !== session.queuedMessages;
           const agentTasks = updateAgentTasks(session.agentTasks, agentId, state.taskSnapshot);
           const changedTasks = agentTasks !== session.agentTasks;
 
-          if (!changedTail && !changedHead && !changedSubmissions && !changedTasks) {
+          if (
+            !changedTail &&
+            !changedHead &&
+            !changedSubmissions &&
+            !changedQueue &&
+            !changedTasks
+          ) {
             return prev;
           }
 
@@ -1096,6 +1252,8 @@ export const useSessionStore = create<SessionStore>()(
                 agentStreamHead: nextHead,
                 agentTasks,
                 messageSubmissions,
+                queuedMessages,
+                removedQueuedMessageIds,
               },
             },
           };
@@ -1469,10 +1627,24 @@ export const useSessionStore = create<SessionStore>()(
               messageSubmissions.delete(agentId);
             }
           }
+          const removedQueuedMessageIds = addRemovedQueuedMessageIds(
+            session.removedQueuedMessageIds,
+            agentId,
+            state.acknowledgedClientMessageIds,
+          );
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
           if (state.synchronized) {
             nextAuthoritative.set(agentId, true);
             nextSyncGeneration.set(agentId, session.historySyncGeneration);
           }
+          const agentTimelineUnsettledTurn = commitUnsettledTurn(
+            session.agentTimelineUnsettledTurn,
+            agentId,
+            state,
+          );
           const tasks = latestTasksFromStream([...state.items, ...state.head]);
           const agentTasks = new Map(session.agentTasks);
           if (tasks.length > 0) agentTasks.set(agentId, tasks);
@@ -1490,10 +1662,32 @@ export const useSessionStore = create<SessionStore>()(
                 agentTimelineCursor: nextCursor,
                 agentTimelineHasOlder: nextHasOlder,
                 agentTimelineHasNewer: nextHasNewer,
+                agentTimelineUnsettledTurn,
                 agentAuthoritativeHistoryApplied: nextAuthoritative,
                 agentHistorySyncGeneration: nextSyncGeneration,
                 messageSubmissions,
+                queuedMessages,
+                removedQueuedMessageIds,
               },
+            },
+          };
+        });
+      },
+
+      setAgentTimelineUnsettledTurn: (serverId, agentId, turn) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) return prev;
+          const current = session.agentTimelineUnsettledTurn;
+          const next = turn
+            ? withUnsettledTurn(current, agentId, turn)
+            : withoutUnsettledTurn(current, agentId);
+          if (next === current) return prev;
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, agentTimelineUnsettledTurn: next },
             },
           };
         });
@@ -1839,7 +2033,8 @@ export const useSessionStore = create<SessionStore>()(
           if (!session) {
             return prev;
           }
-          const nextValue = typeof value === "function" ? value(session.queuedMessages) : value;
+          const proposed = typeof value === "function" ? value(session.queuedMessages) : value;
+          const nextValue = filterRemovedQueuedMessages(proposed, session.removedQueuedMessageIds);
           if (session.queuedMessages === nextValue) {
             return prev;
           }
@@ -1848,6 +2043,53 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, queuedMessages: nextValue },
+            },
+          };
+        });
+      },
+
+      markQueuedMessageRemoved: (serverId, agentId, messageId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session || !messageId) return prev;
+          const removedQueuedMessageIds = addRemovedQueuedMessageIds(
+            session.removedQueuedMessageIds,
+            agentId,
+            [messageId],
+          );
+          const queuedMessages = filterRemovedQueuedMessages(
+            session.queuedMessages,
+            removedQueuedMessageIds,
+          );
+          if (
+            removedQueuedMessageIds === session.removedQueuedMessageIds &&
+            queuedMessages === session.queuedMessages
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, queuedMessages, removedQueuedMessageIds },
+            },
+          };
+        });
+      },
+
+      restoreQueuedMessage: (serverId, agentId, messageId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          const agentIds = session?.removedQueuedMessageIds.get(agentId);
+          if (!session || !agentIds?.delete(messageId)) return prev;
+          const removedQueuedMessageIds = new Map(session.removedQueuedMessageIds);
+          if (agentIds.size === 0) removedQueuedMessageIds.delete(agentId);
+          else removedQueuedMessageIds.set(agentId, agentIds);
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, removedQueuedMessageIds },
             },
           };
         });
