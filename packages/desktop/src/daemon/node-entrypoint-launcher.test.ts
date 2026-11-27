@@ -11,6 +11,23 @@ const CLI_ENTRYPOINT: NodeEntrypointSpec = {
 
 describe("node-entrypoint-launcher", () => {
   describe("createNodeEntrypointInvocation", () => {
+    it("passes the Electron userData path so children close inherited profile fds", () => {
+      expect(
+        createNodeEntrypointInvocation({
+          execPath: "/opt/Paseo/Paseo",
+          isPackaged: true,
+          packagedRunnerPath: "/opt/Paseo/resources/app.asar/dist/daemon/node-entrypoint-runner.js",
+          entrypoint: CLI_ENTRYPOINT,
+          argvMode: "node-script",
+          args: ["daemon", "start"],
+          baseEnv: { PATH: "/usr/bin" },
+          inheritedFdPathPrefix: "/home/gio/.config/Paseo",
+        }).env,
+      ).toMatchObject({
+        PASEO_CLOSE_INHERITED_FDS_UNDER: "/home/gio/.config/Paseo",
+      });
+    });
+
     it("uses the packaged runner when the desktop app is packaged", () => {
       expect(
         createNodeEntrypointInvocation({

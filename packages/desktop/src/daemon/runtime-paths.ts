@@ -117,5 +117,6 @@ export function createNodeEntrypointInvocation(input: {
     argvMode: input.argvMode,
     args: input.args,
     baseEnv: input.baseEnv,
+    inheritedFdPathPrefix: app.getPath("userData"),
   });
 }

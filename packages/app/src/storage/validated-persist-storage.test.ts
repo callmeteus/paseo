@@ -19,24 +19,57 @@ class MemoryStorage implements StateStorage {
   }
 }
 
-const StateSchema = z.strictObject({ enabled: z.boolean() });
+const StateSchema = z.strictObject({
+  enabled: z.boolean(),
+  channel: z.enum(["stable", "beta"]).optional(),
+});
 
 describe("createValidatedPersistStorage", () => {
-  it.each([
-    ["malformed JSON", "{"],
-    ["invalid state", JSON.stringify({ state: { enabled: "yes" }, version: 1 })],
-    ["unknown state fields", JSON.stringify({ state: { enabled: true, extra: true }, version: 1 })],
-    [
-      "unknown envelope fields",
-      JSON.stringify({ state: { enabled: true }, version: 1, extra: true }),
-    ],
-  ])("clears %s", async (_label, stored) => {
+  it("clears malformed JSON", async () => {
     const backing = new MemoryStorage();
-    backing.values.set("settings", stored);
+    backing.values.set("settings", "{");
     const storage = createValidatedPersistStorage(backing, StateSchema);
 
     await expect(storage.getItem("settings")).resolves.toBeNull();
     expect(backing.values.has("settings")).toBe(false);
+  });
+
+  it("keeps valid state fields when one field is invalid for the current schema", async () => {
+    const backing = new MemoryStorage();
+    const raw = JSON.stringify({
+      state: { enabled: true, channel: "nightly", extra: true },
+      version: 1,
+      surprise: true,
+    });
+    backing.values.set("settings", raw);
+    const storage = createValidatedPersistStorage(backing, StateSchema);
+
+    await expect(storage.getItem("settings")).resolves.toEqual({
+      state: { enabled: true },
+      version: 1,
+    });
+    expect(backing.values.get("settings")).toBe(raw);
+  });
+
+  it("keeps sidebar preferences when another build wrote an unknown group mode", async () => {
+    const backing = new MemoryStorage();
+    const raw = JSON.stringify({
+      state: { groupMode: "host_tabs", showBackground: true, hostFilters: ["srv_1"] },
+      version: 8,
+    });
+    backing.values.set("sidebar-view", raw);
+    const olderBuildSchema = z.strictObject({
+      groupMode: z.enum(["project", "status", "host"]).optional(),
+      showBackground: z.boolean().optional(),
+      hostFilters: z.array(z.string()).optional(),
+    });
+    const storage = createValidatedPersistStorage(backing, olderBuildSchema);
+
+    await expect(storage.getItem("sidebar-view")).resolves.toEqual({
+      state: { showBackground: true, hostFilters: ["srv_1"] },
+      version: 8,
+    });
+    expect(backing.values.get("sidebar-view")).toBe(raw);
   });
 
   it("returns schema-validated state", async () => {
@@ -50,9 +83,10 @@ describe("createValidatedPersistStorage", () => {
     });
   });
 
-  it("clears a value rejected by the schema before writing", async () => {
+  it("keeps the stored value when a new value is rejected by the schema", async () => {
     const backing = new MemoryStorage();
-    backing.values.set("settings", JSON.stringify({ state: { count: 1 } }));
+    const raw = JSON.stringify({ state: { count: 1 } });
+    backing.values.set("settings", raw);
     const storage = createValidatedPersistStorage(
       backing,
       z.strictObject({ count: z.number().finite() }),
@@ -60,7 +94,7 @@ describe("createValidatedPersistStorage", () => {
 
     await storage.setItem("settings", { state: { count: Number.NaN } });
 
-    expect(backing.values.has("settings")).toBe(false);
+    expect(backing.values.get("settings")).toBe(raw);
   });
 });
 

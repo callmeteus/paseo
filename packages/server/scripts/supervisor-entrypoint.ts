@@ -1,5 +1,6 @@
 import { fileURLToPath } from "url";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { closeInheritedProfileFds } from "../src/utils/close-inherited-fds.js";
 import path from "node:path";
 import {
   acquirePidLock,
@@ -99,6 +100,7 @@ function resolvePackagedNodeEntrypointRunnerPath(currentScriptPath: string): str
 }
 
 async function main(): Promise<void> {
+  closeInheritedProfileFds(process.env.PASEO_CLOSE_INHERITED_FDS_UNDER);
   const config = parseConfig(process.argv.slice(2));
   const workerEntry = config.devMode ? resolveDevWorkerEntry() : resolveWorkerEntry();
   const workerExecArgv = resolveWorkerExecArgv(workerEntry, config.devMode);

@@ -53,6 +53,10 @@ export default defineConfig({
         find: /^@getpaseo\/server\/process$/,
         replacement: path.resolve(__dirname, "packages/server/src/utils/spawn.ts"),
       },
+      {
+        find: /^@getpaseo\/server\/close-inherited-fds$/,
+        replacement: path.resolve(__dirname, "packages/server/src/utils/close-inherited-fds.ts"),
+      },
       { find: "@", replacement: path.resolve(appDir, "src") },
       // The website's `~/` path alias, as in packages/website/tsconfig.json.
       { find: /^~\/(.*)$/, replacement: path.resolve(__dirname, "packages/website/src/$1") },
