@@ -1,4 +1,5 @@
 const PASEO_NODE_ENV = "PASEO_NODE_ENV";
+export const PASEO_CLOSE_INHERITED_FDS_UNDER = "PASEO_CLOSE_INHERITED_FDS_UNDER";
 
 export interface NodeEntrypointSpec {
   entryPath: string;
@@ -21,23 +22,29 @@ interface CreateNodeEntrypointInvocationInput {
   argvMode: NodeEntrypointArgvMode;
   args: string[];
   baseEnv: NodeJS.ProcessEnv;
+  inheritedFdPathPrefix?: string;
 }
 
 export function createElectronNodeEnv(
   baseEnv: NodeJS.ProcessEnv,
-  options?: { isPackaged?: boolean },
+  options?: { isPackaged?: boolean; inheritedFdPathPrefix?: string },
 ): NodeJS.ProcessEnv {
+  const inheritedFdPathPrefix = options?.inheritedFdPathPrefix;
   return {
     ...baseEnv,
     ELECTRON_RUN_AS_NODE: "1",
     [PASEO_NODE_ENV]: options?.isPackaged === true ? "production" : "development",
+    ...(inheritedFdPathPrefix ? { [PASEO_CLOSE_INHERITED_FDS_UNDER]: inheritedFdPathPrefix } : {}),
   };
 }
 
 export function createNodeEntrypointInvocation(
   input: CreateNodeEntrypointInvocationInput,
 ): NodeEntrypointInvocation {
-  const env = createElectronNodeEnv(input.baseEnv, { isPackaged: input.isPackaged });
+  const env = createElectronNodeEnv(input.baseEnv, {
+    isPackaged: input.isPackaged,
+    inheritedFdPathPrefix: input.inheritedFdPathPrefix,
+  });
 
   if (input.isPackaged) {
     if (!input.packagedRunnerPath) {
