@@ -2810,15 +2810,111 @@ test("plugin provider import launches with runtime MCP servers and returns only 
       { providerHandleId: 'plugin:{"version":1,"data":{"token":"root"}}', cwd: "/project" },
       { config: { ...storedConfig, mcpServers: { company } }, storedConfig },
     );
-    expect(harness.inputs).toContainEqual(
-      expect.objectContaining({
-        type: "session.open",
-        config: expect.objectContaining({ mcpServers: { company } }),
-      }),
-    );
+    const open = harness.inputs.find((input) => input.type === "session.open") as Extract<
+      ProviderInput,
+      { type: "session.open" }
+    >;
+    const wrapped = open.config.mcpServers.company as {
+      type: string;
+      command: string;
+      env: Record<string, string>;
+    };
+    expect(wrapped.type).toBe("stdio");
+    expect(
+      JSON.parse(Buffer.from(wrapped.env.PASEO_MCP_PROXY_CONFIG!, "base64").toString("utf8")),
+    ).toMatchObject(company);
     expect(imported.config).toEqual(storedConfig);
     await imported.session.close();
   } finally {
+    await registry.shutdown();
+  }
+});
+
+test("plugin ACP MCP elicitation becomes a question card and returns the answer", async () => {
+  const harness = createProviderHarness();
+  const registry = new PluginAgentClientRegistry(createTestLogger());
+  registry.replace([harness.registration]);
+  const client = registry.clients()[harness.registration.id]!;
+  const session = await client.createSession({
+    provider: client.provider,
+    cwd: tmpdir(),
+    mcpServers: { grants: { type: "stdio", command: "node", args: ["server.mjs"] } },
+  });
+  const events: AgentStreamEvent[] = [];
+  const unsubscribe = session.subscribe((event) => events.push(event));
+  try {
+    const open = harness.inputs.find((input) => input.type === "session.open") as Extract<
+      ProviderInput,
+      { type: "session.open" }
+    >;
+    const server = open.config.mcpServers.grants as {
+      type: string;
+      command: string;
+      args: string[];
+      env: Record<string, string>;
+    };
+    expect(server.type).toBe("stdio");
+    expect(server.command).toBe(process.execPath);
+    expect(server.args[0]).toMatch(/mcp-proxy-shim\.mjs$/);
+    const env = server.env;
+    expect(env.PASEO_MCP_PROXY_CONFIG).toBeTruthy();
+
+    const elicitation = fetch(env.PASEO_MCP_PROXY_CALLBACK!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: env.PASEO_MCP_PROXY_TOKEN,
+        request: {
+          params: {
+            mode: "form",
+            message: "Confirm the grant and pick a duration.",
+            requestedSchema: {
+              type: "object",
+              properties: {
+                grant: { type: "boolean", title: "Grant SSH" },
+                duration: {
+                  type: "string",
+                  title: "Duration",
+                  oneOf: [
+                    { const: "4h", title: "4 hours" },
+                    { const: "8h", title: "8 hours" },
+                  ],
+                },
+              },
+              required: ["grant", "duration"],
+            },
+          },
+        },
+      }),
+    });
+    await expect
+      .poll(() => events.filter((event) => event.type === "permission_requested"))
+      .toHaveLength(1);
+    const asked = events.find(
+      (event): event is Extract<AgentStreamEvent, { type: "permission_requested" }> =>
+        event.type === "permission_requested",
+    )!;
+    expect(asked.request.input).toMatchObject({
+      elicitation: true,
+      questions: [
+        { header: "Grant SSH", type: "boolean" },
+        { header: "Duration", options: [{ label: "4 hours" }, { label: "8 hours" }] },
+      ],
+    });
+    expect(session.getPendingPermissions().map((request) => request.id)).toEqual([
+      asked.request.id,
+    ]);
+
+    await session.respondToPermission(asked.request.id, {
+      behavior: "allow",
+      updatedInput: { answers: { "Grant SSH": "true", Duration: "8 hours" } },
+    });
+    const answer = await (await elicitation).json();
+    expect(answer).toEqual({ action: "accept", content: { grant: true, duration: "8h" } });
+    expect(session.getPendingPermissions()).toEqual([]);
+  } finally {
+    unsubscribe();
+    await session.close();
     await registry.shutdown();
   }
 });

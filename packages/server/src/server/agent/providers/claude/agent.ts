@@ -1,4 +1,9 @@
 import { markdownToTodo } from "../../plan-tasks.js";
+import {
+  ElicitationProxy,
+  ElicitationQuestions,
+  readHarnessMcpServers,
+} from "../../../mcp/elicitation-proxy.js";
 import { setImmediate } from "node:timers/promises";
 import { ClaudeRuntimeSafety } from "./runtime-safety.js";
 import type { ProviderOptions } from "@getpaseo/protocol/agent-types";
@@ -2466,6 +2471,8 @@ class ClaudeAgentSession implements AgentSession {
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly persistSession?: boolean;
   private readonly sideQuestion: boolean;
+  private readonly elicits: ElicitationQuestions;
+  private readonly elicitationProxy = new ElicitationProxy();
   private readonly logger: Logger;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
@@ -2605,6 +2612,7 @@ class ClaudeAgentSession implements AgentSession {
     this.harnessEnvironment = this.buildSdkEnv();
     this.persistSession = options.persistSession;
     this.sideQuestion = options.sideQuestion === true;
+    this.elicits = new ElicitationQuestions("claude", (event) => this.notifySubscribers(event));
     this.logger = options.logger.child({ agentId: this.agentId });
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary;
@@ -3171,7 +3179,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   getPendingPermissions(): AgentPermissionRequest[] {
-    return Array.from(this.pendingPermissions.values()).map((entry) => entry.request);
+    return [
+      ...Array.from(this.pendingPermissions.values(), (entry) => entry.request),
+      ...this.elicits.getPendingPermissions(),
+    ];
   }
 
   /**
@@ -3247,6 +3258,9 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+    if (this.elicits.hasWithdrawn(requestId))
+      throw new Error(`MCP elicitation request '${requestId}' has expired`);
+    if (this.elicits.respondToPermission(requestId, response)) return;
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
       throw new Error(`No pending permission request with id '${requestId}'`);
@@ -3355,6 +3369,8 @@ class ClaudeAgentSession implements AgentSession {
       "provider.claude.session_close.start",
     );
     this.closed = true;
+    this.elicits.declineAll();
+    await this.elicitationProxy.close();
     await this.ensureHistoryReady();
     this.rejectAllPendingPermissions(new Error("Claude session closed"));
     // AgentManager settles the run after runtime release. Preserve cleanup records
@@ -4093,9 +4109,8 @@ class ClaudeAgentSession implements AgentSession {
       env: sdkEnv,
     };
 
-    if (this.config.mcpServers && !this.sideQuestion) {
-      base.mcpServers = this.normalizeMcpServers(this.config.mcpServers);
-    }
+    const mcpServers = await this.resolveElicitationMcpServers();
+    if (mcpServers) base.mcpServers = mcpServers;
 
     if (this.config.model) {
       base.model = this.config.model;
@@ -4114,6 +4129,26 @@ class ClaudeAgentSession implements AgentSession {
       base.allowedTools = [];
     }
     return base;
+  }
+
+  private async resolveElicitationMcpServers(): Promise<Record<
+    string,
+    ClaudeSdkMcpServerConfig
+  > | null> {
+    if (!this.config.mcpServers || this.sideQuestion) return null;
+    // Claude Code's MCP client does not surface `elicitation/create` to Paseo.
+    // Use the same loopback shim as the other providers so the form reaches
+    // the chat and the answer returns as the tool result.
+    const harnessServers = await readHarnessMcpServers({
+      provider: this.provider,
+      cwd: this.config.cwd,
+    });
+    const proxied = await this.elicitationProxy.wrapServers(
+      { ...harnessServers, ...this.config.mcpServers },
+      this.agentId ?? this.usageSessionKey,
+      { ask: (_server, message, form) => this.elicits.ask(message, form) },
+    );
+    return this.normalizeMcpServers(proxied);
   }
 
   private async buildSettingsOptions(

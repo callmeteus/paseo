@@ -2,7 +2,7 @@ import { decorateOpenCodeV2Env, materializeOpenCodeV2Plugin } from "../bridge.js
 import { resolvePaseoHome } from "../../../../paseo-home.js";
 import { OpenCode } from "@opencode/client";
 import type { V2Api } from "./api.js";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type { Logger } from "pino";
 import { spawnProcess } from "../../../../../utils/spawn.js";
@@ -36,6 +36,10 @@ export interface V2Connection {
   unbindSession(sessionId: string, cwd: string): Promise<void>;
   refreshLocation(cwd: string, signal?: AbortSignal): Promise<void>;
   readonly exited: Promise<Error>;
+  /** Shared/external services must not have their MCP state mutated by Paseo. */
+  readonly serviceKind: "owned" | "dedicated" | "discovered" | "external";
+  /** Identifies the underlying OpenCode process so shared sessions share tokens. */
+  readonly id: string;
 }
 interface Generation {
   client: V2Api;
@@ -44,6 +48,7 @@ interface Generation {
   exited: Promise<Error>;
   /** External servers outlive this runtime, so release must not stop them. */
   persistent?: boolean;
+  id: string;
   bindSession(sessionId: string, cwd: string): Promise<void>;
   unbindSession(sessionId: string, cwd: string): Promise<void>;
   refreshLocation(cwd: string, signal?: AbortSignal): Promise<void>;
@@ -131,7 +136,11 @@ export class V2Runtime {
       if (this.current === pending) this.current = null;
       throw new Error("OpenCode helper server exited");
     }
-    const connection = this.lease(generation, pending);
+    const connection = this.lease(
+      generation,
+      pending,
+      this.connectionKind(input, selection, externalUrl),
+    );
     if (input.signal?.aborted || this.closed) {
       await connection.release();
       input.signal?.throwIfAborted();
@@ -183,7 +192,7 @@ export class V2Runtime {
     if (!this.generations.has(generation)) {
       throw new Error("OpenCode external server is unavailable");
     }
-    const connection = this.lease(generation, this.external);
+    const connection = this.lease(generation, this.external, "external");
     if (input.signal?.aborted || this.closed) {
       await connection.release();
       input.signal?.throwIfAborted();
@@ -236,7 +245,22 @@ export class V2Runtime {
     }
   }
 
-  private lease(generation: Generation, pending: Promise<Generation>): V2Connection {
+  private connectionKind(
+    input: V2RuntimeAcquireOptions,
+    selection: OpenCodeServiceSelection,
+    externalUrl: string | null,
+  ): "owned" | "dedicated" | "discovered" | "external" {
+    if (externalUrl) return "external";
+    if (selection.kind === "owned") return input.env || input.dedicated ? "dedicated" : "owned";
+    const { needsIsolation } = this.sharedConfiguration(input, selection);
+    return needsIsolation ? "dedicated" : "discovered";
+  }
+
+  private lease(
+    generation: Generation,
+    pending: Promise<Generation>,
+    serviceKind: "owned" | "dedicated" | "discovered" | "external",
+  ): V2Connection {
     if (this.closed || !this.generations.has(generation))
       throw new Error("OpenCode helper server is no longer running");
     generation.users += 1;
@@ -254,11 +278,13 @@ export class V2Runtime {
     return {
       client: generation.client,
       release,
-      retain: () => this.lease(generation, pending),
+      retain: () => this.lease(generation, pending, serviceKind),
       bindSession: generation.bindSession,
       unbindSession: generation.unbindSession,
       refreshLocation: generation.refreshLocation,
       exited: generation.exited,
+      serviceKind,
+      id: generation.id,
     };
   }
 
@@ -287,6 +313,7 @@ export class V2Runtime {
       });
     }
     const generation: Generation = {
+      id: randomUUID(),
       client,
       users: 0,
       persistent: true,
@@ -325,6 +352,7 @@ export class V2Runtime {
     const selection = await this.selection;
     if (selection.kind !== "owned" && !forceOwned) {
       const generation: Generation = {
+        id: randomUUID(),
         ...(await connectSharedService(selection, this.options)),
         users: 0,
       };
@@ -478,6 +506,7 @@ export class V2Runtime {
       });
       await client.server.info({ signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
       const generation: Generation = {
+        id: randomUUID(),
         client,
         users: 0,
         stop,
