@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { PersistStorage, StateStorage, StorageValue } from "zustand/middleware";
+import { salvageObject } from "./validated-storage";
 
 export function createValidatedPersistStorage<State>(
   backingStorage: StateStorage,
@@ -29,8 +30,7 @@ export function createValidatedPersistStorage<State>(
 
     const result = envelopeSchema.safeParse(decoded);
     if (!result.success) {
-      await backingStorage.removeItem(name);
-      return null;
+      return salvageObject(envelopeSchema, decoded);
     }
     return result.data;
   }
@@ -61,7 +61,6 @@ export function createValidatedPersistStorage<State>(
       const result = envelopeSchema.safeParse(value);
       if (!result.success) {
         accepted.delete(name);
-        await backingStorage.removeItem(name);
         return;
       }
       if (options.skipUnchanged) accepted.set(name, value);

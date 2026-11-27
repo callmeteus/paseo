@@ -15,18 +15,32 @@ class MemoryStorage {
 }
 
 describe("validated storage reads", () => {
-  it.each([
-    ["malformed JSON", "{"],
-    ["wrong field type", JSON.stringify({ enabled: "yes" })],
-    ["unknown field", JSON.stringify({ enabled: true, surprise: true })],
-  ])("clears invalid JSON payloads: %s", async (_label, raw) => {
+  it("clears a payload that cannot be parsed as JSON", async () => {
     const storage = new MemoryStorage();
-    storage.values.set("settings", raw);
+    storage.values.set("settings", "{");
 
     await expect(
       readValidatedJson(storage, "settings", z.strictObject({ enabled: z.boolean() })),
     ).resolves.toBeNull();
     expect(storage.values.has("settings")).toBe(false);
+  });
+
+  it("keeps the valid fields when one field is invalid for the current schema", async () => {
+    const storage = new MemoryStorage();
+    const raw = JSON.stringify({ enabled: true, channel: "nightly", surprise: true });
+    storage.values.set("settings", raw);
+
+    await expect(
+      readValidatedJson(
+        storage,
+        "settings",
+        z.strictObject({
+          enabled: z.boolean(),
+          channel: z.enum(["stable", "beta"]).optional(),
+        }),
+      ),
+    ).resolves.toEqual({ enabled: true });
+    expect(storage.values.get("settings")).toBe(raw);
   });
 
   it("clears invalid scalar values", async () => {
